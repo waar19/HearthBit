@@ -50,3 +50,71 @@ atacante firmar firmware para toda la flota.
 
 El firmware y sus instrucciones completas conservan la licencia MIT y
 atribución del proyecto Bitle dentro del submódulo.
+
+## Límites del ESP32 para transferencias de archivos
+
+El ancla ESP32 es un relay de **mensajes**, no un nodo de datos. Sus límites
+medidos y estructurales son:
+
+- **Reensamblado ~2 KB:** el buffer de fragmentación del firmware Bitle
+  reconstruye paquetes BitChat de hasta ~2 KB. Sirve para texto, anuncios,
+  SOS y tramas de control HBT (ofertas, ACCEPT, progreso), pero no para
+  chunks de datos sostenidos.
+- **RAM total 320–512 KB** (C3/S3), compartida con las pilas BLE y Wi-Fi.
+  No hay espacio para bitmaps de chunks ni colas de archivos.
+- **Flash de 4–8 MB** ya ocupada por firmware, OTA A/B y el correo
+  store-and-forward cifrado. Un solo archivo de cámara la agotaría.
+- **Contención 2,4 GHz:** BLE y Wi-Fi comparten la misma radio; saturarla
+  con datos degrada el relay de mensajes, que es su función crítica.
+
+Por eso el plano de datos HBT (Nearby, LAN, Wi-Fi Aware, óptico) nunca pasa
+por el ancla: el ESP32 solo transporta el plano de control cifrado por Noise
+y los archivos «inline» BLE pequeños entre teléfonos directamente conectados.
+
+## HearthBit Data Anchor (diseño)
+
+Para guardar y reenviar **archivos grandes** en un barrio sin internet se
+define un nodo separado, el *Data Anchor*, basado en hardware con almacenamiento
+real. No sustituye al ancla ESP32: la complementa.
+
+### Hardware objetivo
+
+| Opción | Base | Ventaja |
+| ------ | ---- | ------- |
+| A (recomendada) | Raspberry Pi Zero 2 W / Pi 4 + microSD ≥ 64 GB | Linux completo, Wi-Fi AP + BLE simultáneos, bajo consumo (~1–3 W) |
+| B | Router OpenWrt con USB (p. ej. GL.iNet) | AP robusto de fábrica, PoE posible, carcasa lista |
+| C (experimento posterior) | ESP32-S3 + microSD | Coste mínimo, pero limitado por RAM y contención 2,4 GHz; solo para colas pequeñas |
+
+Alimentación: batería LiFePO4 + panel solar dimensionados para ≥ 72 h de
+autonomía; el AP Wi-Fi se enciende bajo demanda (anuncio BLE) para ahorrar.
+
+### Funciones
+
+1. **Relay BitChat completo** (igual que el ESP32) por BLE.
+2. **Caché cifrada de archivos:** recibe contenedores HBT cifrados de
+   extremo a extremo y los reenvía cuando aparece el destinatario. El ancla
+   **nunca** posee claves de descifrado: almacena bytes opacos con el
+   `transferId`, el destinatario y la expiración como únicos metadatos.
+3. **AP Wi-Fi local:** publica una red `HearthBit-Anchor-XXXX`; los teléfonos
+   usan el transporte LAN existente (TCP + contenedor cifrado) contra el
+   ancla, sin código nuevo en la app.
+4. **Cuotas y expiración:** por defecto 100 MB por remitente, 1 GB total,
+   expiración de 7 días y borrado seguro al expirar. Anti-DoS: rechaza
+   ofertas sin firma Ed25519 válida de un peer conocido.
+5. **Boletines públicos:** puede reemitir boletines firmados (modo óptico
+   público) en una página local sencilla.
+
+### Confianza
+
+- El teléfono trata al Data Anchor como un peer más de la malla: las ofertas
+  se firman y el contenido va cifrado con la clave efímera del destinatario.
+- Comprometer físicamente un ancla expone solo bytes cifrados y metadatos
+  mínimos; el panic wipe del teléfono no depende del ancla.
+- La administración del ancla (cuotas, purga) se hace por consola local, no
+  por la malla, para que ningún paquete remoto pueda reconfigurarla.
+
+### Estado
+
+Diseño aprobado; implementación fuera del alcance de esta fase. El
+experimento ESP32-S3 + microSD queda pospuesto hasta medir la contención
+BLE/Wi-Fi con tráfico real de malla.

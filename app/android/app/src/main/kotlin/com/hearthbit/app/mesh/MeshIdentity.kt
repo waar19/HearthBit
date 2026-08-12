@@ -1,4 +1,4 @@
-package com.emergencycom.emergency_com.mesh
+package com.hearthbit.app.mesh
 
 import android.content.Context
 import android.util.Base64
@@ -15,7 +15,7 @@ import java.security.SecureRandom
 internal class MeshIdentity(context: Context) {
     private val preferences = EncryptedSharedPreferences.create(
         context,
-        "emergency_com_identity",
+        "hearthbit_identity",
         MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build(),
@@ -87,6 +87,22 @@ internal class MeshIdentity(context: Context) {
         verifier.init(false, Ed25519PublicKeyParameters(publicKey, 0))
         val canonical = packet.canonicalForSigning()
         verifier.update(canonical, 0, canonical.size)
+        return verifier.verifySignature(signature)
+    }
+
+    /** Firma Ed25519 de bytes arbitrarios (ofertas de transferencia, boletines). */
+    fun signBytes(data: ByteArray): ByteArray {
+        val signer = Ed25519Signer()
+        signer.init(true, Ed25519PrivateKeyParameters(signingPrivateKey, 0))
+        signer.update(data, 0, data.size)
+        return signer.generateSignature()
+    }
+
+    fun verifyBytes(data: ByteArray, signature: ByteArray, publicKey: ByteArray): Boolean {
+        if (publicKey.size != 32 || signature.size != 64) return false
+        val verifier = Ed25519Signer()
+        verifier.init(false, Ed25519PublicKeyParameters(publicKey, 0))
+        verifier.update(data, 0, data.size)
         return verifier.verifySignature(signature)
     }
 

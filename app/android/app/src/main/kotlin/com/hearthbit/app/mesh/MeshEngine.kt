@@ -1,4 +1,4 @@
-package com.emergencycom.emergency_com.mesh
+package com.hearthbit.app.mesh
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
@@ -41,6 +41,7 @@ internal class MeshEngine(
     private val peers = ConcurrentHashMap<String, Peer>()
     private val sessions = ConcurrentHashMap<String, NoiseSessionLite>()
     private val pendingPrivate = ConcurrentHashMap<String, MutableList<PendingPrivate>>()
+    private val pendingFrames = ConcurrentHashMap<String, MutableList<ByteArray>>()
     private val clientGatts = ConcurrentHashMap<String, BluetoothGatt>()
     private val clientCharacteristics =
         ConcurrentHashMap<String, BluetoothGattCharacteristic>()
@@ -49,7 +50,12 @@ internal class MeshEngine(
 
     private var gattServer: BluetoothGattServer? = null
     private var serverCharacteristic: BluetoothGattCharacteristic? = null
+
+    @Volatile
     private var running = false
+
+    @Volatile
+    private var advertising = false
 
     data class Peer(
         val id: String,
@@ -65,20 +71,26 @@ internal class MeshEngine(
 
     @SuppressLint("MissingPermission")
     fun start() {
-        if (running) return
         check(adapter != null && adapter.isEnabled) { "Bluetooth está apagado" }
+        // Reinicio real: si ya estaba corriendo (por ejemplo tras un fallo de
+        // advertising) se liberan los recursos antes de volver a intentarlo.
+        if (running) stopInternal(notify = false)
         running = true
+        emitStatus("starting")
         startGattServer()
-        startAdvertising()
         startScanning()
-        emitStatus("active")
-        sendAnnouncement()
+        startAdvertising()
+    }
+
+    fun stop() {
+        if (!running) return
+        stopInternal(notify = true)
     }
 
     @SuppressLint("MissingPermission")
-    fun stop() {
-        if (!running) return
+    private fun stopInternal(notify: Boolean) {
         running = false
+        advertising = false
         runCatching { adapter.bluetoothLeScanner?.stopScan(scanCallback) }
         runCatching { adapter.bluetoothLeAdvertiser?.stopAdvertising(advertiseCallback) }
         clientGatts.values.forEach { runCatching { it.close() } }
@@ -87,9 +99,10 @@ internal class MeshEngine(
         serverSubscribers.clear()
         runCatching { gattServer?.close() }
         gattServer = null
+        serverCharacteristic = null
         sessions.values.forEach(NoiseSessionLite::close)
         sessions.clear()
-        emitStatus("stopped")
+        if (notify) emitStatus("stopped")
     }
 
     fun updateNickname(value: String) {
@@ -150,6 +163,45 @@ internal class MeshEngine(
             null,
         )
         return id
+    }
+
+    /**
+     * Envía una trama HBT al peer por la sesión Noise. Si aún no hay sesión,
+     * la trama queda en cola y se dispara el handshake.
+     */
+    fun sendTransferFrame(peerIdHex: String, frame: ByteArray) {
+        require(peers.containsKey(peerIdHex)) { "El dispositivo ya no está disponible" }
+        require(frame.size <= MAX_TRANSFER_FRAME) { "Trama de transferencia demasiado grande" }
+        val session = sessions[peerIdHex]
+        if (session?.established == true) {
+            sendEncryptedFrame(peerIdHex, frame)
+        } else {
+            pendingFrames.computeIfAbsent(peerIdHex) {
+                Collections.synchronizedList(mutableListOf())
+            }.add(frame)
+            initiateHandshake(peerIdHex)
+        }
+    }
+
+    fun signPayload(data: ByteArray): ByteArray = identity.signBytes(data)
+
+    fun verifyPeerSignature(peerIdHex: String, data: ByteArray, signature: ByteArray): Boolean {
+        val peer = peers[peerIdHex] ?: return false
+        return identity.verifyBytes(data, signature, peer.signingPublicKey)
+    }
+
+    private fun sendEncryptedFrame(peerIdHex: String, frame: ByteArray) {
+        val session = sessions[peerIdHex] ?: return
+        val typedPayload = byteArrayOf(MeshProtocol.NOISE_TRANSFER_FRAME) + frame
+        val encrypted = runCatching { session.encrypt(typedPayload) }.getOrElse {
+            emitError("Falló el cifrado de la trama de transferencia")
+            return
+        }
+        sendNoisePacket(
+            MeshProtocol.TYPE_NOISE_ENCRYPTED,
+            peerIdHex.hexToBytes(),
+            encrypted,
+        )
     }
 
     fun peersSnapshot(): List<Map<String, Any?>> = peers.values
@@ -368,13 +420,27 @@ internal class MeshEngine(
             pendingPrivate.remove(senderHex)?.forEach {
                 sendEncryptedPrivate(senderHex, it.id, it.content)
             }
+            pendingFrames.remove(senderHex)?.forEach {
+                sendEncryptedFrame(senderHex, it)
+            }
         }
     }
 
     private fun processEncrypted(packet: MeshProtocol.Packet, senderHex: String) {
         val session = sessions[senderHex]?.takeIf(NoiseSessionLite::established) ?: return
         val plaintext = runCatching { session.decrypt(packet.payload) }.getOrElse { return }
-        if (plaintext.isEmpty() || plaintext[0] != MeshProtocol.NOISE_PRIVATE_MESSAGE) return
+        if (plaintext.isEmpty()) return
+        if (plaintext[0] == MeshProtocol.NOISE_TRANSFER_FRAME) {
+            emit(
+                mapOf(
+                    "type" to "transferFrame",
+                    "peerId" to senderHex,
+                    "frame" to plaintext.copyOfRange(1, plaintext.size),
+                ),
+            )
+            return
+        }
+        if (plaintext[0] != MeshProtocol.NOISE_PRIVATE_MESSAGE) return
         val message = MeshProtocol.decodePrivateMessage(plaintext.copyOfRange(1, plaintext.size))
             ?: return
         emitMessage(
@@ -421,18 +487,28 @@ internal class MeshEngine(
     @SuppressLint("MissingPermission")
     private fun startAdvertising() {
         val advertiser = adapter.bluetoothLeAdvertiser
-            ?: error("El dispositivo no soporta BLE peripheral")
+        if (advertiser == null) {
+            emitError("El dispositivo no soporta anuncios BLE; modo solo recepción")
+            emitStatus("degraded")
+            return
+        }
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
             .setConnectable(true)
             .build()
+        // El PDU legado de BLE admite 31 bytes. UUID (18B + banderas) viaja en
+        // el anuncio principal y el peerId (26B con cabeceras) en la respuesta
+        // de escaneo, igual que BitChat. Ver MeshAdvertisePlan.
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
             .addServiceUuid(ParcelUuid(SERVICE_UUID))
+            .build()
+        val scanResponse = AdvertiseData.Builder()
+            .setIncludeDeviceName(false)
             .addServiceData(ParcelUuid(SERVICE_UUID), identity.peerId)
             .build()
-        advertiser.startAdvertising(settings, data, advertiseCallback)
+        advertiser.startAdvertising(settings, data, scanResponse, advertiseCallback)
     }
 
     @SuppressLint("MissingPermission")
@@ -445,8 +521,21 @@ internal class MeshEngine(
     }
 
     private val advertiseCallback = object : AdvertiseCallback() {
+        override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
+            if (!running) return
+            advertising = true
+            emitStatus("active")
+            sendAnnouncement()
+        }
+
         override fun onStartFailure(errorCode: Int) {
-            emitError("No se pudo anunciar la malla BLE ($errorCode)")
+            if (!running) return
+            advertising = false
+            emitError(
+                "No se pudo anunciar la malla BLE ($errorCode); " +
+                    "otros teléfonos no verán este dispositivo, pero puede recibir",
+            )
+            emitStatus("degraded")
         }
     }
 
@@ -620,6 +709,9 @@ internal class MeshEngine(
     }
 
     private companion object {
+        /** Techo del plano de control BLE; los blobs van por otros transportes. */
+        const val MAX_TRANSFER_FRAME = 2_048
+
         val SERVICE_UUID: UUID =
             UUID.fromString("F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C")
         val CHARACTERISTIC_UUID: UUID =

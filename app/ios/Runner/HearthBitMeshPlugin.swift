@@ -4,7 +4,7 @@ import Flutter
 import Foundation
 import Security
 
-final class EmergencyMeshPlugin: NSObject, FlutterStreamHandler {
+final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private static let serviceUUID = CBUUID(string: "F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C")
   private static let characteristicUUID = CBUUID(string: "A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D")
 
@@ -18,22 +18,61 @@ final class EmergencyMeshPlugin: NSObject, FlutterStreamHandler {
   private var peers: [String: IOSMeshPeer] = [:]
   private var sessions: [String: IOSNoiseSession] = [:]
   private var pendingPrivate: [String: [(String, String)]] = [:]
+  private var pendingFrames: [String: [Data]] = [:]
   private var seen: [String: Date] = [:]
   private var notifyQueue: [Data] = []
   private var eventSink: FlutterEventSink?
   private var running = false
 
-  static func register(with messenger: FlutterBinaryMessenger) -> EmergencyMeshPlugin {
-    let plugin = EmergencyMeshPlugin()
+  static func register(with messenger: FlutterBinaryMessenger) -> HearthBitMeshPlugin {
+    let plugin = HearthBitMeshPlugin()
     let methods = FlutterMethodChannel(
-      name: "com.emergencycom.mesh/methods",
+      name: "com.hearthbit.mesh/methods",
       binaryMessenger: messenger
     )
     methods.setMethodCallHandler(plugin.handle)
     FlutterEventChannel(
-      name: "com.emergencycom.mesh/events",
+      name: "com.hearthbit.mesh/events",
       binaryMessenger: messenger
     ).setStreamHandler(plugin)
+
+    // Canal de transferencias: en iOS todavía no hay Nearby Connections ni
+    // Wi-Fi Aware (requiere iOS 26 + entitlement + DeviceDiscoveryUI), así
+    // que se responde con capacidades vacías y el selector Dart usa LAN/BLE.
+    let transferMethods = FlutterMethodChannel(
+      name: "com.hearthbit.transfer/methods",
+      binaryMessenger: messenger
+    )
+    transferMethods.setMethodCallHandler { call, result in
+      switch call.method {
+      case "getTransferCapabilities":
+        result(["nearby": false, "wifiAware": false])
+      case "nearbyStop", "wifiAwareStop":
+        result(nil)
+      case "nearbySendFile", "nearbyReceiveFile":
+        result(
+          FlutterError(
+            code: "nearby_unavailable",
+            message: "Nearby Connections no está disponible en iOS",
+            details: nil
+          )
+        )
+      case "wifiAwareSendFile", "wifiAwareReceiveFile":
+        result(
+          FlutterError(
+            code: "wifi_aware_unavailable",
+            message: "Wi-Fi Aware no está disponible en esta versión de iOS",
+            details: nil
+          )
+        )
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    FlutterEventChannel(
+      name: "com.hearthbit.transfer/events",
+      binaryMessenger: messenger
+    ).setStreamHandler(HearthBitTransferEventStub())
     return plugin
   }
 
@@ -91,6 +130,31 @@ final class EmergencyMeshPlugin: NSObject, FlutterStreamHandler {
         result(nil)
       case "getPeers":
         result(peerMaps())
+      case "sendTransferFrame":
+        guard
+          let peerID = arguments["peerId"] as? String,
+          let frame = arguments["frame"] as? FlutterStandardTypedData
+        else { throw IOSMeshError.peerUnavailable }
+        try sendTransferFrame(peerID: peerID, frame: frame.data)
+        result(nil)
+      case "signPayload":
+        guard let data = arguments["data"] as? FlutterStandardTypedData
+        else { throw IOSMeshError.peerUnavailable }
+        result(FlutterStandardTypedData(bytes: try identity.signBytes(data.data)))
+      case "verifyPeerSignature":
+        guard
+          let peerID = arguments["peerId"] as? String,
+          let data = arguments["data"] as? FlutterStandardTypedData,
+          let signature = arguments["signature"] as? FlutterStandardTypedData
+        else { throw IOSMeshError.peerUnavailable }
+        let verified = peers[peerID].map {
+          IOSMeshIdentity.verifyBytes(
+            data.data,
+            signature: signature.data,
+            key: $0.signingPublicKey
+          )
+        } ?? false
+        result(verified)
       case "panicWipe":
         stop()
         IOSMeshIdentity.clear()
@@ -109,23 +173,28 @@ final class EmergencyMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func start() {
-    guard !running else { return }
+    // Reinicio real: liberar recursos previos permite reintentar tras un fallo.
+    if running { stopInternal(notify: false) }
     running = true
+    emitStatus("starting")
     central = CBCentralManager(
       delegate: self,
       queue: nil,
-      options: [CBCentralManagerOptionRestoreIdentifierKey: "EmergencyCom.central"]
+      options: [CBCentralManagerOptionRestoreIdentifierKey: "HearthBit.central"]
     )
     peripheralManager = CBPeripheralManager(
       delegate: self,
       queue: nil,
-      options: [CBPeripheralManagerOptionRestoreIdentifierKey: "EmergencyCom.peripheral"]
+      options: [CBPeripheralManagerOptionRestoreIdentifierKey: "HearthBit.peripheral"]
     )
-    emitStatus("active")
   }
 
   private func stop() {
     guard running else { return }
+    stopInternal(notify: true)
+  }
+
+  private func stopInternal(notify: Bool) {
     running = false
     central?.stopScan()
     connectedPeripherals.values.forEach { central?.cancelPeripheralConnection($0) }
@@ -134,7 +203,7 @@ final class EmergencyMeshPlugin: NSObject, FlutterStreamHandler {
     peripheralManager?.stopAdvertising()
     peripheralManager?.removeAllServices()
     sessions.removeAll()
-    emitStatus("stopped")
+    if notify { emitStatus("stopped") }
   }
 
   @discardableResult
@@ -202,6 +271,44 @@ final class EmergencyMeshPlugin: NSObject, FlutterStreamHandler {
       channel: nil
     )
     return id
+  }
+
+  /// Envía una trama HBT al peer por la sesión Noise; si aún no hay sesión,
+  /// la deja en cola y dispara el handshake.
+  private func sendTransferFrame(peerID: String, frame: Data) throws {
+    guard peers[peerID] != nil else { throw IOSMeshError.peerUnavailable }
+    guard frame.count <= 2048 else { throw IOSMeshError.invalidPayload }
+    if let session = sessions[peerID], session.established {
+      try sendEncryptedFrame(peerID: peerID, frame: frame)
+      return
+    }
+    pendingFrames[peerID, default: []].append(frame)
+    if sessions[peerID] == nil {
+      let claimed = try Data(hex: peerID)
+      let session = IOSNoiseSession(
+        claimedPeerID: claimed,
+        initiator: true,
+        localStatic: identity.noisePrivateKey
+      )
+      sessions[peerID] = session
+      sendNoise(
+        type: IOSMeshProtocol.noiseHandshake,
+        recipient: claimed,
+        payload: try session.start()
+      )
+    }
+  }
+
+  private func sendEncryptedFrame(peerID: String, frame: Data) throws {
+    guard let session = sessions[peerID] else { return }
+    let encrypted = try session.encrypt(
+      Data([IOSMeshProtocol.noiseTransferFrame]) + frame
+    )
+    sendNoise(
+      type: IOSMeshProtocol.noiseEncrypted,
+      recipient: try Data(hex: peerID),
+      payload: encrypted
+    )
   }
 
   private func sendEncryptedPrivate(peerID: String, id: String, content: String) throws {
@@ -357,6 +464,10 @@ final class EmergencyMeshPlugin: NSObject, FlutterStreamHandler {
         for item in queued {
           try sendEncryptedPrivate(peerID: senderID, id: item.0, content: item.1)
         }
+        let queuedFrames = pendingFrames.removeValue(forKey: senderID) ?? []
+        for frame in queuedFrames {
+          try sendEncryptedFrame(peerID: senderID, frame: frame)
+        }
       }
     } catch {
       sessions.removeValue(forKey: senderID)
@@ -368,6 +479,14 @@ final class EmergencyMeshPlugin: NSObject, FlutterStreamHandler {
     guard let session = sessions[senderID], session.established else { return }
     do {
       let plaintext = try session.decrypt(packet.payload)
+      if plaintext.first == IOSMeshProtocol.noiseTransferFrame {
+        emit([
+          "type": "transferFrame",
+          "peerId": senderID,
+          "frame": FlutterStandardTypedData(bytes: Data(plaintext.dropFirst())),
+        ])
+        return
+      }
       guard
         plaintext.first == IOSMeshProtocol.noisePrivate,
         let message = IOSMeshProtocol.decodePrivateMessage(plaintext.dropFirst())
@@ -439,7 +558,7 @@ final class EmergencyMeshPlugin: NSObject, FlutterStreamHandler {
   }
 }
 
-extension EmergencyMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
+extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
   func centralManagerDidUpdateState(_ central: CBCentralManager) {
     guard running, central.state == .poweredOn else { return }
     central.scanForPeripherals(
@@ -512,9 +631,16 @@ extension EmergencyMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
   }
 }
 
-extension EmergencyMeshPlugin: CBPeripheralManagerDelegate {
+extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
   func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
-    guard running, peripheral.state == .poweredOn else { return }
+    guard running else { return }
+    guard peripheral.state == .poweredOn else {
+      if peripheral.state == .unsupported || peripheral.state == .unauthorized {
+        emitError("Este dispositivo no puede anunciarse por BLE; modo solo recepción")
+        emitStatus("degraded")
+      }
+      return
+    }
     let characteristic = CBMutableCharacteristic(
       type: Self.characteristicUUID,
       properties: [.read, .write, .writeWithoutResponse, .notify],
@@ -525,10 +651,24 @@ extension EmergencyMeshPlugin: CBPeripheralManagerDelegate {
     service.characteristics = [characteristic]
     localCharacteristic = characteristic
     peripheral.add(service)
+    // Solo el UUID de servicio: la identidad viaja en el anuncio GATT firmado,
+    // manteniendo el paquete publicitario dentro del presupuesto BLE.
     peripheral.startAdvertising([
-      CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID],
-      CBAdvertisementDataLocalNameKey: "EmergencyCom",
+      CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID]
     ])
+  }
+
+  func peripheralManagerDidStartAdvertising(
+    _ peripheral: CBPeripheralManager,
+    error: Error?
+  ) {
+    guard running else { return }
+    if let error {
+      emitError("No se pudo anunciar la malla BLE: \(error.localizedDescription)")
+      emitStatus("degraded")
+      return
+    }
+    emitStatus("active")
     sendAnnouncement()
   }
 
@@ -595,6 +735,8 @@ private enum IOSMeshProtocol {
   static let noiseHandshake: UInt8 = 0x10
   static let noiseEncrypted: UInt8 = 0x11
   static let noisePrivate: UInt8 = 0x01
+  /// Trama HBT (HearthBit Transfer) encapsulada dentro de la sesión Noise.
+  static let noiseTransferFrame: UInt8 = 0x30
   static let defaultTTL: UInt8 = 7
 
   struct PublicMessage {
@@ -807,7 +949,7 @@ private enum IOSMeshProtocol {
 }
 
 private final class IOSStoreForward {
-  private let key = "emergency.store_forward"
+  private let key = "hearthbit.store_forward"
   private let lifetime: TimeInterval = 12 * 60 * 60
   private let maximum = 100
 
@@ -866,10 +1008,10 @@ private final class IOSMeshIdentity {
 
   var nickname: String {
     get {
-      UserDefaults.standard.string(forKey: "emergency.nickname")
+      UserDefaults.standard.string(forKey: "hearthbit.nickname")
         ?? "Emergencia-\(peerIDHex.suffix(4))"
     }
-    set { UserDefaults.standard.set(newValue, forKey: "emergency.nickname") }
+    set { UserDefaults.standard.set(newValue, forKey: "hearthbit.nickname") }
   }
 
   init() {
@@ -899,21 +1041,32 @@ private final class IOSMeshIdentity {
     return publicKey.isValidSignature(signature, for: packet.canonical())
   }
 
+  /// Firma Ed25519 de bytes arbitrarios (ofertas de transferencia, boletines).
+  func signBytes(_ data: Data) throws -> Data {
+    try signingPrivateKey.signature(for: data)
+  }
+
+  static func verifyBytes(_ data: Data, signature: Data, key: Data) -> Bool {
+    guard let publicKey = try? Curve25519.Signing.PublicKey(rawRepresentation: key)
+    else { return false }
+    return publicKey.isValidSignature(signature, for: data)
+  }
+
   static func clear() {
     for account in ["noise", "signing"] {
       SecItemDelete([
         kSecClass: kSecClassGenericPassword,
-        kSecAttrService: "EmergencyCom",
+        kSecAttrService: "HearthBit",
         kSecAttrAccount: account,
       ] as CFDictionary)
     }
-    UserDefaults.standard.removeObject(forKey: "emergency.nickname")
+    UserDefaults.standard.removeObject(forKey: "hearthbit.nickname")
   }
 
   private static func load(_ account: String) -> Data? {
     let query: [CFString: Any] = [
       kSecClass: kSecClassGenericPassword,
-      kSecAttrService: "EmergencyCom",
+      kSecAttrService: "HearthBit",
       kSecAttrAccount: account,
       kSecReturnData: true,
       kSecMatchLimit: kSecMatchLimitOne,
@@ -928,7 +1081,7 @@ private final class IOSMeshIdentity {
   private static func save(_ data: Data, _ account: String) {
     let base: [CFString: Any] = [
       kSecClass: kSecClassGenericPassword,
-      kSecAttrService: "EmergencyCom",
+      kSecAttrService: "HearthBit",
       kSecAttrAccount: account,
     ]
     SecItemDelete(base as CFDictionary)
@@ -1300,12 +1453,23 @@ private extension Data {
   }
 }
 
+/// Stream handler vacío para el canal de eventos de transferencia en iOS.
+final class HearthBitTransferEventStub: NSObject, FlutterStreamHandler {
+  func onListen(
+    withArguments arguments: Any?,
+    eventSink events: @escaping FlutterEventSink
+  ) -> FlutterError? { nil }
+
+  func onCancel(withArguments arguments: Any?) -> FlutterError? { nil }
+}
+
 private enum IOSMeshError: LocalizedError {
   case notRunning
   case peerUnavailable
   case invalidPeerID
   case identityMismatch
   case noise
+  case invalidPayload
 
   var errorDescription: String? {
     switch self {
@@ -1314,6 +1478,7 @@ private enum IOSMeshError: LocalizedError {
     case .invalidPeerID: return "La identidad del dispositivo no es válida"
     case .identityMismatch: return "La identidad Noise no coincide"
     case .noise: return "Falló el canal cifrado Noise"
+    case .invalidPayload: return "La carga de la transferencia no es válida"
     }
   }
 }

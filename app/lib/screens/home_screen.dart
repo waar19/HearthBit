@@ -1,12 +1,27 @@
+import 'dart:io';
+
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../controllers/mesh_controller.dart';
+import '../controllers/transfer_controller.dart';
 import '../models/mesh_models.dart';
+import '../models/transfer_models.dart';
+import '../services/photo_profile.dart';
+import 'optical_receive_screen.dart';
+import 'optical_send_screen.dart';
+import 'transfers_tab.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({required this.controller, super.key});
+  const HomeScreen({
+    required this.controller,
+    required this.transfers,
+    super.key,
+  });
 
   final MeshController controller;
+  final TransferController transfers;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -16,6 +31,112 @@ class _HomeScreenState extends State<HomeScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   int _tab = 0;
+
+  int get _pendingOffers => widget.transfers.transfers
+      .where(
+        (record) =>
+            record.direction == TransferDirection.incoming &&
+            record.state == TransferState.offered,
+      )
+      .length;
+
+  Future<void> _sendFileTo(MeshPeer peer) async {
+    final file = await openFile();
+    if (file == null || !mounted) return;
+    var path = file.path;
+    var name = file.name;
+    if (PhotoEmergencyProfile.isPhoto(name)) {
+      final size = await File(path).length();
+      if (size > PhotoEmergencyProfile.compressThresholdBytes && mounted) {
+        final compress = await _askCompressPhoto(size);
+        if (compress == null || !mounted) return;
+        if (compress) {
+          final compressed = await PhotoEmergencyProfile.compress(path);
+          if (compressed != null) {
+            path = compressed;
+            name = p.basename(compressed);
+          }
+        }
+      }
+    }
+    if (!mounted) return;
+    try {
+      await widget.transfers.sendFile(
+        peer: peer,
+        filePath: path,
+        fileName: name,
+      );
+      if (!mounted) return;
+      setState(() => _tab = 2);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo ofrecer el archivo: $error')),
+      );
+    }
+  }
+
+  Future<void> _startOpticalSend() async {
+    final file = await openFile();
+    if (file == null || !mounted) return;
+    var path = file.path;
+    var name = file.name;
+    if (PhotoEmergencyProfile.isPhoto(name)) {
+      final size = await File(path).length();
+      if (size > PhotoEmergencyProfile.compressThresholdBytes && mounted) {
+        final compress = await _askCompressPhoto(size);
+        if (compress == null || !mounted) return;
+        if (compress) {
+          final compressed = await PhotoEmergencyProfile.compress(path);
+          if (compressed != null) {
+            path = compressed;
+            name = p.basename(compressed);
+          }
+        }
+      }
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OpticalSendScreen(
+          filePath: path,
+          fileName: name,
+          senderPeerId: widget.controller.peerId,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _startOpticalReceive() {
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OpticalReceiveScreen(transfers: widget.transfers),
+      ),
+    );
+  }
+
+  Future<bool?> _askCompressPhoto(int size) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Perfil de emergencia'),
+        content: Text(
+          'La foto pesa ${(size / (1024 * 1024)).toStringAsFixed(1)} MiB. '
+          'Comprimirla acelera el envío y ahorra batería en la malla.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('ENVIAR ORIGINAL'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('COMPRIMIR'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -27,12 +148,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: widget.controller,
+      animation: Listenable.merge([widget.controller, widget.transfers]),
       builder: (context, _) {
         final controller = widget.controller;
         return Scaffold(
           appBar: AppBar(
-            title: const Text('EmergencyCom'),
+            title: const Text('HearthBit'),
             actions: [
               IconButton(
                 tooltip: 'Cambiar nombre',
@@ -67,6 +188,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       _buildChat(controller),
                       _buildPeers(controller),
+                      TransfersTab(
+                        transfers: widget.transfers,
+                        onSendOptical: _startOpticalSend,
+                        onReceiveOptical: _startOpticalReceive,
+                      ),
                       _buildSos(controller),
                     ],
                   ),
@@ -77,18 +203,27 @@ class _HomeScreenState extends State<HomeScreen> {
           bottomNavigationBar: NavigationBar(
             selectedIndex: _tab,
             onDestinationSelected: (value) => setState(() => _tab = value),
-            destinations: const [
-              NavigationDestination(
+            destinations: [
+              const NavigationDestination(
                 icon: Icon(Icons.forum_outlined),
                 selectedIcon: Icon(Icons.forum),
                 label: 'Canal',
               ),
-              NavigationDestination(
+              const NavigationDestination(
                 icon: Icon(Icons.hub_outlined),
                 selectedIcon: Icon(Icons.hub),
                 label: 'Cercanos',
               ),
               NavigationDestination(
+                icon: Badge(
+                  isLabelVisible: _pendingOffers > 0,
+                  label: Text('$_pendingOffers'),
+                  child: const Icon(Icons.folder_shared_outlined),
+                ),
+                selectedIcon: const Icon(Icons.folder_shared),
+                label: 'Archivos',
+              ),
+              const NavigationDestination(
                 icon: Icon(Icons.sos_outlined),
                 selectedIcon: Icon(Icons.sos),
                 label: 'SOS',
@@ -124,7 +259,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         _MessageComposer(
           controller: _messageController,
-          enabled: controller.status == MeshConnectionStatus.active,
+          enabled: controller.canSend,
           hint: 'Mensaje para todos los cercanos',
           onSend: () async {
             final text = _messageController.text;
@@ -143,7 +278,7 @@ class _HomeScreenState extends State<HomeScreen> {
         icon: Icons.portable_wifi_off,
         title: 'No hay dispositivos cercanos',
         description:
-            'Mantén Bluetooth activo y acerca otro teléfono con EmergencyCom o BitChat.',
+            'Mantén Bluetooth activo y acerca otro teléfono con HearthBit o BitChat.',
       );
     }
     return ListView.separated(
@@ -160,7 +295,17 @@ class _HomeScreenState extends State<HomeScreen> {
           subtitle: Text(
             '${peer.id.substring(0, 8)} · ${peer.secure ? "canal cifrado listo" : "toca para cifrar"}',
           ),
-          trailing: Icon(peer.secure ? Icons.lock : Icons.lock_open),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: 'Enviar archivo',
+                onPressed: () => _sendFileTo(peer),
+                icon: const Icon(Icons.attach_file),
+              ),
+              Icon(peer.secure ? Icons.lock : Icons.lock_open),
+            ],
+          ),
           onTap: () => _openPrivateChat(controller, peer),
         );
       },
@@ -204,22 +349,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   alignment: WrapAlignment.center,
                   children: [
                     FilledButton(
-                      onPressed:
-                          controller.status == MeshConnectionStatus.active
+                      onPressed: controller.canSend
                           ? () => controller.sendSos('Necesito ayuda médica')
                           : null,
                       child: const Text('AYUDA MÉDICA'),
                     ),
                     FilledButton.tonal(
-                      onPressed:
-                          controller.status == MeshConnectionStatus.active
+                      onPressed: controller.canSend
                           ? () => controller.sendSos('Estoy atrapado')
                           : null,
                       child: const Text('ESTOY ATRAPADO'),
                     ),
                     FilledButton.tonal(
-                      onPressed:
-                          controller.status == MeshConnectionStatus.active
+                      onPressed: controller.canSend
                           ? () => controller.sendSos('Estoy bien')
                           : null,
                       child: const Text('ESTOY BIEN'),
@@ -374,7 +516,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
-    if (confirmed == true) await controller.panicWipe();
+    if (confirmed == true) {
+      await widget.transfers.wipe();
+      await controller.panicWipe();
+    }
   }
 
   void _scrollToBottom() {
@@ -397,33 +542,63 @@ class _StatusBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final active = controller.status == MeshConnectionStatus.active;
+    final scheme = Theme.of(context).colorScheme;
+    final status = controller.status;
+    final (color, icon, label) = switch (status) {
+      MeshConnectionStatus.active => (
+        scheme.primaryContainer,
+        Icons.bluetooth_connected,
+        '${controller.nickname} · ${controller.peers.length} cercanos',
+      ),
+      MeshConnectionStatus.degraded => (
+        scheme.tertiaryContainer,
+        Icons.bluetooth_searching,
+        '${controller.nickname} · solo recepción (sin anuncio BLE)',
+      ),
+      MeshConnectionStatus.starting => (
+        scheme.surfaceContainerHighest,
+        Icons.bluetooth_searching,
+        'Iniciando malla…',
+      ),
+      MeshConnectionStatus.error => (
+        scheme.errorContainer,
+        Icons.bluetooth_disabled,
+        'Error en la malla',
+      ),
+      MeshConnectionStatus.stopped => (
+        scheme.surfaceContainerHighest,
+        Icons.bluetooth_disabled,
+        'Malla detenida',
+      ),
+    };
     return ColoredBox(
-      color: active
-          ? Theme.of(context).colorScheme.primaryContainer
-          : Theme.of(context).colorScheme.surfaceContainerHighest,
+      color: color,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
           children: [
-            Icon(active ? Icons.bluetooth_connected : Icons.bluetooth_disabled),
+            Icon(icon),
             const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                active
-                    ? '${controller.nickname} · ${controller.peers.length} cercanos'
-                    : 'Malla detenida',
-              ),
-            ),
-            if (controller.status == MeshConnectionStatus.starting)
+            Expanded(child: Text(label)),
+            if (status == MeshConnectionStatus.starting)
               const SizedBox.square(
                 dimension: 24,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
+            else if (status == MeshConnectionStatus.active)
+              FilledButton.tonal(
+                onPressed: controller.stop,
+                child: const Text('DETENER'),
+              )
+            else if (status == MeshConnectionStatus.degraded)
+              FilledButton.tonal(
+                onPressed: controller.start,
+                child: const Text('REINICIAR'),
+              )
             else
               FilledButton.tonal(
-                onPressed: active ? controller.stop : controller.start,
-                child: Text(active ? 'DETENER' : 'ACTIVAR'),
+                onPressed: controller.start,
+                child: const Text('ACTIVAR'),
               ),
           ],
         ),

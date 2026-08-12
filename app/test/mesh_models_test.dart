@@ -1,4 +1,4 @@
-import 'package:emergency_com/models/mesh_models.dart';
+import 'package:hearth_bit/models/mesh_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

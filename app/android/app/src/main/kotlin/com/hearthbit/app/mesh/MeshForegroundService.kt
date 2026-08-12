@@ -1,4 +1,4 @@
-package com.emergencycom.emergency_com.mesh
+package com.hearthbit.app.mesh
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -8,8 +8,8 @@ import android.app.Service
 import android.content.Intent
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import com.emergencycom.emergency_com.MainActivity
-import com.emergencycom.emergency_com.R
+import com.hearthbit.app.MainActivity
+import com.hearthbit.app.R
 
 class MeshForegroundService : Service() {
     override fun onCreate() {
@@ -28,6 +28,9 @@ class MeshForegroundService : Service() {
         runCatching { MeshRuntime.engine(this).start() }.onFailure {
             MeshRuntime.eventListener?.invoke(
                 mapOf("type" to "error", "message" to (it.message ?: "No se pudo iniciar BLE")),
+            )
+            MeshRuntime.eventListener?.invoke(
+                mapOf("type" to "status", "status" to "error"),
             )
             stopSelf()
         }
@@ -62,7 +65,7 @@ class MeshForegroundService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("EmergencyCom está conectado")
+            .setContentTitle("HearthBit está conectado")
             .setContentText("Retransmitiendo mensajes de la malla BLE")
             .setContentIntent(pendingIntent)
             .setOngoing(true)
@@ -71,7 +74,7 @@ class MeshForegroundService : Service() {
     }
 
     companion object {
-        const val ACTION_STOP = "com.emergencycom.emergency_com.STOP_MESH"
+        const val ACTION_STOP = "com.hearthbit.app.STOP_MESH"
         private const val CHANNEL_ID = "emergency_mesh"
         private const val NOTIFICATION_ID = 7401
     }

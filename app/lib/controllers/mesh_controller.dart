@@ -27,6 +27,12 @@ class MeshController extends ChangeNotifier {
   List<MeshMessage> get messages => List.unmodifiable(_messages);
   List<MeshPeer> get peers => List.unmodifiable(_peers);
 
+  /// La malla puede enviar mensajes: anuncio completo o modo solo recepción,
+  /// donde las conexiones salientes hacia otros nodos siguen funcionando.
+  bool get canSend =>
+      status == MeshConnectionStatus.active ||
+      status == MeshConnectionStatus.degraded;
+
   Future<void> initialize() async {
     _messages
       ..clear()
@@ -136,10 +142,13 @@ class MeshController extends ChangeNotifier {
   void _handleEvent(Map<Object?, Object?> event) {
     switch (event['type']) {
       case 'status':
-        final value = event['status'] as String?;
-        status = value == 'active'
-            ? MeshConnectionStatus.active
-            : MeshConnectionStatus.stopped;
+        status = switch (event['status'] as String?) {
+          'active' => MeshConnectionStatus.active,
+          'degraded' => MeshConnectionStatus.degraded,
+          'starting' => MeshConnectionStatus.starting,
+          'error' => MeshConnectionStatus.error,
+          _ => MeshConnectionStatus.stopped,
+        };
         nickname = event['nickname'] as String? ?? nickname;
         peerId = event['peerId'] as String? ?? peerId;
         break;

@@ -1,4 +1,4 @@
-package com.emergencycom.emergency_com.mesh
+package com.hearthbit.app.mesh
 
 import android.content.Context
 

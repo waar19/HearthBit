@@ -1,6 +1,6 @@
 # Perfil compatible con BitChat
 
-EmergencyCom usa el UUID principal de BitChat:
+HearthBit usa el UUID principal de BitChat:
 
 - Servicio: `F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C`
 - Característica: `A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D`

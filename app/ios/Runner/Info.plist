@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Emergency Com</string>
+	<string>HearthBit</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>emergency_com</string>
+	<string>hearth_bit</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -27,9 +27,11 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>EmergencyCom usa Bluetooth para encontrar teléfonos cercanos y retransmitir mensajes cuando no hay internet.</string>
+	<string>HearthBit usa Bluetooth para encontrar teléfonos cercanos y retransmitir mensajes cuando no hay internet.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>HearthBit usa la cámara para recibir archivos mediante códigos QR cuando no hay ninguna radio disponible.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>EmergencyCom anuncia este teléfono como un nodo de la malla de emergencia.</string>
+	<string>HearthBit anuncia este teléfono como un nodo de la malla de emergencia.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>La ubicación solo se adjunta cuando decides enviar una alerta SOS.</string>
 	<key>UIBackgroundModes</key>

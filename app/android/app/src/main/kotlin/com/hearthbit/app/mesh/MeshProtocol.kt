@@ -1,4 +1,4 @@
-package com.emergencycom.emergency_com.mesh
+package com.hearthbit.app.mesh
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -14,6 +14,9 @@ internal object MeshProtocol {
     const val TTL: Byte = 7
 
     const val NOISE_PRIVATE_MESSAGE: Byte = 0x01
+
+    /** Trama HBT (HearthBit Transfer) encapsulada dentro de la sesión Noise. */
+    const val NOISE_TRANSFER_FRAME: Byte = 0x30
 
     val broadcastRecipient = ByteArray(8) { 0xFF.toByte() }
 

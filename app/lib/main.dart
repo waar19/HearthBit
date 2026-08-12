@@ -1,33 +1,42 @@
 import 'package:flutter/material.dart';
 
 import 'controllers/mesh_controller.dart';
+import 'controllers/transfer_controller.dart';
 import 'screens/home_screen.dart';
+import 'services/mesh_platform_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const EmergencyComApp());
+  runApp(const HearthBitApp());
 }
 
-class EmergencyComApp extends StatefulWidget {
-  const EmergencyComApp({super.key});
+class HearthBitApp extends StatefulWidget {
+  const HearthBitApp({super.key});
 
   @override
-  State<EmergencyComApp> createState() => _EmergencyComAppState();
+  State<HearthBitApp> createState() => _HearthBitAppState();
 }
 
-class _EmergencyComAppState extends State<EmergencyComApp> {
+class _HearthBitAppState extends State<HearthBitApp> {
   late final MeshController _controller;
+  late final TransferController _transfers;
   late final Future<void> _initialization;
 
   @override
   void initState() {
     super.initState();
-    _controller = MeshController();
-    _initialization = _controller.initialize();
+    final platform = MeshPlatformService();
+    _controller = MeshController(platform: platform);
+    _transfers = TransferController(platform);
+    _initialization = Future.wait([
+      _controller.initialize(),
+      _transfers.initialize(),
+    ]);
   }
 
   @override
   void dispose() {
+    _transfers.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -35,7 +44,7 @@ class _EmergencyComAppState extends State<EmergencyComApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'EmergencyCom',
+      title: 'HearthBit',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
@@ -72,7 +81,7 @@ class _EmergencyComAppState extends State<EmergencyComApp> {
               ),
             );
           }
-          return HomeScreen(controller: _controller);
+          return HomeScreen(controller: _controller, transfers: _transfers);
         },
       ),
     );

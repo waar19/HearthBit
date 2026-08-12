@@ -82,4 +82,4 @@ class MeshMessage {
   };
 }
 
-enum MeshConnectionStatus { stopped, starting, active, error }
+enum MeshConnectionStatus { stopped, starting, active, degraded, error }

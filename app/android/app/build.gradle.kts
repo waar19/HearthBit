@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.emergencycom.emergency_com"
+    namespace = "com.hearthbit.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -22,7 +22,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.emergencycom.emergency_com"
+        applicationId = "com.hearthbit.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 26
@@ -53,5 +53,7 @@ flutter {
 dependencies {
     implementation("androidx.security:security-crypto:1.1.0")
     implementation("org.bouncycastle:bcprov-jdk18on:1.85")
+    implementation("com.google.android.gms:play-services-nearby:19.3.0")
+    implementation("com.google.android.gms:play-services-base:18.5.0")
     testImplementation("junit:junit:4.13.2")
 }

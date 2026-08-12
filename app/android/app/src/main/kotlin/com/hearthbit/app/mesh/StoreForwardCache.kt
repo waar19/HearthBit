@@ -1,11 +1,11 @@
-package com.emergencycom.emergency_com.mesh
+package com.hearthbit.app.mesh
 
 import android.content.Context
 import android.util.Base64
 
 internal class StoreForwardCache(context: Context) {
     private val preferences = context.getSharedPreferences(
-        "emergency_com_store_forward",
+        "hearthbit_store_forward",
         Context.MODE_PRIVATE,
     )
 

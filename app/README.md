@@ -1,4 +1,4 @@
-# Aplicación EmergencyCom
+# Aplicación HearthBit
 
 UI Flutter con radios nativas Kotlin/CoreBluetooth.
 

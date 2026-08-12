@@ -8,7 +8,7 @@ class MessageRepository {
 
   Future<Database> get _db async {
     return _database ??= await openDatabase(
-      path.join(await getDatabasesPath(), 'emergency_com.db'),
+      path.join(await getDatabasesPath(), 'hearth_bit.db'),
       version: 1,
       onCreate: (database, version) async {
         await database.execute('''

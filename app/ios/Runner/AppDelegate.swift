@@ -3,7 +3,7 @@ import UIKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
-  private var emergencyMeshPlugin: EmergencyMeshPlugin?
+  private var hearthBitMeshPlugin: HearthBitMeshPlugin?
 
   override func application(
     _ application: UIApplication,
@@ -14,7 +14,7 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    emergencyMeshPlugin = EmergencyMeshPlugin.register(
+    hearthBitMeshPlugin = HearthBitMeshPlugin.register(
       with: engineBridge.applicationRegistrar.messenger()
     )
   }

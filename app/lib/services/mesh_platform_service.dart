@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 class MeshPlatformService {
-  static const _methods = MethodChannel('com.emergencycom.mesh/methods');
-  static const _events = EventChannel('com.emergencycom.mesh/events');
+  static const _methods = MethodChannel('com.hearthbit.mesh/methods');
+  static const _events = EventChannel('com.hearthbit.mesh/events');
 
   Stream<Map<Object?, Object?>> get events => _events
       .receiveBroadcastStream()
@@ -63,4 +63,33 @@ class MeshPlatformService {
   }
 
   Future<void> panicWipe() => _methods.invokeMethod<void>('panicWipe');
+
+  /// Envía una trama HBT (plano de control de transferencias) por la sesión
+  /// Noise de la malla.
+  Future<void> sendTransferFrame(String peerId, Uint8List frame) {
+    return _methods.invokeMethod<void>('sendTransferFrame', {
+      'peerId': peerId,
+      'frame': frame,
+    });
+  }
+
+  /// Firma Ed25519 con la identidad local (ofertas y boletines ópticos).
+  Future<Uint8List> signPayload(Uint8List data) async {
+    return (await _methods.invokeMethod<Uint8List>('signPayload', {
+      'data': data,
+    }))!;
+  }
+
+  Future<bool> verifyPeerSignature(
+    String peerId,
+    Uint8List data,
+    Uint8List signature,
+  ) async {
+    return await _methods.invokeMethod<bool>('verifyPeerSignature', {
+          'peerId': peerId,
+          'data': data,
+          'signature': signature,
+        }) ??
+        false;
+  }
 }
