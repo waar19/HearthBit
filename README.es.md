@@ -1,5 +1,7 @@
 # HearthBit
 
+<img src="app/assets/icon/hearthbit.png" alt="Ícono de la app HearthBit" width="160">
+
 [English](README.md) · **Español**
 
 HearthBit («la red que sigue latiendo») es una aplicación móvil de
@@ -37,6 +39,17 @@ ayudan a financiar pruebas con dispositivos físicos, ensayos de campo y
 hardware para los nodos repetidores.
 
 [![Apoya HearthBit en Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-apoya_HearthBit-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/wilmeralzal)
+
+## Difunde el proyecto
+
+Las mallas de emergencia son más útiles cuando más personas las instalan antes
+de que ocurra un desastre. Comparte HearthBit con tu familia, vecinos, equipos
+de rescate y comunidades locales:
+
+**[Invita a alguien a usar HearthBit](https://github.com/waar19/HearthBit)**
+
+La aplicación también incluye un botón nativo **Compartir HearthBit** en
+«Acerca de» y en la pantalla «Cercanos».
 
 ## Idiomas
 

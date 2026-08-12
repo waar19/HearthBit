@@ -5,6 +5,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
 import java.util.UUID
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 import java.util.zip.Deflater
 import java.util.zip.Inflater
 
@@ -12,12 +14,14 @@ internal object MeshProtocol {
     const val VERSION: Byte = 1
     const val TYPE_ANNOUNCE: Byte = 0x01
     const val TYPE_MESSAGE: Byte = 0x02
+    const val TYPE_COURIER_ENVELOPE: Byte = 0x04
     const val TYPE_NOISE_HANDSHAKE: Byte = 0x10
     const val TYPE_NOISE_ENCRYPTED: Byte = 0x11
     const val TYPE_FRAGMENT: Byte = 0x20
     const val TYPE_REQUEST_SYNC: Byte = 0x21
     const val TYPE_RADAR_CONTROL: Byte = 0x23
     const val TYPE_HBT_CAPABILITY: Byte = 0x24
+    const val TYPE_NODE_CAPABILITY: Byte = 0x25
     const val TTL: Byte = 7
     const val HBT_VERSION: Byte = 0x01
 
@@ -37,9 +41,11 @@ internal object MeshProtocol {
         val recipientId: ByteArray? = null,
         val payload: ByteArray,
         val signature: ByteArray? = null,
+        val route: List<ByteArray> = emptyList(),
+        val isRsr: Boolean = false,
     ) {
         fun canonicalForSigning(): ByteArray = encode(
-            copy(ttl = 0, signature = null),
+            copy(ttl = 0, signature = null, isRsr = false),
             padded = true,
         )
     }
@@ -58,14 +64,35 @@ internal object MeshProtocol {
         val noisePublicKey: ByteArray,
         val signingPublicKey: ByteArray,
         val supportsTransfers: Boolean,
+        val isInfrastructure: Boolean,
     )
 
     data class PrivateMessage(val id: String, val content: String)
 
+    data class SyncRequest(
+        val p: Int,
+        val m: Long,
+        val filter: ByteArray,
+        val typeFlags: Long = SYNC_FLAG_ANNOUNCE or SYNC_FLAG_MESSAGE,
+        val since: Long? = null,
+    )
+
+    data class CourierEnvelope(
+        val recipientTag: ByteArray,
+        val expiry: Long,
+        val ciphertext: ByteArray,
+        val copies: Int,
+        val prekeyId: Long?,
+    )
+
     fun encode(packet: Packet, padded: Boolean = true): ByteArray {
         require(packet.senderId.size == 8)
         require(packet.recipientId == null || packet.recipientId.size == 8)
-        require(packet.payload.size <= 0xFFFF)
+        require(packet.version == 1.toByte() || packet.version == 2.toByte())
+        require(packet.version >= 2 || packet.route.isEmpty())
+        require(packet.route.size <= 255 && packet.route.all { it.size == 8 })
+        require(packet.payload.size <= MAX_PAYLOAD_LENGTH)
+        require(packet.version >= 2 || packet.payload.size <= 0xFFFF)
         require(packet.signature == null || packet.signature.size == 64)
 
         var payload = packet.payload
@@ -80,6 +107,8 @@ internal object MeshProtocol {
         if (packet.recipientId != null) flags = flags or 0x01
         if (packet.signature != null) flags = flags or 0x02
         if (originalPayloadSize != null) flags = flags or 0x04
+        if (packet.version >= 2 && packet.route.isNotEmpty()) flags = flags or 0x08
+        if (packet.isRsr) flags = flags or 0x10
 
         val payloadSizeField = if (originalPayloadSize == null) {
             0
@@ -91,6 +120,7 @@ internal object MeshProtocol {
         val headerSize = if (packet.version >= 2) 16 else 14
         val payloadDataSize = payloadSizeField + payload.size
         val size = headerSize + 8 + (packet.recipientId?.size ?: 0) +
+            (if (packet.route.isEmpty()) 0 else 1 + packet.route.size * 8) +
             payloadDataSize + (packet.signature?.size ?: 0)
         val buffer = ByteBuffer.allocate(size).order(ByteOrder.BIG_ENDIAN)
         buffer.put(packet.version)
@@ -105,6 +135,10 @@ internal object MeshProtocol {
         }
         buffer.put(packet.senderId)
         packet.recipientId?.let(buffer::put)
+        if (packet.version >= 2 && packet.route.isNotEmpty()) {
+            buffer.put(packet.route.size.toByte())
+            packet.route.forEach(buffer::put)
+        }
         originalPayloadSize?.let { originalSize ->
             if (packet.version >= 2) {
                 buffer.putInt(originalSize)
@@ -145,11 +179,13 @@ internal object MeshProtocol {
             val sender = ByteArray(8).also(buffer::get)
             val recipient = if (flags and 0x01 != 0) ByteArray(8).also(buffer::get) else null
 
-            if (version >= 2 && flags and 0x08 != 0) {
+            val route = if (version >= 2 && flags and 0x08 != 0) {
                 val routeCount = buffer.get().toInt() and 0xFF
                 val routeBytes = routeCount * 8
                 if (buffer.remaining() < routeBytes) return null
-                buffer.position(buffer.position() + routeBytes)
+                List(routeCount) { ByteArray(8).also(buffer::get) }
+            } else {
+                emptyList()
             }
             val isCompressed = flags and 0x04 != 0
             val signatureSize = if (flags and 0x02 != 0) 64 else 0
@@ -171,7 +207,18 @@ internal object MeshProtocol {
                 payloadData
             }
             val signature = if (signatureSize > 0) ByteArray(64).also(buffer::get) else null
-            Packet(version, type, ttl, timestamp, sender, recipient, payload, signature)
+            Packet(
+                version = version,
+                type = type,
+                ttl = ttl,
+                timestamp = timestamp,
+                senderId = sender,
+                recipientId = recipient,
+                payload = payload,
+                signature = signature,
+                route = route,
+                isRsr = flags and 0x10 != 0,
+            )
         }.getOrNull()
     }
 
@@ -286,6 +333,7 @@ internal object MeshProtocol {
         var noiseKey: ByteArray? = null
         var signingKey: ByteArray? = null
         var supportsTransfers = false
+        var isInfrastructure = false
         while (offset + 2 <= payload.size) {
             val type = payload[offset++].toInt() and 0xFF
             val length = payload[offset++].toInt() and 0xFF
@@ -300,11 +348,201 @@ internal object MeshProtocol {
                     supportsTransfers = value.size == 1 &&
                         value[0] == HBT_VERSION
                 }
+                INFRASTRUCTURE_TLV -> {
+                    isInfrastructure = value.isNotEmpty() &&
+                        (value[0].toInt() and 0x01) != 0
+                }
             }
         }
         if (nickname == null || noiseKey?.size != 32 || signingKey?.size != 32) return null
-        Announcement(nickname, noiseKey, signingKey, supportsTransfers)
+        Announcement(nickname, noiseKey, signingKey, supportsTransfers, isInfrastructure)
     }.getOrNull()
+
+    fun packetId(packet: Packet): ByteArray {
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(packet.type)
+        digest.update(packet.senderId)
+        digest.update(ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN).putLong(packet.timestamp).array())
+        digest.update(packet.payload)
+        return digest.digest().copyOf(16)
+    }
+
+    fun encodeSyncRequest(packets: Collection<Packet>): ByteArray {
+        val ids = packets.map(::packetId).take(SYNC_MAX_ELEMENTS)
+        val m = if (ids.isEmpty()) 1L else ids.size.toLong() shl SYNC_GCS_P
+        val buckets = ids.map { gcsBucket(it, m) }.distinct().sorted()
+        val filter = gcsEncode(buckets, SYNC_GCS_P)
+        return ByteArrayOutputStream().apply {
+            writeSyncTlv(0x01, byteArrayOf(SYNC_GCS_P.toByte()))
+            writeSyncTlv(
+                0x02,
+                ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(m.toInt()).array(),
+            )
+            writeSyncTlv(0x03, filter)
+            writeSyncTlv(
+                0x04,
+                byteArrayOf((SYNC_FLAG_ANNOUNCE or SYNC_FLAG_MESSAGE).toByte()),
+            )
+        }.toByteArray()
+    }
+
+    fun decodeSyncRequest(payload: ByteArray): SyncRequest? = runCatching {
+        var offset = 0
+        var p: Int? = null
+        var m: Long? = null
+        var filter: ByteArray? = null
+        var typeFlags: Long? = null
+        var since: Long? = null
+        while (offset + 3 <= payload.size) {
+            val type = payload[offset++].toInt() and 0xFF
+            val length = ((payload[offset++].toInt() and 0xFF) shl 8) or
+                (payload[offset++].toInt() and 0xFF)
+            if (offset + length > payload.size) return null
+            val value = payload.copyOfRange(offset, offset + length)
+            offset += length
+            when (type) {
+                0x01 -> if (length == 1) p = value[0].toInt() and 0xFF
+                0x02 -> if (length == 4) {
+                    m = ByteBuffer.wrap(value).order(ByteOrder.BIG_ENDIAN).int.toLong() and
+                        0xFFFF_FFFFL
+                }
+                0x03 -> {
+                    if (length > SYNC_MAX_ACCEPT_BYTES) return null
+                    filter = value
+                }
+                0x04 -> {
+                    var flags = 0L
+                    value.take(8).forEachIndexed { index, byte ->
+                        flags = flags or ((byte.toLong() and 0xFF) shl (index * 8))
+                    }
+                    typeFlags = flags
+                }
+                0x05 -> if (length == 8) {
+                    since = ByteBuffer.wrap(value).order(ByteOrder.BIG_ENDIAN).long
+                }
+            }
+        }
+        val validP = p ?: return null
+        val validM = m ?: return null
+        val validFilter = filter ?: return null
+        if (validP !in 1..32 || validM <= 0) return null
+        SyncRequest(
+            validP,
+            validM,
+            validFilter,
+            typeFlags ?: (SYNC_FLAG_ANNOUNCE or SYNC_FLAG_MESSAGE),
+            since,
+        )
+    }.getOrNull()
+
+    fun decodeGcs(request: SyncRequest): LongArray {
+        val values = ArrayList<Long>()
+        var bitOffset = 0
+        var accumulator = 0L
+        fun readBit(): Int? {
+            if (bitOffset >= request.filter.size * 8) return null
+            val byte = request.filter[bitOffset / 8].toInt() and 0xFF
+            return ((byte ushr (7 - bitOffset++ % 8)) and 1)
+        }
+        while (values.size < SYNC_MAX_DECODED_ELEMENTS) {
+            var quotient = 0L
+            var bit = readBit() ?: break
+            while (bit == 1) {
+                quotient++
+                bit = readBit() ?: return values.toLongArray()
+            }
+            var remainder = 0L
+            repeat(request.p) {
+                remainder = (remainder shl 1) or
+                    (readBit() ?: return values.toLongArray()).toLong()
+            }
+            accumulator += (quotient shl request.p) + remainder + 1
+            if (accumulator >= request.m) break
+            values += accumulator
+        }
+        return values.toLongArray()
+    }
+
+    fun gcsBucket(packetId: ByteArray, m: Long): Long {
+        if (m <= 1) return 0
+        val digest = MessageDigest.getInstance("SHA-256").digest(packetId)
+        var hash = 0L
+        repeat(8) { hash = (hash shl 8) or (digest[it].toLong() and 0xFF) }
+        val value = (hash and Long.MAX_VALUE) % m
+        return if (value == 0L) 1 else value
+    }
+
+    fun gcsContains(sortedValues: LongArray, candidate: Long): Boolean =
+        sortedValues.binarySearch(candidate) >= 0
+
+    fun encodeCourierEnvelope(
+        recipientNoiseKey: ByteArray,
+        ciphertext: ByteArray,
+        now: Long = System.currentTimeMillis(),
+        expiry: Long = now + COURIER_LIFETIME_MS,
+        copies: Int = COURIER_DEFAULT_COPIES,
+    ): ByteArray {
+        require(recipientNoiseKey.size == 32)
+        require(ciphertext.isNotEmpty() && ciphertext.size <= 0xFFFF)
+        require(expiry > now && expiry <= now + COURIER_MAX_LIFETIME_MS)
+        val day = Math.floorDiv(now, DAY_MS)
+        return ByteArrayOutputStream().apply {
+            writeSyncTlv(0x01, courierTag(recipientNoiseKey, day))
+            writeSyncTlv(
+                0x02,
+                ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN).putLong(expiry).array(),
+            )
+            writeSyncTlv(0x03, ciphertext)
+            if (copies > 1) writeSyncTlv(0x04, byteArrayOf(copies.coerceAtMost(8).toByte()))
+        }.toByteArray()
+    }
+
+    fun decodeCourierEnvelope(payload: ByteArray): CourierEnvelope? = runCatching {
+        var offset = 0
+        var tag: ByteArray? = null
+        var expiry: Long? = null
+        var ciphertext: ByteArray? = null
+        var copies = 1
+        var prekeyId: Long? = null
+        while (offset + 3 <= payload.size) {
+            val type = payload[offset++].toInt() and 0xFF
+            val length = ((payload[offset++].toInt() and 0xFF) shl 8) or
+                (payload[offset++].toInt() and 0xFF)
+            if (offset + length > payload.size) return null
+            val value = payload.copyOfRange(offset, offset + length)
+            offset += length
+            when (type) {
+                0x01 -> if (length == 16) tag = value else return null
+                0x02 -> if (length == 8) {
+                    expiry = ByteBuffer.wrap(value).order(ByteOrder.BIG_ENDIAN).long
+                } else {
+                    return null
+                }
+                0x03 -> if (value.isNotEmpty()) ciphertext = value else return null
+                0x04 -> if (length == 1) copies =
+                    (value[0].toInt() and 0xFF).coerceIn(1, 8) else return null
+                0x05 -> if (length == 4) {
+                    prekeyId = ByteBuffer.wrap(value).order(ByteOrder.BIG_ENDIAN)
+                        .int.toLong() and 0xFFFF_FFFFL
+                } else {
+                    return null
+                }
+            }
+        }
+        CourierEnvelope(tag ?: return null, expiry ?: return null, ciphertext ?: return null, copies, prekeyId)
+    }.getOrNull()
+
+    fun courierEnvelopeIsFor(
+        envelope: CourierEnvelope,
+        noisePublicKey: ByteArray,
+        now: Long = System.currentTimeMillis(),
+    ): Boolean {
+        if (envelope.expiry <= now || envelope.expiry > now + COURIER_MAX_LIFETIME_MS) return false
+        val day = Math.floorDiv(now, DAY_MS)
+        return (day - 1..day + 1).any {
+            MessageDigest.isEqual(envelope.recipientTag, courierTag(noisePublicKey, it))
+        }
+    }
 
     fun encodePrivateMessage(id: String, content: String): ByteArray {
         val idBytes = id.toByteArray().take(255).toByteArray()
@@ -343,13 +581,55 @@ internal object MeshProtocol {
     fun hex(bytes: ByteArray): String = bytes.joinToString("") { "%02x".format(it) }
 
     fun fingerprint(packet: Packet): String {
-        val canonical = encode(packet.copy(ttl = 0), padded = false)
+        val canonical = encode(packet.copy(ttl = 0, isRsr = false), padded = false)
         return hex(MessageDigest.getInstance("SHA-256").digest(canonical).copyOfRange(0, 12))
     }
 
     private fun putByteString(buffer: ByteBuffer, bytes: ByteArray) {
         buffer.put(bytes.size.toByte())
         buffer.put(bytes)
+    }
+
+    private fun ByteArrayOutputStream.writeSyncTlv(type: Int, value: ByteArray) {
+        require(value.size <= 0xFFFF)
+        write(type)
+        write(value.size ushr 8)
+        write(value.size)
+        write(value)
+    }
+
+    private fun gcsEncode(sorted: List<Long>, p: Int): ByteArray {
+        val output = ByteArrayOutputStream()
+        var currentByte = 0
+        var bitCount = 0
+        fun writeBit(bit: Int) {
+            currentByte = (currentByte shl 1) or (bit and 1)
+            bitCount++
+            if (bitCount == 8) {
+                output.write(currentByte)
+                currentByte = 0
+                bitCount = 0
+            }
+        }
+        var previous = 0L
+        sorted.forEach { value ->
+            val delta = value - previous
+            previous = value
+            val encoded = delta - 1
+            repeat((encoded ushr p).toInt()) { writeBit(1) }
+            writeBit(0)
+            for (shift in p - 1 downTo 0) writeBit((encoded ushr shift).toInt())
+        }
+        if (bitCount > 0) output.write(currentByte shl (8 - bitCount))
+        return output.toByteArray()
+    }
+
+    private fun courierTag(noisePublicKey: ByteArray, epochDay: Long): ByteArray {
+        val message = COURIER_TAG_CONTEXT.toByteArray(Charsets.UTF_8) +
+            ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(epochDay.toInt()).array()
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(noisePublicKey, "HmacSHA256"))
+        return mac.doFinal(message).copyOf(16)
     }
 
     private fun getByteString(buffer: ByteBuffer): String {
@@ -427,5 +707,17 @@ internal object MeshProtocol {
     private const val COMPRESSION_THRESHOLD = 100
     private const val MAX_PAYLOAD_LENGTH = 10_485_760
     private const val HBT_CAPABILITY_TLV = 0xF0
+    private const val INFRASTRUCTURE_TLV = 0xB1
+    const val SYNC_FLAG_ANNOUNCE = 1L shl 0
+    const val SYNC_FLAG_MESSAGE = 1L shl 1
+    private const val SYNC_GCS_P = 7
+    private const val SYNC_MAX_ELEMENTS = 355
+    private const val SYNC_MAX_DECODED_ELEMENTS = 1024
+    private const val SYNC_MAX_ACCEPT_BYTES = 1024
+    private const val DAY_MS = 86_400_000L
+    private const val COURIER_LIFETIME_MS = 12 * 60 * 60 * 1_000L
+    private const val COURIER_MAX_LIFETIME_MS = 25 * 60 * 60 * 1_000L
+    private const val COURIER_DEFAULT_COPIES = 4
+    private const val COURIER_TAG_CONTEXT = "bitchat-courier-tag-v1"
     private val SOS_PREFIX = "SOS|".toByteArray(Charsets.UTF_8)
 }

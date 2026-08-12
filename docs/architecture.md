@@ -4,8 +4,9 @@
 
 1. Cada teléfono mantiene una identidad Curve25519 para Noise y una clave
    Ed25519 para firmar anuncios y mensajes públicos.
-2. Android anuncia y escanea el UUID BitChat desde un servicio en primer plano.
-   iOS usa CoreBluetooth con restauración de estado y los modos
+2. Android anuncia y escanea el UUID BitChat desde un servicio en primer plano
+   y mantiene un segundo escaneo, solo de presencia, para balizas BLE
+   genéricas. iOS usa CoreBluetooth con restauración de estado y los modos
    `bluetooth-central` y `bluetooth-peripheral`.
 3. Los peers intercambian anuncios TLV firmados. El identificador de 8 bytes es
    `SHA-256(clave pública Noise)[0:8]`.
@@ -80,6 +81,27 @@
    desde la posición del rescatista.
 6. Alcance realista: decenas de metros a cielo abierto, mucho menos entre
    escombros. El radar guía el último tramo; la aproximación inicial es GPS.
+
+## Dos niveles, roles e infraestructura
+
+1. El nivel de **presencia** acepta anuncios BLE genéricos, pero no intenta
+   GATT, no crea peers y nunca habilita chat. Android elimina toda observación
+   tras 45 s; Flutter solo presenta «Presencia detectada, sin chat».
+2. El nivel de **malla** exige `ANNOUNCE` firmado y claves vinculadas. Los
+   peers autenticados anuncian su rol en el paquete firmado dedicado `0x25`;
+   no se añade un TLV HearthBit a `ANNOUNCE` por compatibilidad con builds
+   BitChat afectados por la regresión de TLV desconocidos.
+3. `PHONE_RELAY` conserva el comportamiento de teléfono actual:
+   comunicación, relay y store-and-forward. `PHONE_BEACON` es presencia sin
+   chat ni relay. `INFRA_RELAY` retransmite sin conservar datos y
+   `INFRA_DATA_ANCHOR` retransmite y conserva paquetes dirigidos.
+4. La decisión de relay está centralizada y depende del rol, TTL y destino.
+   Noise dirigido al propio nodo se consume; Noise para otro destinatario y
+   paquetes públicos solo avanzan cuando el rol permite relay.
+5. El escáner genérico jamás entrega a Flutter nombre o MAC. Normaliza solo
+   datos de servicio/fabricante y genera un HMAC con secreto de proceso; el ID
+   cambia cada 15 min y también con cada reinicio. Estas presencias no se
+   persisten ni se mezclan con la identidad Curve25519.
 
 ## Límites intencionales
 

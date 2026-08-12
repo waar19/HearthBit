@@ -49,6 +49,12 @@ class MainActivity : FlutterActivity() {
                         "platform" to "android",
                         "backgroundRelay" to true,
                         "peripheralMode" to true,
+                        "nodeRoles" to listOf(
+                            "PHONE_RELAY",
+                            "PHONE_BEACON",
+                            "INFRA_RELAY",
+                            "INFRA_DATA_ANCHOR",
+                        ),
                     ),
                 )
                 "requestPermissions" -> requestMeshPermissions(result)
@@ -88,6 +94,12 @@ class MainActivity : FlutterActivity() {
                 "setNickname" -> runMethod(result) {
                     MeshRuntime.engine(this).updateNickname(
                         call.argument<String>("nickname").orEmpty(),
+                    )
+                    null
+                }
+                "setNodeRole" -> runMethod(result) {
+                    MeshRuntime.engine(this).updateRole(
+                        requireNotNull(call.argument<String>("role")),
                     )
                     null
                 }

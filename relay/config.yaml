@@ -1,0 +1,55 @@
+name: "HearthBit Relay"
+version: "0.1.0"
+slug: "hearthbit_relay"
+description: "Relay BLE persistente para la malla HearthBit"
+url: "https://github.com/waar1/emergency-com"
+startup: services
+boot: auto
+init: false
+advanced: true
+arch:
+  - aarch64
+  - amd64
+  - armv7
+host_dbus: true
+host_network: true
+apparmor: false
+options:
+  adapter: "hci0"
+  local_name: "Bitle Relay"
+  central_enabled: true
+  scan_interval_seconds: 20
+  max_central_links: 2
+  max_packet_size: 2048
+  log_level: "INFO"
+  store:
+    path: "/data/relay.db"
+    max_bytes: 67108864
+    max_packets: 20000
+    packet_ttl_seconds: 604800
+    seen_ttl_seconds: 86400
+    replay_batch: 256
+    require_signature: true
+    message_types:
+      - "0x02"
+      - "0x04"
+      - "0x24"
+      - "0x25"
+schema:
+  adapter: str
+  local_name: str
+  central_enabled: bool
+  scan_interval_seconds: float
+  max_central_links: int
+  max_packet_size: int
+  log_level: list(TRACE|DEBUG|INFO|WARNING|ERROR|CRITICAL)
+  store:
+    path: str
+    max_bytes: int
+    max_packets: int
+    packet_ttl_seconds: int
+    seen_ttl_seconds: int
+    replay_batch: int
+    require_signature: bool
+    message_types:
+      - str

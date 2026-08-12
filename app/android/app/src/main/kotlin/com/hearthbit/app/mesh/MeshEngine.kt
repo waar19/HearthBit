@@ -17,6 +17,7 @@ import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
+import android.bluetooth.le.ScanRecord
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
@@ -26,6 +27,7 @@ import android.os.Looper
 import android.os.ParcelUuid
 import android.util.Log
 import com.hearthbit.app.R
+import java.io.ByteArrayOutputStream
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -47,6 +49,8 @@ internal class MeshEngine(
     private val sessions = ConcurrentHashMap<String, NoiseSessionLite>()
     private val pendingPrivate = ConcurrentHashMap<String, MutableList<PendingPrivate>>()
     private val pendingFrames = ConcurrentHashMap<String, MutableList<ByteArray>>()
+    private val pendingCourier =
+        ConcurrentHashMap<String, MutableList<MeshProtocol.Packet>>()
     private val clientGatts = ConcurrentHashMap<String, BluetoothGatt>()
     private val clientCharacteristics =
         ConcurrentHashMap<String, BluetoothGattCharacteristic>()
@@ -58,8 +62,17 @@ internal class MeshEngine(
     private val storeForward = StoreForwardCache(context)
     private val fragmentReassembler = MeshFragmentReassembler()
     private val lastSyncRequestByAddress = ConcurrentHashMap<String, Long>()
+    private val syncResponseTimes = ConcurrentHashMap<String, ArrayDeque<Long>>()
+    private val syncPackets = Collections.synchronizedMap(
+        object : LinkedHashMap<String, MeshProtocol.Packet>(SYNC_STORE_CAPACITY, 0.75f, true) {
+            override fun removeEldestEntry(
+                eldest: MutableMap.MutableEntry<String, MeshProtocol.Packet>?,
+            ): Boolean = size > SYNC_STORE_CAPACITY
+        },
+    )
     private val remoteRadarConsents = ConcurrentHashMap<String, RemoteRadarConsent>()
     private val tentativeRadarReads = ConcurrentHashMap<String, String>()
+    private val genericPresenceTracker = GenericBlePresenceTracker()
 
     /**
      * Dirección MAC -> peerId de vecinos directos. Se alimenta con el peerId
@@ -81,6 +94,9 @@ internal class MeshEngine(
     @Volatile
     private var currentStatus = "stopped"
 
+    @Volatile
+    private var localRole = identity.nodeRole
+
     private var advertiseCallback: AdvertiseCallback? = null
     private var advertiseAttempt = 0
     private var advertiseGeneration = 0
@@ -94,7 +110,9 @@ internal class MeshEngine(
         val id: String,
         val nickname: String,
         val signingPublicKey: ByteArray,
+        val noisePublicKey: ByteArray,
         var supportsTransfers: Boolean,
+        var role: MeshNodeRole = MeshNodeRole.PHONE_RELAY,
         var lastSeen: Long = System.currentTimeMillis(),
     )
 
@@ -109,8 +127,11 @@ internal class MeshEngine(
         "status" to currentStatus,
         "peerId" to peerId,
         "nickname" to nickname,
+        "role" to localRole.wireName,
         "radarConsentUntil" to activeLocalRadarConsentUntil(),
         "peers" to peersSnapshot(),
+        "presences" to genericPresenceTracker.snapshot(System.currentTimeMillis())
+            .map(GenericBlePresenceTracker.Presence::toEventMap),
     )
 
     @SuppressLint("MissingPermission")
@@ -125,6 +146,7 @@ internal class MeshEngine(
         emitStatus("starting")
         startGattServer()
         startScanning()
+        startGenericBeaconScanning()
         startAdvertising()
     }
 
@@ -162,6 +184,8 @@ internal class MeshEngine(
         stopRadar()
         addressToPeer.clear()
         runCatching { adapter.bluetoothLeScanner?.stopScan(scanCallback) }
+        runCatching { adapter.bluetoothLeScanner?.stopScan(genericBeaconScanCallback) }
+        genericPresenceTracker.clear()
         clientGatts.values.forEach { runCatching { it.close() } }
         clientGatts.clear()
         clientCharacteristics.clear()
@@ -178,6 +202,8 @@ internal class MeshEngine(
         sessions.clear()
         fragmentReassembler.clear()
         lastSyncRequestByAddress.clear()
+        syncResponseTimes.clear()
+        pendingCourier.clear()
         remoteRadarConsents.clear()
         tentativeRadarReads.clear()
         if (notify) emitStatus("stopped")
@@ -188,7 +214,19 @@ internal class MeshEngine(
         sendAnnouncement()
     }
 
+    fun updateRole(value: String) {
+        localRole = requireNotNull(MeshNodeRole.fromWireName(value)) {
+            "Rol de nodo no válido"
+        }
+        identity.nodeRole = localRole
+        sendNodeCapability()
+        emit(stateSnapshot())
+    }
+
     fun sendPublic(content: String, channel: String? = null): String {
+        check(localRole.canOriginateChat) {
+            "El rol ${localRole.wireName} no puede originar chat"
+        }
         check(content.isNotBlank())
         val id = UUID.randomUUID().toString().uppercase()
         val payload = MeshProtocol.encodeInteropPublicMessage(content.take(2_000))
@@ -229,8 +267,15 @@ internal class MeshEngine(
     }
 
     fun sendPrivate(peerIdHex: String, content: String): String {
-        require(peers.containsKey(peerIdHex)) {
+        check(localRole.canOriginateChat) {
+            "El rol ${localRole.wireName} no puede originar chat"
+        }
+        val peer = peers[peerIdHex]
+        require(peer != null) {
             context.getString(R.string.error_peer_unavailable)
+        }
+        require(peer.role.canOriginateChat) {
+            "El rol ${peer.role.wireName} no admite chat"
         }
         val id = UUID.randomUUID().toString().uppercase()
         val session = sessions[peerIdHex]
@@ -310,6 +355,7 @@ internal class MeshEngine(
                 "lastSeen" to it.lastSeen,
                 "secure" to (sessions[it.id]?.established == true),
                 "supportsTransfers" to it.supportsTransfers,
+                "role" to it.role.wireName,
                 "radarAllowedUntil" to (consent?.expiresAt ?: 0L),
                 "radarConsentSource" to consent?.source,
             )
@@ -319,6 +365,7 @@ internal class MeshEngine(
     fun panicWipe() {
         stop()
         storeForward.clear()
+        syncPackets.clear()
         identity.clear()
         emit(mapOf("type" to "wiped"))
     }
@@ -412,6 +459,7 @@ internal class MeshEngine(
         )
         broadcast(packet)
         broadcastHbtCapability()
+        sendNodeCapability()
         if (activeLocalRadarConsentUntil() > System.currentTimeMillis()) {
             broadcastRadarConsent(grant = true)
         }
@@ -427,6 +475,21 @@ internal class MeshEngine(
                     timestamp = System.currentTimeMillis(),
                     senderId = identity.peerId,
                     payload = byteArrayOf(MeshProtocol.HBT_VERSION),
+                ),
+            ),
+        )
+    }
+
+    private fun sendNodeCapability() {
+        if (!running) return
+        broadcast(
+            identity.sign(
+                MeshProtocol.Packet(
+                    type = MeshProtocol.TYPE_NODE_CAPABILITY,
+                    ttl = MeshProtocol.TTL,
+                    timestamp = System.currentTimeMillis(),
+                    senderId = identity.peerId,
+                    payload = NodeCapabilityProtocol.encode(localRole),
                 ),
             ),
         )
@@ -491,11 +554,7 @@ internal class MeshEngine(
         val previous = lastSyncRequestByAddress[sourceAddress]
         if (previous != null && now - previous < SYNC_REQUEST_COOLDOWN_MS) return
         lastSyncRequestByAddress[sourceAddress] = now
-        val emptyGcsFilter = byteArrayOf(
-            0x01, 0x00, 0x01, 0x02, // P = 2
-            0x02, 0x00, 0x04, 0x00, 0x00, 0x00, 0x01, // M = 1
-            0x03, 0x00, 0x00, // filtro vacío: solicitar todo lo reciente
-        )
+        val gcsFilter = MeshProtocol.encodeSyncRequest(syncSnapshot(now))
         val packet = identity.sign(
             MeshProtocol.Packet(
                 type = MeshProtocol.TYPE_REQUEST_SYNC,
@@ -503,11 +562,11 @@ internal class MeshEngine(
                 timestamp = now,
                 senderId = identity.peerId,
                 recipientId = peerIdHex.hexToBytes(),
-                payload = emptyGcsFilter,
+                payload = gcsFilter,
             ),
         )
         Log.i(LOG_TAG, "REQUEST_SYNC sent to ${peerIdHex.take(8)}")
-        broadcast(packet)
+        sendBytesToAddress(MeshProtocol.encodeForBle(packet), sourceAddress)
     }
 
     private fun initiateHandshake(peerIdHex: String) {
@@ -532,14 +591,19 @@ internal class MeshEngine(
             emitError(context.getString(R.string.error_private_encrypt))
             return
         }
-        sendNoisePacket(
+        val packet = sendNoisePacket(
             MeshProtocol.TYPE_NOISE_ENCRYPTED,
             peerIdHex.hexToBytes(),
             encrypted,
         )
+        depositCourierWithDirectAnchors(packet)
     }
 
-    private fun sendNoisePacket(type: Byte, recipient: ByteArray, payload: ByteArray) {
+    private fun sendNoisePacket(
+        type: Byte,
+        recipient: ByteArray,
+        payload: ByteArray,
+    ): MeshProtocol.Packet {
         val packet = MeshProtocol.Packet(
             type = type,
             ttl = MeshProtocol.TTL,
@@ -549,12 +613,56 @@ internal class MeshEngine(
             payload = payload,
         )
         broadcast(packet)
+        return packet
+    }
+
+    private fun depositCourierWithDirectAnchors(innerPacket: MeshProtocol.Packet) {
+        val directPeerIds = addressToPeer.values.toSet()
+        peers.values
+            .filter { it.role == MeshNodeRole.INFRA_DATA_ANCHOR && it.id in directPeerIds }
+            .forEach { anchor ->
+                if (sessions[anchor.id]?.established == true) {
+                    sendCourierDeposit(anchor.id, innerPacket)
+                } else {
+                    pendingCourier.computeIfAbsent(anchor.id) {
+                        Collections.synchronizedList(mutableListOf())
+                    }.add(innerPacket)
+                    initiateHandshake(anchor.id)
+                }
+            }
+    }
+
+    private fun sendCourierDeposit(anchorId: String, innerPacket: MeshProtocol.Packet) {
+        val recipientId = innerPacket.recipientId ?: return
+        val recipient = peers[MeshProtocol.hex(recipientId)] ?: return
+        val sourceAddress = addressToPeer.entries.firstOrNull { it.value == anchorId }?.key ?: return
+        val payload = runCatching {
+            MeshProtocol.encodeCourierEnvelope(
+                recipient.noisePublicKey,
+                MeshProtocol.encode(innerPacket, padded = false),
+            )
+        }.getOrNull() ?: return
+        val courier = identity.sign(
+            MeshProtocol.Packet(
+                type = MeshProtocol.TYPE_COURIER_ENVELOPE,
+                ttl = MeshProtocol.TTL,
+                timestamp = System.currentTimeMillis(),
+                senderId = identity.peerId,
+                recipientId = anchorId.hexToBytes(),
+                payload = payload,
+            ),
+        )
+        sendBytesToAddress(MeshProtocol.encodeForBle(courier), sourceAddress)
+        Log.i(LOG_TAG, "Courier deposited with anchor ${anchorId.take(8)}")
     }
 
     private fun broadcast(packet: MeshProtocol.Packet, excludeAddress: String? = null) {
+        rememberSyncPacket(packet)
         val bytes = MeshProtocol.encodeForBle(packet)
         broadcastBytes(bytes, excludeAddress)
-        if (packet.recipientId != null &&
+        if (localRole.storesDirectedPackets &&
+            packet.type != MeshProtocol.TYPE_REQUEST_SYNC &&
+            packet.recipientId != null &&
             !packet.recipientId.contentEquals(MeshProtocol.broadcastRecipient)
         ) {
             storeForward.put(packet)
@@ -600,7 +708,7 @@ internal class MeshEngine(
             val queue = clientWriteQueues.getOrPut(address) { ArrayDeque() }
             if (queue.size >= MAX_PENDING_GATT_WRITES) queue.removeFirst()
             queue.addLast(bytes.copyOf())
-            address in clientReady && clientWritesInFlight.add(address)
+            clientReady.contains(address) && clientWritesInFlight.add(address)
         }
         if (shouldStart) writeNextClient(address, gatt, characteristic)
     }
@@ -692,13 +800,14 @@ internal class MeshEngine(
             packet.recipientId.contentEquals(MeshProtocol.broadcastRecipient)
         if (isForUs) process(packet, senderHex, sourceAddress)
 
-        if (packet.ttl.toInt() and 0xFF > 1 &&
-            packet.type != MeshProtocol.TYPE_NOISE_HANDSHAKE &&
-            packet.type != MeshProtocol.TYPE_NOISE_ENCRYPTED
+        val addressedToLocalNode = packet.recipientId?.contentEquals(identity.peerId) == true
+        if (MeshRelayPolicy.shouldRelay(
+                role = localRole,
+                packetType = packet.type,
+                ttl = packet.ttl.toInt() and 0xFF,
+                addressedToLocalNode = addressedToLocalNode,
+            )
         ) {
-            val relayed = packet.copy(ttl = ((packet.ttl.toInt() and 0xFF) - 1).toByte())
-            broadcastBytes(MeshProtocol.encodeForBle(relayed), sourceAddress)
-        } else if (!isForUs && packet.ttl.toInt() and 0xFF > 1) {
             val relayed = packet.copy(ttl = ((packet.ttl.toInt() and 0xFF) - 1).toByte())
             broadcastBytes(MeshProtocol.encodeForBle(relayed), sourceAddress)
         }
@@ -714,8 +823,11 @@ internal class MeshEngine(
             MeshProtocol.TYPE_MESSAGE -> processPublicMessage(packet, senderHex)
             MeshProtocol.TYPE_NOISE_HANDSHAKE -> processHandshake(packet, senderHex)
             MeshProtocol.TYPE_NOISE_ENCRYPTED -> processEncrypted(packet, senderHex)
+            MeshProtocol.TYPE_COURIER_ENVELOPE -> processCourier(packet, senderHex)
+            MeshProtocol.TYPE_REQUEST_SYNC -> processSyncRequest(packet, senderHex, sourceAddress)
             MeshProtocol.TYPE_RADAR_CONTROL -> processRadarControl(packet, senderHex)
             MeshProtocol.TYPE_HBT_CAPABILITY -> processHbtCapability(packet, senderHex)
+            MeshProtocol.TYPE_NODE_CAPABILITY -> processNodeCapability(packet, senderHex)
             MeshProtocol.TYPE_FRAGMENT -> {
                 val reassembled = fragmentReassembler.accept(packet)
                 if (reassembled != null) {
@@ -770,12 +882,20 @@ internal class MeshEngine(
             addressToPeer[sourceAddress] = senderHex
         }
         val previouslySupported = peers[senderHex]?.supportsTransfers == true
+        val previousRole = peers[senderHex]?.role ?: if (announcement.isInfrastructure) {
+            MeshNodeRole.INFRA_DATA_ANCHOR
+        } else {
+            MeshNodeRole.PHONE_RELAY
+        }
         peers[senderHex] = Peer(
             senderHex,
             announcement.nickname,
             announcement.signingPublicKey,
+            announcement.noisePublicKey,
             announcement.supportsTransfers || previouslySupported,
+            previousRole,
         )
+        rememberSyncPacket(packet)
         emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
         requestMissingMessages(senderHex, sourceAddress)
         storeForward.forRecipient(packet.senderId).forEach(::broadcast)
@@ -786,6 +906,15 @@ internal class MeshEngine(
         if (packet.payload.size != 1 || packet.payload[0] != MeshProtocol.HBT_VERSION) return
         if (!identity.verify(packet, peer.signingPublicKey)) return
         peer.supportsTransfers = true
+        peer.lastSeen = System.currentTimeMillis()
+        emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
+    }
+
+    private fun processNodeCapability(packet: MeshProtocol.Packet, senderHex: String) {
+        val peer = peers[senderHex] ?: return
+        val capability = NodeCapabilityProtocol.decode(packet.payload) ?: return
+        if (!identity.verify(packet, peer.signingPublicKey)) return
+        peer.role = capability.role
         peer.lastSeen = System.currentTimeMillis()
         emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
     }
@@ -807,6 +936,7 @@ internal class MeshEngine(
             timestamp = packet.timestamp,
             senderPeerId = senderHex,
         )
+        rememberSyncPacket(packet)
         peer.lastSeen = System.currentTimeMillis()
         if (message.channel == "sos") {
             val expiresAt = packet.timestamp + RadarConsentProtocol.SOS_DURATION_MS
@@ -864,6 +994,9 @@ internal class MeshEngine(
             pendingFrames.remove(senderHex)?.forEach {
                 sendEncryptedFrame(senderHex, it)
             }
+            pendingCourier.remove(senderHex)?.forEach {
+                sendCourierDeposit(senderHex, it)
+            }
         }
     }
 
@@ -894,6 +1027,141 @@ internal class MeshEngine(
             packet.timestamp,
             null,
         )
+    }
+
+    private fun processCourier(packet: MeshProtocol.Packet, senderHex: String) {
+        val carrier = peers[senderHex] ?: return
+        if (!identity.verify(packet, carrier.signingPublicKey)) return
+        val envelope = MeshProtocol.decodeCourierEnvelope(packet.payload) ?: return
+        if (!MeshProtocol.courierEnvelopeIsFor(envelope, identity.noisePublicKey)) return
+        val inner = MeshProtocol.decode(envelope.ciphertext) ?: return
+        if (inner.type != MeshProtocol.TYPE_NOISE_ENCRYPTED ||
+            inner.recipientId?.contentEquals(identity.peerId) != true
+        ) {
+            return
+        }
+        val fingerprint = MeshProtocol.fingerprint(inner)
+        if (seen.put(fingerprint, System.currentTimeMillis()) != null) return
+        processEncrypted(inner, MeshProtocol.hex(inner.senderId))
+    }
+
+    private fun processSyncRequest(
+        packet: MeshProtocol.Packet,
+        senderHex: String,
+        sourceAddress: String,
+    ) {
+        if (packet.ttl != 0.toByte() || !allowSyncResponse(sourceAddress)) return
+        val peer = peers[senderHex] ?: return
+        if (!identity.verify(packet, peer.signingPublicKey)) return
+        val request = MeshProtocol.decodeSyncRequest(packet.payload) ?: return
+        val remoteBuckets = MeshProtocol.decodeGcs(request)
+        var sent = 0
+        syncSnapshot().forEach { candidate ->
+            if (sent >= SYNC_MAX_REPLAY) return@forEach
+            val typeFlag = when (candidate.type) {
+                MeshProtocol.TYPE_ANNOUNCE -> MeshProtocol.SYNC_FLAG_ANNOUNCE
+                MeshProtocol.TYPE_MESSAGE -> MeshProtocol.SYNC_FLAG_MESSAGE
+                else -> 0L
+            }
+            if (request.typeFlags and typeFlag == 0L) return@forEach
+            if (request.since != null &&
+                candidate.type != MeshProtocol.TYPE_ANNOUNCE &&
+                candidate.timestamp < request.since
+            ) {
+                return@forEach
+            }
+            val bucket = MeshProtocol.gcsBucket(MeshProtocol.packetId(candidate), request.m)
+            if (remoteBuckets.isNotEmpty() && MeshProtocol.gcsContains(remoteBuckets, bucket)) {
+                return@forEach
+            }
+            sendBytesToAddress(
+                MeshProtocol.encodeForBle(candidate.copy(ttl = 0, isRsr = true)),
+                sourceAddress,
+            )
+            sent++
+        }
+        if (sent > 0) Log.i(LOG_TAG, "REQUEST_SYNC replayed $sent packet(s)")
+    }
+
+    private fun allowSyncResponse(sourceAddress: String): Boolean {
+        val now = System.currentTimeMillis()
+        val timestamps = syncResponseTimes.computeIfAbsent(sourceAddress) { ArrayDeque() }
+        synchronized(timestamps) {
+            while (timestamps.isNotEmpty() && now - timestamps.first() > SYNC_RATE_WINDOW_MS) {
+                timestamps.removeFirst()
+            }
+            if (timestamps.size >= SYNC_RATE_MAX_RESPONSES) return false
+            timestamps.addLast(now)
+            return true
+        }
+    }
+
+    private fun rememberSyncPacket(packet: MeshProtocol.Packet) {
+        if (packet.signature == null ||
+            packet.type !in setOf(MeshProtocol.TYPE_ANNOUNCE, MeshProtocol.TYPE_MESSAGE) ||
+            packet.recipientId?.contentEquals(MeshProtocol.broadcastRecipient) == false
+        ) {
+            return
+        }
+        val now = System.currentTimeMillis()
+        if (!isSyncFresh(packet, now) || packet.timestamp > now + SYNC_FUTURE_SKEW_MS) return
+        synchronized(syncPackets) {
+            if (packet.type == MeshProtocol.TYPE_ANNOUNCE) {
+                val sender = MeshProtocol.hex(packet.senderId)
+                if (syncPackets.values.any {
+                        it.type == MeshProtocol.TYPE_ANNOUNCE &&
+                            MeshProtocol.hex(it.senderId) == sender &&
+                            it.timestamp >= packet.timestamp
+                    }
+                ) {
+                    return
+                }
+                val superseded = syncPackets.filterValues {
+                    it.type == MeshProtocol.TYPE_ANNOUNCE &&
+                        MeshProtocol.hex(it.senderId) == sender &&
+                        it.timestamp <= packet.timestamp
+                }.keys
+                superseded.forEach(syncPackets::remove)
+            }
+            syncPackets[MeshProtocol.hex(MeshProtocol.packetId(packet))] = packet
+        }
+    }
+
+    private fun syncSnapshot(now: Long = System.currentTimeMillis()): List<MeshProtocol.Packet> =
+        synchronized(syncPackets) {
+            val expired = syncPackets.filterValues { !isSyncFresh(it, now) }.keys
+            expired.forEach(syncPackets::remove)
+            syncPackets.values.sortedByDescending { it.timestamp }
+        }
+
+    private fun isSyncFresh(packet: MeshProtocol.Packet, now: Long): Boolean {
+        val window = if (packet.type == MeshProtocol.TYPE_ANNOUNCE) {
+            SYNC_ANNOUNCE_WINDOW_MS
+        } else {
+            SYNC_MESSAGE_WINDOW_MS
+        }
+        return now < window || packet.timestamp >= now - window
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun sendBytesToAddress(bytes: ByteArray, address: String) {
+        clientCharacteristics[address]?.let { characteristic ->
+            val gatt = clientGatts[address] ?: return@let
+            enqueueClientWrite(address, gatt, characteristic, bytes)
+        }
+        val subscriber = serverSubscribers.firstOrNull { it.address == address } ?: return
+        val server = gattServer ?: return
+        val characteristic = serverCharacteristic ?: return
+        runCatching {
+            if (Build.VERSION.SDK_INT >= 33) {
+                server.notifyCharacteristicChanged(subscriber, characteristic, false, bytes)
+            } else {
+                @Suppress("DEPRECATION")
+                characteristic.value = bytes
+                @Suppress("DEPRECATION")
+                server.notifyCharacteristicChanged(subscriber, characteristic, false)
+            }
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -989,6 +1257,25 @@ internal class MeshEngine(
         adapter.bluetoothLeScanner?.startScan(listOf(filter), settings, scanCallback)
     }
 
+    /**
+     * Segundo nivel: presencia BLE genérica. Se escanea sin filtro, pero no se
+     * conecta al dispositivo ni se leen nombre o MAC. Solo se publican IDs
+     * locales rotativos producidos por [GenericBlePresenceTracker].
+     */
+    @SuppressLint("MissingPermission")
+    private fun startGenericBeaconScanning() {
+        val settings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
+            .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+            .build()
+        runCatching { adapter.bluetoothLeScanner?.stopScan(genericBeaconScanCallback) }
+        adapter.bluetoothLeScanner?.startScan(
+            emptyList(),
+            settings,
+            genericBeaconScanCallback,
+        )
+    }
+
     @SuppressLint("MissingPermission")
     private fun scheduleAdvertiseWatchdog(generation: Int) {
         cancelAdvertiseWatchdog()
@@ -1044,6 +1331,31 @@ internal class MeshEngine(
         }
     }
 
+    private val genericBeaconScanCallback = object : ScanCallback() {
+        override fun onScanResult(callbackType: Int, result: ScanResult) {
+            val record = result.scanRecord ?: return
+            if (isMeshAdvertisement(record)) return
+            val material = genericAdvertisementMaterial(record)
+            val presences = genericPresenceTracker.observe(
+                advertisementMaterial = material,
+                rssi = result.rssi,
+                now = System.currentTimeMillis(),
+            ) ?: return
+            emit(
+                mapOf(
+                    "type" to "presences",
+                    "presences" to presences.map(
+                        GenericBlePresenceTracker.Presence::toEventMap,
+                    ),
+                ),
+            )
+        }
+
+        override fun onScanFailed(errorCode: Int) {
+            Log.w(LOG_TAG, "Generic BLE presence scan failed: $errorCode")
+        }
+    }
+
     private val clientCallback = object : BluetoothGattCallback() {
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
@@ -1054,6 +1366,7 @@ internal class MeshEngine(
                 clientGatts.remove(gatt.device.address)
                 clientReady.remove(gatt.device.address)
                 lastSyncRequestByAddress.remove(gatt.device.address)
+                syncResponseTimes.remove(gatt.device.address)
                 synchronized(clientWriteLock) {
                     clientWriteQueues.remove(gatt.device.address)
                     clientWritesInFlight.remove(gatt.device.address)
@@ -1159,6 +1472,8 @@ internal class MeshEngine(
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 serverSubscribers.remove(device)
+                lastSyncRequestByAddress.remove(device.address)
+                syncResponseTimes.remove(device.address)
             }
         }
 
@@ -1237,6 +1552,7 @@ internal class MeshEngine(
                 "status" to status,
                 "peerId" to peerId,
                 "nickname" to nickname,
+                "role" to localRole.wireName,
             ),
         )
     }
@@ -1250,6 +1566,63 @@ internal class MeshEngine(
         return chunked(2).map { it.toInt(16).toByte() }.toByteArray()
     }
 
+    private fun isMeshAdvertisement(record: ScanRecord): Boolean {
+        val service = ParcelUuid(SERVICE_UUID)
+        return record.serviceUuids?.contains(service) == true ||
+            record.serviceData.containsKey(service)
+    }
+
+    /**
+     * Material canónico sin nombre ni dirección. Una baliza sin datos de
+     * servicio/fabricante no se puede agrupar de forma privada y se ignora.
+     */
+    private fun genericAdvertisementMaterial(record: ScanRecord): ByteArray {
+        val output = ByteArrayOutputStream()
+
+        fun writeField(tag: Int, key: ByteArray, value: ByteArray = byteArrayOf()) {
+            output.write(tag)
+            val size = key.size + value.size
+            output.write((size ushr 8) and 0xFF)
+            output.write(size and 0xFF)
+            output.write(key)
+            output.write(value)
+        }
+
+        record.serviceUuids.orEmpty()
+            .map { it.uuid.toString() }
+            .sorted()
+            .forEach { writeField(0x01, it.toByteArray(Charsets.US_ASCII)) }
+
+        if (Build.VERSION.SDK_INT >= 29) {
+            record.serviceSolicitationUuids.orEmpty()
+                .map { it.uuid.toString() }
+                .sorted()
+                .forEach { writeField(0x02, it.toByteArray(Charsets.US_ASCII)) }
+        }
+
+        record.serviceData.entries
+            .sortedBy { it.key.uuid.toString() }
+            .forEach { (uuid, value) ->
+                writeField(
+                    0x03,
+                    uuid.uuid.toString().toByteArray(Charsets.US_ASCII),
+                    value,
+                )
+            }
+
+        val manufacturerData = record.manufacturerSpecificData
+        for (index in 0 until manufacturerData.size()) {
+            val manufacturerId = manufacturerData.keyAt(index)
+            val key = byteArrayOf(
+                (manufacturerId ushr 8).toByte(),
+                manufacturerId.toByte(),
+            )
+            writeField(0x04, key, manufacturerData.valueAt(index))
+        }
+
+        return output.toByteArray()
+    }
+
     private companion object {
         /** Techo del plano de control BLE; los blobs van por otros transportes. */
         const val MAX_TRANSFER_FRAME = 2_048
@@ -1261,6 +1634,13 @@ internal class MeshEngine(
         const val MAX_ADVERTISE_RETRIES = 1
         const val MAX_PENDING_GATT_WRITES = 256
         const val SYNC_REQUEST_COOLDOWN_MS = 60_000L
+        const val SYNC_STORE_CAPACITY = 80
+        const val SYNC_MAX_REPLAY = 40
+        const val SYNC_RATE_MAX_RESPONSES = 8
+        const val SYNC_RATE_WINDOW_MS = 30_000L
+        const val SYNC_ANNOUNCE_WINDOW_MS = 15 * 60 * 1_000L
+        const val SYNC_MESSAGE_WINDOW_MS = 6 * 60 * 60 * 1_000L
+        const val SYNC_FUTURE_SKEW_MS = 15 * 60 * 1_000L
 
         const val LOG_TAG = "HearthBitMesh"
 

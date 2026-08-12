@@ -1,3 +1,25 @@
+enum MeshNodeRole {
+  phoneRelay('PHONE_RELAY'),
+  phoneBeacon('PHONE_BEACON'),
+  infraRelay('INFRA_RELAY'),
+  infraDataAnchor('INFRA_DATA_ANCHOR');
+
+  const MeshNodeRole(this.wireName);
+
+  final String wireName;
+
+  static MeshNodeRole fromWire(Object? value) {
+    return switch (value) {
+      'PHONE_BEACON' => MeshNodeRole.phoneBeacon,
+      'INFRA_RELAY' => MeshNodeRole.infraRelay,
+      'INFRA_DATA_ANCHOR' => MeshNodeRole.infraDataAnchor,
+      _ => MeshNodeRole.phoneRelay,
+    };
+  }
+
+  bool get canChat => this == MeshNodeRole.phoneRelay;
+}
+
 class MeshPeer {
   const MeshPeer({
     required this.id,
@@ -5,6 +27,7 @@ class MeshPeer {
     required this.lastSeen,
     required this.secure,
     this.supportsTransfers = false,
+    this.role = MeshNodeRole.phoneRelay,
     this.radarAllowedUntil,
     this.radarConsentSource,
   });
@@ -16,6 +39,7 @@ class MeshPeer {
       lastSeen: DateTime.fromMillisecondsSinceEpoch(map['lastSeen']! as int),
       secure: map['secure'] as bool? ?? false,
       supportsTransfers: map['supportsTransfers'] as bool? ?? false,
+      role: MeshNodeRole.fromWire(map['role']),
       radarAllowedUntil: switch (map['radarAllowedUntil']) {
         final int value when value > 0 => DateTime.fromMillisecondsSinceEpoch(
           value,
@@ -31,6 +55,7 @@ class MeshPeer {
   final DateTime lastSeen;
   final bool secure;
   final bool supportsTransfers;
+  final MeshNodeRole role;
   final DateTime? radarAllowedUntil;
   final String? radarConsentSource;
 
@@ -50,6 +75,38 @@ class MeshPeer {
     'nickname': nickname,
     'last_seen': lastSeen.millisecondsSinceEpoch,
   };
+}
+
+class GenericBlePresence {
+  const GenericBlePresence({
+    required this.id,
+    required this.role,
+    required this.kind,
+    required this.chatAvailable,
+    required this.rssi,
+    required this.lastSeen,
+  });
+
+  factory GenericBlePresence.fromMap(Map<Object?, Object?> map) {
+    return GenericBlePresence(
+      id: map['id']! as String,
+      role: MeshNodeRole.fromWire(map['role']),
+      kind: map['kind'] as String? ?? 'genericBle',
+      chatAvailable: map['chatAvailable'] as bool? ?? false,
+      rssi: (map['rssi']! as num).toInt(),
+      lastSeen: DateTime.fromMillisecondsSinceEpoch(
+        (map['lastSeen']! as num).toInt(),
+      ),
+    );
+  }
+
+  /// Identificador efímero, local a esta ejecución y rotado por Android.
+  final String id;
+  final MeshNodeRole role;
+  final String kind;
+  final bool chatAvailable;
+  final int rssi;
+  final DateTime lastSeen;
 }
 
 /// Regla única para ofrecer archivos desde cualquier vista de la aplicación.

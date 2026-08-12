@@ -63,6 +63,10 @@ class MeshPlatformService {
     return _methods.invokeMethod<void>('setNickname', {'nickname': nickname});
   }
 
+  Future<void> setNodeRole(String role) {
+    return _methods.invokeMethod<void>('setNodeRole', {'role': role});
+  }
+
   Future<List<Map<Object?, Object?>>> getPeers() async {
     final peers = await _methods.invokeListMethod<Object?>('getPeers');
     return peers?.whereType<Map<Object?, Object?>>().toList(growable: false) ??

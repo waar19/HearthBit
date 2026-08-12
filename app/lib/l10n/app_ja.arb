@@ -159,6 +159,10 @@
   "aboutVersion": "バージョン {version}",
   "aboutSourceCode": "ソースコード",
   "supportButton": "コーヒーで支援",
+  "shareInviteButton": "HearthBit を共有",
+  "shareInviteMessage": "インターネットなしで動作するオープンソースの緊急メッシュ、HearthBit に参加してください。ダウンロードまたは貢献はこちら: {url}",
+  "tooltipShare": "HearthBit に招待",
+  "shareInviteError": "共有オプションを開けませんでした",
   "openLinkError": "リンクを開けませんでした",
   "actionClose": "閉じる",
 
@@ -211,5 +215,8 @@
   "radarSweepEstimateWarning": "これは RSSI による推定で、正確な方向ではありません。移動して再度スイープし、確認してください。",
   "radarCompassUnavailable": "このスマートフォンではコンパスを利用できません。近接レーダーは引き続き使用できます。",
   "dateToday": "今日",
-  "dateYesterday": "昨日"
+  "dateYesterday": "昨日",
+  "genericPresenceSectionTitle": "その他の Bluetooth 信号",
+  "genericPresenceNoChat": "存在を検出、チャット不可",
+  "genericPresenceSignal": "一般 Bluetooth 信号 · {rssi} dBm"
 }

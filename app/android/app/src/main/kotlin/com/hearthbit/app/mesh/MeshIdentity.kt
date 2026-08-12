@@ -38,6 +38,14 @@ internal class MeshIdentity(context: Context) {
             preferences.edit().putLong(KEY_RADAR_CONSENT_UNTIL, value).apply()
         }
 
+    var nodeRole: MeshNodeRole
+        get() = MeshNodeRole.fromWireName(
+            preferences.getString(KEY_NODE_ROLE, null),
+        ) ?: MeshNodeRole.PHONE_RELAY
+        set(value) {
+            preferences.edit().putString(KEY_NODE_ROLE, value.wireName).apply()
+        }
+
     val noisePrivateKey: ByteArray
     val noisePublicKey: ByteArray
     val signingPrivateKey: ByteArray
@@ -133,5 +141,6 @@ internal class MeshIdentity(context: Context) {
         const val KEY_SIGNING_PRIVATE = "signing_private"
         const val KEY_SIGNING_PUBLIC = "signing_public"
         const val KEY_RADAR_CONSENT_UNTIL = "radar_consent_until"
+        const val KEY_NODE_ROLE = "node_role"
     }
 }

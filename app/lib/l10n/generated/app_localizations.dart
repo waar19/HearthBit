@@ -969,6 +969,30 @@ abstract class AppLocalizations {
   /// **'Buy me a coffee'**
   String get supportButton;
 
+  /// No description provided for @shareInviteButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Share HearthBit'**
+  String get shareInviteButton;
+
+  /// No description provided for @shareInviteMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Join HearthBit, an open-source emergency mesh that works without internet. Download it or contribute at {url}'**
+  String shareInviteMessage(String url);
+
+  /// No description provided for @tooltipShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite people to HearthBit'**
+  String get tooltipShare;
+
+  /// No description provided for @shareInviteError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open the sharing options'**
+  String get shareInviteError;
+
   /// No description provided for @openLinkError.
   ///
   /// In en, this message translates to:
@@ -1280,6 +1304,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Yesterday'**
   String get dateYesterday;
+
+  /// No description provided for @genericPresenceSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Other Bluetooth signals'**
+  String get genericPresenceSectionTitle;
+
+  /// No description provided for @genericPresenceNoChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Presence detected, no chat'**
+  String get genericPresenceNoChat;
+
+  /// No description provided for @genericPresenceSignal.
+  ///
+  /// In en, this message translates to:
+  /// **'Generic Bluetooth signal · {rssi} dBm'**
+  String genericPresenceSignal(int rssi);
 }
 
 class _AppLocalizationsDelegate

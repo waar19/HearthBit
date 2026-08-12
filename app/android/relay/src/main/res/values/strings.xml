@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="relay_title_tv">HearthBit relay para Android TV</string>
+    <string name="relay_title_automotive">HearthBit relay para Android Automotive</string>
+    <string name="relay_description_tv">Extiende la malla BLE sin GPS, radar ni acceso a mensajes.</string>
+    <string name="relay_description_automotive">Extiende la malla BLE mientras la sesión del vehículo está activa.</string>
+    <string name="relay_mode_dual">Modo: relay BLE completo (escaneo, GATT y advertising)</string>
+    <string name="relay_mode_central">Modo degradado: escaneo y GATT central; este equipo no puede anunciarse</string>
+    <string name="relay_mode_unavailable">BLE no disponible en este equipo</string>
+    <string name="relay_status_stopped">Relay detenido</string>
+    <string name="relay_status_starting">Iniciando relay…</string>
+    <string name="relay_status_active">Relay activo</string>
+    <string name="relay_status_degraded">Relay activo en modo central</string>
+    <string name="relay_status_permission">Se requieren permisos de dispositivos cercanos</string>
+    <string name="relay_status_vehicle_gate">Relay detenido: la sesión del vehículo no está activa</string>
+    <string name="relay_status_error">No se pudo iniciar: %1$s</string>
+    <string name="relay_start">Iniciar relay</string>
+    <string name="relay_stop">Detener relay</string>
+    <string name="relay_permission_denied">No se concedieron todos los permisos necesarios</string>
+    <string name="notification_channel_name">Relay de emergencia</string>
+    <string name="notification_channel_description">Mantiene la malla Bluetooth activa</string>
+    <string name="notification_title">HearthBit relay activo</string>
+    <string name="notification_text">Retransmitiendo mensajes BLE de la malla</string>
+    <string name="error_ble_start">No se pudo iniciar BLE</string>
+    <string name="error_bluetooth_off">Bluetooth está desactivado</string>
+    <string name="error_no_advertising">Este equipo no admite advertising BLE; se usa el modo central</string>
+    <string name="error_advertise_failed">Falló el advertising BLE (%1$d); se mantiene el modo central</string>
+    <string name="error_advertise_timeout">El advertising BLE no respondió; se mantiene el modo central</string>
+    <string name="error_scan_failed">Falló el escaneo BLE (%1$d)</string>
+    <string name="error_private_channel">No se pudo iniciar el canal privado: %1$s</string>
+    <string name="error_private_encrypt">No se pudo cifrar el mensaje privado</string>
+    <string name="error_frame_encrypt">No se pudo cifrar la trama</string>
+    <string name="error_identity_rejected">El canal privado rechazó una identidad inválida</string>
+    <string name="error_peer_unavailable">El dispositivo ya no está disponible</string>
+    <string name="error_radar_consent_required">La función de radar no está disponible en esta variante</string>
+    <string name="error_frame_too_large">La trama es demasiado grande</string>
+</resources>

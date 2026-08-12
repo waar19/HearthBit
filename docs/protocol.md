@@ -28,6 +28,11 @@ Tipos implementados:
 - `0x02`: mensaje público
 - `0x10`: handshake Noise XX
 - `0x11`: transporte Noise cifrado
+- `0x20`: fragmento
+- `0x21`: solicitud de sincronización
+- `0x23`: consentimiento temporal del radar
+- `0x24`: capacidad HBT
+- `0x25`: capacidad y rol de nodo HearthBit
 
 Los tamaños se normalizan a 256, 512, 1024 o 2048 bytes mediante padding
 PKCS#7 cuando la diferencia cabe en un byte.
@@ -46,3 +51,79 @@ texto.
 
 La fuente normativa fijada para interoperabilidad está en
 `vendor/bitchat-android`.
+
+## Protocolo de dos niveles
+
+HearthBit distingue deliberadamente:
+
+1. **Nivel de presencia**: un escáner puede detectar un anuncio BLE genérico.
+   Solo significa «hay una señal cerca»; no demuestra identidad, no crea un
+   peer y no habilita chat.
+2. **Nivel de malla autenticada**: requiere un `ANNOUNCE` válido, la
+   vinculación del sender ID con la clave Noise y una firma Ed25519 válida.
+   Solo este nivel permite mensajes, Noise, radar consentido o transferencias.
+
+Una detección de nivel 1 nunca se promociona automáticamente al nivel 2,
+aunque ambos anuncios parezcan proceder del mismo dispositivo.
+
+## Roles y política de relay
+
+El rol local y el de los peers HearthBit usan uno de estos valores:
+
+- `PHONE_RELAY`: teléfono interactivo; origina chat, retransmite y conserva
+  temporalmente paquetes dirigidos para compatibilidad store-and-forward.
+- `PHONE_BEACON`: presencia solamente; no origina chat, no retransmite y no
+  conserva tráfico dirigido.
+- `INFRA_RELAY`: infraestructura de tránsito; no origina chat, retransmite y
+  no conserva paquetes.
+- `INFRA_DATA_ANCHOR`: infraestructura con datos; no origina chat,
+  retransmite y conserva tráfico dirigido.
+
+Todo relay exige TTL mayor que 1 y lo decrementa antes del envío. Un paquete
+Noise dirigido al nodo local se consume y no se retransmite; si va dirigido a
+otro nodo sí puede retransmitirse. Los demás paquetes públicos siguen la
+política del rol. La deduplicación continúa usando el hash canónico sin TTL.
+
+## Paquete dedicado de capacidad de nodo (`0x25`)
+
+Payload firmado:
+
+1. Versión: `0x01`.
+2. Rol: `0x01` `PHONE_RELAY`, `0x02` `PHONE_BEACON`, `0x03`
+   `INFRA_RELAY`, `0x04` `INFRA_DATA_ANCHOR`.
+3. Flags informativos: bit 0 relay, bit 1 origina chat, bit 2
+   store-and-forward, bit 3 presencia solamente.
+
+El receptor solo aplica el rol después de haber aceptado el `ANNOUNCE` del
+sender y verificar este paquete con la clave Ed25519 ya vinculada. Un BitChat
+que desconoce `0x25` lo descarta como tipo no manejado; no altera su estado de
+identidad ni el flujo de chat.
+
+### Decisión de compatibilidad sobre `ANNOUNCE`
+
+No se añadió un TLV HearthBit al `ANNOUNCE`. El decoder del submódulo BitChat
+actual sí conserva TLV desconocidos, pero existieron builds con la regresión
+que rechazaba o reconstruía incorrectamente extensiones desconocidas. Por
+tanto, que el código fijado hoy sea tolerante no prueba seguridad para toda la
+flota interoperable.
+
+HearthBit mantiene el `ANNOUNCE` en el perfil conocido (`0x01`, `0x02`,
+`0x03` y el `0x05` estándar sin capacidades HearthBit) y usa paquetes
+dedicados `0x24`/`0x25`. Esto reduce el fallo de un cliente antiguo a ignorar
+una capacidad opcional, en vez de perder el anuncio de identidad completo.
+
+## Privacidad de balizas BLE genéricas en Android
+
+- El escáner de presencia no lee ni transmite a Flutter el nombre Bluetooth
+  ni la dirección MAC.
+- Solo normaliza datos de servicio, solicitud de servicio y fabricante. Un
+  anuncio sin ese material se ignora porque no puede agruparse de forma
+  privada.
+- El identificador mostrado al modelo es un HMAC local con una clave aleatoria
+  creada en memoria. Rota cada 15 minutos y cambia al reiniciar el proceso.
+- Las observaciones expiran tras 45 segundos y no se escriben en SQLite ni en
+  logs. Flutter recibe `chatAvailable: false`, rol `PHONE_BEACON`, RSSI y la
+  hora de última detección.
+
+Estos IDs solo sirven para deduplicar la UI a corto plazo; no son identidad,
+no son estables entre sesiones y no deben incorporarse a telemetría.

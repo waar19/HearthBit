@@ -1,5 +1,7 @@
 # HearthBit
 
+<img src="app/assets/icon/hearthbit.png" alt="HearthBit app icon" width="160">
+
 **English** · [Español](README.es.md)
 
 HearthBit ("the network that keeps beating") is a mobile emergency
@@ -36,6 +38,17 @@ HearthBit is open source and community-supported. Donations help fund physical
 device testing, emergency-field trials and relay-node hardware.
 
 [![Support HearthBit on Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-support_HearthBit-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/wilmeralzal)
+
+## Spread the project
+
+Emergency meshes become more useful as more people install them before a
+disaster. Share HearthBit with your family, neighbors, rescue groups and local
+communities:
+
+**[Invite someone to HearthBit](https://github.com/waar19/HearthBit)**
+
+The app also includes a native **Share HearthBit** button in About and on the
+Nearby screen.
 
 ## Languages
 

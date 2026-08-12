@@ -1,0 +1,27 @@
+[Unit]
+Description=HearthBit Bluetooth mesh relay
+Documentation=file:/opt/hearthbit-relay/README.md
+After=bluetooth.service dbus.service
+Wants=bluetooth.service
+Requires=dbus.service
+
+[Service]
+Type=simple
+ExecStart=/opt/hearthbit-relay/venv/bin/hearthbit-relay --config /etc/hearthbit-relay/config.json
+Restart=on-failure
+RestartSec=5
+StateDirectory=hearthbit-relay
+UMask=0077
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/hearthbit-relay
+RestrictAddressFamilies=AF_UNIX AF_BLUETOOTH
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

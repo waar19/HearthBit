@@ -40,4 +40,32 @@ void main() {
     expect(canOfferFileToPeer(hearthBitPeer, isOnline: false), isFalse);
     expect(canOfferFileToPeer(bitChatPeer, isOnline: true), isFalse);
   });
+
+  test('interpreta los cuatro roles del protocolo', () {
+    expect(MeshNodeRole.fromWire('PHONE_RELAY'), MeshNodeRole.phoneRelay);
+    expect(MeshNodeRole.fromWire('PHONE_BEACON'), MeshNodeRole.phoneBeacon);
+    expect(MeshNodeRole.fromWire('INFRA_RELAY'), MeshNodeRole.infraRelay);
+    expect(
+      MeshNodeRole.fromWire('INFRA_DATA_ANCHOR'),
+      MeshNodeRole.infraDataAnchor,
+    );
+    expect(MeshNodeRole.phoneRelay.canChat, isTrue);
+    expect(MeshNodeRole.infraRelay.canChat, isFalse);
+  });
+
+  test('presencia BLE genérica queda marcada sin chat', () {
+    final presence = GenericBlePresence.fromMap({
+      'id': 'aabbccddeeff001122334455',
+      'role': 'PHONE_BEACON',
+      'kind': 'genericBle',
+      'chatAvailable': false,
+      'rssi': -72,
+      'lastSeen': 1234,
+    });
+
+    expect(presence.role, MeshNodeRole.phoneBeacon);
+    expect(presence.chatAvailable, isFalse);
+    expect(presence.rssi, -72);
+    expect(presence.id, hasLength(24));
+  });
 }

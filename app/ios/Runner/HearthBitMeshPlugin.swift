@@ -21,7 +21,11 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var sessions: [String: IOSNoiseSession] = [:]
   private var pendingPrivate: [String: [(String, String)]] = [:]
   private var pendingFrames: [String: [Data]] = [:]
+  private var pendingCourier: [String: [IOSMeshPacket]] = [:]
   private var seen: [String: Date] = [:]
+  private var syncPackets: [String: IOSMeshPacket] = [:]
+  private var syncResponseTimes: [UUID: [Date]] = [:]
+  private var lastSyncRequestBySource: [UUID: Date] = [:]
   private var remoteRadarConsents: [String: IOSRemoteRadarConsent] = [:]
   private var notifyQueue: [Data] = []
   private var eventSink: FlutterEventSink?
@@ -175,6 +179,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         storeForward.clear()
         peers.removeAll()
         sessions.removeAll()
+        syncPackets.removeAll()
         remoteRadarConsents.removeAll()
         result(nil)
         emit(["type": "wiped"])
@@ -259,6 +264,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     peripheralManager?.stopAdvertising()
     peripheralManager?.removeAllServices()
     sessions.removeAll()
+    pendingCourier.removeAll()
+    syncResponseTimes.removeAll()
+    lastSyncRequestBySource.removeAll()
     remoteRadarConsents.removeAll()
     if notify { emitStatus("stopped") }
   }
@@ -428,24 +436,71 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     guard let session = sessions[peerID] else { return }
     let privatePayload = IOSMeshProtocol.privateMessage(id: id, content: content)
     let encrypted = try session.encrypt(Data([IOSMeshProtocol.noisePrivate]) + privatePayload)
-    sendNoise(
+    let packet = sendNoise(
       type: IOSMeshProtocol.noiseEncrypted,
       recipient: try Data(hex: peerID),
       payload: encrypted
     )
+    depositCourierWithDirectAnchors(innerPacket: packet)
   }
 
-  private func sendNoise(type: UInt8, recipient: Data, payload: Data) {
-    broadcast(
+  @discardableResult
+  private func sendNoise(type: UInt8, recipient: Data, payload: Data) -> IOSMeshPacket {
+    let packet = IOSMeshPacket(
+      type: type,
+      ttl: IOSMeshProtocol.defaultTTL,
+      timestamp: UInt64(Date().timeIntervalSince1970 * 1000),
+      senderID: identity.peerID,
+      recipientID: recipient,
+      payload: payload
+    )
+    broadcast(packet)
+    return packet
+  }
+
+  private func depositCourierWithDirectAnchors(innerPacket: IOSMeshPacket) {
+    let directPeerIDs = Set(peripheralPeers.values)
+    for anchor in peers.values
+    where anchor.isInfrastructure && directPeerIDs.contains(anchor.id) {
+      if sessions[anchor.id]?.established == true {
+        sendCourierDeposit(anchorID: anchor.id, innerPacket: innerPacket)
+      } else {
+        pendingCourier[anchor.id, default: []].append(innerPacket)
+        guard sessions[anchor.id] == nil, let claimed = try? Data(hex: anchor.id) else { continue }
+        let session = IOSNoiseSession(
+          claimedPeerID: claimed,
+          initiator: true,
+          localStatic: identity.noisePrivateKey
+        )
+        sessions[anchor.id] = session
+        if let first = try? session.start() {
+          sendNoise(type: IOSMeshProtocol.noiseHandshake, recipient: claimed, payload: first)
+        }
+      }
+    }
+  }
+
+  private func sendCourierDeposit(anchorID: String, innerPacket: IOSMeshPacket) {
+    guard
+      let recipientID = innerPacket.recipientID,
+      let recipient = peers[recipientID.hex],
+      let payload = IOSMeshProtocol.courierEnvelope(
+        recipientNoiseKey: recipient.noisePublicKey,
+        ciphertext: IOSMeshProtocol.encode(innerPacket, padded: false)
+      ),
+      let anchorBytes = try? Data(hex: anchorID)
+    else { return }
+    let courier = identity.sign(
       IOSMeshPacket(
-        type: type,
+        type: IOSMeshProtocol.courierEnvelope,
         ttl: IOSMeshProtocol.defaultTTL,
-        timestamp: UInt64(Date().timeIntervalSince1970 * 1000),
+        timestamp: currentMilliseconds(),
         senderID: identity.peerID,
-        recipientID: recipient,
+        recipientID: anchorBytes,
         payload: payload
       )
     )
+    send(packet: courier, toPeerID: anchorID)
   }
 
   private func sendAnnouncement() {
@@ -549,6 +604,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func broadcast(_ packet: IOSMeshPacket, excluding: UUID? = nil) {
+    rememberSyncPacket(packet)
     let bytes = IOSMeshProtocol.encodeForBLE(packet)
     if let recipient = packet.recipientID,
        recipient != Data(repeating: 0xff, count: 8) {
@@ -569,6 +625,31 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     }
   }
 
+  private func send(packet: IOSMeshPacket, toPeerID peerID: String) {
+    let bytes = IOSMeshProtocol.encodeForBLE(packet)
+    for (identifier, mappedPeerID) in peripheralPeers where mappedPeerID == peerID {
+      if
+        let characteristic = remoteCharacteristics[identifier],
+        let peripheral = connectedPeripherals[identifier]
+      {
+        let writeType: CBCharacteristicWriteType =
+          characteristic.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+        if bytes.count <= peripheral.maximumWriteValueLength(for: writeType) {
+          peripheral.writeValue(bytes, for: characteristic, type: writeType)
+        }
+      }
+      if
+        let characteristic = localCharacteristic,
+        let manager = peripheralManager,
+        let central = characteristic.subscribedCentrals?.first(where: {
+          $0.identifier == identifier
+        })
+      {
+        _ = manager.updateValue(bytes, for: characteristic, onSubscribedCentrals: [central])
+      }
+    }
+  }
+
   private func receive(_ data: Data, source: UUID?) {
     guard let packet = IOSMeshProtocol.decode(data) else { return }
     // Un anuncio con TTL intacto solo puede venir del emisor original: eso
@@ -577,7 +658,6 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     if packet.type == IOSMeshProtocol.announce,
        packet.ttl == IOSMeshProtocol.defaultTTL,
        let source,
-       connectedPeripherals[source] != nil,
        packet.senderID.hex != identity.peerIDHex {
       peripheralPeers[source] = packet.senderID.hex
     }
@@ -592,7 +672,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let forUs = packet.recipientID == nil ||
       packet.recipientID == identity.peerID ||
       packet.recipientID == Data(repeating: 0xff, count: 8)
-    if forUs { process(packet, senderID: senderID) }
+    if forUs { process(packet, senderID: senderID, source: source) }
     let controlForUs = forUs &&
       (packet.type == IOSMeshProtocol.noiseHandshake ||
        packet.type == IOSMeshProtocol.noiseEncrypted)
@@ -603,7 +683,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     }
   }
 
-  private func process(_ packet: IOSMeshPacket, senderID: String) {
+  private func process(_ packet: IOSMeshPacket, senderID: String, source: UUID? = nil) {
     switch packet.type {
     case IOSMeshProtocol.announce:
       guard
@@ -614,12 +694,17 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       peers[senderID] = IOSMeshPeer(
         id: senderID,
         nickname: announcement.nickname,
+        noisePublicKey: announcement.noisePublicKey,
         signingPublicKey: announcement.signingPublicKey,
         supportsTransfers: announcement.supportsTransfers ||
           (peers[senderID]?.supportsTransfers ?? false),
+        isInfrastructure: announcement.isInfrastructure ||
+          (peers[senderID]?.isInfrastructure ?? false),
         lastSeen: Date()
       )
+      rememberSyncPacket(packet)
       emit(["type": "peers", "peers": peerMaps()])
+      if let source { requestMissingMessages(peerID: senderID, source: source) }
       for stored in storeForward.packets(for: packet.senderID) {
         broadcast(stored)
       }
@@ -636,6 +721,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           timestamp: packet.timestamp,
           channel: packet.payload.starts(with: Data("SOS|".utf8)) ? "sos" : nil
         )
+      rememberSyncPacket(packet)
       if message.channel == "sos" {
         let expiresAt = packet.timestamp + IOSRadarConsentProtocol.sosDurationMilliseconds
         if expiresAt > currentMilliseconds() {
@@ -660,6 +746,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       processHandshake(packet, senderID: senderID)
     case IOSMeshProtocol.noiseEncrypted:
       processEncrypted(packet, senderID: senderID)
+    case IOSMeshProtocol.courierEnvelope:
+      processCourier(packet, senderID: senderID)
+    case IOSMeshProtocol.requestSync:
+      if let source { processSyncRequest(packet, senderID: senderID, source: source) }
     case IOSMeshProtocol.radarControl:
       processRadarControl(packet, senderID: senderID)
     case IOSMeshProtocol.hbtCapability:
@@ -733,6 +823,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         for frame in queuedFrames {
           try sendEncryptedFrame(peerID: senderID, frame: frame)
         }
+        let queuedCourier = pendingCourier.removeValue(forKey: senderID) ?? []
+        for innerPacket in queuedCourier {
+          sendCourierDeposit(anchorID: senderID, innerPacket: innerPacket)
+        }
       }
     } catch {
       sessions.removeValue(forKey: senderID)
@@ -769,6 +863,149 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     } catch {
       return
     }
+  }
+
+  private func processCourier(_ packet: IOSMeshPacket, senderID: String) {
+    guard
+      let carrier = peers[senderID],
+      IOSMeshIdentity.verify(packet, key: carrier.signingPublicKey),
+      let envelope = IOSMeshProtocol.decodeCourierEnvelope(packet.payload),
+      IOSMeshProtocol.courierEnvelopeIsFor(
+        envelope,
+        noisePublicKey: identity.noisePrivateKey.publicKey.rawRepresentation
+      ),
+      let inner = IOSMeshProtocol.decode(envelope.ciphertext),
+      inner.type == IOSMeshProtocol.noiseEncrypted,
+      inner.recipientID == identity.peerID
+    else { return }
+    let fingerprint = IOSMeshProtocol.fingerprint(inner)
+    guard seen[fingerprint] == nil else { return }
+    seen[fingerprint] = Date()
+    processEncrypted(inner, senderID: inner.senderID.hex)
+  }
+
+  private func requestMissingMessages(peerID: String, source: UUID) {
+    let now = Date()
+    if let previous = lastSyncRequestBySource[source],
+       now.timeIntervalSince(previous) < 60 {
+      return
+    }
+    lastSyncRequestBySource[source] = now
+    let request = identity.sign(
+      IOSMeshPacket(
+        type: IOSMeshProtocol.requestSync,
+        ttl: 0,
+        timestamp: currentMilliseconds(),
+        senderID: identity.peerID,
+        recipientID: try? Data(hex: peerID),
+        payload: IOSMeshProtocol.encodeSyncRequest(syncSnapshot())
+      )
+    )
+    send(packet: request, toPeerID: peerID)
+  }
+
+  private func processSyncRequest(
+    _ packet: IOSMeshPacket,
+    senderID: String,
+    source: UUID
+  ) {
+    guard
+      packet.ttl == 0,
+      allowSyncResponse(source: source),
+      let peer = peers[senderID],
+      IOSMeshIdentity.verify(packet, key: peer.signingPublicKey),
+      let request = IOSMeshProtocol.decodeSyncRequest(packet.payload)
+    else { return }
+    let remoteBuckets = IOSMeshProtocol.decodeGCS(request)
+    var sent = 0
+    for candidate in syncSnapshot() where sent < 40 {
+      let typeFlag: UInt64
+      switch candidate.type {
+      case IOSMeshProtocol.announce:
+        typeFlag = IOSMeshProtocol.syncFlagAnnounce
+      case IOSMeshProtocol.message:
+        typeFlag = IOSMeshProtocol.syncFlagMessage
+      default:
+        continue
+      }
+      guard request.typeFlags & typeFlag != 0 else { continue }
+      if
+        let since = request.since,
+        candidate.type != IOSMeshProtocol.announce,
+        candidate.timestamp < since
+      {
+        continue
+      }
+      let bucket = IOSMeshProtocol.gcsBucket(
+        packetID: IOSMeshProtocol.packetID(candidate),
+        m: request.m
+      )
+      if !remoteBuckets.isEmpty && remoteBuckets.contains(bucket) {
+        continue
+      }
+      var replay = candidate
+      replay.ttl = 0
+      replay.isRSR = true
+      send(packet: replay, toPeerID: senderID)
+      sent += 1
+    }
+  }
+
+  private func allowSyncResponse(source: UUID) -> Bool {
+    let now = Date()
+    var timestamps = syncResponseTimes[source, default: []]
+      .filter { now.timeIntervalSince($0) <= 30 }
+    guard timestamps.count < 8 else {
+      syncResponseTimes[source] = timestamps
+      return false
+    }
+    timestamps.append(now)
+    syncResponseTimes[source] = timestamps
+    return true
+  }
+
+  private func rememberSyncPacket(_ packet: IOSMeshPacket) {
+    let broadcast = packet.recipientID == nil ||
+      packet.recipientID == Data(repeating: 0xff, count: 8)
+    guard
+      packet.signature != nil,
+      packet.type == IOSMeshProtocol.announce ||
+        (packet.type == IOSMeshProtocol.message && broadcast),
+      isSyncFresh(packet)
+    else { return }
+    if packet.type == IOSMeshProtocol.announce {
+      if syncPackets.values.contains(where: {
+        $0.type == IOSMeshProtocol.announce &&
+          $0.senderID == packet.senderID &&
+          $0.timestamp >= packet.timestamp
+      }) {
+        return
+      }
+      syncPackets = syncPackets.filter {
+        !($0.value.type == IOSMeshProtocol.announce &&
+          $0.value.senderID == packet.senderID &&
+          $0.value.timestamp <= packet.timestamp)
+      }
+    }
+    syncPackets[IOSMeshProtocol.packetID(packet).hex] = packet
+    while syncPackets.count > 80,
+          let oldest = syncPackets.min(by: { $0.value.timestamp < $1.value.timestamp }) {
+      syncPackets.removeValue(forKey: oldest.key)
+    }
+  }
+
+  private func syncSnapshot() -> [IOSMeshPacket] {
+    syncPackets = syncPackets.filter { isSyncFresh($0.value) }
+    return syncPackets.values.sorted { $0.timestamp > $1.timestamp }
+  }
+
+  private func isSyncFresh(_ packet: IOSMeshPacket) -> Bool {
+    let now = currentMilliseconds()
+    let window: UInt64 = packet.type == IOSMeshProtocol.announce
+      ? 15 * 60 * 1000
+      : 6 * 60 * 60 * 1000
+    return packet.timestamp <= now + 15 * 60 * 1000 &&
+      (now < window || packet.timestamp >= now - window)
   }
 
   private func peerMaps() -> [[String: Any]] {
@@ -872,6 +1109,8 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
   ) {
     connectedPeripherals.removeValue(forKey: peripheral.identifier)
     remoteCharacteristics.removeValue(forKey: peripheral.identifier)
+    lastSyncRequestBySource.removeValue(forKey: peripheral.identifier)
+    syncResponseTimes.removeValue(forKey: peripheral.identifier)
   }
 
   func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
@@ -1004,8 +1243,10 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
 private struct IOSMeshPeer {
   let id: String
   let nickname: String
+  let noisePublicKey: Data
   let signingPublicKey: Data
   var supportsTransfers: Bool
+  var isInfrastructure: Bool
   var lastSeen: Date
 }
 
@@ -1094,11 +1335,14 @@ private struct IOSMeshPacket {
   var recipientID: Data?
   var payload: Data
   var signature: Data?
+  var route: [Data] = []
+  var isRSR = false
 
   func canonical() -> Data {
     var copy = self
     copy.ttl = 0
     copy.signature = nil
+    copy.isRSR = false
     return IOSMeshProtocol.encode(copy, padded: true)
   }
 }
@@ -1106,8 +1350,10 @@ private struct IOSMeshPacket {
 private enum IOSMeshProtocol {
   static let announce: UInt8 = 0x01
   static let message: UInt8 = 0x02
+  static let courierEnvelope: UInt8 = 0x04
   static let noiseHandshake: UInt8 = 0x10
   static let noiseEncrypted: UInt8 = 0x11
+  static let requestSync: UInt8 = 0x21
   static let radarControl: UInt8 = 0x23
   static let hbtCapability: UInt8 = 0x24
   static let hbtVersion: UInt8 = 0x01
@@ -1129,6 +1375,7 @@ private enum IOSMeshProtocol {
     let noisePublicKey: Data
     let signingPublicKey: Data
     let supportsTransfers: Bool
+    let isInfrastructure: Bool
   }
 
   struct PrivateMessage {
@@ -1136,7 +1383,25 @@ private enum IOSMeshProtocol {
     let content: String
   }
 
+  struct SyncRequest {
+    let p: Int
+    let m: UInt64
+    let filter: Data
+    let typeFlags: UInt64
+    let since: UInt64?
+  }
+
+  struct CourierEnvelope {
+    let recipientTag: Data
+    let expiry: UInt64
+    let ciphertext: Data
+    let copies: UInt8
+  }
+
   static func encode(_ packet: IOSMeshPacket, padded: Bool = true) -> Data {
+    precondition(packet.version == 1 || packet.version == 2)
+    precondition(packet.version >= 2 || packet.route.isEmpty)
+    precondition(packet.route.count <= 255 && packet.route.allSatisfy { $0.count == 8 })
     var payload = packet.payload
     var originalPayloadSize: Int?
     if shouldCompress(payload), let compressed = compress(payload) {
@@ -1147,6 +1412,8 @@ private enum IOSMeshProtocol {
     if packet.recipientID != nil { flags |= 0x01 }
     if packet.signature != nil { flags |= 0x02 }
     if originalPayloadSize != nil { flags |= 0x04 }
+    if packet.version >= 2 && !packet.route.isEmpty { flags |= 0x08 }
+    if packet.isRSR { flags |= 0x10 }
     var output = Data([
       packet.version,
       packet.type,
@@ -1163,6 +1430,10 @@ private enum IOSMeshProtocol {
     }
     output.append(packet.senderID)
     if let recipient = packet.recipientID { output.append(recipient) }
+    if packet.version >= 2 && !packet.route.isEmpty {
+      output.append(UInt8(packet.route.count))
+      packet.route.forEach { output.append($0) }
+    }
     if let originalPayloadSize {
       if packet.version >= 2 {
         output.appendInteger(UInt32(originalPayloadSize))
@@ -1207,8 +1478,13 @@ private enum IOSMeshProtocol {
     }
     guard let sender = reader.data(count: 8) else { return nil }
     let recipient = flags & 0x01 != 0 ? reader.data(count: 8) : nil
+    var route: [Data] = []
     if version >= 2, flags & 0x08 != 0 {
-      guard let count = reader.byte(), reader.skip(Int(count) * 8) else { return nil }
+      guard let count = reader.byte() else { return nil }
+      for _ in 0..<count {
+        guard let hop = reader.data(count: 8) else { return nil }
+        route.append(hop)
+      }
     }
     guard let payloadData = reader.data(count: payloadLength) else { return nil }
     let payload: Data
@@ -1246,7 +1522,9 @@ private enum IOSMeshProtocol {
       senderID: sender,
       recipientID: recipient,
       payload: payload,
-      signature: signature
+      signature: signature,
+      route: route,
+      isRSR: flags & 0x10 != 0
     )
   }
 
@@ -1317,6 +1595,7 @@ private enum IOSMeshProtocol {
     var noise: Data?
     var signing: Data?
     var supportsTransfers = false
+    var isInfrastructure = false
     while let type = reader.byte(), let length = reader.byte(),
           let value = reader.data(count: Int(length)) {
       switch type {
@@ -1324,6 +1603,7 @@ private enum IOSMeshProtocol {
       case 0x02: noise = value
       case 0x03: signing = value
       case 0xF0: supportsTransfers = value == Data([0x01])
+      case 0xB1: isInfrastructure = value.first.map { $0 & 0x01 != 0 } ?? false
       default: break
       }
     }
@@ -1333,7 +1613,8 @@ private enum IOSMeshProtocol {
       nickname: nickname,
       noisePublicKey: noise,
       signingPublicKey: signing,
-      supportsTransfers: supportsTransfers
+      supportsTransfers: supportsTransfers,
+      isInfrastructure: isInfrastructure
     )
   }
 
@@ -1360,12 +1641,229 @@ private enum IOSMeshProtocol {
     return PrivateMessage(id: id, content: content)
   }
 
+  static func packetID(_ packet: IOSMeshPacket) -> Data {
+    var input = Data([packet.type])
+    input.append(packet.senderID)
+    input.appendInteger(packet.timestamp)
+    input.append(packet.payload)
+    return Data(SHA256.hash(data: input).prefix(16))
+  }
+
+  static func encodeSyncRequest(_ packets: [IOSMeshPacket]) -> Data {
+    let ids = packets.prefix(syncMaximumElements).map(packetID)
+    let m: UInt64 = ids.isEmpty ? 1 : UInt64(ids.count) << syncGCSP
+    let buckets = Array(Set(ids.map { gcsBucket(packetID: $0, m: m) })).sorted()
+    var output = Data()
+    output.appendWideTLV(type: 0x01, value: Data([UInt8(syncGCSP)]))
+    var mBytes = Data()
+    mBytes.appendInteger(UInt32(m))
+    output.appendWideTLV(type: 0x02, value: mBytes)
+    output.appendWideTLV(type: 0x03, value: encodeGCS(buckets, p: syncGCSP))
+    output.appendWideTLV(type: 0x04, value: Data([UInt8(syncFlagAnnounce | syncFlagMessage)]))
+    return output
+  }
+
+  static func decodeSyncRequest(_ payload: Data) -> SyncRequest? {
+    var reader = DataReader(payload)
+    var p: Int?
+    var m: UInt64?
+    var filter: Data?
+    var typeFlags: UInt64?
+    var since: UInt64?
+    while let type = reader.byte(), let length: UInt16 = reader.integer(),
+          let value = reader.data(count: Int(length)) {
+      switch type {
+      case 0x01 where value.count == 1:
+        p = Int(value[0])
+      case 0x02 where value.count == 4:
+        var valueReader = DataReader(value)
+        if let range: UInt32 = valueReader.integer() { m = UInt64(range) }
+      case 0x03:
+        guard value.count <= syncMaximumAcceptedBytes else { return nil }
+        filter = value
+      case 0x04:
+        var flags: UInt64 = 0
+        for (index, byte) in value.prefix(8).enumerated() {
+          flags |= UInt64(byte) << (index * 8)
+        }
+        typeFlags = flags
+      case 0x05 where value.count == 8:
+        var valueReader = DataReader(value)
+        since = valueReader.integer()
+      default:
+        break
+      }
+    }
+    guard let p, (1...32).contains(p), let m, m > 0, let filter else { return nil }
+    return SyncRequest(
+      p: p,
+      m: m,
+      filter: filter,
+      typeFlags: typeFlags ?? (syncFlagAnnounce | syncFlagMessage),
+      since: since
+    )
+  }
+
+  static func decodeGCS(_ request: SyncRequest) -> [UInt64] {
+    let bytes = [UInt8](request.filter)
+    var bitOffset = 0
+    func readBit() -> UInt64? {
+      guard bitOffset < bytes.count * 8 else { return nil }
+      defer { bitOffset += 1 }
+      return UInt64((bytes[bitOffset / 8] >> (7 - bitOffset % 8)) & 1)
+    }
+    var output: [UInt64] = []
+    var accumulator: UInt64 = 0
+    while output.count < syncMaximumDecodedElements {
+      var quotient: UInt64 = 0
+      guard var bit = readBit() else { break }
+      while bit == 1 {
+        quotient += 1
+        guard let next = readBit() else { return output }
+        bit = next
+      }
+      var remainder: UInt64 = 0
+      for _ in 0..<request.p {
+        guard let next = readBit() else { return output }
+        remainder = (remainder << 1) | next
+      }
+      accumulator += (quotient << request.p) + remainder + 1
+      if accumulator >= request.m { break }
+      output.append(accumulator)
+    }
+    return output
+  }
+
+  static func gcsBucket(packetID: Data, m: UInt64) -> UInt64 {
+    guard m > 1 else { return 0 }
+    let digest = SHA256.hash(data: packetID)
+    var hash: UInt64 = 0
+    for byte in digest.prefix(8) { hash = (hash << 8) | UInt64(byte) }
+    let value = (hash & (UInt64.max >> 1)) % m
+    return value == 0 ? 1 : value
+  }
+
+  static func courierEnvelope(
+    recipientNoiseKey: Data,
+    ciphertext: Data,
+    now: UInt64 = UInt64(Date().timeIntervalSince1970 * 1000),
+    expiry: UInt64? = nil,
+    copies: UInt8 = 4
+  ) -> Data? {
+    let envelopeExpiry = expiry ?? now + courierLifetimeMilliseconds
+    guard
+      recipientNoiseKey.count == 32,
+      !ciphertext.isEmpty,
+      ciphertext.count <= Int(UInt16.max),
+      envelopeExpiry > now,
+      envelopeExpiry <= now + courierMaximumLifetimeMilliseconds
+    else { return nil }
+    var output = Data()
+    output.appendWideTLV(
+      type: 0x01,
+      value: courierTag(noiseKey: recipientNoiseKey, epochDay: now / dayMilliseconds)
+    )
+    var expiryBytes = Data()
+    expiryBytes.appendInteger(envelopeExpiry)
+    output.appendWideTLV(type: 0x02, value: expiryBytes)
+    output.appendWideTLV(type: 0x03, value: ciphertext)
+    if copies > 1 {
+      output.appendWideTLV(type: 0x04, value: Data([min(copies, 8)]))
+    }
+    return output
+  }
+
+  static func decodeCourierEnvelope(_ payload: Data) -> CourierEnvelope? {
+    var reader = DataReader(payload)
+    var tag: Data?
+    var expiry: UInt64?
+    var ciphertext: Data?
+    var copies: UInt8 = 1
+    while let type = reader.byte(), let length: UInt16 = reader.integer(),
+          let value = reader.data(count: Int(length)) {
+      switch type {
+      case 0x01 where value.count == 16:
+        tag = value
+      case 0x02 where value.count == 8:
+        var valueReader = DataReader(value)
+        expiry = valueReader.integer()
+      case 0x03 where !value.isEmpty:
+        ciphertext = value
+      case 0x04 where value.count == 1:
+        copies = min(max(value[0], 1), 8)
+      default:
+        break
+      }
+    }
+    guard let tag, let expiry, let ciphertext else { return nil }
+    return CourierEnvelope(
+      recipientTag: tag,
+      expiry: expiry,
+      ciphertext: ciphertext,
+      copies: copies
+    )
+  }
+
+  static func courierEnvelopeIsFor(
+    _ envelope: CourierEnvelope,
+    noisePublicKey: Data,
+    now: UInt64 = UInt64(Date().timeIntervalSince1970 * 1000)
+  ) -> Bool {
+    guard
+      noisePublicKey.count == 32,
+      envelope.expiry > now,
+      envelope.expiry <= now + courierMaximumLifetimeMilliseconds
+    else { return false }
+    let day = now / dayMilliseconds
+    let days = day == 0 ? [0, 1] : [day - 1, day, day + 1]
+    return days.contains {
+      courierTag(noiseKey: noisePublicKey, epochDay: $0) == envelope.recipientTag
+    }
+  }
+
   static func peerID(_ noisePublicKey: Data) -> Data {
     Data(SHA256.hash(data: noisePublicKey).prefix(8))
   }
 
   static func fingerprint(_ packet: IOSMeshPacket) -> String {
     Data(SHA256.hash(data: packet.canonical()).prefix(12)).hex
+  }
+
+  private static func encodeGCS(_ sorted: [UInt64], p: Int) -> Data {
+    var output = Data()
+    var current: UInt8 = 0
+    var bitCount = 0
+    func writeBit(_ bit: UInt8) {
+      current = (current << 1) | (bit & 1)
+      bitCount += 1
+      if bitCount == 8 {
+        output.append(current)
+        current = 0
+        bitCount = 0
+      }
+    }
+    var previous: UInt64 = 0
+    for value in sorted {
+      let encoded = value - previous - 1
+      previous = value
+      for _ in 0..<(encoded >> p) { writeBit(1) }
+      writeBit(0)
+      for shift in stride(from: p - 1, through: 0, by: -1) {
+        writeBit(UInt8((encoded >> shift) & 1))
+      }
+    }
+    if bitCount > 0 { output.append(current << (8 - bitCount)) }
+    return output
+  }
+
+  private static func courierTag(noiseKey: Data, epochDay: UInt64) -> Data {
+    var message = Data(courierTagContext.utf8)
+    message.appendInteger(UInt32(truncatingIfNeeded: epochDay))
+    let authentication = HMAC<SHA256>.authenticationCode(
+      for: message,
+      using: SymmetricKey(data: noiseKey)
+    )
+    return Data(authentication.prefix(16))
   }
 
   private static func pad(_ data: Data) -> Data {
@@ -1439,6 +1937,16 @@ private enum IOSMeshProtocol {
 
   private static let compressionThreshold = 100
   private static let maximumPayloadLength = 10_485_760
+  static let syncFlagAnnounce: UInt64 = 1 << 0
+  static let syncFlagMessage: UInt64 = 1 << 1
+  private static let syncGCSP = 7
+  private static let syncMaximumElements = 355
+  private static let syncMaximumDecodedElements = 1024
+  private static let syncMaximumAcceptedBytes = 1024
+  private static let dayMilliseconds: UInt64 = 86_400_000
+  private static let courierLifetimeMilliseconds: UInt64 = 12 * 60 * 60 * 1000
+  private static let courierMaximumLifetimeMilliseconds: UInt64 = 25 * 60 * 60 * 1000
+  private static let courierTagContext = "bitchat-courier-tag-v1"
 }
 
 private final class IOSStoreForward {
@@ -1946,6 +2454,13 @@ private extension Data {
     append(type)
     append(UInt8(limited.count))
     append(limited)
+  }
+
+  mutating func appendWideTLV(type: UInt8, value: Data) {
+    precondition(value.count <= Int(UInt16.max))
+    append(type)
+    appendInteger(UInt16(value.count))
+    append(value)
   }
 }
 

@@ -1,0 +1,12 @@
+services:
+  hearthbit-relay:
+    build: .
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+      - ./config.example.json:/config/config.json:ro
+      - hearthbit-data:/var/lib/hearthbit-relay
+
+volumes:
+  hearthbit-data:

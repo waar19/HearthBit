@@ -16,6 +16,7 @@ class _FakePlatform extends MeshPlatformService {
   int sosCalls = 0;
   final List<({bool enabled, int minutes})> radarConsentCalls = [];
   int panicWipeCalls = 0;
+  final List<String> nodeRoles = [];
   bool permissionsGranted = true;
   bool backgroundLocation = true;
   Object? startError;
@@ -79,6 +80,11 @@ class _FakePlatform extends MeshPlatformService {
   @override
   Future<void> panicWipe() async {
     panicWipeCalls += 1;
+  }
+
+  @override
+  Future<void> setNodeRole(String role) async {
+    nodeRoles.add(role);
   }
 }
 
@@ -155,6 +161,7 @@ void main() {
       'status': 'active',
       'nickname': 'Nodo 7',
       'peerId': '0102030405060708',
+      'role': 'PHONE_RELAY',
       'radarConsentUntil': consentUntil,
       'peers': [
         {
@@ -163,8 +170,19 @@ void main() {
           'lastSeen': 1234,
           'secure': true,
           'supportsTransfers': true,
+          'role': 'INFRA_DATA_ANCHOR',
           'radarAllowedUntil': consentUntil,
           'radarConsentSource': 'temporary',
+        },
+      ],
+      'presences': [
+        {
+          'id': 'aabbccddeeff001122334455',
+          'role': 'PHONE_BEACON',
+          'kind': 'genericBle',
+          'chatAvailable': false,
+          'rssi': -68,
+          'lastSeen': DateTime.now().millisecondsSinceEpoch,
         },
       ],
     });
@@ -175,6 +193,8 @@ void main() {
     expect(controller.peerId, '0102030405060708');
     expect(controller.peers.single.nickname, 'Rescate');
     expect(controller.peers.single.supportsTransfers, isTrue);
+    expect(controller.peers.single.role, MeshNodeRole.infraDataAnchor);
+    expect(controller.genericPresences.single.chatAvailable, isFalse);
     expect(controller.radarConsentActive, isTrue);
     expect(controller.peers.single.radarAllowed, isTrue);
   });
@@ -300,6 +320,38 @@ void main() {
     await controller.revokeRadarConsent();
     expect(controller.radarConsentActive, isFalse);
     expect(platform.radarConsentCalls.last.enabled, isFalse);
+  });
+
+  test('cambia el rol local y bloquea chat para infraestructura', () async {
+    platform.emit({'type': 'status', 'status': 'active'});
+    await pumpEvents();
+    expect(controller.canSend, isTrue);
+
+    await controller.updateNodeRole(MeshNodeRole.infraRelay);
+
+    expect(platform.nodeRoles.single, 'INFRA_RELAY');
+    expect(controller.localRole, MeshNodeRole.infraRelay);
+    expect(controller.canSend, isFalse);
+  });
+
+  test('actualiza presencias genéricas sin convertirlas en peers', () async {
+    platform.emit({
+      'type': 'presences',
+      'presences': [
+        {
+          'id': '00112233445566778899aabb',
+          'role': 'PHONE_BEACON',
+          'kind': 'genericBle',
+          'chatAvailable': false,
+          'rssi': -81,
+          'lastSeen': DateTime.now().millisecondsSinceEpoch,
+        },
+      ],
+    });
+    await pumpEvents();
+
+    expect(controller.genericPresences.single.rssi, -81);
+    expect(controller.peers, isEmpty);
   });
 
   test('el borrado de pánico elimina el consentimiento local', () async {

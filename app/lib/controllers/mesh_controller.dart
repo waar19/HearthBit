@@ -22,12 +22,14 @@ class MeshController extends ChangeNotifier {
   final MessageRepository _repository;
   final List<MeshMessage> _messages = [];
   final List<MeshPeer> _peers = [];
+  final List<GenericBlePresence> _presences = [];
   final Map<String, MeshPeer> _knownPeers = {};
 
   StreamSubscription<Map<Object?, Object?>>? _subscription;
   MeshConnectionStatus status = MeshConnectionStatus.stopped;
   String nickname = '';
   String peerId = '';
+  MeshNodeRole localRole = MeshNodeRole.phoneRelay;
   String? lastError;
   bool supportsBackgroundRelay = false;
   DateTime? radarConsentUntil;
@@ -48,6 +50,13 @@ class MeshController extends ChangeNotifier {
 
   List<MeshMessage> get messages => List.unmodifiable(_messages);
   List<MeshPeer> get peers => List.unmodifiable(_peers);
+  List<GenericBlePresence> get genericPresences {
+    final cutoff = DateTime.now().subtract(const Duration(seconds: 45));
+    return List.unmodifiable(
+      _presences.where((presence) => presence.lastSeen.isAfter(cutoff)),
+    );
+  }
+
   bool isPeerOnline(String id) => _peers.any((peer) => peer.id == id);
   MeshPeer? peerById(String id) {
     for (final peer in _peers) {
@@ -95,8 +104,9 @@ class MeshController extends ChangeNotifier {
   /// La malla puede enviar mensajes: anuncio completo o modo solo recepción,
   /// donde las conexiones salientes hacia otros nodos siguen funcionando.
   bool get canSend =>
-      status == MeshConnectionStatus.active ||
-      status == MeshConnectionStatus.degraded;
+      localRole.canChat &&
+      (status == MeshConnectionStatus.active ||
+          status == MeshConnectionStatus.degraded);
 
   Future<void> initialize() async {
     _messages
@@ -226,6 +236,7 @@ class MeshController extends ChangeNotifier {
     await setRescueMode(false);
     await _platform.stop();
     status = MeshConnectionStatus.stopped;
+    _presences.clear();
     notifyListeners();
   }
 
@@ -235,7 +246,7 @@ class MeshController extends ChangeNotifier {
   }
 
   Future<void> sendPrivate(MeshPeer peer, String content) async {
-    if (content.trim().isEmpty) return;
+    if (!peer.role.canChat || content.trim().isEmpty) return;
     await _run(() => _platform.sendPrivate(peer.id, content.trim()));
   }
 
@@ -280,6 +291,12 @@ class MeshController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateNodeRole(MeshNodeRole role) async {
+    await _platform.setNodeRole(role.wireName);
+    localRole = role;
+    notifyListeners();
+  }
+
   Future<void> allowRadarFor15Minutes() async {
     await _platform.setRadarConsent(enabled: true);
     radarConsentUntil = DateTime.now().add(const Duration(minutes: 15));
@@ -321,12 +338,16 @@ class MeshController extends ChangeNotifier {
       case 'snapshot':
         _applyStatus(event);
         _replacePeers(event['peers']);
+        _replacePresences(event['presences']);
         break;
       case 'status':
         _applyStatus(event);
         break;
       case 'peers':
         _replacePeers(event['peers']);
+        break;
+      case 'presences':
+        _replacePresences(event['presences']);
         break;
       case 'radarConsent':
         _applyRadarConsent(event);
@@ -352,6 +373,7 @@ class MeshController extends ChangeNotifier {
       case 'wiped':
         _messages.clear();
         _peers.clear();
+        _presences.clear();
         _knownPeers.clear();
         status = MeshConnectionStatus.stopped;
         radarConsentUntil = null;
@@ -376,6 +398,7 @@ class MeshController extends ChangeNotifier {
     };
     nickname = event['nickname'] as String? ?? nickname;
     peerId = event['peerId'] as String? ?? peerId;
+    localRole = MeshNodeRole.fromWire(event['role']);
     _applyRadarConsent(event);
   }
 
@@ -401,6 +424,17 @@ class MeshController extends ChangeNotifier {
     if (_peers.isNotEmpty) {
       unawaited(_repository.saveKnownPeers(_peers));
     }
+  }
+
+  void _replacePresences(Object? value) {
+    final rawPresences = value as List<Object?>? ?? const [];
+    _presences
+      ..clear()
+      ..addAll(
+        rawPresences.whereType<Map<Object?, Object?>>().map(
+          GenericBlePresence.fromMap,
+        ),
+      );
   }
 
   String _conversationNickname(String peerId) {

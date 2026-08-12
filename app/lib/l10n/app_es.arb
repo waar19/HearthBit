@@ -159,6 +159,10 @@
   "aboutVersion": "Versión {version}",
   "aboutSourceCode": "Código fuente",
   "supportButton": "Invítame a un café",
+  "shareInviteButton": "Compartir HearthBit",
+  "shareInviteMessage": "Únete a HearthBit, una malla de emergencia de código abierto que funciona sin internet. Descárgala o contribuye en {url}",
+  "tooltipShare": "Invitar personas a HearthBit",
+  "shareInviteError": "No se pudieron abrir las opciones para compartir",
   "openLinkError": "No se pudo abrir el enlace",
   "actionClose": "Cerrar",
 
@@ -211,5 +215,8 @@
   "radarSweepEstimateWarning": "Es una estimación por RSSI, no una dirección precisa. Verifícala moviéndote y repitiendo el barrido.",
   "radarCompassUnavailable": "Este teléfono no tiene una brújula utilizable. El radar de proximidad sigue disponible.",
   "dateToday": "Hoy",
-  "dateYesterday": "Ayer"
+  "dateYesterday": "Ayer",
+  "genericPresenceSectionTitle": "Otras señales Bluetooth",
+  "genericPresenceNoChat": "Presencia detectada, sin chat",
+  "genericPresenceSignal": "Señal Bluetooth genérica · {rssi} dBm"
 }

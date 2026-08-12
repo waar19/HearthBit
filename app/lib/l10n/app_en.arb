@@ -180,6 +180,11 @@
   "@aboutVersion": {"placeholders": {"version": {"type": "String"}}},
   "aboutSourceCode": "Source code",
   "supportButton": "Buy me a coffee",
+  "shareInviteButton": "Share HearthBit",
+  "shareInviteMessage": "Join HearthBit, an open-source emergency mesh that works without internet. Download it or contribute at {url}",
+  "@shareInviteMessage": {"placeholders": {"url": {"type": "String"}}},
+  "tooltipShare": "Invite people to HearthBit",
+  "shareInviteError": "Could not open the sharing options",
   "openLinkError": "Could not open the link",
   "actionClose": "Close",
 
@@ -246,5 +251,9 @@
   "radarSweepEstimateWarning": "This is an RSSI estimate, not a precise direction. Verify it by moving and repeating the sweep.",
   "radarCompassUnavailable": "This phone has no usable compass sensor. Proximity radar remains available.",
   "dateToday": "Today",
-  "dateYesterday": "Yesterday"
+  "dateYesterday": "Yesterday",
+  "genericPresenceSectionTitle": "Other Bluetooth signals",
+  "genericPresenceNoChat": "Presence detected, no chat",
+  "genericPresenceSignal": "Generic Bluetooth signal · {rssi} dBm",
+  "@genericPresenceSignal": {"placeholders": {"rssi": {"type": "int"}}}
 }

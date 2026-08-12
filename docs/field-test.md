@@ -22,6 +22,61 @@ La interoperabilidad HearthBit↔BitChat con hardware real (pasos 2-5) es una
 prueba manual obligatoria antes de declarar compatibilidad física; los tests
 binarios automatizados no la sustituyen.
 
+## Reconexión y sincronización GCS
+
+Use dos teléfonos HearthBit y un BitChat oficial:
+
+1. Conecte los tres, espere los `ANNOUNCE` firmados y envíe tres mensajes
+   públicos desde cada cliente.
+2. Apague Bluetooth en un HearthBit y envíe otros tres mensajes desde BitChat.
+3. Reactive Bluetooth antes de seis horas. Al recibir el nuevo `ANNOUNCE`,
+   HearthBit debe enviar `REQUEST_SYNC` (`0x21`) con TTL 0 y un filtro GCS
+   MSB-first; BitChat debe devolver únicamente los paquetes ausentes.
+4. Repita desconectando BitChat. HearthBit debe responder su `REQUEST_SYNC`
+   firmado con un máximo de 40 reenvíos, TTL 0 y flag RSR (`0x10`), sin duplicar
+   mensajes ya presentes.
+5. Capture los bytes de una petición y compruebe los TLV de 16 bits: P `0x01`,
+   M big-endian `0x02`, filtro `0x03` y tipos little-endian `0x04`.
+6. Mantenga los equipos conectados dos minutos y confirme que el control de
+   tasa evita tormentas: no más de ocho respuestas por enlace cada 30 s.
+
+Registre el número de mensajes antes y después. El resultado correcto es
+convergencia exacta, sin duplicados y sin propagar `REQUEST_SYNC` más allá del
+vecino directo.
+
+## Paquetes v2 con ruta
+
+Con un cliente BitChat que emita versión 2:
+
+1. Envíe un paquete con flag route `0x08`, dos IDs de salto y payload conocido.
+2. Confirme que HearthBit conserva los dos IDs al decodificar y volver a
+   codificar; el largo del payload no debe incluir el byte de conteo ni la ruta.
+3. Repita con recipient, compresión y firma activados.
+4. Inyecte una ruta truncada. El paquete debe rechazarse sin cerrar la conexión.
+5. Verifique también un paquete v1 normal: sus bytes deben seguir coincidiendo
+   con el vector BitChat existente.
+
+## Courier cifrado con ancla Bitle
+
+1. Establezca una sesión Noise entre dos teléfonos y conecte el emisor
+   directamente a un ancla con `0xB1 bit0`.
+2. Envíe un mensaje privado. El emisor debe completar Noise con el ancla y
+   depositar un `CourierEnvelope` `0x04` firmado, dirigido al ID del ancla.
+3. En el log del ancla confirme `Envelope deposited`; el TLV `0x03` debe ser el
+   paquete Noise cifrado opaco, nunca texto en claro.
+4. Desconecte el emisor, conecte el destinatario y anuncie su clave. El ancla
+   debe entregar el sobre por la etiqueta HMAC del día y eliminar su copia.
+5. Confirme que el destinatario valida la firma del portador, la etiqueta y la
+   expiración antes de abrir el paquete Noise, y que copias repetidas no generan
+   mensajes duplicados.
+6. Repita con etiqueta de otra clave, sobre vencido y ciphertext alterado:
+   todos deben descartarse. Pruebe además el cruce de medianoche; se aceptan
+   día anterior, actual y siguiente para tolerar desfase de reloj.
+
+El depósito requiere enlace directo, identidad anunciada y sesión Noise con el
+ancla. Un relay no verificado o alcanzado solo por varios saltos no debe aceptar
+correo.
+
 ## Registro de interoperabilidad
 
 ### 2026-08-12 — Galaxy S25 ↔ BitChat en iPhone
@@ -88,8 +143,10 @@ Con dos teléfonos y la malla activa:
 
 ## Prueba automatizada
 
-`MeshProtocolTest` congela la cabecera binaria v1, la compresión, la forma
-canónica de firma y el parseo tolerante de anuncios usados por BitChat.
+`MeshProtocolTest` congela las cabeceras binarias v1/v2, rutas, compresión, la
+forma canónica de firma, GCS y Courier, además del parseo tolerante de anuncios
+usados por BitChat. La prueba de ANNOUNCE también garantiza que HearthBit no
+vuelva a emitir el TLV privado `0xF0`.
 Ejecútela con:
 
 ```powershell

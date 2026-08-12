@@ -1,0 +1,19 @@
+{
+  "adapter": "hci0",
+  "local_name": "Bitle Relay",
+  "central_enabled": true,
+  "scan_interval_seconds": 20,
+  "max_central_links": 2,
+  "max_packet_size": 2048,
+  "log_level": "INFO",
+  "store": {
+    "path": "/var/lib/hearthbit-relay/relay.db",
+    "max_bytes": 67108864,
+    "max_packets": 20000,
+    "packet_ttl_seconds": 604800,
+    "seen_ttl_seconds": 86400,
+    "replay_batch": 256,
+    "require_signature": true,
+    "message_types": ["0x02", "0x04", "0x24", "0x25"]
+  }
+}

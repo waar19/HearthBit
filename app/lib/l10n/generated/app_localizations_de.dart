@@ -518,6 +518,21 @@ class AppLocalizationsDe extends AppLocalizations {
   String get supportButton => 'Spendiere mir einen Kaffee';
 
   @override
+  String get shareInviteButton => 'HearthBit teilen';
+
+  @override
+  String shareInviteMessage(String url) {
+    return 'Mach bei HearthBit mit, einem quelloffenen Notfallnetz, das ohne Internet funktioniert. Lade es herunter oder hilf mit unter $url';
+  }
+
+  @override
+  String get tooltipShare => 'Menschen zu HearthBit einladen';
+
+  @override
+  String get shareInviteError =>
+      'Die Teilen-Optionen konnten nicht geöffnet werden';
+
+  @override
   String get openLinkError => 'Der Link konnte nicht geöffnet werden';
 
   @override
@@ -713,4 +728,15 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get dateYesterday => 'Gestern';
+
+  @override
+  String get genericPresenceSectionTitle => 'Andere Bluetooth-Signale';
+
+  @override
+  String get genericPresenceNoChat => 'Anwesenheit erkannt, kein Chat';
+
+  @override
+  String genericPresenceSignal(int rssi) {
+    return 'Allgemeines Bluetooth-Signal · $rssi dBm';
+  }
 }

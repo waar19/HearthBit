@@ -501,6 +501,20 @@ class AppLocalizationsJa extends AppLocalizations {
   String get supportButton => 'コーヒーで支援';
 
   @override
+  String get shareInviteButton => 'HearthBit を共有';
+
+  @override
+  String shareInviteMessage(String url) {
+    return 'インターネットなしで動作するオープンソースの緊急メッシュ、HearthBit に参加してください。ダウンロードまたは貢献はこちら: $url';
+  }
+
+  @override
+  String get tooltipShare => 'HearthBit に招待';
+
+  @override
+  String get shareInviteError => '共有オプションを開けませんでした';
+
+  @override
   String get openLinkError => 'リンクを開けませんでした';
 
   @override
@@ -687,4 +701,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dateYesterday => '昨日';
+
+  @override
+  String get genericPresenceSectionTitle => 'その他の Bluetooth 信号';
+
+  @override
+  String get genericPresenceNoChat => '存在を検出、チャット不可';
+
+  @override
+  String genericPresenceSignal(int rssi) {
+    return '一般 Bluetooth 信号 · $rssi dBm';
+  }
 }

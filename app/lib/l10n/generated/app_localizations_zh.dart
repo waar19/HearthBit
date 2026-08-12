@@ -489,6 +489,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get supportButton => '请我喝杯咖啡';
 
   @override
+  String get shareInviteButton => '分享 HearthBit';
+
+  @override
+  String shareInviteMessage(String url) {
+    return '加入 HearthBit：一个无需互联网即可工作的开源应急网状网络。下载或参与贡献：$url';
+  }
+
+  @override
+  String get tooltipShare => '邀请他人使用 HearthBit';
+
+  @override
+  String get shareInviteError => '无法打开分享选项';
+
+  @override
   String get openLinkError => '无法打开链接';
 
   @override
@@ -672,4 +686,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dateYesterday => '昨天';
+
+  @override
+  String get genericPresenceSectionTitle => '其他蓝牙信号';
+
+  @override
+  String get genericPresenceNoChat => '检测到附近设备，无法聊天';
+
+  @override
+  String genericPresenceSignal(int rssi) {
+    return '通用蓝牙信号 · $rssi dBm';
+  }
 }

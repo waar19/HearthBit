@@ -11,6 +11,7 @@ import '../controllers/transfer_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../models/transfer_models.dart';
+import '../services/invite_share_service.dart';
 import '../services/photo_profile.dart';
 import '../utils/message_chronology.dart';
 import 'optical_receive_screen.dart';
@@ -34,13 +35,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
-  static final Uri _donationUri = Uri.parse(
-    'https://buymeacoffee.com/wilmeralzal',
-  );
-  static final Uri _repositoryUri = Uri.parse(
-    'https://github.com/waar19/HearthBit',
-  );
-
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   int _tab = 0;
@@ -366,11 +360,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final newNearbyPeers = controller.peers
         .where((peer) => !conversationIds.contains(peer.id))
         .toList(growable: false);
-    if (conversations.isEmpty && newNearbyPeers.isEmpty) {
+    final genericPresences = controller.genericPresences;
+    if (conversations.isEmpty &&
+        newNearbyPeers.isEmpty &&
+        genericPresences.isEmpty) {
       return _EmptyState(
         icon: Icons.portable_wifi_off,
         title: context.l10n.emptyPeersTitle,
         description: context.l10n.emptyPeersBody,
+        action: Builder(
+          builder: (buttonContext) => FilledButton.icon(
+            onPressed: () => _shareInvite(buttonContext),
+            icon: const Icon(Icons.ios_share),
+            label: Text(context.l10n.shareInviteButton),
+          ),
+        ),
       );
     }
     return ListView(
@@ -384,7 +388,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             return Card(
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
-                onTap: () => _openPrivateChat(controller, peer),
+                onTap: peer.role.canChat
+                    ? () => _openPrivateChat(controller, peer)
+                    : null,
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Column(
@@ -439,7 +445,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               title: Text(peer.nickname),
               subtitle: Text(
                 '${peer.id.substring(0, 8)} · '
-                '${peer.secure ? context.l10n.peerSecure : context.l10n.peerTapToEncrypt}',
+                '${peer.role.canChat ? (peer.secure ? context.l10n.peerSecure : context.l10n.peerTapToEncrypt) : context.l10n.genericPresenceNoChat}',
               ),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -468,10 +474,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         : null,
                     icon: const Icon(Icons.attach_file),
                   ),
-                  Icon(peer.secure ? Icons.lock : Icons.lock_open),
+                  Icon(
+                    peer.role.canChat
+                        ? (peer.secure ? Icons.lock : Icons.lock_open)
+                        : Icons.chat_bubble_outline,
+                  ),
                 ],
               ),
-              onTap: () => _openPrivateChat(controller, peer),
+              onTap: peer.role.canChat
+                  ? () => _openPrivateChat(controller, peer)
+                  : null,
+            ),
+          ),
+        ],
+        if (genericPresences.isNotEmpty) ...[
+          _ListSectionTitle(title: context.l10n.genericPresenceSectionTitle),
+          ...genericPresences.map(
+            (presence) => ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.sensors)),
+              title: Text(context.l10n.genericPresenceNoChat),
+              subtitle: Text(context.l10n.genericPresenceSignal(presence.rssi)),
+              trailing: const Icon(Icons.chat_bubble_outline),
+              enabled: false,
             ),
           ),
         ],
@@ -699,7 +723,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        icon: const Icon(Icons.favorite_outline),
+        icon: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Image.asset(
+            'assets/icon/hearthbit.png',
+            width: 64,
+            height: 64,
+          ),
+        ),
         title: Text(context.l10n.aboutTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -720,18 +751,43 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             child: Text(context.l10n.actionClose),
           ),
           TextButton.icon(
-            onPressed: () => _openExternal(_repositoryUri),
+            onPressed: () => _openExternal(InviteShareService.repositoryUri),
             icon: const Icon(Icons.code),
             label: Text(context.l10n.aboutSourceCode),
           ),
+          Builder(
+            builder: (buttonContext) => TextButton.icon(
+              onPressed: () => _shareInvite(buttonContext),
+              icon: const Icon(Icons.ios_share),
+              label: Text(context.l10n.shareInviteButton),
+            ),
+          ),
           FilledButton.icon(
-            onPressed: () => _openExternal(_donationUri),
+            onPressed: () => _openExternal(InviteShareService.donationUri),
             icon: const Icon(Icons.local_cafe_outlined),
             label: Text(context.l10n.supportButton),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _shareInvite(BuildContext anchorContext) async {
+    final anchor = anchorContext.findRenderObject() as RenderBox?;
+    try {
+      await InviteShareService.share(
+        anchor: anchor,
+        message: context.l10n.shareInviteMessage(
+          InviteShareService.repositoryUri.toString(),
+        ),
+        subject: context.l10n.appTitle,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.shareInviteError)));
+    }
   }
 
   Future<void> _openExternal(Uri uri) async {
@@ -1277,11 +1333,13 @@ class _EmptyState extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.description,
+    this.action,
   });
 
   final IconData icon;
   final String title;
   final String description;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -1300,6 +1358,7 @@ class _EmptyState extends StatelessWidget {
                   Text(title, style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 8),
                   Text(description, textAlign: TextAlign.center),
+                  if (action != null) ...[const SizedBox(height: 20), action!],
                 ],
               ),
             ),
