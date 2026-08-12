@@ -95,6 +95,10 @@
    comunicación, relay y store-and-forward. `PHONE_BEACON` es presencia sin
    chat ni relay. `INFRA_RELAY` retransmite sin conservar datos y
    `INFRA_DATA_ANCHOR` retransmite y conserva paquetes dirigidos.
+   En Android, `PHONE_BEACON` detiene escaneos y conexiones GATT y reinicia el
+   anuncio como no conectable. En iOS se bloquean chat, relay y
+   store-and-forward; CoreBluetooth administra la conectabilidad del anuncio,
+   por lo que el ahorro exacto depende del sistema.
 4. La decisión de relay está centralizada y depende del rol, TTL y destino.
    Noise dirigido al propio nodo se consume; Noise para otro destinatario y
    paquetes públicos solo avanzan cuando el rol permite relay.

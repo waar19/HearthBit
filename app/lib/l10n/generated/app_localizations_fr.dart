@@ -739,4 +739,24 @@ class AppLocalizationsFr extends AppLocalizations {
   String genericPresenceSignal(int rssi) {
     return 'Signal Bluetooth générique · $rssi dBm';
   }
+
+  @override
+  String get nodeModeTooltip => 'Mode du nœud';
+
+  @override
+  String get nodeModeTitle => 'Comment ce téléphone doit-il participer ?';
+
+  @override
+  String get nodeModeRelayTitle => 'Relais maillé';
+
+  @override
+  String get nodeModeRelayBody =>
+      'Discutez normalement et relayez les messages des personnes proches.';
+
+  @override
+  String get nodeModeBeaconTitle => 'Présence uniquement';
+
+  @override
+  String get nodeModeBeaconBody =>
+      'Économise l’énergie et annonce votre présence sans discussion ni relais. Sur Android, les liaisons de données sont aussi désactivées.';
 }

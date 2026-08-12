@@ -144,9 +144,11 @@ internal class MeshEngine(
         if (running) stopInternal(notify = false)
         running = true
         emitStatus("starting")
-        startGattServer()
-        startScanning()
-        startGenericBeaconScanning()
+        if (localRole != MeshNodeRole.PHONE_BEACON) {
+            startGattServer()
+            startScanning()
+            startGenericBeaconScanning()
+        }
         startAdvertising()
     }
 
@@ -215,12 +217,69 @@ internal class MeshEngine(
     }
 
     fun updateRole(value: String) {
-        localRole = requireNotNull(MeshNodeRole.fromWireName(value)) {
+        val nextRole = requireNotNull(MeshNodeRole.fromWireName(value)) {
             "Rol de nodo no válido"
         }
+        if (nextRole == localRole) return
+        val previousRole = localRole
+        localRole = nextRole
         identity.nodeRole = localRole
         sendNodeCapability()
+        if (running) {
+            if (localRole == MeshNodeRole.PHONE_BEACON) {
+                mainHandler.postDelayed({ enterPresenceOnlyMode() }, ROLE_TRANSITION_DELAY_MS)
+            } else if (previousRole == MeshNodeRole.PHONE_BEACON) {
+                enterDataRelayMode()
+            } else {
+                restartAdvertising()
+            }
+        }
         emit(stateSnapshot())
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun enterPresenceOnlyMode() {
+        if (!running || localRole != MeshNodeRole.PHONE_BEACON) return
+        runCatching { adapter.bluetoothLeScanner?.stopScan(scanCallback) }
+        runCatching { adapter.bluetoothLeScanner?.stopScan(genericBeaconScanCallback) }
+        genericPresenceTracker.clear()
+        clientGatts.values.forEach { runCatching { it.close() } }
+        clientGatts.clear()
+        clientCharacteristics.clear()
+        clientReady.clear()
+        synchronized(clientWriteLock) {
+            clientWriteQueues.clear()
+            clientWritesInFlight.clear()
+        }
+        serverSubscribers.clear()
+        runCatching { gattServer?.close() }
+        gattServer = null
+        serverCharacteristic = null
+        sessions.values.forEach(NoiseSessionLite::close)
+        sessions.clear()
+        restartAdvertising()
+    }
+
+    private fun enterDataRelayMode() {
+        if (!running || localRole == MeshNodeRole.PHONE_BEACON) return
+        if (gattServer == null) startGattServer()
+        startScanning()
+        startGenericBeaconScanning()
+        restartAdvertising()
+        mainHandler.postDelayed({ sendAnnouncement() }, ROLE_TRANSITION_DELAY_MS)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun restartAdvertising() {
+        advertising = false
+        advertiseGeneration += 1
+        cancelAdvertiseWatchdog()
+        advertiseCallback?.let { callback ->
+            runCatching { adapter.bluetoothLeAdvertiser?.stopAdvertising(callback) }
+        }
+        advertiseCallback = null
+        advertiseAttempt = 0
+        startAdvertising()
     }
 
     fun sendPublic(content: String, channel: String? = null): String {
@@ -1204,7 +1263,7 @@ internal class MeshEngine(
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
-            .setConnectable(true)
+            .setConnectable(localRole != MeshNodeRole.PHONE_BEACON)
             .build()
         // El PDU legado de BLE admite 31 bytes. UUID (18B + banderas) viaja en
         // el anuncio principal y el peerId (26B con cabeceras) en la respuesta
@@ -1641,6 +1700,7 @@ internal class MeshEngine(
         const val SYNC_ANNOUNCE_WINDOW_MS = 15 * 60 * 1_000L
         const val SYNC_MESSAGE_WINDOW_MS = 6 * 60 * 60 * 1_000L
         const val SYNC_FUTURE_SKEW_MS = 15 * 60 * 1_000L
+        const val ROLE_TRANSITION_DELAY_MS = 750L
 
         const val LOG_TAG = "HearthBitMesh"
 

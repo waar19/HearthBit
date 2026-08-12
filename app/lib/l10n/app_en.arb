@@ -255,5 +255,11 @@
   "genericPresenceSectionTitle": "Other Bluetooth signals",
   "genericPresenceNoChat": "Presence detected, no chat",
   "genericPresenceSignal": "Generic Bluetooth signal · {rssi} dBm",
-  "@genericPresenceSignal": {"placeholders": {"rssi": {"type": "int"}}}
+  "@genericPresenceSignal": {"placeholders": {"rssi": {"type": "int"}}},
+  "nodeModeTooltip": "Node mode",
+  "nodeModeTitle": "How should this phone participate?",
+  "nodeModeRelayTitle": "Mesh relay",
+  "nodeModeRelayBody": "Chat normally and relay messages for nearby people.",
+  "nodeModeBeaconTitle": "Presence only",
+  "nodeModeBeaconBody": "Save power and advertise your presence without chat or message relay. On Android, data links are also disabled."
 }

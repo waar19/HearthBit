@@ -218,5 +218,11 @@
   "dateYesterday": "昨日",
   "genericPresenceSectionTitle": "その他の Bluetooth 信号",
   "genericPresenceNoChat": "存在を検出、チャット不可",
-  "genericPresenceSignal": "一般 Bluetooth 信号 · {rssi} dBm"
+  "genericPresenceSignal": "一般 Bluetooth 信号 · {rssi} dBm",
+  "nodeModeTooltip": "ノードモード",
+  "nodeModeTitle": "このスマートフォンをどのように参加させますか？",
+  "nodeModeRelayTitle": "メッシュ中継",
+  "nodeModeRelayBody": "通常どおりチャットし、近くの人のメッセージを中継します。",
+  "nodeModeBeaconTitle": "プレゼンスのみ",
+  "nodeModeBeaconBody": "チャットや中継をせず、存在だけを通知して電力を節約します。Android ではデータ接続も無効になります。"
 }

@@ -218,5 +218,11 @@
   "dateYesterday": "Gestern",
   "genericPresenceSectionTitle": "Andere Bluetooth-Signale",
   "genericPresenceNoChat": "Anwesenheit erkannt, kein Chat",
-  "genericPresenceSignal": "Allgemeines Bluetooth-Signal · {rssi} dBm"
+  "genericPresenceSignal": "Allgemeines Bluetooth-Signal · {rssi} dBm",
+  "nodeModeTooltip": "Knotenmodus",
+  "nodeModeTitle": "Wie soll dieses Telefon teilnehmen?",
+  "nodeModeRelayTitle": "Mesh-Relay",
+  "nodeModeRelayBody": "Normal chatten und Nachrichten für Personen in der Nähe weiterleiten.",
+  "nodeModeBeaconTitle": "Nur Anwesenheit",
+  "nodeModeBeaconBody": "Spart Strom und kündigt deine Anwesenheit ohne Chat oder Weiterleitung an. Unter Android werden auch Datenverbindungen deaktiviert."
 }

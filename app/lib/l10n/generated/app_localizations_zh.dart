@@ -697,4 +697,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String genericPresenceSignal(int rssi) {
     return '通用蓝牙信号 · $rssi dBm';
   }
+
+  @override
+  String get nodeModeTooltip => '节点模式';
+
+  @override
+  String get nodeModeTitle => '此手机应如何参与网络？';
+
+  @override
+  String get nodeModeRelayTitle => '网状网络中继';
+
+  @override
+  String get nodeModeRelayBody => '正常聊天，并为附近的人转发消息。';
+
+  @override
+  String get nodeModeBeaconTitle => '仅在线状态';
+
+  @override
+  String get nodeModeBeaconBody =>
+      '不聊天、不转发消息，仅广播在线状态以节省电量。在 Android 上还会禁用数据连接。';
 }

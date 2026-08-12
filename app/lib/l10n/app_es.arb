@@ -218,5 +218,11 @@
   "dateYesterday": "Ayer",
   "genericPresenceSectionTitle": "Otras señales Bluetooth",
   "genericPresenceNoChat": "Presencia detectada, sin chat",
-  "genericPresenceSignal": "Señal Bluetooth genérica · {rssi} dBm"
+  "genericPresenceSignal": "Señal Bluetooth genérica · {rssi} dBm",
+  "nodeModeTooltip": "Modo del nodo",
+  "nodeModeTitle": "¿Cómo debe participar este teléfono?",
+  "nodeModeRelayTitle": "Relay de malla",
+  "nodeModeRelayBody": "Usa el chat normalmente y retransmite mensajes para personas cercanas.",
+  "nodeModeBeaconTitle": "Solo presencia",
+  "nodeModeBeaconBody": "Ahorra batería y anuncia tu presencia sin chat ni retransmisión. En Android también se desactivan los enlaces de datos."
 }

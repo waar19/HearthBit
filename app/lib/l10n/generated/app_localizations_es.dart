@@ -740,4 +740,24 @@ class AppLocalizationsEs extends AppLocalizations {
   String genericPresenceSignal(int rssi) {
     return 'Señal Bluetooth genérica · $rssi dBm';
   }
+
+  @override
+  String get nodeModeTooltip => 'Modo del nodo';
+
+  @override
+  String get nodeModeTitle => '¿Cómo debe participar este teléfono?';
+
+  @override
+  String get nodeModeRelayTitle => 'Relay de malla';
+
+  @override
+  String get nodeModeRelayBody =>
+      'Usa el chat normalmente y retransmite mensajes para personas cercanas.';
+
+  @override
+  String get nodeModeBeaconTitle => 'Solo presencia';
+
+  @override
+  String get nodeModeBeaconBody =>
+      'Ahorra batería y anuncia tu presencia sin chat ni retransmisión. En Android también se desactivan los enlaces de datos.';
 }

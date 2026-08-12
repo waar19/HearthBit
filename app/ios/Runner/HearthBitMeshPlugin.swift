@@ -11,6 +11,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private static let characteristicUUID = CBUUID(string: "A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D")
 
   private var identity = IOSMeshIdentity()
+  private var localRole = IOSMeshNodeRole.load()
   private let storeForward = IOSStoreForward()
   private var central: CBCentralManager?
   private var peripheralManager: CBPeripheralManager?
@@ -114,6 +115,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           "platform": "ios",
           "backgroundRelay": true,
           "peripheralMode": true,
+          "nodeRoles": IOSMeshNodeRole.allCases.map(\.rawValue),
         ])
       case "requestPermissions":
         result(true)
@@ -144,6 +146,16 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       case "setNickname":
         identity.nickname = String((arguments["nickname"] as? String ?? "").prefix(31))
         sendAnnouncement()
+        result(nil)
+      case "setNodeRole":
+        guard
+          let value = arguments["role"] as? String,
+          let role = IOSMeshNodeRole(rawValue: value)
+        else { throw IOSMeshError.invalidPayload }
+        localRole = role
+        role.persist()
+        broadcastNodeCapability()
+        emitStatus(running ? "active" : "stopped")
         result(nil)
       case "getPeers":
         result(peerMaps())
@@ -334,6 +346,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   @discardableResult
   private func sendPublic(content: String, channel: String?) throws -> String {
     guard running else { throw IOSMeshError.notRunning }
+    guard localRole.canChat else { throw IOSMeshError.roleCannotChat }
     let id = UUID().uuidString.uppercased()
     let payload = Data(String(content.prefix(2000)).utf8)
     let packet = identity.sign(
@@ -360,6 +373,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func sendPrivate(peerID: String, content: String) throws -> String {
+    guard localRole.canChat else { throw IOSMeshError.roleCannotChat }
     guard peers[peerID] != nil else { throw IOSMeshError.peerUnavailable }
     let id = UUID().uuidString.uppercased()
     if let session = sessions[peerID], session.established {
@@ -522,6 +536,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       )
     )
     broadcastHbtCapability()
+    broadcastNodeCapability()
     if activeLocalRadarConsentUntil() > currentMilliseconds() {
       broadcastRadarConsent(grant: true)
     }
@@ -537,6 +552,21 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           timestamp: currentMilliseconds(),
           senderID: identity.peerID,
           payload: Data([IOSMeshProtocol.hbtVersion])
+        )
+      )
+    )
+  }
+
+  private func broadcastNodeCapability() {
+    guard running else { return }
+    broadcast(
+      identity.sign(
+        IOSMeshPacket(
+          type: IOSMeshProtocol.nodeCapability,
+          ttl: IOSMeshProtocol.defaultTTL,
+          timestamp: currentMilliseconds(),
+          senderID: identity.peerID,
+          payload: localRole.capabilityPayload
         )
       )
     )
@@ -606,7 +636,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func broadcast(_ packet: IOSMeshPacket, excluding: UUID? = nil) {
     rememberSyncPacket(packet)
     let bytes = IOSMeshProtocol.encodeForBLE(packet)
-    if let recipient = packet.recipientID,
+    if localRole.storesDirectedPackets,
+       let recipient = packet.recipientID,
        recipient != Data(repeating: 0xff, count: 8) {
       storeForward.put(packet)
     }
@@ -676,7 +707,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let controlForUs = forUs &&
       (packet.type == IOSMeshProtocol.noiseHandshake ||
        packet.type == IOSMeshProtocol.noiseEncrypted)
-    if packet.ttl > 1 && !controlForUs {
+    if localRole.relaysPackets && packet.ttl > 1 && !controlForUs {
       var relayed = packet
       relayed.ttl -= 1
       broadcast(relayed, excluding: source)
@@ -700,6 +731,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           (peers[senderID]?.supportsTransfers ?? false),
         isInfrastructure: announcement.isInfrastructure ||
           (peers[senderID]?.isInfrastructure ?? false),
+        role: peers[senderID]?.role ?? .phoneRelay,
         lastSeen: Date()
       )
       rememberSyncPacket(packet)
@@ -754,6 +786,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       processRadarControl(packet, senderID: senderID)
     case IOSMeshProtocol.hbtCapability:
       processHbtCapability(packet, senderID: senderID)
+    case IOSMeshProtocol.nodeCapability:
+      processNodeCapability(packet, senderID: senderID)
     default:
       break
     }
@@ -766,6 +800,19 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       IOSMeshIdentity.verify(packet, key: peer.signingPublicKey)
     else { return }
     peer.supportsTransfers = true
+    peer.lastSeen = Date()
+    peers[senderID] = peer
+    emit(["type": "peers", "peers": peerMaps()])
+  }
+
+  private func processNodeCapability(_ packet: IOSMeshPacket, senderID: String) {
+    guard
+      var peer = peers[senderID],
+      let role = IOSMeshNodeRole.decodeCapability(packet.payload),
+      IOSMeshIdentity.verify(packet, key: peer.signingPublicKey)
+    else { return }
+    peer.role = role
+    peer.isInfrastructure = role.isInfrastructure || peer.isInfrastructure
     peer.lastSeen = Date()
     peers[senderID] = peer
     emit(["type": "peers", "peers": peerMaps()])
@@ -1018,6 +1065,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         "lastSeen": Int($0.lastSeen.timeIntervalSince1970 * 1000),
         "secure": sessions[$0.id]?.established ?? false,
         "supportsTransfers": $0.supportsTransfers,
+        "role": $0.role.rawValue,
         "radarAllowedUntil": consent?.expiresAt ?? 0,
         "radarConsentSource": consent?.source ?? "",
       ]
@@ -1030,6 +1078,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       "status": status,
       "peerId": identity.peerIDHex,
       "nickname": identity.nickname,
+      "role": localRole.rawValue,
       "radarConsentUntil": activeLocalRadarConsentUntil(),
     ])
   }
@@ -1240,6 +1289,73 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
   }
 }
 
+private enum IOSMeshNodeRole: String, CaseIterable {
+  case phoneRelay = "PHONE_RELAY"
+  case phoneBeacon = "PHONE_BEACON"
+  case infraRelay = "INFRA_RELAY"
+  case infraDataAnchor = "INFRA_DATA_ANCHOR"
+
+  private static let defaultsKey = "hearthbit.node_role"
+  private static let capabilityVersion: UInt8 = 1
+
+  var code: UInt8 {
+    switch self {
+    case .phoneRelay: return 1
+    case .phoneBeacon: return 2
+    case .infraRelay: return 3
+    case .infraDataAnchor: return 4
+    }
+  }
+
+  var relaysPackets: Bool {
+    self != .phoneBeacon
+  }
+
+  var canChat: Bool {
+    self == .phoneRelay
+  }
+
+  var storesDirectedPackets: Bool {
+    self == .phoneRelay || self == .infraDataAnchor
+  }
+
+  var isInfrastructure: Bool {
+    self == .infraRelay || self == .infraDataAnchor
+  }
+
+  var capabilityPayload: Data {
+    var flags: UInt8 = 0
+    if relaysPackets { flags |= 0x01 }
+    if canChat { flags |= 0x02 }
+    if storesDirectedPackets { flags |= 0x04 }
+    if self == .phoneBeacon { flags |= 0x08 }
+    return Data([Self.capabilityVersion, code, flags])
+  }
+
+  func persist() {
+    UserDefaults.standard.set(rawValue, forKey: Self.defaultsKey)
+  }
+
+  static func load() -> IOSMeshNodeRole {
+    guard
+      let value = UserDefaults.standard.string(forKey: defaultsKey),
+      let role = IOSMeshNodeRole(rawValue: value)
+    else { return .phoneRelay }
+    return role
+  }
+
+  static func decodeCapability(_ payload: Data) -> IOSMeshNodeRole? {
+    guard payload.count == 3, payload[0] == capabilityVersion else { return nil }
+    switch payload[1] {
+    case 1: return .phoneRelay
+    case 2: return .phoneBeacon
+    case 3: return .infraRelay
+    case 4: return .infraDataAnchor
+    default: return nil
+    }
+  }
+}
+
 private struct IOSMeshPeer {
   let id: String
   let nickname: String
@@ -1247,6 +1363,7 @@ private struct IOSMeshPeer {
   let signingPublicKey: Data
   var supportsTransfers: Bool
   var isInfrastructure: Bool
+  var role: IOSMeshNodeRole
   var lastSeen: Date
 }
 
@@ -1356,6 +1473,7 @@ private enum IOSMeshProtocol {
   static let requestSync: UInt8 = 0x21
   static let radarControl: UInt8 = 0x23
   static let hbtCapability: UInt8 = 0x24
+  static let nodeCapability: UInt8 = 0x25
   static let hbtVersion: UInt8 = 0x01
   static let noisePrivate: UInt8 = 0x01
   /// Trama HBT (HearthBit Transfer) encapsulada dentro de la sesión Noise.
@@ -2482,6 +2600,7 @@ private enum IOSMeshError: LocalizedError {
   case noise
   case invalidPayload
   case radarConsentRequired
+  case roleCannotChat
 
   var errorDescription: String? {
     switch self {
@@ -2492,6 +2611,7 @@ private enum IOSMeshError: LocalizedError {
     case .noise: return HearthBitL10n.string("noise_failed")
     case .invalidPayload: return HearthBitL10n.string("invalid_payload")
     case .radarConsentRequired: return HearthBitL10n.string("radar_consent_required")
+    case .roleCannotChat: return HearthBitL10n.string("role_cannot_chat")
     }
   }
 }
@@ -2529,6 +2649,7 @@ enum HearthBitL10n {
       "noise_failed": "The Noise encrypted channel failed",
       "invalid_payload": "The transfer payload is not valid",
       "radar_consent_required": "This person has not allowed radar location",
+      "role_cannot_chat": "Presence-only mode cannot send messages",
     ],
     "es": [
       "sos_default": "Necesito ayuda",
@@ -2544,6 +2665,7 @@ enum HearthBitL10n {
       "noise_failed": "Falló el canal cifrado Noise",
       "invalid_payload": "La carga de la transferencia no es válida",
       "radar_consent_required": "Esta persona no ha permitido la ubicación por radar",
+      "role_cannot_chat": "El modo de solo presencia no puede enviar mensajes",
     ],
     "de": [
       "sos_default": "Ich brauche Hilfe",
@@ -2559,6 +2681,7 @@ enum HearthBitL10n {
       "noise_failed": "Der verschlüsselte Noise-Kanal ist fehlgeschlagen",
       "invalid_payload": "Die Übertragungsdaten sind ungültig",
       "radar_consent_required": "Diese Person hat die Ortung per Radar nicht erlaubt",
+      "role_cannot_chat": "Im reinen Anwesenheitsmodus können keine Nachrichten gesendet werden",
     ],
     "fr": [
       "sos_default": "J'ai besoin d'aide",
@@ -2574,6 +2697,7 @@ enum HearthBitL10n {
       "noise_failed": "Le canal chiffré Noise a échoué",
       "invalid_payload": "La charge du transfert n'est pas valide",
       "radar_consent_required": "Cette personne n'a pas autorisé la localisation par radar",
+      "role_cannot_chat": "Le mode présence seule ne peut pas envoyer de messages",
     ],
     "zh": [
       "sos_default": "我需要帮助",
@@ -2589,6 +2713,7 @@ enum HearthBitL10n {
       "noise_failed": "Noise 加密通道失败",
       "invalid_payload": "传输数据无效",
       "radar_consent_required": "对方尚未允许通过雷达定位",
+      "role_cannot_chat": "仅在线状态模式无法发送消息",
     ],
     "ja": [
       "sos_default": "助けが必要です",
@@ -2604,6 +2729,7 @@ enum HearthBitL10n {
       "noise_failed": "Noise 暗号化チャネルに失敗しました",
       "invalid_payload": "転送ペイロードが無効です",
       "radar_consent_required": "相手はレーダーによる位置確認を許可していません",
+      "role_cannot_chat": "プレゼンス専用モードではメッセージを送信できません",
     ],
   ]
 }

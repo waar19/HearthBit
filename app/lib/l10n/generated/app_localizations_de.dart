@@ -739,4 +739,24 @@ class AppLocalizationsDe extends AppLocalizations {
   String genericPresenceSignal(int rssi) {
     return 'Allgemeines Bluetooth-Signal · $rssi dBm';
   }
+
+  @override
+  String get nodeModeTooltip => 'Knotenmodus';
+
+  @override
+  String get nodeModeTitle => 'Wie soll dieses Telefon teilnehmen?';
+
+  @override
+  String get nodeModeRelayTitle => 'Mesh-Relay';
+
+  @override
+  String get nodeModeRelayBody =>
+      'Normal chatten und Nachrichten für Personen in der Nähe weiterleiten.';
+
+  @override
+  String get nodeModeBeaconTitle => 'Nur Anwesenheit';
+
+  @override
+  String get nodeModeBeaconBody =>
+      'Spart Strom und kündigt deine Anwesenheit ohne Chat oder Weiterleitung an. Unter Android werden auch Datenverbindungen deaktiviert.';
 }

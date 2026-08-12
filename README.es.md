@@ -60,7 +60,9 @@ Consulta [docs/localization.md](docs/localization.md) para añadir un idioma.
 ## Componentes
 
 - `app/`: aplicación Flutter para Android e iOS.
+- `app/android/relay/`: variantes de solo relay para Android TV y Automotive.
 - `firmware/anchor-node/`: firmware Bitle para ESP32-C3/ESP32-S3.
+- `relay/`: daemon relay para Linux/Raspberry Pi y add-on de Home Assistant.
 - `docs/`: protocolo, arquitectura, despliegue y pruebas de campo.
 - `vendor/bitchat-android/`: referencia de protocolo y núcleo Noise usado por Android.
 

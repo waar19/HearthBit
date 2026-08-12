@@ -712,4 +712,23 @@ class AppLocalizationsJa extends AppLocalizations {
   String genericPresenceSignal(int rssi) {
     return '一般 Bluetooth 信号 · $rssi dBm';
   }
+
+  @override
+  String get nodeModeTooltip => 'ノードモード';
+
+  @override
+  String get nodeModeTitle => 'このスマートフォンをどのように参加させますか？';
+
+  @override
+  String get nodeModeRelayTitle => 'メッシュ中継';
+
+  @override
+  String get nodeModeRelayBody => '通常どおりチャットし、近くの人のメッセージを中継します。';
+
+  @override
+  String get nodeModeBeaconTitle => 'プレゼンスのみ';
+
+  @override
+  String get nodeModeBeaconBody =>
+      'チャットや中継をせず、存在だけを通知して電力を節約します。Android ではデータ接続も無効になります。';
 }

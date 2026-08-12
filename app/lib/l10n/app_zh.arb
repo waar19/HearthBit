@@ -218,5 +218,11 @@
   "dateYesterday": "昨天",
   "genericPresenceSectionTitle": "其他蓝牙信号",
   "genericPresenceNoChat": "检测到附近设备，无法聊天",
-  "genericPresenceSignal": "通用蓝牙信号 · {rssi} dBm"
+  "genericPresenceSignal": "通用蓝牙信号 · {rssi} dBm",
+  "nodeModeTooltip": "节点模式",
+  "nodeModeTitle": "此手机应如何参与网络？",
+  "nodeModeRelayTitle": "网状网络中继",
+  "nodeModeRelayBody": "正常聊天，并为附近的人转发消息。",
+  "nodeModeBeaconTitle": "仅在线状态",
+  "nodeModeBeaconBody": "不聊天、不转发消息，仅广播在线状态以节省电量。在 Android 上还会禁用数据连接。"
 }

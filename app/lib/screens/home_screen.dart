@@ -236,6 +236,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 icon: const Icon(Icons.favorite_outline),
               ),
               IconButton(
+                tooltip: context.l10n.nodeModeTooltip,
+                onPressed: () => _showNodeMode(controller),
+                icon: Icon(
+                  controller.localRole == MeshNodeRole.phoneBeacon
+                      ? Icons.sensors
+                      : Icons.hub_outlined,
+                ),
+              ),
+              IconButton(
                 tooltip: context.l10n.tooltipChangeName,
                 onPressed: () => _changeNickname(controller),
                 icon: const Icon(Icons.badge_outlined),
@@ -710,6 +719,51 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _NicknameDialog(initialNickname: controller.nickname),
     );
     if (value != null) await controller.updateNickname(value);
+  }
+
+  Future<void> _showNodeMode(MeshController controller) async {
+    final selected = await showDialog<MeshNodeRole>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.nodeModeTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(
+                controller.localRole == MeshNodeRole.phoneRelay
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off,
+              ),
+              title: Text(context.l10n.nodeModeRelayTitle),
+              subtitle: Text(context.l10n.nodeModeRelayBody),
+              onTap: () =>
+                  Navigator.pop(dialogContext, MeshNodeRole.phoneRelay),
+            ),
+            ListTile(
+              leading: Icon(
+                controller.localRole == MeshNodeRole.phoneBeacon
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off,
+              ),
+              title: Text(context.l10n.nodeModeBeaconTitle),
+              subtitle: Text(context.l10n.nodeModeBeaconBody),
+              onTap: () =>
+                  Navigator.pop(dialogContext, MeshNodeRole.phoneBeacon),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(context.l10n.actionCancel),
+          ),
+        ],
+      ),
+    );
+    if (selected != null && selected != controller.localRole) {
+      await controller.updateNodeRole(selected);
+    }
   }
 
   Future<void> _showAbout() async {

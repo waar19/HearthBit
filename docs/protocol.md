@@ -73,7 +73,9 @@ El rol local y el de los peers HearthBit usan uno de estos valores:
 - `PHONE_RELAY`: teléfono interactivo; origina chat, retransmite y conserva
   temporalmente paquetes dirigidos para compatibilidad store-and-forward.
 - `PHONE_BEACON`: presencia solamente; no origina chat, no retransmite y no
-  conserva tráfico dirigido.
+  conserva tráfico dirigido. Android además detiene el plano GATT y anuncia
+  de forma no conectable; iOS aplica la política de datos, pero deja a
+  CoreBluetooth controlar la conectabilidad física.
 - `INFRA_RELAY`: infraestructura de tránsito; no origina chat, retransmite y
   no conserva paquetes.
 - `INFRA_DATA_ANCHOR`: infraestructura con datos; no origina chat,

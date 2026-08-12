@@ -1322,6 +1322,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Generic Bluetooth signal · {rssi} dBm'**
   String genericPresenceSignal(int rssi);
+
+  /// No description provided for @nodeModeTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Node mode'**
+  String get nodeModeTooltip;
+
+  /// No description provided for @nodeModeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'How should this phone participate?'**
+  String get nodeModeTitle;
+
+  /// No description provided for @nodeModeRelayTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Mesh relay'**
+  String get nodeModeRelayTitle;
+
+  /// No description provided for @nodeModeRelayBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat normally and relay messages for nearby people.'**
+  String get nodeModeRelayBody;
+
+  /// No description provided for @nodeModeBeaconTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Presence only'**
+  String get nodeModeBeaconTitle;
+
+  /// No description provided for @nodeModeBeaconBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Save power and advertise your presence without chat or message relay. On Android, data links are also disabled.'**
+  String get nodeModeBeaconBody;
 }
 
 class _AppLocalizationsDelegate

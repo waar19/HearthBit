@@ -59,7 +59,9 @@ and Japanese, and follows the system language automatically. See
 ## Components
 
 - `app/`: Flutter application for Android and iOS.
+- `app/android/relay/`: relay-only Android TV and Automotive variants.
 - `firmware/anchor-node/`: Bitle firmware for ESP32-C3/ESP32-S3.
+- `relay/`: Linux/Raspberry Pi relay daemon and Home Assistant add-on.
 - `docs/`: protocol, architecture, deployment and field tests.
 - `vendor/bitchat-android/`: protocol reference and Noise core used by
   Android.

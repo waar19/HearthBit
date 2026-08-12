@@ -322,16 +322,19 @@ void main() {
     expect(platform.radarConsentCalls.last.enabled, isFalse);
   });
 
-  test('cambia el rol local y bloquea chat para infraestructura', () async {
+  test('cambia el rol local y bloquea chat en modo presencia', () async {
     platform.emit({'type': 'status', 'status': 'active'});
     await pumpEvents();
     expect(controller.canSend, isTrue);
 
-    await controller.updateNodeRole(MeshNodeRole.infraRelay);
+    await controller.updateNodeRole(MeshNodeRole.phoneBeacon);
 
-    expect(platform.nodeRoles.single, 'INFRA_RELAY');
-    expect(controller.localRole, MeshNodeRole.infraRelay);
+    expect(platform.nodeRoles.single, 'PHONE_BEACON');
+    expect(controller.localRole, MeshNodeRole.phoneBeacon);
     expect(controller.canSend, isFalse);
+
+    await controller.updateNodeRole(MeshNodeRole.phoneRelay);
+    expect(controller.canSend, isTrue);
   });
 
   test('actualiza presencias genéricas sin convertirlas en peers', () async {

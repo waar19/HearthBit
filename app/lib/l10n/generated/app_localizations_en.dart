@@ -734,4 +734,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String genericPresenceSignal(int rssi) {
     return 'Generic Bluetooth signal · $rssi dBm';
   }
+
+  @override
+  String get nodeModeTooltip => 'Node mode';
+
+  @override
+  String get nodeModeTitle => 'How should this phone participate?';
+
+  @override
+  String get nodeModeRelayTitle => 'Mesh relay';
+
+  @override
+  String get nodeModeRelayBody =>
+      'Chat normally and relay messages for nearby people.';
+
+  @override
+  String get nodeModeBeaconTitle => 'Presence only';
+
+  @override
+  String get nodeModeBeaconBody =>
+      'Save power and advertise your presence without chat or message relay. On Android, data links are also disabled.';
 }
