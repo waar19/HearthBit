@@ -94,7 +94,7 @@ internal class MeshEngine(
         val id: String,
         val nickname: String,
         val signingPublicKey: ByteArray,
-        val supportsTransfers: Boolean,
+        var supportsTransfers: Boolean,
         var lastSeen: Long = System.currentTimeMillis(),
     )
 
@@ -411,9 +411,25 @@ internal class MeshEngine(
             ),
         )
         broadcast(packet)
+        broadcastHbtCapability()
         if (activeLocalRadarConsentUntil() > System.currentTimeMillis()) {
             broadcastRadarConsent(grant = true)
         }
+    }
+
+    private fun broadcastHbtCapability() {
+        if (!running) return
+        broadcast(
+            identity.sign(
+                MeshProtocol.Packet(
+                    type = MeshProtocol.TYPE_HBT_CAPABILITY,
+                    ttl = MeshProtocol.TTL,
+                    timestamp = System.currentTimeMillis(),
+                    senderId = identity.peerId,
+                    payload = byteArrayOf(MeshProtocol.HBT_VERSION),
+                ),
+            ),
+        )
     }
 
     private fun broadcastRadarConsent(grant: Boolean) {
@@ -699,6 +715,7 @@ internal class MeshEngine(
             MeshProtocol.TYPE_NOISE_HANDSHAKE -> processHandshake(packet, senderHex)
             MeshProtocol.TYPE_NOISE_ENCRYPTED -> processEncrypted(packet, senderHex)
             MeshProtocol.TYPE_RADAR_CONTROL -> processRadarControl(packet, senderHex)
+            MeshProtocol.TYPE_HBT_CAPABILITY -> processHbtCapability(packet, senderHex)
             MeshProtocol.TYPE_FRAGMENT -> {
                 val reassembled = fragmentReassembler.accept(packet)
                 if (reassembled != null) {
@@ -752,15 +769,25 @@ internal class MeshEngine(
         if (packet.ttl == MeshProtocol.TTL) {
             addressToPeer[sourceAddress] = senderHex
         }
+        val previouslySupported = peers[senderHex]?.supportsTransfers == true
         peers[senderHex] = Peer(
             senderHex,
             announcement.nickname,
             announcement.signingPublicKey,
-            announcement.supportsTransfers,
+            announcement.supportsTransfers || previouslySupported,
         )
         emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
         requestMissingMessages(senderHex, sourceAddress)
         storeForward.forRecipient(packet.senderId).forEach(::broadcast)
+    }
+
+    private fun processHbtCapability(packet: MeshProtocol.Packet, senderHex: String) {
+        val peer = peers[senderHex] ?: return
+        if (packet.payload.size != 1 || packet.payload[0] != MeshProtocol.HBT_VERSION) return
+        if (!identity.verify(packet, peer.signingPublicKey)) return
+        peer.supportsTransfers = true
+        peer.lastSeen = System.currentTimeMillis()
+        emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
     }
 
     private fun processPublicMessage(packet: MeshProtocol.Packet, senderHex: String) {

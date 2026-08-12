@@ -466,9 +466,25 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         )
       )
     )
+    broadcastHbtCapability()
     if activeLocalRadarConsentUntil() > currentMilliseconds() {
       broadcastRadarConsent(grant: true)
     }
+  }
+
+  private func broadcastHbtCapability() {
+    guard running else { return }
+    broadcast(
+      identity.sign(
+        IOSMeshPacket(
+          type: IOSMeshProtocol.hbtCapability,
+          ttl: IOSMeshProtocol.defaultTTL,
+          timestamp: currentMilliseconds(),
+          senderID: identity.peerID,
+          payload: Data([IOSMeshProtocol.hbtVersion])
+        )
+      )
+    )
   }
 
   private func broadcastRadarConsent(grant: Bool) {
@@ -599,7 +615,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         id: senderID,
         nickname: announcement.nickname,
         signingPublicKey: announcement.signingPublicKey,
-        supportsTransfers: announcement.supportsTransfers,
+        supportsTransfers: announcement.supportsTransfers ||
+          (peers[senderID]?.supportsTransfers ?? false),
         lastSeen: Date()
       )
       emit(["type": "peers", "peers": peerMaps()])
@@ -645,9 +662,23 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       processEncrypted(packet, senderID: senderID)
     case IOSMeshProtocol.radarControl:
       processRadarControl(packet, senderID: senderID)
+    case IOSMeshProtocol.hbtCapability:
+      processHbtCapability(packet, senderID: senderID)
     default:
       break
     }
+  }
+
+  private func processHbtCapability(_ packet: IOSMeshPacket, senderID: String) {
+    guard
+      var peer = peers[senderID],
+      packet.payload == Data([IOSMeshProtocol.hbtVersion]),
+      IOSMeshIdentity.verify(packet, key: peer.signingPublicKey)
+    else { return }
+    peer.supportsTransfers = true
+    peer.lastSeen = Date()
+    peers[senderID] = peer
+    emit(["type": "peers", "peers": peerMaps()])
   }
 
   private func processRadarControl(_ packet: IOSMeshPacket, senderID: String) {
@@ -974,8 +1005,8 @@ private struct IOSMeshPeer {
   let id: String
   let nickname: String
   let signingPublicKey: Data
-  let supportsTransfers: Bool
-  let lastSeen: Date
+  var supportsTransfers: Bool
+  var lastSeen: Date
 }
 
 private struct IOSRemoteRadarConsent {
@@ -1078,6 +1109,8 @@ private enum IOSMeshProtocol {
   static let noiseHandshake: UInt8 = 0x10
   static let noiseEncrypted: UInt8 = 0x11
   static let radarControl: UInt8 = 0x23
+  static let hbtCapability: UInt8 = 0x24
+  static let hbtVersion: UInt8 = 0x01
   static let noisePrivate: UInt8 = 0x01
   /// Trama HBT (HearthBit Transfer) encapsulada dentro de la sesión Noise.
   static let noiseTransferFrame: UInt8 = 0x30
@@ -1275,7 +1308,6 @@ private enum IOSMeshProtocol {
     output.appendTLV(type: 0x02, value: noisePublicKey)
     output.appendTLV(type: 0x03, value: signingPublicKey)
     output.appendTLV(type: 0x05, value: Data([0x00]))
-    output.appendTLV(type: 0xF0, value: Data([0x01]))
     return output
   }
 

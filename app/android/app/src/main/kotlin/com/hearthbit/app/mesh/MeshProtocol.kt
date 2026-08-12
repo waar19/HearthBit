@@ -17,7 +17,9 @@ internal object MeshProtocol {
     const val TYPE_FRAGMENT: Byte = 0x20
     const val TYPE_REQUEST_SYNC: Byte = 0x21
     const val TYPE_RADAR_CONTROL: Byte = 0x23
+    const val TYPE_HBT_CAPABILITY: Byte = 0x24
     const val TTL: Byte = 7
+    const val HBT_VERSION: Byte = 0x01
 
     const val NOISE_PRIVATE_MESSAGE: Byte = 0x01
 
@@ -275,11 +277,6 @@ internal object MeshProtocol {
             add(0x05)
             add(0x01)
             add(0x00)
-            // Extensión HearthBit: versión de HBT. BitChat ignora los TLV
-            // desconocidos y continúa procesando el anuncio.
-            add(HBT_CAPABILITY_TLV)
-            add(0x01)
-            add(HBT_VERSION)
         }.map(Int::toByte).toByteArray()
     }
 
@@ -301,7 +298,7 @@ internal object MeshProtocol {
                 0x03 -> signingKey = value
                 HBT_CAPABILITY_TLV -> {
                     supportsTransfers = value.size == 1 &&
-                        (value[0].toInt() and 0xFF) == HBT_VERSION
+                        value[0] == HBT_VERSION
                 }
             }
         }
@@ -430,6 +427,5 @@ internal object MeshProtocol {
     private const val COMPRESSION_THRESHOLD = 100
     private const val MAX_PAYLOAD_LENGTH = 10_485_760
     private const val HBT_CAPABILITY_TLV = 0xF0
-    private const val HBT_VERSION = 0x01
     private val SOS_PREFIX = "SOS|".toByteArray(Charsets.UTF_8)
 }

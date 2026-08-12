@@ -165,7 +165,20 @@ class MeshProtocolTest {
     }
 
     @Test
-    fun `announcement tolera TLV de capacidades y gossip`() {
+    fun `announcement compatible no emite extension HBT desconocida`() {
+        val base = MeshProtocol.encodeAnnouncement(
+            nickname = "Ana",
+            noisePublicKey = ByteArray(32) { 2 },
+            signingPublicKey = ByteArray(32) { 3 },
+        )
+
+        assertEquals(76, base.size)
+        assertArrayEquals(byteArrayOf(0x05, 0x01, 0x00), base.takeLast(3).toByteArray())
+        assertEquals(false, MeshProtocol.decodeAnnouncement(base)!!.supportsTransfers)
+    }
+
+    @Test
+    fun `announcement tolera extension HBT de builds intermedios`() {
         val base = MeshProtocol.encodeAnnouncement(
             nickname = "Ana",
             noisePublicKey = ByteArray(32) { 2 },
@@ -173,12 +186,30 @@ class MeshProtocolTest {
         )
         val extended = base +
             byteArrayOf(0x05, 0x02, 0x01, 0x00) +
-            byteArrayOf(0x04, 0x08, 1, 2, 3, 4, 5, 6, 7, 8)
+            byteArrayOf(0x04, 0x08, 1, 2, 3, 4, 5, 6, 7, 8) +
+            byteArrayOf(0xF0.toByte(), 0x01, MeshProtocol.HBT_VERSION)
 
         val decoded = MeshProtocol.decodeAnnouncement(extended)
         assertNotNull(decoded)
         assertEquals("Ana", decoded!!.nickname)
         assertEquals(true, decoded.supportsTransfers)
+    }
+
+    @Test
+    fun `paquete de capacidad HBT sobrevive ida y vuelta`() {
+        val packet = MeshProtocol.Packet(
+            type = MeshProtocol.TYPE_HBT_CAPABILITY,
+            ttl = MeshProtocol.TTL,
+            timestamp = 1234,
+            senderId = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8),
+            payload = byteArrayOf(MeshProtocol.HBT_VERSION),
+        )
+
+        val decoded = MeshProtocol.decode(MeshProtocol.encodeForBle(packet))
+
+        assertNotNull(decoded)
+        assertEquals(MeshProtocol.TYPE_HBT_CAPABILITY, decoded!!.type)
+        assertArrayEquals(byteArrayOf(MeshProtocol.HBT_VERSION), decoded.payload)
     }
 
     @Test
