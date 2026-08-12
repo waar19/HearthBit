@@ -59,6 +59,7 @@ internal class MeshEngine(
     private val fragmentReassembler = MeshFragmentReassembler()
     private val lastSyncRequestByAddress = ConcurrentHashMap<String, Long>()
     private val remoteRadarConsents = ConcurrentHashMap<String, RemoteRadarConsent>()
+    private val tentativeRadarReads = ConcurrentHashMap<String, String>()
 
     /**
      * Dirección MAC -> peerId de vecinos directos. Se alimenta con el peerId
@@ -93,6 +94,7 @@ internal class MeshEngine(
         val id: String,
         val nickname: String,
         val signingPublicKey: ByteArray,
+        val supportsTransfers: Boolean,
         var lastSeen: Long = System.currentTimeMillis(),
     )
 
@@ -177,6 +179,7 @@ internal class MeshEngine(
         fragmentReassembler.clear()
         lastSyncRequestByAddress.clear()
         remoteRadarConsents.clear()
+        tentativeRadarReads.clear()
         if (notify) emitStatus("stopped")
     }
 
@@ -306,6 +309,7 @@ internal class MeshEngine(
                 "nickname" to it.nickname,
                 "lastSeen" to it.lastSeen,
                 "secure" to (sessions[it.id]?.established == true),
+                "supportsTransfers" to it.supportsTransfers,
                 "radarAllowedUntil" to (consent?.expiresAt ?: 0L),
                 "radarConsentSource" to consent?.source,
             )
@@ -332,12 +336,17 @@ internal class MeshEngine(
         }
         radarPeerId = normalized
         mainHandler.removeCallbacks(radarReadTask)
+        startScanning(aggressive = true)
+        sendAnnouncement()
         mainHandler.post(radarReadTask)
     }
 
     fun stopRadar() {
+        val wasActive = radarPeerId != null
         radarPeerId = null
         mainHandler.removeCallbacks(radarReadTask)
+        tentativeRadarReads.clear()
+        if (wasActive && running) startScanning(aggressive = false)
     }
 
     private val radarReadTask = object : Runnable {
@@ -349,21 +358,37 @@ internal class MeshEngine(
                 emit(mapOf("type" to "radarExpired", "peerId" to target))
                 return
             }
-            clientGatts.forEach { (address, gatt) ->
-                if (addressToPeer[address] == target) {
+            val mapped = clientGatts.filterKeys { addressToPeer[it] == target }
+            if (mapped.isNotEmpty()) {
+                mapped.forEach { (address, gatt) ->
+                    tentativeRadarReads.remove(address)
                     runCatching { gatt.readRemoteRssi() }
+                }
+            } else {
+                // iOS no incluye peerId en el anuncio BLE. Si queda una sola
+                // conexión GATT lista y sin resolver, úsala como señal
+                // tentativa hasta recibir el ANNOUNCE directo.
+                val unresolved = clientGatts.filterKeys { address ->
+                    clientReady.contains(address) && !addressToPeer.containsKey(address)
+                }
+                if (unresolved.size == 1) {
+                    val (address, gatt) = unresolved.entries.single()
+                    tentativeRadarReads[address] = target
+                    val started = runCatching { gatt.readRemoteRssi() }.getOrDefault(false)
+                    if (!started) tentativeRadarReads.remove(address)
                 }
             }
             mainHandler.postDelayed(this, RADAR_READ_INTERVAL_MS)
         }
     }
 
-    private fun emitRssi(peerIdHex: String, rssi: Int) {
+    private fun emitRssi(peerIdHex: String, rssi: Int, tentative: Boolean = false) {
         emit(
             mapOf(
                 "type" to "rssi",
                 "peerId" to peerIdHex,
                 "rssi" to rssi,
+                "tentative" to tentative,
                 "at" to System.currentTimeMillis(),
             ),
         )
@@ -642,15 +667,6 @@ internal class MeshEngine(
             "RX decoded: version=${packet.version} type=${packet.type.toUByte()} " +
                 "ttl=${packet.ttl.toUByte()} sender=${senderHex.take(8)}",
         )
-        // Un anuncio con TTL intacto solo puede venir del emisor original:
-        // eso identifica al vecino directo detrás de esta dirección (clave
-        // para el radar con iPhones, que no anuncian su peerId por BLE).
-        if (packet.type == MeshProtocol.TYPE_ANNOUNCE &&
-            packet.ttl == MeshProtocol.TTL &&
-            senderHex != peerId
-        ) {
-            addressToPeer[sourceAddress] = senderHex
-        }
         val fingerprint = MeshProtocol.fingerprint(packet)
         if (seen.put(fingerprint, System.currentTimeMillis()) != null) return
         if (senderHex == peerId) return
@@ -731,10 +747,16 @@ internal class MeshEngine(
             LOG_TAG,
             "ANNOUNCE accepted from ${senderHex.take(8)} nickname=${announcement.nickname}",
         )
+        // Solo vincular dirección y peerId después de validar claves y firma.
+        // TTL intacto prueba que el anuncio llegó directamente, no por relay.
+        if (packet.ttl == MeshProtocol.TTL) {
+            addressToPeer[sourceAddress] = senderHex
+        }
         peers[senderHex] = Peer(
             senderHex,
             announcement.nickname,
             announcement.signingPublicKey,
+            announcement.supportsTransfers,
         )
         emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
         requestMissingMessages(senderHex, sourceAddress)
@@ -925,11 +947,18 @@ internal class MeshEngine(
     }
 
     @SuppressLint("MissingPermission")
-    private fun startScanning() {
+    private fun startScanning(aggressive: Boolean = false) {
         val filter = ScanFilter.Builder().setServiceUuid(ParcelUuid(SERVICE_UUID)).build()
-        val settings = ScanSettings.Builder()
+        val settingsBuilder = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-            .build()
+            .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+        if (aggressive) {
+            settingsBuilder
+                .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+                .setNumOfMatches(ScanSettings.MATCH_NUM_MAX_ADVERTISEMENT)
+        }
+        val settings = settingsBuilder.build()
+        runCatching { adapter.bluetoothLeScanner?.stopScan(scanCallback) }
         adapter.bluetoothLeScanner?.startScan(listOf(filter), settings, scanCallback)
     }
 
@@ -1086,10 +1115,14 @@ internal class MeshEngine(
         }
 
         override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
+            val address = gatt.device.address
+            val tentativeTarget = tentativeRadarReads.remove(address)
             if (status != BluetoothGatt.GATT_SUCCESS) return
             val target = radarPeerId ?: return
-            if (addressToPeer[gatt.device.address] == target) {
+            if (addressToPeer[address] == target) {
                 emitRssi(target, rssi)
+            } else if (tentativeTarget == target) {
+                emitRssi(target, rssi, tentative = true)
             }
         }
     }
@@ -1195,7 +1228,7 @@ internal class MeshEngine(
         const val MAX_TRANSFER_FRAME = 2_048
 
         /** Cadencia de lectura RSSI sobre GATT conectado en modo radar. */
-        const val RADAR_READ_INTERVAL_MS = 1_000L
+        const val RADAR_READ_INTERVAL_MS = 500L
 
         const val ADVERTISE_TIMEOUT_MS = 10_000L
         const val MAX_ADVERTISE_RETRIES = 1

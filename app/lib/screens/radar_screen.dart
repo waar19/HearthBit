@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_compass/flutter_compass.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../l10n/l10n.dart';
@@ -40,9 +41,11 @@ class _RadarScreenState extends State<RadarScreen>
     with TickerProviderStateMixin {
   final _platform = MeshPlatformService();
   final _processor = RadarSignalProcessor();
+  final _sweepEstimator = SweepEstimator();
 
   StreamSubscription<Map<Object?, Object?>>? _events;
   StreamSubscription<Position>? _positions;
+  StreamSubscription<CompassEvent>? _compassEvents;
   Timer? _ticker;
 
   late final AnimationController _sweep = AnimationController(
@@ -57,8 +60,13 @@ class _RadarScreenState extends State<RadarScreen>
   RadarReading? _reading;
   bool _stale = false;
   bool _permissionExpired = false;
+  bool _tentativeSignal = false;
+  bool _sweepActive = false;
+  bool _compassUnavailable = false;
   String? _startError;
   double? _gpsDistanceMeters;
+  double? _headingDegrees;
+  SweepEstimate? _directionEstimate;
   DateTime _lastHaptic = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
@@ -94,12 +102,51 @@ class _RadarScreenState extends State<RadarScreen>
     final rssi = event['rssi'] as int?;
     if (rssi == null) return;
     final reading = _processor.addSample(rssi, DateTime.now());
+    final heading = _headingDegrees;
+    if (_sweepActive && heading != null) {
+      _sweepEstimator.addSample(
+        headingDegrees: heading,
+        rssi: reading.smoothedRssi,
+      );
+      if (_sweepEstimator.isComplete) {
+        _sweepActive = false;
+        _directionEstimate = _sweepEstimator.estimate;
+      }
+    }
     if (!mounted) return;
     setState(() {
       _reading = reading;
       _stale = false;
+      _tentativeSignal = event['tentative'] as bool? ?? false;
     });
     _pulse.forward(from: 0);
+  }
+
+  void _startDirectionSweep() {
+    final compassStream = FlutterCompass.events;
+    if (compassStream == null) {
+      setState(() => _compassUnavailable = true);
+      return;
+    }
+    _sweepEstimator.reset();
+    _compassEvents ??= compassStream.listen(
+      (event) {
+        if (!mounted) return;
+        final heading = event.heading;
+        setState(() {
+          _headingDegrees = heading;
+          _compassUnavailable = heading == null;
+        });
+      },
+      onError: (_) {
+        if (mounted) setState(() => _compassUnavailable = true);
+      },
+    );
+    setState(() {
+      _sweepActive = true;
+      _compassUnavailable = false;
+      _directionEstimate = null;
+    });
   }
 
   void _tick() {
@@ -189,6 +236,7 @@ class _RadarScreenState extends State<RadarScreen>
     unawaited(_platform.stopRadar());
     _events?.cancel();
     _positions?.cancel();
+    _compassEvents?.cancel();
     _ticker?.cancel();
     _sweep.dispose();
     _pulse.dispose();
@@ -221,6 +269,8 @@ class _RadarScreenState extends State<RadarScreen>
                         sweepProgress: _sweep.value,
                         pulseProgress: _pulse.value,
                         strength: _stale ? null : reading?.strength,
+                        directionSweepSectors: _sweepEstimator.sectorCoverage,
+                        estimatedDirectionRadians: _estimatedDirectionRadians(),
                       ),
                     ),
                   ),
@@ -232,6 +282,8 @@ class _RadarScreenState extends State<RadarScreen>
               child: Column(
                 children: [
                   _buildPanel(theme, reading, searching),
+                  const SizedBox(height: 10),
+                  _buildDirectionSweep(),
                   const SizedBox(height: 10),
                   Text(
                     '${_consentLabel()}\n${context.l10n.radarConsentExpires(_formatExpiry())}\n${context.l10n.radarNotDirection}',
@@ -245,6 +297,85 @@ class _RadarScreenState extends State<RadarScreen>
         ),
       ),
     );
+  }
+
+  Widget _buildDirectionSweep() {
+    const green = Color(0xFF4ADE80);
+    const dim = Color(0xFF94A3B8);
+    final estimate = _directionEstimate;
+    return _panelCard(
+      children: [
+        if (_compassUnavailable) ...[
+          const Icon(Icons.explore_off_outlined, color: dim),
+          const SizedBox(height: 6),
+          Text(
+            context.l10n.radarCompassUnavailable,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: dim),
+          ),
+        ] else if (_sweepActive) ...[
+          Text(
+            context.l10n.radarSweepInstruction,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(
+            value: _sweepEstimator.progress,
+            color: green,
+            backgroundColor: Colors.white12,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            context.l10n.radarSweepProgress(
+              (_sweepEstimator.progress * 100).round(),
+            ),
+            style: const TextStyle(color: dim, fontSize: 12),
+          ),
+        ] else if (estimate != null) ...[
+          Text(
+            context.l10n.radarSweepResult(estimate.headingDegrees.round()),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            context.l10n.radarSweepConfidence(
+              (estimate.confidence * 100).round(),
+            ),
+            style: const TextStyle(color: green),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            context.l10n.radarSweepEstimateWarning,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: dim, fontSize: 12),
+          ),
+        ],
+        if (!_sweepActive) ...[
+          if (estimate != null || _compassUnavailable)
+            const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _startDirectionSweep,
+            icon: const Icon(Icons.explore_outlined),
+            label: Text(
+              estimate == null
+                  ? context.l10n.radarSweepStart
+                  : context.l10n.radarSweepRestart,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  double? _estimatedDirectionRadians() {
+    final estimate = _directionEstimate;
+    final heading = _headingDegrees;
+    if (estimate == null || heading == null) return null;
+    return (estimate.headingDegrees - heading) * math.pi / 180;
   }
 
   Widget _buildPanel(ThemeData theme, RadarReading? reading, bool searching) {
@@ -360,6 +491,14 @@ class _RadarScreenState extends State<RadarScreen>
           context.l10n.radarDbm(reading.smoothedRssi.round()),
           style: const TextStyle(color: dim, fontSize: 12),
         ),
+        if (_tentativeSignal) ...[
+          const SizedBox(height: 4),
+          Text(
+            context.l10n.radarTentativeSignal,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: dim, fontSize: 12),
+          ),
+        ],
         if (_gpsDistanceMeters != null) _gpsRow(dim),
       ],
     );
@@ -439,6 +578,8 @@ class _RadarPainter extends CustomPainter {
     required this.sweepProgress,
     required this.pulseProgress,
     required this.strength,
+    required this.directionSweepSectors,
+    required this.estimatedDirectionRadians,
   });
 
   final double sweepProgress;
@@ -446,6 +587,8 @@ class _RadarPainter extends CustomPainter {
 
   /// null cuando no hay señal utilizable (sin blip).
   final double? strength;
+  final List<bool> directionSweepSectors;
+  final double? estimatedDirectionRadians;
 
   static const _green = Color(0xFF4ADE80);
 
@@ -460,6 +603,22 @@ class _RadarPainter extends CustomPainter {
       ..color = _green.withValues(alpha: 0.25);
     for (var i = 1; i <= 4; i++) {
       canvas.drawCircle(center, radius * i / 4, ringPaint);
+    }
+    final sectorAngle = 2 * math.pi / directionSweepSectors.length;
+    final directionProgressPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 5
+      ..color = _green;
+    for (var index = 0; index < directionSweepSectors.length; index++) {
+      if (!directionSweepSectors[index]) continue;
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius - 3),
+        -math.pi / 2 + index * sectorAngle + 0.04,
+        sectorAngle - 0.08,
+        false,
+        directionProgressPaint,
+      );
     }
     final crossPaint = Paint()
       ..strokeWidth = 1
@@ -487,6 +646,28 @@ class _RadarPainter extends CustomPainter {
 
     // Punto central: el rescatista.
     canvas.drawCircle(center, 5, Paint()..color = Colors.white);
+
+    final direction = estimatedDirectionRadians;
+    if (direction != null) {
+      canvas.save();
+      canvas.translate(center.dx, center.dy);
+      canvas.rotate(direction);
+      final arrowPaint = Paint()
+        ..strokeWidth = 5
+        ..strokeCap = StrokeCap.round
+        ..color = const Color(0xFFFBBF24);
+      final tipY = -radius * 0.72;
+      canvas.drawLine(Offset.zero, Offset(0, tipY), arrowPaint);
+      canvas.drawPath(
+        Path()
+          ..moveTo(0, tipY - 10)
+          ..lineTo(-11, tipY + 8)
+          ..lineTo(11, tipY + 8)
+          ..close(),
+        Paint()..color = const Color(0xFFFBBF24),
+      );
+      canvas.restore();
+    }
 
     final currentStrength = strength;
     if (currentStrength != null) {
@@ -516,5 +697,7 @@ class _RadarPainter extends CustomPainter {
   bool shouldRepaint(_RadarPainter oldDelegate) =>
       oldDelegate.sweepProgress != sweepProgress ||
       oldDelegate.pulseProgress != pulseProgress ||
-      oldDelegate.strength != strength;
+      oldDelegate.strength != strength ||
+      oldDelegate.directionSweepSectors != directionSweepSectors ||
+      oldDelegate.estimatedDirectionRadians != estimatedDirectionRadians;
 }

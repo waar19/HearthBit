@@ -33,6 +33,7 @@
   "peerTapToEncrypt": "点按以加密",
   "tooltipRadar": "近距离雷达",
   "tooltipSendFile": "发送文件",
+  "peerDoesNotSupportTransfers": "对方使用 BitChat；文件传输需要 HearthBit。请改用二维码传输。",
 
   "sosCardTitle": "发送优先求救警报",
   "sosCardBody": "如有可能将附上您的 GPS 位置。警报是公开的，并将通过网状网络转发。",
@@ -85,6 +86,8 @@
   "actionSendOriginal": "发送原图",
   "actionCompress": "压缩",
   "offerFileError": "无法发起文件传输：{error}",
+  "terrPeerDoesNotSupportTransfers": "接收方不支持 HearthBit 文件传输。请改用二维码传输。",
+  "terrOfferExpiredNoHbt": "传输请求已过期，因为接收方不支持 HearthBit 文件传输。",
 
   "sendByQr": "通过二维码发送",
   "receiveByQr": "通过二维码接收",
@@ -198,6 +201,15 @@
   "radarConsentExpires": "权限于 {time} 到期",
   "radarNotDirection": "圆点表示距离而非方向。请缓慢移动并比较信号是否增强。",
   "radarPermissionExpired": "雷达权限已到期或被撤销。",
+  "radarTentativeSignal": "暂定信号：正在确认此 iPhone 是否属于所选人员。",
+  "radarSweepStart": "搜索方向",
+  "radarSweepRestart": "重新扫描",
+  "radarSweepInstruction": "将手机贴在胸前，缓慢转动一整圈。",
+  "radarSweepProgress": "扫描进度：{percent}%",
+  "radarSweepResult": "估计信号方位：{heading}°",
+  "radarSweepConfidence": "置信度：{percent}%",
+  "radarSweepEstimateWarning": "这是 RSSI 估计值，并非精确方向。请移动位置并重新扫描以验证。",
+  "radarCompassUnavailable": "此手机没有可用的指南针传感器。距离雷达仍可使用。",
   "dateToday": "今天",
   "dateYesterday": "昨天"
 }

@@ -274,6 +274,12 @@ abstract class AppLocalizations {
   /// **'Send a file'**
   String get tooltipSendFile;
 
+  /// No description provided for @peerDoesNotSupportTransfers.
+  ///
+  /// In en, this message translates to:
+  /// **'This person uses BitChat; files require HearthBit. Use QR transfer instead.'**
+  String get peerDoesNotSupportTransfers;
+
   /// No description provided for @sosCardTitle.
   ///
   /// In en, this message translates to:
@@ -555,6 +561,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not offer the file: {error}'**
   String offerFileError(String error);
+
+  /// No description provided for @terrPeerDoesNotSupportTransfers.
+  ///
+  /// In en, this message translates to:
+  /// **'The recipient does not support HearthBit file transfers. Use QR transfer instead.'**
+  String get terrPeerDoesNotSupportTransfers;
+
+  /// No description provided for @terrOfferExpiredNoHbt.
+  ///
+  /// In en, this message translates to:
+  /// **'The offer expired because the recipient does not support HearthBit file transfers.'**
+  String get terrOfferExpiredNoHbt;
 
   /// No description provided for @sendByQr.
   ///
@@ -1196,6 +1214,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Radar permission expired or was revoked.'**
   String get radarPermissionExpired;
+
+  /// No description provided for @radarTentativeSignal.
+  ///
+  /// In en, this message translates to:
+  /// **'Tentative signal: verifying that this iPhone is the selected person.'**
+  String get radarTentativeSignal;
+
+  /// No description provided for @radarSweepStart.
+  ///
+  /// In en, this message translates to:
+  /// **'FIND DIRECTION'**
+  String get radarSweepStart;
+
+  /// No description provided for @radarSweepRestart.
+  ///
+  /// In en, this message translates to:
+  /// **'REPEAT SWEEP'**
+  String get radarSweepRestart;
+
+  /// No description provided for @radarSweepInstruction.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold the phone against your chest and turn slowly through one full circle.'**
+  String get radarSweepInstruction;
+
+  /// No description provided for @radarSweepProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Sweep progress: {percent}%'**
+  String radarSweepProgress(int percent);
+
+  /// No description provided for @radarSweepResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Estimated signal heading: {heading}°'**
+  String radarSweepResult(int heading);
+
+  /// No description provided for @radarSweepConfidence.
+  ///
+  /// In en, this message translates to:
+  /// **'Confidence: {percent}%'**
+  String radarSweepConfidence(int percent);
+
+  /// No description provided for @radarSweepEstimateWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'This is an RSSI estimate, not a precise direction. Verify it by moving and repeating the sweep.'**
+  String get radarSweepEstimateWarning;
+
+  /// No description provided for @radarCompassUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone has no usable compass sensor. Proximity radar remains available.'**
+  String get radarCompassUnavailable;
 
   /// No description provided for @dateToday.
   ///

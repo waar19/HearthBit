@@ -4,6 +4,7 @@ class MeshPeer {
     required this.nickname,
     required this.lastSeen,
     required this.secure,
+    this.supportsTransfers = false,
     this.radarAllowedUntil,
     this.radarConsentSource,
   });
@@ -14,6 +15,7 @@ class MeshPeer {
       nickname: map['nickname']! as String,
       lastSeen: DateTime.fromMillisecondsSinceEpoch(map['lastSeen']! as int),
       secure: map['secure'] as bool? ?? false,
+      supportsTransfers: map['supportsTransfers'] as bool? ?? false,
       radarAllowedUntil: switch (map['radarAllowedUntil']) {
         final int value when value > 0 => DateTime.fromMillisecondsSinceEpoch(
           value,
@@ -28,6 +30,7 @@ class MeshPeer {
   final String nickname;
   final DateTime lastSeen;
   final bool secure;
+  final bool supportsTransfers;
   final DateTime? radarAllowedUntil;
   final String? radarConsentSource;
 
@@ -48,6 +51,10 @@ class MeshPeer {
     'last_seen': lastSeen.millisecondsSinceEpoch,
   };
 }
+
+/// Regla única para ofrecer archivos desde cualquier vista de la aplicación.
+bool canOfferFileToPeer(MeshPeer peer, {required bool isOnline}) =>
+    isOnline && peer.supportsTransfers;
 
 class MeshMessage {
   const MeshMessage({

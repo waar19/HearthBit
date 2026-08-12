@@ -33,6 +33,7 @@
   "peerTapToEncrypt": "zum Verschlüsseln tippen",
   "tooltipRadar": "Näherungsradar",
   "tooltipSendFile": "Datei senden",
+  "peerDoesNotSupportTransfers": "Diese Person verwendet BitChat; Dateien erfordern HearthBit. Nutze stattdessen die QR-Übertragung.",
 
   "sosCardTitle": "Prioritätsalarm senden",
   "sosCardBody": "Wenn möglich, wird dein GPS-Standort angehängt. Der Alarm ist öffentlich und wird über das Mesh weitergeleitet.",
@@ -85,6 +86,8 @@
   "actionSendOriginal": "ORIGINAL SENDEN",
   "actionCompress": "KOMPRIMIEREN",
   "offerFileError": "Die Datei konnte nicht angeboten werden: {error}",
+  "terrPeerDoesNotSupportTransfers": "Der Empfänger unterstützt keine HearthBit-Dateiübertragung. Nutze stattdessen QR.",
+  "terrOfferExpiredNoHbt": "Das Angebot ist abgelaufen, weil der Empfänger keine HearthBit-Dateiübertragung unterstützt.",
 
   "sendByQr": "Per QR senden",
   "receiveByQr": "Per QR empfangen",
@@ -198,6 +201,15 @@
   "radarConsentExpires": "Die Erlaubnis endet um {time}",
   "radarNotDirection": "Der Punkt zeigt Nähe, nicht Richtung. Bewege dich langsam und prüfe, ob das Signal stärker wird.",
   "radarPermissionExpired": "Die Radar-Erlaubnis ist abgelaufen oder wurde widerrufen.",
+  "radarTentativeSignal": "Vorläufiges Signal: Es wird geprüft, ob dieses iPhone die ausgewählte Person ist.",
+  "radarSweepStart": "RICHTUNG SUCHEN",
+  "radarSweepRestart": "SUCHE WIEDERHOLEN",
+  "radarSweepInstruction": "Halte das Telefon an die Brust und drehe dich langsam einmal vollständig im Kreis.",
+  "radarSweepProgress": "Fortschritt der Suche: {percent}%",
+  "radarSweepResult": "Geschätzte Signalrichtung: {heading}°",
+  "radarSweepConfidence": "Konfidenz: {percent}%",
+  "radarSweepEstimateWarning": "Dies ist eine RSSI-Schätzung, keine genaue Richtung. Prüfe sie durch Bewegung und eine erneute Suche.",
+  "radarCompassUnavailable": "Dieses Telefon hat keinen nutzbaren Kompasssensor. Das Näherungsradar bleibt verfügbar.",
   "dateToday": "Heute",
   "dateYesterday": "Gestern"
 }

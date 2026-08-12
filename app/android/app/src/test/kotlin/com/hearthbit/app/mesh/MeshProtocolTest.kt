@@ -178,5 +178,21 @@ class MeshProtocolTest {
         val decoded = MeshProtocol.decodeAnnouncement(extended)
         assertNotNull(decoded)
         assertEquals("Ana", decoded!!.nickname)
+        assertEquals(true, decoded.supportsTransfers)
+    }
+
+    @Test
+    fun `announcement sin HBT identifica clientes BitChat`() {
+        val legacy = byteArrayOf(0x01, 0x03) +
+            "Bob".toByteArray() +
+            byteArrayOf(0x02, 0x20) +
+            ByteArray(32) { 2 } +
+            byteArrayOf(0x03, 0x20) +
+            ByteArray(32) { 3 }
+
+        val decoded = MeshProtocol.decodeAnnouncement(legacy)
+
+        assertNotNull(decoded)
+        assertEquals(false, decoded!!.supportsTransfers)
     }
 }

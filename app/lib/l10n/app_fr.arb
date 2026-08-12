@@ -33,6 +33,7 @@
   "peerTapToEncrypt": "touchez pour chiffrer",
   "tooltipRadar": "Radar de proximité",
   "tooltipSendFile": "Envoyer un fichier",
+  "peerDoesNotSupportTransfers": "Cette personne utilise BitChat ; les fichiers nécessitent HearthBit. Utilisez plutôt le transfert par QR.",
 
   "sosCardTitle": "Envoyer une alerte prioritaire",
   "sosCardBody": "Votre position GPS sera jointe si possible. L'alerte est publique et relayée par le maillage.",
@@ -85,6 +86,8 @@
   "actionSendOriginal": "ENVOYER L'ORIGINAL",
   "actionCompress": "COMPRESSER",
   "offerFileError": "Impossible de proposer le fichier : {error}",
+  "terrPeerDoesNotSupportTransfers": "Le destinataire ne prend pas en charge les fichiers HearthBit. Utilisez plutôt le transfert par QR.",
+  "terrOfferExpiredNoHbt": "L’offre a expiré car le destinataire ne prend pas en charge les transferts HearthBit.",
 
   "sendByQr": "Envoyer par QR",
   "receiveByQr": "Recevoir par QR",
@@ -198,6 +201,15 @@
   "radarConsentExpires": "L'autorisation expire à {time}",
   "radarNotDirection": "Le point indique la proximité, pas la direction. Déplacez-vous lentement et vérifiez si le signal se renforce.",
   "radarPermissionExpired": "L'autorisation radar a expiré ou a été révoquée.",
+  "radarTentativeSignal": "Signal provisoire : vérification que cet iPhone correspond à la personne sélectionnée.",
+  "radarSweepStart": "CHERCHER LA DIRECTION",
+  "radarSweepRestart": "REFAIRE LE BALAYAGE",
+  "radarSweepInstruction": "Tenez le téléphone contre votre poitrine et tournez lentement sur un tour complet.",
+  "radarSweepProgress": "Progression du balayage : {percent} %",
+  "radarSweepResult": "Cap estimé du signal : {heading}°",
+  "radarSweepConfidence": "Confiance : {percent} %",
+  "radarSweepEstimateWarning": "Il s’agit d’une estimation RSSI, pas d’une direction précise. Vérifiez-la en vous déplaçant et en recommençant.",
+  "radarCompassUnavailable": "Ce téléphone ne dispose pas d’une boussole utilisable. Le radar de proximité reste disponible.",
   "dateToday": "Aujourd’hui",
   "dateYesterday": "Hier"
 }

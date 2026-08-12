@@ -102,6 +102,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get tooltipSendFile => 'Envoyer un fichier';
 
   @override
+  String get peerDoesNotSupportTransfers =>
+      'Cette personne utilise BitChat ; les fichiers nécessitent HearthBit. Utilisez plutôt le transfert par QR.';
+
+  @override
   String get sosCardTitle => 'Envoyer une alerte prioritaire';
 
   @override
@@ -268,6 +272,14 @@ class AppLocalizationsFr extends AppLocalizations {
   String offerFileError(String error) {
     return 'Impossible de proposer le fichier : $error';
   }
+
+  @override
+  String get terrPeerDoesNotSupportTransfers =>
+      'Le destinataire ne prend pas en charge les fichiers HearthBit. Utilisez plutôt le transfert par QR.';
+
+  @override
+  String get terrOfferExpiredNoHbt =>
+      'L’offre a expiré car le destinataire ne prend pas en charge les transferts HearthBit.';
 
   @override
   String get sendByQr => 'Envoyer par QR';
@@ -659,6 +671,43 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get radarPermissionExpired =>
       'L\'autorisation radar a expiré ou a été révoquée.';
+
+  @override
+  String get radarTentativeSignal =>
+      'Signal provisoire : vérification que cet iPhone correspond à la personne sélectionnée.';
+
+  @override
+  String get radarSweepStart => 'CHERCHER LA DIRECTION';
+
+  @override
+  String get radarSweepRestart => 'REFAIRE LE BALAYAGE';
+
+  @override
+  String get radarSweepInstruction =>
+      'Tenez le téléphone contre votre poitrine et tournez lentement sur un tour complet.';
+
+  @override
+  String radarSweepProgress(int percent) {
+    return 'Progression du balayage : $percent %';
+  }
+
+  @override
+  String radarSweepResult(int heading) {
+    return 'Cap estimé du signal : $heading°';
+  }
+
+  @override
+  String radarSweepConfidence(int percent) {
+    return 'Confiance : $percent %';
+  }
+
+  @override
+  String get radarSweepEstimateWarning =>
+      'Il s’agit d’une estimation RSSI, pas d’une direction précise. Vérifiez-la en vous déplaçant et en recommençant.';
+
+  @override
+  String get radarCompassUnavailable =>
+      'Ce téléphone ne dispose pas d’une boussole utilisable. Le radar de proximité reste disponible.';
 
   @override
   String get dateToday => 'Aujourd’hui';

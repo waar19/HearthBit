@@ -20,4 +20,24 @@ void main() {
     expect(restored.content, original.content);
     expect(restored.isSos, isTrue);
   });
+
+  test('solo ofrece archivos a un peer HearthBit conectado', () {
+    final hearthBitPeer = MeshPeer(
+      id: '0123456789abcdef',
+      nickname: 'Ana',
+      lastSeen: DateTime.now(),
+      secure: true,
+      supportsTransfers: true,
+    );
+    final bitChatPeer = MeshPeer(
+      id: 'fedcba9876543210',
+      nickname: 'Bob',
+      lastSeen: DateTime.now(),
+      secure: true,
+    );
+
+    expect(canOfferFileToPeer(hearthBitPeer, isOnline: true), isTrue);
+    expect(canOfferFileToPeer(hearthBitPeer, isOnline: false), isFalse);
+    expect(canOfferFileToPeer(bitChatPeer, isOnline: true), isFalse);
+  });
 }

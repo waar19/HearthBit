@@ -136,3 +136,110 @@ class RadarSignalProcessor {
       .pow(10, (txPowerAtOneMeter - rssi) / (10 * pathLossExponent))
       .toDouble();
 }
+
+class SweepEstimate {
+  const SweepEstimate({required this.headingDegrees, required this.confidence});
+
+  /// Rumbo magnético aproximado (0° norte, 90° este).
+  final double headingDegrees;
+
+  /// Contraste relativo entre el sector más fuerte y el promedio, de 0 a 1.
+  final double confidence;
+}
+
+/// Estima el rumbo de una señal BLE mientras la persona gira lentamente.
+///
+/// No mide ángulo de llegada: aprovecha la atenuación que producen el cuerpo
+/// y el teléfono para comparar RSSI por sectores de brújula.
+class SweepEstimator {
+  SweepEstimator({
+    this.sectorCount = 12,
+    this.minimumSamplesPerSector = 2,
+    this.minimumRotationDegrees = 330,
+    this.confidenceScaleDb = 12,
+  }) : assert(sectorCount > 2),
+       assert(minimumSamplesPerSector > 0),
+       assert(minimumRotationDegrees > 0),
+       assert(confidenceScaleDb > 0),
+       _rssiBySector = List.generate(sectorCount, (_) => <double>[]);
+
+  final int sectorCount;
+  final int minimumSamplesPerSector;
+  final double minimumRotationDegrees;
+  final double confidenceScaleDb;
+  final List<List<double>> _rssiBySector;
+
+  double? _lastHeading;
+  double _rotationDegrees = 0;
+
+  int get coveredSectors => _rssiBySector
+      .where((samples) => samples.length >= minimumSamplesPerSector)
+      .length;
+
+  List<bool> get sectorCoverage => List.unmodifiable(
+    _rssiBySector.map((samples) => samples.length >= minimumSamplesPerSector),
+  );
+
+  double get progress {
+    final coverage = coveredSectors / sectorCount;
+    final rotation = (_rotationDegrees / minimumRotationDegrees).clamp(
+      0.0,
+      1.0,
+    );
+    return math.min(coverage, rotation);
+  }
+
+  bool get isComplete =>
+      coveredSectors == sectorCount &&
+      _rotationDegrees >= minimumRotationDegrees;
+
+  SweepEstimate? get estimate {
+    if (!isComplete) return null;
+    final averages = _rssiBySector
+        .map((samples) => samples.reduce((a, b) => a + b) / samples.length)
+        .toList(growable: false);
+    var strongestSector = 0;
+    for (var index = 1; index < averages.length; index++) {
+      if (averages[index] > averages[strongestSector]) {
+        strongestSector = index;
+      }
+    }
+    final average = averages.reduce((a, b) => a + b) / averages.length;
+    final contrastDb = averages[strongestSector] - average;
+    return SweepEstimate(
+      headingDegrees: (strongestSector + 0.5) * (360 / sectorCount),
+      confidence: (contrastDb / confidenceScaleDb).clamp(0.0, 1.0),
+    );
+  }
+
+  void addSample({required double headingDegrees, required double rssi}) {
+    final heading = _normalizeHeading(headingDegrees);
+    final previous = _lastHeading;
+    if (previous != null) {
+      var delta = (heading - previous).abs();
+      if (delta > 180) delta = 360 - delta;
+      // Saltos grandes suelen ser interferencia magnética, no un giro real.
+      if (delta <= 60) _rotationDegrees += delta;
+    }
+    _lastHeading = heading;
+    final sectorWidth = 360 / sectorCount;
+    final sector = (heading / sectorWidth)
+        .floor()
+        .clamp(0, sectorCount - 1)
+        .toInt();
+    _rssiBySector[sector].add(rssi);
+  }
+
+  void reset() {
+    for (final samples in _rssiBySector) {
+      samples.clear();
+    }
+    _lastHeading = null;
+    _rotationDegrees = 0;
+  }
+
+  static double _normalizeHeading(double heading) {
+    final normalized = heading % 360;
+    return normalized < 0 ? normalized + 360 : normalized;
+  }
+}

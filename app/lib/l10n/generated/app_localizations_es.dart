@@ -102,6 +102,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get tooltipSendFile => 'Enviar archivo';
 
   @override
+  String get peerDoesNotSupportTransfers =>
+      'Esta persona usa BitChat; los archivos requieren HearthBit. Usa la transferencia por QR.';
+
+  @override
   String get sosCardTitle => 'Enviar alerta prioritaria';
 
   @override
@@ -268,6 +272,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String offerFileError(String error) {
     return 'No se pudo ofrecer el archivo: $error';
   }
+
+  @override
+  String get terrPeerDoesNotSupportTransfers =>
+      'El destinatario no admite archivos de HearthBit. Usa la transferencia por QR.';
+
+  @override
+  String get terrOfferExpiredNoHbt =>
+      'La oferta venció porque el destinatario no admite transferencias de HearthBit.';
 
   @override
   String get sendByQr => 'Enviar por QR';
@@ -659,6 +671,43 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get radarPermissionExpired =>
       'El permiso del radar venció o fue revocado.';
+
+  @override
+  String get radarTentativeSignal =>
+      'Señal tentativa: verificando que este iPhone sea la persona seleccionada.';
+
+  @override
+  String get radarSweepStart => 'BUSCAR DIRECCIÓN';
+
+  @override
+  String get radarSweepRestart => 'REPETIR BARRIDO';
+
+  @override
+  String get radarSweepInstruction =>
+      'Sostén el teléfono contra el pecho y gira despacio una vuelta completa.';
+
+  @override
+  String radarSweepProgress(int percent) {
+    return 'Progreso del barrido: $percent%';
+  }
+
+  @override
+  String radarSweepResult(int heading) {
+    return 'Rumbo estimado de la señal: $heading°';
+  }
+
+  @override
+  String radarSweepConfidence(int percent) {
+    return 'Confianza: $percent%';
+  }
+
+  @override
+  String get radarSweepEstimateWarning =>
+      'Es una estimación por RSSI, no una dirección precisa. Verifícala moviéndote y repitiendo el barrido.';
+
+  @override
+  String get radarCompassUnavailable =>
+      'Este teléfono no tiene una brújula utilizable. El radar de proximidad sigue disponible.';
 
   @override
   String get dateToday => 'Hoy';

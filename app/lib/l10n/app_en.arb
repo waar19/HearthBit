@@ -36,6 +36,7 @@
   "peerTapToEncrypt": "tap to encrypt",
   "tooltipRadar": "Proximity radar",
   "tooltipSendFile": "Send a file",
+  "peerDoesNotSupportTransfers": "This person uses BitChat; files require HearthBit. Use QR transfer instead.",
 
   "sosCardTitle": "Send priority alert",
   "sosCardBody": "Your GPS location will be attached if possible. The alert is public and relayed across the mesh.",
@@ -93,6 +94,8 @@
   "actionCompress": "COMPRESS",
   "offerFileError": "Could not offer the file: {error}",
   "@offerFileError": {"placeholders": {"error": {"type": "String"}}},
+  "terrPeerDoesNotSupportTransfers": "The recipient does not support HearthBit file transfers. Use QR transfer instead.",
+  "terrOfferExpiredNoHbt": "The offer expired because the recipient does not support HearthBit file transfers.",
 
   "sendByQr": "Send via QR",
   "receiveByQr": "Receive via QR",
@@ -230,6 +233,18 @@
   "@radarConsentExpires": {"placeholders": {"time": {"type": "String"}}},
   "radarNotDirection": "The point shows proximity, not direction. Move slowly and compare whether the signal gets stronger.",
   "radarPermissionExpired": "Radar permission expired or was revoked.",
+  "radarTentativeSignal": "Tentative signal: verifying that this iPhone is the selected person.",
+  "radarSweepStart": "FIND DIRECTION",
+  "radarSweepRestart": "REPEAT SWEEP",
+  "radarSweepInstruction": "Hold the phone against your chest and turn slowly through one full circle.",
+  "radarSweepProgress": "Sweep progress: {percent}%",
+  "@radarSweepProgress": {"placeholders": {"percent": {"type": "int"}}},
+  "radarSweepResult": "Estimated signal heading: {heading}°",
+  "@radarSweepResult": {"placeholders": {"heading": {"type": "int"}}},
+  "radarSweepConfidence": "Confidence: {percent}%",
+  "@radarSweepConfidence": {"placeholders": {"percent": {"type": "int"}}},
+  "radarSweepEstimateWarning": "This is an RSSI estimate, not a precise direction. Verify it by moving and repeating the sweep.",
+  "radarCompassUnavailable": "This phone has no usable compass sensor. Proximity radar remains available.",
   "dateToday": "Today",
   "dateYesterday": "Yesterday"
 }

@@ -599,6 +599,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         id: senderID,
         nickname: announcement.nickname,
         signingPublicKey: announcement.signingPublicKey,
+        supportsTransfers: announcement.supportsTransfers,
         lastSeen: Date()
       )
       emit(["type": "peers", "peers": peerMaps()])
@@ -748,6 +749,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         "nickname": $0.nickname,
         "lastSeen": Int($0.lastSeen.timeIntervalSince1970 * 1000),
         "secure": sessions[$0.id]?.established ?? false,
+        "supportsTransfers": $0.supportsTransfers,
         "radarAllowedUntil": consent?.expiresAt ?? 0,
         "radarConsentSource": consent?.source ?? "",
       ]
@@ -972,6 +974,7 @@ private struct IOSMeshPeer {
   let id: String
   let nickname: String
   let signingPublicKey: Data
+  let supportsTransfers: Bool
   let lastSeen: Date
 }
 
@@ -1092,6 +1095,7 @@ private enum IOSMeshProtocol {
     let nickname: String
     let noisePublicKey: Data
     let signingPublicKey: Data
+    let supportsTransfers: Bool
   }
 
   struct PrivateMessage {
@@ -1271,6 +1275,7 @@ private enum IOSMeshProtocol {
     output.appendTLV(type: 0x02, value: noisePublicKey)
     output.appendTLV(type: 0x03, value: signingPublicKey)
     output.appendTLV(type: 0x05, value: Data([0x00]))
+    output.appendTLV(type: 0xF0, value: Data([0x01]))
     return output
   }
 
@@ -1279,18 +1284,25 @@ private enum IOSMeshProtocol {
     var nickname: String?
     var noise: Data?
     var signing: Data?
+    var supportsTransfers = false
     while let type = reader.byte(), let length = reader.byte(),
           let value = reader.data(count: Int(length)) {
       switch type {
       case 0x01: nickname = String(data: value, encoding: .utf8)
       case 0x02: noise = value
       case 0x03: signing = value
+      case 0xF0: supportsTransfers = value == Data([0x01])
       default: break
       }
     }
     guard let nickname, let noise, noise.count == 32,
           let signing, signing.count == 32 else { return nil }
-    return Announcement(nickname: nickname, noisePublicKey: noise, signingPublicKey: signing)
+    return Announcement(
+      nickname: nickname,
+      noisePublicKey: noise,
+      signingPublicKey: signing,
+      supportsTransfers: supportsTransfers
+    )
   }
 
   static func privateMessage(id: String, content: String) -> Data {

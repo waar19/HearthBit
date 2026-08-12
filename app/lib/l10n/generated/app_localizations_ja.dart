@@ -101,6 +101,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tooltipSendFile => 'ファイルを送信';
 
   @override
+  String get peerDoesNotSupportTransfers =>
+      '相手は BitChat を使用しています。ファイル送信には HearthBit が必要です。代わりに QR 転送を使用してください。';
+
+  @override
   String get sosCardTitle => '優先アラートを送信';
 
   @override
@@ -257,6 +261,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String offerFileError(String error) {
     return 'ファイルを送信できませんでした：$error';
   }
+
+  @override
+  String get terrPeerDoesNotSupportTransfers =>
+      '受信側は HearthBit のファイル転送に対応していません。代わりに QR 転送を使用してください。';
+
+  @override
+  String get terrOfferExpiredNoHbt =>
+      '受信側が HearthBit のファイル転送に対応していないため、送信依頼の期限が切れました。';
 
   @override
   String get sendByQr => 'QR で送信';
@@ -634,6 +646,41 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get radarPermissionExpired => 'レーダーの許可が期限切れ、または取り消されました。';
+
+  @override
+  String get radarTentativeSignal => '暫定的な信号です。この iPhone が選択した相手か確認しています。';
+
+  @override
+  String get radarSweepStart => '方向を探す';
+
+  @override
+  String get radarSweepRestart => 'スイープをやり直す';
+
+  @override
+  String get radarSweepInstruction => 'スマートフォンを胸に当て、ゆっくり一周してください。';
+
+  @override
+  String radarSweepProgress(int percent) {
+    return 'スイープ進捗：$percent%';
+  }
+
+  @override
+  String radarSweepResult(int heading) {
+    return '推定信号方位：$heading°';
+  }
+
+  @override
+  String radarSweepConfidence(int percent) {
+    return '信頼度：$percent%';
+  }
+
+  @override
+  String get radarSweepEstimateWarning =>
+      'これは RSSI による推定で、正確な方向ではありません。移動して再度スイープし、確認してください。';
+
+  @override
+  String get radarCompassUnavailable =>
+      'このスマートフォンではコンパスを利用できません。近接レーダーは引き続き使用できます。';
 
   @override
   String get dateToday => '今日';

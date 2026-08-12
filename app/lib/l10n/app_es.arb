@@ -33,6 +33,7 @@
   "peerTapToEncrypt": "toca para cifrar",
   "tooltipRadar": "Radar de proximidad",
   "tooltipSendFile": "Enviar archivo",
+  "peerDoesNotSupportTransfers": "Esta persona usa BitChat; los archivos requieren HearthBit. Usa la transferencia por QR.",
 
   "sosCardTitle": "Enviar alerta prioritaria",
   "sosCardBody": "Se intentará incluir tu ubicación GPS. La alerta será pública y se retransmitirá por la malla.",
@@ -85,6 +86,8 @@
   "actionSendOriginal": "ENVIAR ORIGINAL",
   "actionCompress": "COMPRIMIR",
   "offerFileError": "No se pudo ofrecer el archivo: {error}",
+  "terrPeerDoesNotSupportTransfers": "El destinatario no admite archivos de HearthBit. Usa la transferencia por QR.",
+  "terrOfferExpiredNoHbt": "La oferta venció porque el destinatario no admite transferencias de HearthBit.",
 
   "sendByQr": "Enviar por QR",
   "receiveByQr": "Recibir por QR",
@@ -198,6 +201,15 @@
   "radarConsentExpires": "El permiso vence a las {time}",
   "radarNotDirection": "El punto muestra proximidad, no dirección. Muévete despacio y compara si la señal se fortalece.",
   "radarPermissionExpired": "El permiso del radar venció o fue revocado.",
+  "radarTentativeSignal": "Señal tentativa: verificando que este iPhone sea la persona seleccionada.",
+  "radarSweepStart": "BUSCAR DIRECCIÓN",
+  "radarSweepRestart": "REPETIR BARRIDO",
+  "radarSweepInstruction": "Sostén el teléfono contra el pecho y gira despacio una vuelta completa.",
+  "radarSweepProgress": "Progreso del barrido: {percent}%",
+  "radarSweepResult": "Rumbo estimado de la señal: {heading}°",
+  "radarSweepConfidence": "Confianza: {percent}%",
+  "radarSweepEstimateWarning": "Es una estimación por RSSI, no una dirección precisa. Verifícala moviéndote y repitiendo el barrido.",
+  "radarCompassUnavailable": "Este teléfono no tiene una brújula utilizable. El radar de proximidad sigue disponible.",
   "dateToday": "Hoy",
   "dateYesterday": "Ayer"
 }

@@ -92,6 +92,9 @@ class TransferController extends ChangeNotifier {
     required String fileName,
     String? mimeType,
   }) async {
+    if (!peer.supportsTransfers) {
+      throw StateError(currentL10n.terrPeerDoesNotSupportTransfers);
+    }
     final file = File(filePath);
     final fileSize = await file.length();
     if (fileSize == 0 || fileSize > maxFileBytes) {
@@ -127,7 +130,12 @@ class TransferController extends ChangeNotifier {
     );
     final session = _TransferSession(keyPair: keyPair);
     session.expiryTimer = Timer(offerLifetime, () {
-      _fail(record, currentL10n.terrOfferExpired);
+      _fail(
+        record,
+        peer.supportsTransfers
+            ? currentL10n.terrOfferExpired
+            : currentL10n.terrOfferExpiredNoHbt,
+      );
     });
     _sessions[idHex] = session;
     _transfers.insert(0, record);

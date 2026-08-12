@@ -33,6 +33,7 @@
   "peerTapToEncrypt": "タップして暗号化",
   "tooltipRadar": "近接レーダー",
   "tooltipSendFile": "ファイルを送信",
+  "peerDoesNotSupportTransfers": "相手は BitChat を使用しています。ファイル送信には HearthBit が必要です。代わりに QR 転送を使用してください。",
 
   "sosCardTitle": "優先アラートを送信",
   "sosCardBody": "可能であれば GPS 位置情報が添付されます。アラートは公開され、メッシュ全体に中継されます。",
@@ -85,6 +86,8 @@
   "actionSendOriginal": "元のまま送信",
   "actionCompress": "圧縮する",
   "offerFileError": "ファイルを送信できませんでした：{error}",
+  "terrPeerDoesNotSupportTransfers": "受信側は HearthBit のファイル転送に対応していません。代わりに QR 転送を使用してください。",
+  "terrOfferExpiredNoHbt": "受信側が HearthBit のファイル転送に対応していないため、送信依頼の期限が切れました。",
 
   "sendByQr": "QR で送信",
   "receiveByQr": "QR で受信",
@@ -198,6 +201,15 @@
   "radarConsentExpires": "許可は {time} に期限切れになります",
   "radarNotDirection": "点は方向ではなく近さを示します。ゆっくり移動し、信号が強くなるか比較してください。",
   "radarPermissionExpired": "レーダーの許可が期限切れ、または取り消されました。",
+  "radarTentativeSignal": "暫定的な信号です。この iPhone が選択した相手か確認しています。",
+  "radarSweepStart": "方向を探す",
+  "radarSweepRestart": "スイープをやり直す",
+  "radarSweepInstruction": "スマートフォンを胸に当て、ゆっくり一周してください。",
+  "radarSweepProgress": "スイープ進捗：{percent}%",
+  "radarSweepResult": "推定信号方位：{heading}°",
+  "radarSweepConfidence": "信頼度：{percent}%",
+  "radarSweepEstimateWarning": "これは RSSI による推定で、正確な方向ではありません。移動して再度スイープし、確認してください。",
+  "radarCompassUnavailable": "このスマートフォンではコンパスを利用できません。近接レーダーは引き続き使用できます。",
   "dateToday": "今日",
   "dateYesterday": "昨日"
 }

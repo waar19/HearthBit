@@ -107,6 +107,38 @@ void main() {
     });
   });
 
+  group('SweepEstimator', () {
+    test('estima el sector con señal más fuerte después de una vuelta', () {
+      final estimator = SweepEstimator();
+      for (var sector = 0; sector < 12; sector++) {
+        final heading = 15.0 + sector * 30;
+        final rssi = sector == 3 ? -50.0 : -75.0;
+        estimator
+          ..addSample(headingDegrees: heading, rssi: rssi)
+          ..addSample(headingDegrees: heading, rssi: rssi - 1);
+      }
+
+      expect(estimator.isComplete, isTrue);
+      expect(estimator.progress, 1);
+      expect(estimator.estimate, isNotNull);
+      expect(estimator.estimate!.headingDegrees, closeTo(105, 0.1));
+      expect(estimator.estimate!.confidence, greaterThan(0.5));
+    });
+
+    test('reporta confianza baja cuando la señal es plana', () {
+      final estimator = SweepEstimator();
+      for (var sector = 0; sector < 12; sector++) {
+        final heading = 15.0 + sector * 30;
+        estimator
+          ..addSample(headingDegrees: heading, rssi: -70)
+          ..addSample(headingDegrees: heading, rssi: -70);
+      }
+
+      expect(estimator.isComplete, isTrue);
+      expect(estimator.estimate!.confidence, closeTo(0, 0.001));
+    });
+  });
+
   group('MeshMessage SOS', () {
     MeshMessage sos(String content) => MeshMessage(
       id: '1',

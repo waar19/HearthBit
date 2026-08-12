@@ -99,6 +99,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tooltipSendFile => '发送文件';
 
   @override
+  String get peerDoesNotSupportTransfers =>
+      '对方使用 BitChat；文件传输需要 HearthBit。请改用二维码传输。';
+
+  @override
   String get sosCardTitle => '发送优先求救警报';
 
   @override
@@ -249,6 +253,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String offerFileError(String error) {
     return '无法发起文件传输：$error';
   }
+
+  @override
+  String get terrPeerDoesNotSupportTransfers =>
+      '接收方不支持 HearthBit 文件传输。请改用二维码传输。';
+
+  @override
+  String get terrOfferExpiredNoHbt => '传输请求已过期，因为接收方不支持 HearthBit 文件传输。';
 
   @override
   String get sendByQr => '通过二维码发送';
@@ -622,6 +633,39 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get radarPermissionExpired => '雷达权限已到期或被撤销。';
+
+  @override
+  String get radarTentativeSignal => '暂定信号：正在确认此 iPhone 是否属于所选人员。';
+
+  @override
+  String get radarSweepStart => '搜索方向';
+
+  @override
+  String get radarSweepRestart => '重新扫描';
+
+  @override
+  String get radarSweepInstruction => '将手机贴在胸前，缓慢转动一整圈。';
+
+  @override
+  String radarSweepProgress(int percent) {
+    return '扫描进度：$percent%';
+  }
+
+  @override
+  String radarSweepResult(int heading) {
+    return '估计信号方位：$heading°';
+  }
+
+  @override
+  String radarSweepConfidence(int percent) {
+    return '置信度：$percent%';
+  }
+
+  @override
+  String get radarSweepEstimateWarning => '这是 RSSI 估计值，并非精确方向。请移动位置并重新扫描以验证。';
+
+  @override
+  String get radarCompassUnavailable => '此手机没有可用的指南针传感器。距离雷达仍可使用。';
 
   @override
   String get dateToday => '今天';

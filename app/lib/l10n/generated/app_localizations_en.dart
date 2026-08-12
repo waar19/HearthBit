@@ -102,6 +102,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tooltipSendFile => 'Send a file';
 
   @override
+  String get peerDoesNotSupportTransfers =>
+      'This person uses BitChat; files require HearthBit. Use QR transfer instead.';
+
+  @override
   String get sosCardTitle => 'Send priority alert';
 
   @override
@@ -268,6 +272,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String offerFileError(String error) {
     return 'Could not offer the file: $error';
   }
+
+  @override
+  String get terrPeerDoesNotSupportTransfers =>
+      'The recipient does not support HearthBit file transfers. Use QR transfer instead.';
+
+  @override
+  String get terrOfferExpiredNoHbt =>
+      'The offer expired because the recipient does not support HearthBit file transfers.';
 
   @override
   String get sendByQr => 'Send via QR';
@@ -654,6 +666,43 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get radarPermissionExpired =>
       'Radar permission expired or was revoked.';
+
+  @override
+  String get radarTentativeSignal =>
+      'Tentative signal: verifying that this iPhone is the selected person.';
+
+  @override
+  String get radarSweepStart => 'FIND DIRECTION';
+
+  @override
+  String get radarSweepRestart => 'REPEAT SWEEP';
+
+  @override
+  String get radarSweepInstruction =>
+      'Hold the phone against your chest and turn slowly through one full circle.';
+
+  @override
+  String radarSweepProgress(int percent) {
+    return 'Sweep progress: $percent%';
+  }
+
+  @override
+  String radarSweepResult(int heading) {
+    return 'Estimated signal heading: $heading°';
+  }
+
+  @override
+  String radarSweepConfidence(int percent) {
+    return 'Confidence: $percent%';
+  }
+
+  @override
+  String get radarSweepEstimateWarning =>
+      'This is an RSSI estimate, not a precise direction. Verify it by moving and repeating the sweep.';
+
+  @override
+  String get radarCompassUnavailable =>
+      'This phone has no usable compass sensor. Proximity radar remains available.';
 
   @override
   String get dateToday => 'Today';

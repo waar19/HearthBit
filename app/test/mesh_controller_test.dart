@@ -162,6 +162,7 @@ void main() {
           'nickname': 'Rescate',
           'lastSeen': 1234,
           'secure': true,
+          'supportsTransfers': true,
           'radarAllowedUntil': consentUntil,
           'radarConsentSource': 'temporary',
         },
@@ -173,6 +174,7 @@ void main() {
     expect(controller.nickname, 'Nodo 7');
     expect(controller.peerId, '0102030405060708');
     expect(controller.peers.single.nickname, 'Rescate');
+    expect(controller.peers.single.supportsTransfers, isTrue);
     expect(controller.radarConsentActive, isTrue);
     expect(controller.peers.single.radarAllowed, isTrue);
   });

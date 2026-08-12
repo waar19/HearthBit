@@ -102,6 +102,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get tooltipSendFile => 'Datei senden';
 
   @override
+  String get peerDoesNotSupportTransfers =>
+      'Diese Person verwendet BitChat; Dateien erfordern HearthBit. Nutze stattdessen die QR-Übertragung.';
+
+  @override
   String get sosCardTitle => 'Prioritätsalarm senden';
 
   @override
@@ -268,6 +272,14 @@ class AppLocalizationsDe extends AppLocalizations {
   String offerFileError(String error) {
     return 'Die Datei konnte nicht angeboten werden: $error';
   }
+
+  @override
+  String get terrPeerDoesNotSupportTransfers =>
+      'Der Empfänger unterstützt keine HearthBit-Dateiübertragung. Nutze stattdessen QR.';
+
+  @override
+  String get terrOfferExpiredNoHbt =>
+      'Das Angebot ist abgelaufen, weil der Empfänger keine HearthBit-Dateiübertragung unterstützt.';
 
   @override
   String get sendByQr => 'Per QR senden';
@@ -658,6 +670,43 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get radarPermissionExpired =>
       'Die Radar-Erlaubnis ist abgelaufen oder wurde widerrufen.';
+
+  @override
+  String get radarTentativeSignal =>
+      'Vorläufiges Signal: Es wird geprüft, ob dieses iPhone die ausgewählte Person ist.';
+
+  @override
+  String get radarSweepStart => 'RICHTUNG SUCHEN';
+
+  @override
+  String get radarSweepRestart => 'SUCHE WIEDERHOLEN';
+
+  @override
+  String get radarSweepInstruction =>
+      'Halte das Telefon an die Brust und drehe dich langsam einmal vollständig im Kreis.';
+
+  @override
+  String radarSweepProgress(int percent) {
+    return 'Fortschritt der Suche: $percent%';
+  }
+
+  @override
+  String radarSweepResult(int heading) {
+    return 'Geschätzte Signalrichtung: $heading°';
+  }
+
+  @override
+  String radarSweepConfidence(int percent) {
+    return 'Konfidenz: $percent%';
+  }
+
+  @override
+  String get radarSweepEstimateWarning =>
+      'Dies ist eine RSSI-Schätzung, keine genaue Richtung. Prüfe sie durch Bewegung und eine erneute Suche.';
+
+  @override
+  String get radarCompassUnavailable =>
+      'Dieses Telefon hat keinen nutzbaren Kompasssensor. Das Näherungsradar bleibt verfügbar.';
 
   @override
   String get dateToday => 'Heute';

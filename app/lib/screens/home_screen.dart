@@ -84,6 +84,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       .length;
 
   Future<void> _sendFileTo(MeshPeer peer) async {
+    if (!peer.supportsTransfers) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.peerDoesNotSupportTransfers),
+          action: SnackBarAction(
+            label: context.l10n.sendByQr,
+            onPressed: _startOpticalSend,
+          ),
+        ),
+      );
+      return;
+    }
     final file = await openFile();
     if (file == null || !mounted) return;
     var path = file.path;
@@ -448,8 +460,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     icon: const Icon(Icons.radar),
                   ),
                   IconButton(
-                    tooltip: context.l10n.tooltipSendFile,
-                    onPressed: () => _sendFileTo(peer),
+                    tooltip: peer.supportsTransfers
+                        ? context.l10n.tooltipSendFile
+                        : context.l10n.peerDoesNotSupportTransfers,
+                    onPressed: canOfferFileToPeer(peer, isOnline: true)
+                        ? () => _sendFileTo(peer)
+                        : null,
                     icon: const Icon(Icons.attach_file),
                   ),
                   Icon(peer.secure ? Icons.lock : Icons.lock_open),
@@ -490,8 +506,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             icon: const Icon(Icons.radar),
           ),
           IconButton(
-            tooltip: context.l10n.tooltipSendFile,
-            onPressed: online ? () => _sendFileTo(peer) : null,
+            tooltip: !online
+                ? context.l10n.peerOffline
+                : peer.supportsTransfers
+                ? context.l10n.tooltipSendFile
+                : context.l10n.peerDoesNotSupportTransfers,
+            onPressed: canOfferFileToPeer(peer, isOnline: online)
+                ? () => _sendFileTo(peer)
+                : null,
             icon: const Icon(Icons.attach_file),
           ),
           Tooltip(

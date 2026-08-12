@@ -55,6 +55,7 @@ internal object MeshProtocol {
         val nickname: String,
         val noisePublicKey: ByteArray,
         val signingPublicKey: ByteArray,
+        val supportsTransfers: Boolean,
     )
 
     data class PrivateMessage(val id: String, val content: String)
@@ -274,6 +275,11 @@ internal object MeshProtocol {
             add(0x05)
             add(0x01)
             add(0x00)
+            // Extensión HearthBit: versión de HBT. BitChat ignora los TLV
+            // desconocidos y continúa procesando el anuncio.
+            add(HBT_CAPABILITY_TLV)
+            add(0x01)
+            add(HBT_VERSION)
         }.map(Int::toByte).toByteArray()
     }
 
@@ -282,6 +288,7 @@ internal object MeshProtocol {
         var nickname: String? = null
         var noiseKey: ByteArray? = null
         var signingKey: ByteArray? = null
+        var supportsTransfers = false
         while (offset + 2 <= payload.size) {
             val type = payload[offset++].toInt() and 0xFF
             val length = payload[offset++].toInt() and 0xFF
@@ -292,10 +299,14 @@ internal object MeshProtocol {
                 0x01 -> nickname = value.toString(Charsets.UTF_8)
                 0x02 -> noiseKey = value
                 0x03 -> signingKey = value
+                HBT_CAPABILITY_TLV -> {
+                    supportsTransfers = value.size == 1 &&
+                        (value[0].toInt() and 0xFF) == HBT_VERSION
+                }
             }
         }
         if (nickname == null || noiseKey?.size != 32 || signingKey?.size != 32) return null
-        Announcement(nickname, noiseKey, signingKey)
+        Announcement(nickname, noiseKey, signingKey, supportsTransfers)
     }.getOrNull()
 
     fun encodePrivateMessage(id: String, content: String): ByteArray {
@@ -418,5 +429,7 @@ internal object MeshProtocol {
 
     private const val COMPRESSION_THRESHOLD = 100
     private const val MAX_PAYLOAD_LENGTH = 10_485_760
+    private const val HBT_CAPABILITY_TLV = 0xF0
+    private const val HBT_VERSION = 0x01
     private val SOS_PREFIX = "SOS|".toByteArray(Charsets.UTF_8)
 }
