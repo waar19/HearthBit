@@ -47,6 +47,22 @@ Escenarios adversos a cubrir en al menos un transporte:
 - SOS enviado durante una transferencia grande: los mensajes deben llegar
   sin demora perceptible.
 
+## Radar de proximidad
+
+Con dos teléfonos y la malla activa:
+
+1. Desde una alerta SOS toque «RASTREAR» (o el icono de radar en Cercanos) y
+   confirme que aparecen lecturas en menos de 5 s.
+2. Camine acercándose y alejándose en línea recta (10-30 m): la tendencia
+   debe cambiar a «te estás acercando» / «la señal se está debilitando» en
+   pocos segundos, sin parpadear con usted quieto.
+3. Verifique la vibración: más rápida e intensa al acercarse.
+4. Apague el Bluetooth del objetivo: en ~5 s debe aparecer «señal perdida».
+5. Repita con el teléfono objetivo en un bolsillo o bajo una caja (atenúa la
+   señal): las bandas de distancia deben degradarse, nunca congelar la UI.
+6. Combinaciones requeridas: Android→Android, Android→iPhone (objetivo iOS en
+   primer plano y en segundo plano), iPhone→Android.
+
 ## Evidencia a registrar
 
 - Modelos y versiones de Android/iOS.

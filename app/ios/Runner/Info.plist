@@ -33,11 +33,14 @@
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>HearthBit anuncia este teléfono como un nodo de la malla de emergencia.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>La ubicación solo se adjunta cuando decides enviar una alerta SOS.</string>
+	<string>La ubicación se adjunta a tus alertas SOS para que los rescatistas puedan encontrarte.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Con acceso permanente, el modo rescate reenvía tu posición GPS por la malla aunque la pantalla esté apagada, para ayudar a los rescatistas a ubicarte.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>
 		<string>bluetooth-peripheral</string>
+		<string>location</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>

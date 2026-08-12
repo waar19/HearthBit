@@ -70,6 +70,26 @@ class MeshMessage {
 
   bool get isSos => channel == 'sos' || content.startsWith('SOS|');
 
+  /// Las alertas viajan como 'SOS|descripción|lat|lon' (lat/lon vacíos si no
+  /// hubo GPS). Estos helpers separan las partes para la UI y el radar.
+  String get sosDescription {
+    if (!content.startsWith('SOS|')) return content;
+    final parts = content.split('|');
+    if (parts.length < 4) return parts.skip(1).join('|');
+    return parts.sublist(1, parts.length - 2).join('|');
+  }
+
+  double? get sosLatitude => _sosCoordinate(2);
+
+  double? get sosLongitude => _sosCoordinate(1);
+
+  double? _sosCoordinate(int fromEnd) {
+    if (!content.startsWith('SOS|')) return null;
+    final parts = content.split('|');
+    if (parts.length < 4) return null;
+    return double.tryParse(parts[parts.length - fromEnd]);
+  }
+
   Map<String, Object?> toDatabase() => {
     'id': id,
     'sender': sender,

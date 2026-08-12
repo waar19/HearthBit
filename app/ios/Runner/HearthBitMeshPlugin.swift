@@ -1,4 +1,5 @@
 import CoreBluetooth
+import CoreLocation
 import CryptoKit
 import Flutter
 import Foundation
@@ -23,6 +24,15 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var notifyQueue: [Data] = []
   private var eventSink: FlutterEventSink?
   private var running = false
+  private lazy var locationManager = CLLocationManager()
+
+  /// Identificador de periférico -> peerId de vecinos directos. Se alimenta
+  /// con el service data del anuncio (teléfonos Android) y con anuncios de
+  /// malla recibidos con TTL intacto, que solo pueden venir del emisor.
+  private var peripheralPeers: [UUID: String] = [:]
+  /// Peer objetivo del radar de rescate; nil cuando el radar está apagado.
+  private var radarPeerID: String?
+  private var radarTimer: Timer?
 
   static func register(with messenger: FlutterBinaryMessenger) -> HearthBitMeshPlugin {
     let plugin = HearthBitMeshPlugin()
@@ -164,12 +174,47 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         sessions.removeAll()
         result(nil)
         emit(["type": "wiped"])
+      case "getPowerStatus":
+        result([
+          // iOS no tiene equivalente a Doze configurable por app.
+          "ignoringBatteryOptimizations": true,
+          "lowPowerMode": ProcessInfo.processInfo.isLowPowerModeEnabled,
+          "backgroundLocation": locationAuthorization() == .authorizedAlways,
+        ])
+      case "requestBackgroundLocation":
+        // Pide «Permitir siempre»; el sistema decide cuándo mostrar el
+        // diálogo. Flutter refresca el estado al volver a primer plano.
+        if locationAuthorization() == .notDetermined {
+          locationManager.requestWhenInUseAuthorization()
+        }
+        locationManager.requestAlwaysAuthorization()
+        result(locationAuthorization() == .authorizedAlways)
+      case "requestDisableBatteryOptimizations":
+        // No aplica en iOS; el consejo equivalente es no forzar el cierre de
+        // la app y desactivar el Modo de bajo consumo.
+        result(true)
+      case "startRadar":
+        guard let peerID = arguments["peerId"] as? String else {
+          throw IOSMeshError.peerUnavailable
+        }
+        startRadar(peerID: peerID.lowercased())
+        result(nil)
+      case "stopRadar":
+        stopRadar()
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
     } catch {
       result(FlutterError(code: "mesh_error", message: error.localizedDescription, details: nil))
     }
+  }
+
+  private func locationAuthorization() -> CLAuthorizationStatus {
+    if #available(iOS 14.0, *) {
+      return locationManager.authorizationStatus
+    }
+    return CLLocationManager.authorizationStatus()
   }
 
   private func start() {
@@ -196,14 +241,59 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
 
   private func stopInternal(notify: Bool) {
     running = false
+    stopRadar()
     central?.stopScan()
     connectedPeripherals.values.forEach { central?.cancelPeripheralConnection($0) }
     connectedPeripherals.removeAll()
     remoteCharacteristics.removeAll()
+    peripheralPeers.removeAll()
     peripheralManager?.stopAdvertising()
     peripheralManager?.removeAllServices()
     sessions.removeAll()
     if notify { emitStatus("stopped") }
+  }
+
+  /// Radar de rescate: emite lecturas RSSI del peer objetivo combinando los
+  /// anuncios captados por el escaneo (con duplicados activados) y lecturas
+  /// periódicas `readRSSI()` sobre periféricos conectados.
+  private func startRadar(peerID: String) {
+    radarPeerID = peerID
+    restartScan()
+    radarTimer?.invalidate()
+    radarTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+      guard let self, let target = self.radarPeerID else { return }
+      for (identifier, peripheral) in self.connectedPeripherals
+      where self.peripheralPeers[identifier] == target && peripheral.state == .connected {
+        peripheral.readRSSI()
+      }
+    }
+  }
+
+  private func stopRadar() {
+    radarPeerID = nil
+    radarTimer?.invalidate()
+    radarTimer = nil
+    restartScan()
+  }
+
+  /// Reinicia el escaneo BLE; con radar activo se permiten duplicados para
+  /// recibir un RSSI por cada anuncio (solo funciona en primer plano).
+  private func restartScan() {
+    guard running, let central, central.state == .poweredOn else { return }
+    central.stopScan()
+    central.scanForPeripherals(
+      withServices: [Self.serviceUUID],
+      options: [CBCentralManagerScanOptionAllowDuplicatesKey: radarPeerID != nil]
+    )
+  }
+
+  private func emitRssi(peerID: String, rssi: Int) {
+    emit([
+      "type": "rssi",
+      "peerId": peerID,
+      "rssi": rssi,
+      "at": Int(Date().timeIntervalSince1970 * 1000),
+    ])
   }
 
   @discardableResult
@@ -378,6 +468,16 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
 
   private func receive(_ data: Data, source: UUID?) {
     guard let packet = IOSMeshProtocol.decode(data) else { return }
+    // Un anuncio con TTL intacto solo puede venir del emisor original: eso
+    // identifica al vecino directo detrás de este periférico (clave para el
+    // radar, ya que iOS no incluye el peerId en su anuncio BLE).
+    if packet.type == IOSMeshProtocol.announce,
+       packet.ttl == IOSMeshProtocol.defaultTTL,
+       let source,
+       connectedPeripherals[source] != nil,
+       packet.senderID.hex != identity.peerIDHex {
+      peripheralPeers[source] = packet.senderID.hex
+    }
     let fingerprint = IOSMeshProtocol.fingerprint(packet)
     if seen[fingerprint] != nil { return }
     seen[fingerprint] = Date()
@@ -563,7 +663,7 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
     guard running, central.state == .poweredOn else { return }
     central.scanForPeripherals(
       withServices: [Self.serviceUUID],
-      options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+      options: [CBCentralManagerScanOptionAllowDuplicatesKey: radarPeerID != nil]
     )
   }
 
@@ -573,6 +673,17 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
     advertisementData: [String: Any],
     rssi RSSI: NSNumber
   ) {
+    if let serviceData = advertisementData[CBAdvertisementDataServiceDataKey] as? [CBUUID: Data],
+       let advertisedPeer = serviceData[Self.serviceUUID],
+       advertisedPeer.count >= 8 {
+      peripheralPeers[peripheral.identifier] = advertisedPeer.prefix(8).hex
+    }
+    // 127 significa «RSSI no disponible» según CoreBluetooth.
+    if let target = radarPeerID,
+       peripheralPeers[peripheral.identifier] == target,
+       RSSI.intValue != 127 {
+      emitRssi(peerID: target, rssi: RSSI.intValue)
+    }
     guard connectedPeripherals[peripheral.identifier] == nil else { return }
     connectedPeripherals[peripheral.identifier] = peripheral
     peripheral.delegate = self
@@ -628,6 +739,16 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
   ) {
     guard let value = characteristic.value else { return }
     receive(value, source: peripheral.identifier)
+  }
+
+  func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
+    guard
+      error == nil,
+      let target = radarPeerID,
+      peripheralPeers[peripheral.identifier] == target,
+      RSSI.intValue != 127
+    else { return }
+    emitRssi(peerID: target, rssi: RSSI.intValue)
   }
 }
 

@@ -1,13 +1,18 @@
 package com.hearthbit.app.mesh
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.hearthbit.app.MainActivity
 import com.hearthbit.app.R
 
@@ -15,7 +20,32 @@ class MeshForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
-        startForeground(NOTIFICATION_ID, notification())
+        if (Build.VERSION.SDK_INT >= 29) {
+            startForeground(NOTIFICATION_ID, notification(), foregroundServiceTypes())
+        } else {
+            startForeground(NOTIFICATION_ID, notification())
+        }
+    }
+
+    /**
+     * El tipo `location` solo puede declararse si el permiso de ubicación ya
+     * está concedido; con él, el SO permite leer GPS con la app en segundo
+     * plano (SOS del modo rescate) mientras el servicio siga vivo.
+     */
+    private fun foregroundServiceTypes(): Int {
+        var types = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+        val fine = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        val coarse = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (fine || coarse) {
+            types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        }
+        return types
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

@@ -38,6 +38,49 @@
 6. Un SOS en la malla frena los transportes de datos durante unos segundos:
    el chat de emergencia siempre tiene prioridad sobre los archivos.
 
+## Modo rescate y energía
+
+1. El **modo rescate** reenvía la alerta SOS con coordenadas GPS frescas cada
+   5 minutos para que los rescatistas sigan la posición. Requiere ubicación
+   «todo el tiempo» (Android) o «siempre» (iOS); la app la solicita en dos
+   pasos como exige cada sistema.
+2. En Android, el servicio en primer plano declara los tipos
+   `connectedDevice|location`, lo que permite leer GPS con la pantalla
+   apagada. La app ofrece el diálogo del sistema para excluirse de la
+   optimización de batería (Doze); sin esa exclusión, Android suspende BLE y
+   GPS.
+3. En iOS no existe exclusión de Doze: la guía integrada recomienda no forzar
+   el cierre de la app y evitar el Modo de bajo consumo, que reduce el BLE en
+   segundo plano. El modo de fondo `location` mantiene viva la app mientras
+   siga la actualización de posición.
+4. La pestaña SOS muestra una lista de verificación (optimización de batería,
+   ubicación permanente, modo de ahorro activo) con acciones directas y
+   consejos de ahorro para prolongar la autonomía durante la emergencia.
+
+## Radar de proximidad (rescatistas)
+
+1. El radar mide la intensidad de señal BLE (RSSI) del dispositivo objetivo,
+   igual que la búsqueda de un AirTag sin banda ultra ancha. Se activa desde
+   una alerta SOS («RASTREAR») o desde la lista de cercanos.
+2. Fuentes de RSSI: en Android, cada anuncio captado por el escaneo más
+   lecturas `readRemoteRssi()` cada segundo sobre la conexión GATT; en iOS,
+   `didDiscover` (con duplicados activados en primer plano) más `readRSSI()`
+   sobre periféricos conectados.
+3. Para asociar dirección/periférico con el peer, Android usa el peerId del
+   scan response; para objetivos iOS (que no anuncian su peerId) ambos lados
+   aprovechan que un anuncio de malla con TTL intacto solo puede venir del
+   vecino directo.
+4. El RSSI crudo es ruidoso: una media móvil exponencial lo suaviza y la
+   tendencia («te estás acercando» / «la señal se está debilitando») compara
+   contra la señal de hace 4 s con histéresis de 2 dB. La distancia se estima
+   con el modelo log-distancia y se muestra siempre como aproximación.
+5. La vibración tipo contador Geiger acelera al acercarse; si no llegan
+   muestras en 5 s el radar declara «señal perdida» y pide volver sobre los
+   pasos. Si el SOS traía GPS, se muestra además la distancia en línea recta
+   desde la posición del rescatista.
+6. Alcance realista: decenas de metros a cielo abierto, mucho menos entre
+   escombros. El radar guía el último tramo; la aproximación inicial es GPS.
+
 ## Límites intencionales
 
 - Los mensajes de texto se limitan a 240 caracteres en la interfaz para caber

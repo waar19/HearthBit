@@ -20,6 +20,8 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelUuid
 import java.util.Collections
 import java.util.UUID
@@ -48,6 +50,14 @@ internal class MeshEngine(
     private val serverSubscribers = ConcurrentHashMap.newKeySet<BluetoothDevice>()
     private val storeForward = StoreForwardCache(context)
 
+    /**
+     * Dirección MAC -> peerId de vecinos directos. Se alimenta con el peerId
+     * del scan response (Android) y con anuncios recibidos con TTL intacto
+     * (un salto), que solo pueden venir del propio emisor.
+     */
+    private val addressToPeer = ConcurrentHashMap<String, String>()
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     private var gattServer: BluetoothGattServer? = null
     private var serverCharacteristic: BluetoothGattCharacteristic? = null
 
@@ -56,6 +66,10 @@ internal class MeshEngine(
 
     @Volatile
     private var advertising = false
+
+    /** Peer objetivo del radar de rescate; null cuando el radar está apagado. */
+    @Volatile
+    private var radarPeerId: String? = null
 
     data class Peer(
         val id: String,
@@ -91,6 +105,8 @@ internal class MeshEngine(
     private fun stopInternal(notify: Boolean) {
         running = false
         advertising = false
+        stopRadar()
+        addressToPeer.clear()
         runCatching { adapter.bluetoothLeScanner?.stopScan(scanCallback) }
         runCatching { adapter.bluetoothLeAdvertiser?.stopAdvertising(advertiseCallback) }
         clientGatts.values.forEach { runCatching { it.close() } }
@@ -222,6 +238,47 @@ internal class MeshEngine(
         emit(mapOf("type" to "wiped"))
     }
 
+    /**
+     * Radar de rescate: emite lecturas RSSI del peer objetivo. Combina dos
+     * fuentes: los anuncios BLE captados por el escaneo (que sigue activo
+     * mientras la malla corre) y lecturas periódicas sobre la conexión GATT
+     * si el vecino está conectado (único camino con iOS en segundo plano).
+     */
+    fun startRadar(peerIdHex: String) {
+        radarPeerId = peerIdHex.lowercase()
+        mainHandler.removeCallbacks(radarReadTask)
+        mainHandler.post(radarReadTask)
+    }
+
+    fun stopRadar() {
+        radarPeerId = null
+        mainHandler.removeCallbacks(radarReadTask)
+    }
+
+    private val radarReadTask = object : Runnable {
+        @SuppressLint("MissingPermission")
+        override fun run() {
+            val target = radarPeerId ?: return
+            clientGatts.forEach { (address, gatt) ->
+                if (addressToPeer[address] == target) {
+                    runCatching { gatt.readRemoteRssi() }
+                }
+            }
+            mainHandler.postDelayed(this, RADAR_READ_INTERVAL_MS)
+        }
+    }
+
+    private fun emitRssi(peerIdHex: String, rssi: Int) {
+        emit(
+            mapOf(
+                "type" to "rssi",
+                "peerId" to peerIdHex,
+                "rssi" to rssi,
+                "at" to System.currentTimeMillis(),
+            ),
+        )
+    }
+
     private fun sendAnnouncement() {
         if (!running) return
         val payload = MeshProtocol.encodeAnnouncement(
@@ -338,9 +395,18 @@ internal class MeshEngine(
 
     private fun receive(bytes: ByteArray, sourceAddress: String) {
         val packet = MeshProtocol.decode(bytes) ?: return
+        val senderHex = MeshProtocol.hex(packet.senderId)
+        // Un anuncio con TTL intacto solo puede venir del emisor original:
+        // eso identifica al vecino directo detrás de esta dirección (clave
+        // para el radar con iPhones, que no anuncian su peerId por BLE).
+        if (packet.type == MeshProtocol.TYPE_ANNOUNCE &&
+            packet.ttl == MeshProtocol.TTL &&
+            senderHex != peerId
+        ) {
+            addressToPeer[sourceAddress] = senderHex
+        }
         val fingerprint = MeshProtocol.fingerprint(packet)
         if (seen.put(fingerprint, System.currentTimeMillis()) != null) return
-        val senderHex = MeshProtocol.hex(packet.senderId)
         if (senderHex == peerId) return
 
         val isForUs = packet.recipientId == null ||
@@ -548,6 +614,13 @@ internal class MeshEngine(
                 ?.copyOfRange(0, 8)
             if (advertisedPeer?.contentEquals(identity.peerId) == true) return
             val address = result.device.address
+            if (advertisedPeer != null) {
+                addressToPeer[address] = MeshProtocol.hex(advertisedPeer)
+            }
+            val radarTarget = radarPeerId
+            if (radarTarget != null && addressToPeer[address] == radarTarget) {
+                emitRssi(radarTarget, result.rssi)
+            }
             if (clientGatts.containsKey(address)) return
             clientGatts[address] = result.device.connectGatt(
                 context,
@@ -612,6 +685,14 @@ internal class MeshEngine(
             value: ByteArray,
         ) {
             receive(value, gatt.device.address)
+        }
+
+        override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
+            if (status != BluetoothGatt.GATT_SUCCESS) return
+            val target = radarPeerId ?: return
+            if (addressToPeer[gatt.device.address] == target) {
+                emitRssi(target, rssi)
+            }
         }
     }
 
@@ -711,6 +792,9 @@ internal class MeshEngine(
     private companion object {
         /** Techo del plano de control BLE; los blobs van por otros transportes. */
         const val MAX_TRANSFER_FRAME = 2_048
+
+        /** Cadencia de lectura RSSI sobre GATT conectado en modo radar. */
+        const val RADAR_READ_INTERVAL_MS = 1_000L
 
         val SERVICE_UUID: UUID =
             UUID.fromString("F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C")

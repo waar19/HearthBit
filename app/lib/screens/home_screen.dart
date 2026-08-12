@@ -11,6 +11,8 @@ import '../models/transfer_models.dart';
 import '../services/photo_profile.dart';
 import 'optical_receive_screen.dart';
 import 'optical_send_screen.dart';
+import 'radar_screen.dart';
+import 'rescue_power_cards.dart';
 import 'transfers_tab.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -27,10 +29,24 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   int _tab = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Al volver de Ajustes (batería/ubicación) se refresca el estado real.
+    if (state == AppLifecycleState.resumed) {
+      widget.controller.refreshPowerStatus();
+    }
+  }
 
   int get _pendingOffers => widget.transfers.transfers
       .where(
@@ -115,6 +131,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _openRadar({
+    required String peerId,
+    required String nickname,
+    double? latitude,
+    double? longitude,
+  }) {
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => RadarScreen(
+          peerId: peerId,
+          nickname: nickname,
+          latitude: latitude,
+          longitude: longitude,
+        ),
+      ),
+    );
+  }
+
   Future<bool?> _askCompressPhoto(int size) {
     return showDialog<bool>(
       context: context,
@@ -140,6 +174,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -299,6 +334,14 @@ class _HomeScreenState extends State<HomeScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
+                tooltip: 'Radar de proximidad',
+                onPressed: () => _openRadar(
+                  peerId: peer.id,
+                  nickname: peer.nickname,
+                ),
+                icon: const Icon(Icons.radar),
+              ),
+              IconButton(
                 tooltip: 'Enviar archivo',
                 onPressed: () => _sendFileTo(peer),
                 icon: const Icon(Icons.attach_file),
@@ -372,6 +415,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+        const SizedBox(height: 12),
+        RescueModeCard(controller: controller),
+        const SizedBox(height: 12),
+        PowerSavingCard(controller: controller),
         const SizedBox(height: 16),
         Text(
           'Alertas recibidas',
@@ -386,7 +433,26 @@ class _HomeScreenState extends State<HomeScreen> {
               child: ListTile(
                 leading: const Icon(Icons.crisis_alert),
                 title: Text(message.sender),
-                subtitle: Text(message.content.replaceFirst('SOS|', '')),
+                subtitle: Text(
+                  message.sosLatitude != null
+                      ? '${message.sosDescription}\n'
+                            'GPS ${message.sosLatitude!.toStringAsFixed(5)}, '
+                            '${message.sosLongitude!.toStringAsFixed(5)}'
+                      : message.sosDescription,
+                ),
+                isThreeLine: message.sosLatitude != null,
+                trailing: message.isMine
+                    ? null
+                    : FilledButton.tonalIcon(
+                        onPressed: () => _openRadar(
+                          peerId: message.senderPeerId,
+                          nickname: message.sender,
+                          latitude: message.sosLatitude,
+                          longitude: message.sosLongitude,
+                        ),
+                        icon: const Icon(Icons.radar, size: 18),
+                        label: const Text('RASTREAR'),
+                      ),
               ),
             ),
           ),

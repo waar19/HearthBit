@@ -21,6 +21,13 @@ extremo (X25519 + XChaCha20-Poly1305) con verificación SHA-256, sea cual sea
 el transporte. En iOS, Nearby y Wi-Fi Aware aún no están disponibles: se usan
 LAN, BLE u óptico.
 
+Para los equipos de rescate incluye un **radar de proximidad** estilo AirTag:
+desde cualquier alerta SOS se rastrea la señal Bluetooth de la víctima con
+indicación de cercanía, tendencia («te estás acercando» / «la señal se está
+debilitando»), vibración que acelera al acercarse y distancia GPS en línea
+recta si la alerta traía coordenadas. El **modo rescate** de la víctima
+reenvía su SOS con GPS fresco cada 5 minutos.
+
 ## Componentes
 
 - `app/`: aplicación Flutter para Android e iOS.

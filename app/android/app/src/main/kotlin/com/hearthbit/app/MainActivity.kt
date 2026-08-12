@@ -3,8 +3,11 @@ package com.hearthbit.app
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.net.wifi.aware.WifiAwareManager
 import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.core.content.ContextCompat
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
@@ -19,6 +22,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var permissionResult: MethodChannel.Result? = null
+    private var backgroundLocationResult: MethodChannel.Result? = null
     private var transferEvents: EventChannel.EventSink? = null
     private val nearbyTransport by lazy {
         NearbyTransport(applicationContext) { event ->
@@ -114,6 +118,30 @@ class MainActivity : FlutterActivity() {
                     MeshRuntime.destroy()
                     null
                 }
+                "startRadar" -> runMethod(result) {
+                    MeshRuntime.engine(this).startRadar(
+                        requireNotNull(call.argument<String>("peerId")),
+                    )
+                    null
+                }
+                "stopRadar" -> runMethod(result) {
+                    MeshRuntime.engine(this).stopRadar()
+                    null
+                }
+                "getPowerStatus" -> {
+                    val power = getSystemService(PowerManager::class.java)
+                    result.success(
+                        mapOf(
+                            "ignoringBatteryOptimizations" to
+                                (power?.isIgnoringBatteryOptimizations(packageName) == true),
+                            "lowPowerMode" to (power?.isPowerSaveMode == true),
+                            "backgroundLocation" to backgroundLocationGranted(),
+                        ),
+                    )
+                }
+                "requestDisableBatteryOptimizations" ->
+                    requestDisableBatteryOptimizations(result)
+                "requestBackgroundLocation" -> requestBackgroundLocation(result)
                 else -> result.notImplemented()
             }
         }
@@ -208,6 +236,71 @@ class MainActivity : FlutterActivity() {
         return manager?.isAvailable == true
     }
 
+    /**
+     * Muestra el diálogo del sistema para excluir a HearthBit de la
+     * optimización de batería (Doze). Sin esta exclusión, Android suspende el
+     * BLE y el GPS en segundo plano justo cuando más se necesitan.
+     */
+    private fun requestDisableBatteryOptimizations(result: MethodChannel.Result) {
+        val power = getSystemService(PowerManager::class.java)
+        if (power?.isIgnoringBatteryOptimizations(packageName) == true) {
+            result.success(true)
+            return
+        }
+        runCatching {
+            startActivity(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                    .setData(Uri.parse("package:$packageName")),
+            )
+        }.recoverCatching {
+            // Algunos fabricantes bloquean el diálogo directo; se abre la
+            // lista general para que la persona busque HearthBit.
+            startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        }
+        // El diálogo es asíncrono: Flutter refresca el estado al volver.
+        result.success(false)
+    }
+
+    private fun fineOrCoarseLocationGranted(): Boolean =
+        ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
+
+    private fun backgroundLocationGranted(): Boolean =
+        if (Build.VERSION.SDK_INT < 29) {
+            fineOrCoarseLocationGranted()
+        } else {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+
+    /**
+     * Pide «Permitir todo el tiempo». Requiere que el permiso de primer plano
+     * ya esté concedido (Android lo exige en dos pasos desde API 30).
+     */
+    private fun requestBackgroundLocation(result: MethodChannel.Result) {
+        if (backgroundLocationGranted()) {
+            result.success(true)
+            return
+        }
+        if (!fineOrCoarseLocationGranted()) {
+            result.success(false)
+            return
+        }
+        backgroundLocationResult = result
+        requestPermissions(
+            arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION),
+            BACKGROUND_LOCATION_REQUEST,
+        )
+    }
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -219,6 +312,10 @@ class MainActivity : FlutterActivity() {
                 grantResults.all { it == PackageManager.PERMISSION_GRANTED }
             permissionResult?.success(granted)
             permissionResult = null
+        }
+        if (requestCode == BACKGROUND_LOCATION_REQUEST) {
+            backgroundLocationResult?.success(backgroundLocationGranted())
+            backgroundLocationResult = null
         }
     }
 
@@ -264,5 +361,6 @@ class MainActivity : FlutterActivity() {
         const val TRANSFER_METHOD_CHANNEL = "com.hearthbit.transfer/methods"
         const val TRANSFER_EVENT_CHANNEL = "com.hearthbit.transfer/events"
         const val PERMISSION_REQUEST = 7402
+        const val BACKGROUND_LOCATION_REQUEST = 7403
     }
 }

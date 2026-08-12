@@ -12,6 +12,11 @@ class MeshController extends ChangeNotifier {
     : _platform = platform ?? MeshPlatformService(),
       _repository = repository ?? MessageRepository();
 
+  /// Intervalo entre reenvíos de SOS con GPS fresco en modo rescate: lo
+  /// bastante frecuente para seguir a una persona que se mueve, lo bastante
+  /// espaciado para no agotar batería ni saturar la malla.
+  static const Duration rescueInterval = Duration(minutes: 5);
+
   final MeshPlatformService _platform;
   final MessageRepository _repository;
   final List<MeshMessage> _messages = [];
@@ -23,6 +28,17 @@ class MeshController extends ChangeNotifier {
   String peerId = '';
   String? lastError;
   bool supportsBackgroundRelay = false;
+
+  // Modo rescate: reenvía el SOS con ubicación actualizada periódicamente.
+  bool rescueMode = false;
+  DateTime? lastRescuePing;
+  Timer? _rescueTimer;
+  String _rescueDescription = 'Necesito ayuda';
+
+  // Estado de energía/ubicación reportado por el sistema.
+  bool ignoringBatteryOptimizations = true;
+  bool lowPowerMode = false;
+  bool backgroundLocationGranted = false;
 
   List<MeshMessage> get messages => List.unmodifiable(_messages);
   List<MeshPeer> get peers => List.unmodifiable(_peers);
@@ -40,6 +56,86 @@ class MeshController extends ChangeNotifier {
     _subscription = _platform.events.listen(_handleEvent);
     final capabilities = await _platform.getCapabilities();
     supportsBackgroundRelay = capabilities['backgroundRelay'] as bool? ?? false;
+    await refreshPowerStatus();
+    notifyListeners();
+  }
+
+  Future<void> refreshPowerStatus() async {
+    final power = await _platform.getPowerStatus();
+    ignoringBatteryOptimizations =
+        power['ignoringBatteryOptimizations'] as bool? ?? true;
+    lowPowerMode = power['lowPowerMode'] as bool? ?? false;
+    backgroundLocationGranted = power['backgroundLocation'] as bool? ?? false;
+    notifyListeners();
+  }
+
+  /// Abre el diálogo de optimización de batería (Android). El resultado real
+  /// se conoce al volver a la app, con [refreshPowerStatus].
+  Future<void> requestDisableBatteryOptimizations() async {
+    ignoringBatteryOptimizations = await _platform
+        .requestDisableBatteryOptimizations();
+    notifyListeners();
+  }
+
+  /// Solicita ubicación permanente en dos pasos: primero el permiso en
+  /// primer plano (diálogo de geolocator) y luego «todo el tiempo»/«siempre».
+  Future<bool> ensureAlwaysLocation() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        lastError = 'Activa la ubicación del sistema para el modo rescate';
+        notifyListeners();
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        backgroundLocationGranted = false;
+        notifyListeners();
+        return false;
+      }
+    } catch (_) {
+      // Sin plugin de ubicación (tests); se sigue con el paso nativo.
+    }
+    backgroundLocationGranted = await _platform.requestBackgroundLocation();
+    notifyListeners();
+    return backgroundLocationGranted;
+  }
+
+  /// Modo rescate: envía un SOS inmediato y lo reenvía con GPS fresco cada
+  /// [rescueInterval] para que los rescatistas sigan la posición. Requiere
+  /// que la malla y el servicio en primer plano sigan vivos.
+  Future<void> setRescueMode(
+    bool enabled, {
+    String? description,
+    Duration? interval,
+  }) async {
+    if (!enabled) {
+      _rescueTimer?.cancel();
+      _rescueTimer = null;
+      rescueMode = false;
+      notifyListeners();
+      return;
+    }
+    if (description != null && description.trim().isNotEmpty) {
+      _rescueDescription = description.trim();
+    }
+    rescueMode = true;
+    notifyListeners();
+    await ensureAlwaysLocation();
+    await _rescuePing();
+    _rescueTimer?.cancel();
+    _rescueTimer = Timer.periodic(
+      interval ?? rescueInterval,
+      (_) => unawaited(_rescuePing()),
+    );
+  }
+
+  Future<void> _rescuePing() async {
+    if (!rescueMode) return;
+    await sendSos(_rescueDescription);
+    lastRescuePing = DateTime.now();
     notifyListeners();
   }
 
@@ -62,6 +158,7 @@ class MeshController extends ChangeNotifier {
   }
 
   Future<void> stop() async {
+    await setRescueMode(false);
     await _platform.stop();
     status = MeshConnectionStatus.stopped;
     notifyListeners();
@@ -119,6 +216,7 @@ class MeshController extends ChangeNotifier {
   }
 
   Future<void> panicWipe() async {
+    await setRescueMode(false);
     await _platform.panicWipe();
     await _repository.clear();
     _messages.clear();
@@ -182,6 +280,10 @@ class MeshController extends ChangeNotifier {
         _peers.clear();
         status = MeshConnectionStatus.stopped;
         break;
+      case 'rssi':
+        // Lecturas del radar de rescate: las consume RadarScreen directamente
+        // del stream; evitar redibujar toda la app varias veces por segundo.
+        return;
       default:
         break;
     }
@@ -190,6 +292,7 @@ class MeshController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _rescueTimer?.cancel();
     _subscription?.cancel();
     super.dispose();
   }
