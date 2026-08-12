@@ -20,6 +20,7 @@ import android.net.wifi.aware.WifiAwareSession
 import android.os.Handler
 import android.os.HandlerThread
 import androidx.annotation.RequiresApi
+import com.hearthbit.app.R
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
@@ -97,7 +98,10 @@ internal class WifiAwareTransport(
                     }
 
                     override fun onSessionConfigFailed() {
-                        error(transferId, "Wi-Fi Aware rechazó la publicación")
+                        error(
+                            transferId,
+                            context.getString(R.string.error_wifi_aware_publish),
+                        )
                     }
                 },
                 handler,
@@ -139,7 +143,10 @@ internal class WifiAwareTransport(
                     }
 
                     override fun onSessionConfigFailed() {
-                        error(transferId, "Wi-Fi Aware rechazó la suscripción")
+                        error(
+                            transferId,
+                            context.getString(R.string.error_wifi_aware_subscribe),
+                        )
                     }
                 },
                 handler,
@@ -167,7 +174,7 @@ internal class WifiAwareTransport(
     private fun attach(transferId: String, onAttached: (WifiAwareSession) -> Unit) {
         val manager = context.getSystemService(WifiAwareManager::class.java)
         if (manager?.isAvailable != true) {
-            error(transferId, "Wi-Fi Aware no está disponible en este momento")
+            error(transferId, context.getString(R.string.error_wifi_aware_unavailable_now))
             return
         }
         manager.attach(
@@ -182,7 +189,7 @@ internal class WifiAwareTransport(
                 }
 
                 override fun onAttachFailed() {
-                    error(transferId, "No se pudo iniciar la sesión Wi-Fi Aware")
+                    error(transferId, context.getString(R.string.error_wifi_aware_session))
                 }
             },
             handler,
@@ -212,7 +219,10 @@ internal class WifiAwareTransport(
 
             override fun onUnavailable() {
                 if (this@WifiAwareTransport.transferId == transferId) {
-                    error(transferId, "El data path Wi-Fi Aware no se estableció")
+                    error(
+                        transferId,
+                        context.getString(R.string.error_wifi_aware_datapath),
+                    )
                 }
             }
         }
@@ -249,7 +259,13 @@ internal class WifiAwareTransport(
                 emit(mapOf("type" to "wifiAwareDone", "transferId" to transferId))
             }.onFailure {
                 if (this.transferId == transferId) {
-                    error(transferId, "Envío Wi-Fi Aware interrumpido: ${it.message}")
+                    error(
+                        transferId,
+                        context.getString(
+                            R.string.error_wifi_aware_send_interrupted,
+                            it.message,
+                        ),
+                    )
                 }
             }
         }
@@ -268,7 +284,7 @@ internal class WifiAwareTransport(
                     .use { socket ->
                         DataInputStream(socket.getInputStream().buffered()).use { input ->
                             val total = input.readLong()
-                            require(total >= 0) { "Cabecera de tamaño inválida" }
+                            require(total >= 0) { "Invalid size header" }
                             File(destinationPath).outputStream().use { output ->
                                 val buffer = ByteArray(BUFFER_SIZE)
                                 var received = 0L
@@ -276,7 +292,7 @@ internal class WifiAwareTransport(
                                     val target =
                                         minOf(buffer.size.toLong(), total - received)
                                     val read = input.read(buffer, 0, target.toInt())
-                                    check(read >= 0) { "Conexión cerrada antes de tiempo" }
+                                    check(read >= 0) { "Connection closed prematurely" }
                                     output.write(buffer, 0, read)
                                     received += read
                                     progress(transferId, received)
@@ -287,7 +303,13 @@ internal class WifiAwareTransport(
                 emit(mapOf("type" to "wifiAwareDone", "transferId" to transferId))
             }.onFailure {
                 if (this.transferId == transferId) {
-                    error(transferId, "Descarga Wi-Fi Aware interrumpida: ${it.message}")
+                    error(
+                        transferId,
+                        context.getString(
+                            R.string.error_wifi_aware_receive_interrupted,
+                            it.message,
+                        ),
+                    )
                 }
             }
         }

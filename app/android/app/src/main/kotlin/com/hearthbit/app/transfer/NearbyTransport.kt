@@ -2,6 +2,7 @@ package com.hearthbit.app.transfer
 
 import android.content.Context
 import com.google.android.gms.nearby.Nearby
+import com.hearthbit.app.R
 import com.google.android.gms.nearby.connection.AdvertisingOptions
 import com.google.android.gms.nearby.connection.ConnectionInfo
 import com.google.android.gms.nearby.connection.ConnectionLifecycleCallback
@@ -54,7 +55,9 @@ internal class NearbyTransport(
             .setStrategy(Strategy.P2P_POINT_TO_POINT)
             .build()
         client.startAdvertising(transferId, SERVICE_ID, connectionCallback, options)
-            .addOnFailureListener { error(transferId, "No se pudo anunciar Nearby: ${it.message}") }
+            .addOnFailureListener {
+                error(transferId, context.getString(R.string.error_nearby_advertise, it.message))
+            }
     }
 
     fun receiveFile(transferId: String, destination: String) {
@@ -66,7 +69,9 @@ internal class NearbyTransport(
             .setStrategy(Strategy.P2P_POINT_TO_POINT)
             .build()
         client.startDiscovery(SERVICE_ID, discoveryCallback, options)
-            .addOnFailureListener { error(transferId, "No se pudo descubrir Nearby: ${it.message}") }
+            .addOnFailureListener {
+                error(transferId, context.getString(R.string.error_nearby_discover, it.message))
+            }
     }
 
     fun stop() {
@@ -92,7 +97,9 @@ internal class NearbyTransport(
             val id = transferId ?: return
             if (info.endpointName != id) return
             client.requestConnection(id, endpointId, connectionCallback)
-                .addOnFailureListener { error(id, "Conexión Nearby rechazada: ${it.message}") }
+                .addOnFailureListener {
+                    error(id, context.getString(R.string.error_nearby_rejected, it.message))
+                }
         }
 
         override fun onEndpointLost(endpointId: String) {}
@@ -111,7 +118,13 @@ internal class NearbyTransport(
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
             val id = transferId ?: return
             if (result.status.statusCode != ConnectionsStatusCodes.STATUS_OK) {
-                error(id, "Nearby no conectó (${result.status.statusCode})")
+                error(
+                    id,
+                    context.getString(
+                        R.string.error_nearby_not_connected,
+                        result.status.statusCode,
+                    ),
+                )
                 return
             }
             connectedEndpoint = endpointId
@@ -119,7 +132,9 @@ internal class NearbyTransport(
                 val path = sourcePath ?: return
                 runCatching {
                     client.sendPayload(endpointId, Payload.fromFile(File(path)))
-                }.onFailure { error(id, "No se pudo enviar por Nearby: ${it.message}") }
+                }.onFailure {
+                    error(id, context.getString(R.string.error_nearby_send, it.message))
+                }
             }
         }
 
@@ -167,12 +182,15 @@ internal class NearbyTransport(
                     }.onSuccess {
                         emit(mapOf("type" to "nearbyDone", "transferId" to id))
                     }.onFailure {
-                        error(id, "No se pudo guardar el archivo Nearby: ${it.message}")
+                        error(id, context.getString(R.string.error_nearby_save, it.message))
                     }
                 }
                 PayloadTransferUpdate.Status.FAILURE,
                 PayloadTransferUpdate.Status.CANCELED,
-                -> error(id, "Transferencia Nearby interrumpida (${update.status})")
+                -> error(
+                    id,
+                    context.getString(R.string.error_nearby_interrupted, update.status),
+                )
                 else -> {}
             }
         }

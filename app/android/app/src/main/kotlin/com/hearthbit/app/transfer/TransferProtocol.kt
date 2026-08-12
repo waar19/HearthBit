@@ -55,7 +55,7 @@ internal class TransferFrame(
         output.write(type)
         for (tag in tags.keys.sorted()) {
             val value = tags.getValue(tag)
-            require(value.size <= 0xFFFF) { "TLV $tag excede 65535 bytes" }
+            require(value.size <= 0xFFFF) { "TLV $tag exceeds 65535 bytes" }
             output.write(tag)
             output.write(value.size ushr 8)
             output.write(value.size and 0xFF)

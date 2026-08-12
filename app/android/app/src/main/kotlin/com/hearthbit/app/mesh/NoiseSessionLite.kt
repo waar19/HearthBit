@@ -36,7 +36,7 @@ internal class NoiseSessionLite(
                 completeIfReady()
                 null
             }
-            HandshakeState.FAILED -> error("Noise XX rechazó el handshake")
+            HandshakeState.FAILED -> error("Noise XX rejected the handshake")
             else -> null
         }
     }
@@ -73,7 +73,7 @@ internal class NoiseSessionLite(
                 ((input[1].toLong() and 0xFF) shl 16) or
                 ((input[2].toLong() and 0xFF) shl 8) or
                 (input[3].toLong() and 0xFF)
-        check(receivedNonces.add(nonce)) { "Nonce Noise repetido" }
+        check(receivedNonces.add(nonce)) { "Repeated Noise nonce" }
         while (receivedNonces.size > 1024) {
             receivedNonces.remove(receivedNonces.first())
         }
@@ -127,7 +127,7 @@ internal class NoiseSessionLite(
         val remotePublic = ByteArray(32)
         remoteDh.getPublicKey(remotePublic, 0)
         check(MeshProtocol.peerIdFromNoiseKey(remotePublic).contentEquals(claimedPeerId)) {
-            "La identidad Noise no coincide con el peer anunciado"
+            "Noise identity does not match the announced peer"
         }
         val pair = state.split()
         sendCipher = pair.sender

@@ -70,14 +70,14 @@ class LanSender {
     final received = await reader.read(16);
     if (!_constantTimeEquals(received, token)) {
       socket.destroy();
-      throw const SocketException('Token LAN inválido');
+      throw const SocketException('Invalid LAN token');
     }
     final bitmapLength = ByteData.sublistView(
       await reader.read(4),
     ).getUint32(0);
     if (bitmapLength > 1 << 20) {
       socket.destroy();
-      throw const SocketException('Bitmap LAN demasiado grande');
+      throw const SocketException('LAN bitmap too large');
     }
     final fileSize = await sourceFile.length();
     final chunkCount = (fileSize + chunkSize - 1) ~/ chunkSize;
@@ -177,7 +177,7 @@ class LanReceiver {
             await reader.read(4),
           ).getUint32(0);
           if (index >= bitmap.length || length > chunkSize + 64) {
-            throw const SocketException('Chunk LAN fuera de rango');
+            throw const SocketException('LAN chunk out of range');
           }
           final encrypted = await reader.read(length);
           final plain = await cipher.decryptChunk(index, encrypted);
@@ -211,7 +211,7 @@ Future<String> _localIpv4() async {
       if (!address.isLoopback) return address.address;
     }
   }
-  throw const SocketException('Sin dirección IPv4 en la red local');
+  throw const SocketException('No IPv4 address on the local network');
 }
 
 bool _constantTimeEquals(List<int> a, List<int> b) {
@@ -285,7 +285,7 @@ class _SocketReader {
       _pending = null;
       _subscription.cancel();
       pending.completeError(
-        _pendingError ?? const SocketException('Conexión LAN cerrada'),
+        _pendingError ?? const SocketException('LAN connection closed'),
       );
     }
   }

@@ -230,7 +230,7 @@ class FountainDecoder {
 
   Uint8List assemble(int fileSize) {
     if (!isComplete) {
-      throw StateError('Faltan ${chunkCount - _decodedCount} chunks');
+      throw StateError('${chunkCount - _decodedCount} chunks missing');
     }
     final output = Uint8List(fileSize);
     for (var i = 0; i < chunkCount; i++) {

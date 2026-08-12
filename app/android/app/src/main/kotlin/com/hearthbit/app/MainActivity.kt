@@ -187,7 +187,9 @@ class MainActivity : FlutterActivity() {
                     null
                 }
                 "wifiAwareSendFile" -> runMethod(result) {
-                    requireNotNull(wifiAwareTransport) { "Wi-Fi Aware no soportado" }
+                    requireNotNull(wifiAwareTransport) {
+                        getString(R.string.error_wifi_aware_unsupported)
+                    }
                         .sendFile(
                             requireNotNull(call.argument<String>("transferId")),
                             requireNotNull(call.argument<String>("filePath")),
@@ -195,7 +197,9 @@ class MainActivity : FlutterActivity() {
                     null
                 }
                 "wifiAwareReceiveFile" -> runMethod(result) {
-                    requireNotNull(wifiAwareTransport) { "Wi-Fi Aware no soportado" }
+                    requireNotNull(wifiAwareTransport) {
+                        getString(R.string.error_wifi_aware_unsupported)
+                    }
                         .receiveFile(
                             requireNotNull(call.argument<String>("transferId")),
                             requireNotNull(call.argument<String>("destinationPath")),
@@ -351,7 +355,11 @@ class MainActivity : FlutterActivity() {
         runCatching(block)
             .onSuccess(result::success)
             .onFailure {
-                result.error("mesh_error", it.message ?: "Error de malla", null)
+                result.error(
+                    "mesh_error",
+                    it.message ?: getString(R.string.error_mesh_generic),
+                    null,
+                )
             }
     }
 

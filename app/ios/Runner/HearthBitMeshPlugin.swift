@@ -63,7 +63,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         result(
           FlutterError(
             code: "nearby_unavailable",
-            message: "Nearby Connections no está disponible en iOS",
+            message: HearthBitL10n.string("nearby_unavailable"),
             details: nil
           )
         )
@@ -71,7 +71,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         result(
           FlutterError(
             code: "wifi_aware_unavailable",
-            message: "Wi-Fi Aware no está disponible en esta versión de iOS",
+            message: HearthBitL10n.string("wifi_aware_unavailable"),
             details: nil
           )
         )
@@ -128,7 +128,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           )
         )
       case "sendSos":
-        let description = arguments["content"] as? String ?? "Necesito ayuda"
+        let description =
+          arguments["content"] as? String ?? HearthBitL10n.string("sos_default")
         let latitude = arguments["latitude"] as? Double
         let longitude = arguments["longitude"] as? Double
         let location = latitude != nil && longitude != nil
@@ -571,7 +572,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       }
     } catch {
       sessions.removeValue(forKey: senderID)
-      emitError("Un canal privado fue rechazado por identidad inválida")
+      emitError(HearthBitL10n.string("identity_rejected"))
     }
   }
 
@@ -757,7 +758,7 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
     guard running else { return }
     guard peripheral.state == .poweredOn else {
       if peripheral.state == .unsupported || peripheral.state == .unauthorized {
-        emitError("Este dispositivo no puede anunciarse por BLE; modo solo recepción")
+        emitError(HearthBitL10n.string("no_advertising"))
         emitStatus("degraded")
       }
       return
@@ -785,7 +786,12 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
   ) {
     guard running else { return }
     if let error {
-      emitError("No se pudo anunciar la malla BLE: \(error.localizedDescription)")
+      emitError(
+        String(
+          format: HearthBitL10n.string("advertise_failed"),
+          error.localizedDescription
+        )
+      )
       emitStatus("degraded")
       return
     }
@@ -1127,10 +1133,12 @@ private final class IOSMeshIdentity {
   let peerID: Data
   let peerIDHex: String
 
+  // «SOS-XXXX» como nombre por defecto: neutro y comprensible en cualquier
+  // idioma, clave ahora que la app está localizada en varios idiomas.
   var nickname: String {
     get {
       UserDefaults.standard.string(forKey: "hearthbit.nickname")
-        ?? "Emergencia-\(peerIDHex.suffix(4))"
+        ?? "SOS-\(peerIDHex.suffix(4))"
     }
     set { UserDefaults.standard.set(newValue, forKey: "hearthbit.nickname") }
   }
@@ -1594,12 +1602,118 @@ private enum IOSMeshError: LocalizedError {
 
   var errorDescription: String? {
     switch self {
-    case .notRunning: return "La malla no está activa"
-    case .peerUnavailable: return "El dispositivo ya no está disponible"
-    case .invalidPeerID: return "La identidad del dispositivo no es válida"
-    case .identityMismatch: return "La identidad Noise no coincide"
-    case .noise: return "Falló el canal cifrado Noise"
-    case .invalidPayload: return "La carga de la transferencia no es válida"
+    case .notRunning: return HearthBitL10n.string("not_running")
+    case .peerUnavailable: return HearthBitL10n.string("peer_unavailable")
+    case .invalidPeerID: return HearthBitL10n.string("invalid_peer_id")
+    case .identityMismatch: return HearthBitL10n.string("identity_mismatch")
+    case .noise: return HearthBitL10n.string("noise_failed")
+    case .invalidPayload: return HearthBitL10n.string("invalid_payload")
     }
   }
+}
+
+/// Localización nativa mínima sin tocar el proyecto de Xcode: elige el idioma
+/// preferido del sistema entre los seis que soporta la app y cae a inglés si
+/// no hay coincidencia. Las traducciones espejan los ARB de Flutter.
+enum HearthBitL10n {
+  private static let supported = ["en", "es", "de", "fr", "zh", "ja"]
+
+  static var language: String {
+    for preferred in Locale.preferredLanguages {
+      let code = String(preferred.prefix(2)).lowercased()
+      if supported.contains(code) { return code }
+    }
+    return "en"
+  }
+
+  static func string(_ key: String) -> String {
+    table[language]?[key] ?? table["en"]?[key] ?? key
+  }
+
+  private static let table: [String: [String: String]] = [
+    "en": [
+      "sos_default": "I need help",
+      "nearby_unavailable": "Nearby Connections is not available on iOS",
+      "wifi_aware_unavailable": "Wi-Fi Aware is not available on this iOS version",
+      "identity_rejected": "A private channel was rejected due to an invalid identity",
+      "no_advertising": "This device cannot advertise over BLE; receive-only mode",
+      "advertise_failed": "Could not advertise the BLE mesh: %@",
+      "not_running": "The mesh is not active",
+      "peer_unavailable": "The device is no longer available",
+      "invalid_peer_id": "The device identity is not valid",
+      "identity_mismatch": "The Noise identity does not match",
+      "noise_failed": "The Noise encrypted channel failed",
+      "invalid_payload": "The transfer payload is not valid",
+    ],
+    "es": [
+      "sos_default": "Necesito ayuda",
+      "nearby_unavailable": "Nearby Connections no está disponible en iOS",
+      "wifi_aware_unavailable": "Wi-Fi Aware no está disponible en esta versión de iOS",
+      "identity_rejected": "Un canal privado fue rechazado por identidad inválida",
+      "no_advertising": "Este dispositivo no puede anunciarse por BLE; modo solo recepción",
+      "advertise_failed": "No se pudo anunciar la malla BLE: %@",
+      "not_running": "La malla no está activa",
+      "peer_unavailable": "El dispositivo ya no está disponible",
+      "invalid_peer_id": "La identidad del dispositivo no es válida",
+      "identity_mismatch": "La identidad Noise no coincide",
+      "noise_failed": "Falló el canal cifrado Noise",
+      "invalid_payload": "La carga de la transferencia no es válida",
+    ],
+    "de": [
+      "sos_default": "Ich brauche Hilfe",
+      "nearby_unavailable": "Nearby Connections ist auf iOS nicht verfügbar",
+      "wifi_aware_unavailable": "Wi-Fi Aware ist in dieser iOS-Version nicht verfügbar",
+      "identity_rejected": "Ein privater Kanal wurde wegen ungültiger Identität abgelehnt",
+      "no_advertising": "Dieses Gerät kann sich nicht über BLE ankündigen; Nur-Empfangsmodus",
+      "advertise_failed": "Das BLE-Mesh konnte nicht angekündigt werden: %@",
+      "not_running": "Das Mesh ist nicht aktiv",
+      "peer_unavailable": "Das Gerät ist nicht mehr verfügbar",
+      "invalid_peer_id": "Die Geräteidentität ist ungültig",
+      "identity_mismatch": "Die Noise-Identität stimmt nicht überein",
+      "noise_failed": "Der verschlüsselte Noise-Kanal ist fehlgeschlagen",
+      "invalid_payload": "Die Übertragungsdaten sind ungültig",
+    ],
+    "fr": [
+      "sos_default": "J'ai besoin d'aide",
+      "nearby_unavailable": "Nearby Connections n'est pas disponible sur iOS",
+      "wifi_aware_unavailable": "Wi-Fi Aware n'est pas disponible sur cette version d'iOS",
+      "identity_rejected": "Un canal privé a été rejeté pour identité invalide",
+      "no_advertising": "Cet appareil ne peut pas s'annoncer en BLE ; mode réception seule",
+      "advertise_failed": "Impossible d'annoncer le maillage BLE : %@",
+      "not_running": "Le maillage n'est pas actif",
+      "peer_unavailable": "L'appareil n'est plus disponible",
+      "invalid_peer_id": "L'identité de l'appareil n'est pas valide",
+      "identity_mismatch": "L'identité Noise ne correspond pas",
+      "noise_failed": "Le canal chiffré Noise a échoué",
+      "invalid_payload": "La charge du transfert n'est pas valide",
+    ],
+    "zh": [
+      "sos_default": "我需要帮助",
+      "nearby_unavailable": "Nearby Connections 在 iOS 上不可用",
+      "wifi_aware_unavailable": "此 iOS 版本不支持 Wi-Fi Aware",
+      "identity_rejected": "一个私密通道因身份无效被拒绝",
+      "no_advertising": "此设备无法进行 BLE 广播；仅接收模式",
+      "advertise_failed": "无法广播 BLE 网状网络：%@",
+      "not_running": "网状网络未激活",
+      "peer_unavailable": "该设备已不可用",
+      "invalid_peer_id": "设备身份无效",
+      "identity_mismatch": "Noise 身份不匹配",
+      "noise_failed": "Noise 加密通道失败",
+      "invalid_payload": "传输数据无效",
+    ],
+    "ja": [
+      "sos_default": "助けが必要です",
+      "nearby_unavailable": "Nearby Connections は iOS では利用できません",
+      "wifi_aware_unavailable": "このバージョンの iOS では Wi-Fi Aware を利用できません",
+      "identity_rejected": "無効な ID のためプライベートチャネルが拒否されました",
+      "no_advertising": "この端末は BLE アドバタイズができません。受信専用モードです",
+      "advertise_failed": "BLE メッシュをアドバタイズできませんでした：%@",
+      "not_running": "メッシュが有効ではありません",
+      "peer_unavailable": "端末が利用できなくなりました",
+      "invalid_peer_id": "端末の ID が無効です",
+      "identity_mismatch": "Noise の ID が一致しません",
+      "noise_failed": "Noise 暗号化チャネルに失敗しました",
+      "invalid_payload": "転送ペイロードが無効です",
+    ],
+  ]
 }

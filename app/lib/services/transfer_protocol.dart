@@ -89,7 +89,7 @@ class TransferFrame {
     for (final tag in orderedTags) {
       final value = tags[tag]!;
       if (value.length > 0xFFFF) {
-        throw ArgumentError('TLV $tag excede 65535 bytes');
+        throw ArgumentError('TLV $tag exceeds 65535 bytes');
       }
       builder
         ..addByte(tag)

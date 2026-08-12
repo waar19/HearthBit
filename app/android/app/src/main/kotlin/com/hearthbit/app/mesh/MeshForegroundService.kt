@@ -57,7 +57,10 @@ class MeshForegroundService : Service() {
         }
         runCatching { MeshRuntime.engine(this).start() }.onFailure {
             MeshRuntime.eventListener?.invoke(
-                mapOf("type" to "error", "message" to (it.message ?: "No se pudo iniciar BLE")),
+                mapOf(
+                    "type" to "error",
+                    "message" to (it.message ?: getString(R.string.error_ble_start)),
+                ),
             )
             MeshRuntime.eventListener?.invoke(
                 mapOf("type" to "status", "status" to "error"),
@@ -77,10 +80,10 @@ class MeshForegroundService : Service() {
     private fun createChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Malla de emergencia",
+            getString(R.string.notification_channel_name),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "Mantiene la conexión Bluetooth activa durante una emergencia"
+            description = getString(R.string.notification_channel_description)
         }
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
@@ -95,8 +98,8 @@ class MeshForegroundService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("HearthBit está conectado")
-            .setContentText("Retransmitiendo mensajes de la malla BLE")
+            .setContentTitle(getString(R.string.notification_title))
+            .setContentText(getString(R.string.notification_text))
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)

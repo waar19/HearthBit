@@ -23,9 +23,11 @@ internal class MeshIdentity(context: Context) {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
     )
 
+    // «SOS-XXXX» como nombre por defecto: neutro y comprensible en cualquier
+    // idioma, clave ahora que la app está localizada en varios idiomas.
     var nickname: String
         get() = preferences.getString(KEY_NICKNAME, null)
-            ?: "Emergencia-${peerIdHex.takeLast(4)}"
+            ?: "SOS-${peerIdHex.takeLast(4)}"
         set(value) {
             preferences.edit().putString(KEY_NICKNAME, value.take(31)).apply()
         }

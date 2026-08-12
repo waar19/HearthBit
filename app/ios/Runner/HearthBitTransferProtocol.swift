@@ -69,7 +69,7 @@ struct HBTransferFrame {
     var output = Data([HBTransferProtocol.version, type])
     for tag in tags.keys.sorted() {
       let value = tags[tag]!
-      precondition(value.count <= 0xFFFF, "TLV \(tag) excede 65535 bytes")
+      precondition(value.count <= 0xFFFF, "TLV \(tag) exceeds 65535 bytes")
       output.append(tag)
       output.append(UInt8(value.count >> 8))
       output.append(UInt8(value.count & 0xFF))

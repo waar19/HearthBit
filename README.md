@@ -1,41 +1,50 @@
 # HearthBit
 
-HearthBit («la red que sigue latiendo») es una aplicación móvil de
-comunicación durante emergencias que
-funciona sin internet. Los teléfonos crean una malla Bluetooth Low Energy (BLE)
-y retransmiten mensajes entre dispositivos cercanos. Los nodos fijos ESP32 de
-`firmware/anchor-node` amplían la cobertura y mantienen mensajes en tránsito.
+**English** · [Español](README.es.md)
 
-Además del chat y las alertas SOS, HearthBit transfiere archivos sin internet
-mediante una cadena de transportes con fallback automático:
+HearthBit ("the network that keeps beating") is a mobile emergency
+communication app that works without internet. Phones form a Bluetooth Low
+Energy (BLE) mesh and relay messages between nearby devices. The fixed ESP32
+nodes in `firmware/anchor-node` extend coverage and keep messages in transit.
 
-- **Nearby Connections** (Android): rápido y sin configuración.
-- **LAN / hotspot**: TCP directo cuando ambos comparten una red local.
-- **Wi-Fi Aware** (Android 10+, progresivo): datos directos sin punto de acceso.
-- **BLE inline**: archivos pequeños (≤ 256 KiB) por la propia malla.
-- **QR óptico**: códigos fountain rateless entre pantalla y cámara, sin
-  ninguna radio; ideal para dispositivos aislados o boletines.
+Beyond chat and SOS alerts, HearthBit transfers files without internet through
+a chain of transports with automatic fallback:
 
-Toda oferta se firma con Ed25519 y el contenido viaja cifrado de extremo a
-extremo (X25519 + XChaCha20-Poly1305) con verificación SHA-256, sea cual sea
-el transporte. En iOS, Nearby y Wi-Fi Aware aún no están disponibles: se usan
-LAN, BLE u óptico.
+- **Nearby Connections** (Android): fast and zero-configuration.
+- **LAN / hotspot**: direct TCP when both devices share a local network.
+- **Wi-Fi Aware** (Android 10+, progressive): direct data without an access
+  point.
+- **Inline BLE**: small files (≤ 256 KiB) over the mesh itself.
+- **Optical QR**: rateless fountain codes between screen and camera, with no
+  radio at all; ideal for isolated devices or bulletins.
 
-Para los equipos de rescate incluye un **radar de proximidad** estilo AirTag:
-desde cualquier alerta SOS se rastrea la señal Bluetooth de la víctima con
-indicación de cercanía, tendencia («te estás acercando» / «la señal se está
-debilitando»), vibración que acelera al acercarse y distancia GPS en línea
-recta si la alerta traía coordenadas. El **modo rescate** de la víctima
-reenvía su SOS con GPS fresco cada 5 minutos.
+Every offer is signed with Ed25519 and the content travels end-to-end
+encrypted (X25519 + XChaCha20-Poly1305) with SHA-256 verification, whatever
+the transport. On iOS, Nearby and Wi-Fi Aware are not available yet: LAN, BLE
+or optical are used instead.
 
-## Componentes
+For rescue teams it includes an AirTag-style **proximity radar**: from any SOS
+alert you can track the victim's Bluetooth signal with closeness indication,
+trend ("you are getting closer" / "the signal is fading"), haptics that speed
+up as you approach, and straight-line GPS distance if the alert carried
+coordinates. The victim's **rescue mode** re-broadcasts their SOS with fresh
+GPS every 5 minutes.
 
-- `app/`: aplicación Flutter para Android e iOS.
-- `firmware/anchor-node/`: firmware Bitle para ESP32-C3/ESP32-S3.
-- `docs/`: protocolo, arquitectura, despliegue y pruebas de campo.
-- `vendor/bitchat-android/`: referencia de protocolo y núcleo Noise usado por Android.
+## Languages
 
-## Inicio rápido
+The app is localized in English, Spanish, German, French, Chinese (Simplified)
+and Japanese, and follows the system language automatically. See
+[docs/localization.md](docs/localization.md) to add a new language.
+
+## Components
+
+- `app/`: Flutter application for Android and iOS.
+- `firmware/anchor-node/`: Bitle firmware for ESP32-C3/ESP32-S3.
+- `docs/`: protocol, architecture, deployment and field tests.
+- `vendor/bitchat-android/`: protocol reference and Noise core used by
+  Android.
+
+## Quick start
 
 ```powershell
 git submodule update --init --recursive
@@ -44,39 +53,38 @@ flutter pub get
 flutter run
 ```
 
-La malla necesita dispositivos físicos; los emuladores no reproducen los roles
-BLE central y periférico. Para una prueba útil se requieren dos teléfonos
-Android, o un Android y un iPhone, con Bluetooth habilitado.
+The mesh needs physical devices; emulators do not reproduce the BLE central
+and peripheral roles. A useful test requires two Android phones, or one
+Android and one iPhone, with Bluetooth enabled.
 
-## Seguridad y alcance
+## Security and scope
 
-Los mensajes públicos son visibles para cualquier participante del canal y se
-firman para detectar alteraciones. Los mensajes privados usan sesiones Noise XX
-compatibles con BitChat. HearthBit no sustituye los canales oficiales de
-emergencia ni garantiza la entrega: BLE y la ejecución en segundo plano están
-limitados por cada sistema operativo.
+Public messages are visible to any channel participant and are signed to
+detect tampering. Private messages use Noise XX sessions compatible with
+BitChat. HearthBit does not replace official emergency channels and does not
+guarantee delivery: BLE and background execution are constrained by each
+operating system.
 
-## Licencias
+## Licenses
 
-El código propio se distribuye bajo MIT. BitChat está publicado bajo Unlicense.
-El firmware Bitle se distribuye bajo MIT y conserva su atribución en el
-submódulo correspondiente.
+Our own code is distributed under MIT. BitChat is published under the
+Unlicense. The Bitle firmware is distributed under MIT and keeps its
+attribution in the corresponding submodule.
 
-Dependencias directas de la app y sus licencias: `cryptography`,
-`sqflite`, `geolocator`, `path_provider`, `file_selector`, `qr`,
-`mobile_scanner`, `image` y `crypto` usan licencias MIT/BSD/Apache-2.0
-compatibles. Google Play Services Nearby (solo Android) se usa bajo los
-términos estándar de Google Play Services. Los códigos fountain LT del modo
-óptico son implementación propia (MIT), sin dependencias RaptorQ de terceros.
+Direct app dependencies and their licenses: `cryptography`, `sqflite`,
+`geolocator`, `path_provider`, `file_selector`, `qr`, `mobile_scanner`,
+`image` and `crypto` use compatible MIT/BSD/Apache-2.0 licenses. Google Play
+Services Nearby (Android only) is used under the standard Google Play Services
+terms. The LT fountain codes of the optical mode are our own implementation
+(MIT), with no third-party RaptorQ dependencies.
 
-## Antes de publicar
+## Before publishing
 
-Lista de verificación administrativa (fuera del alcance del código):
+Administrative checklist (outside the scope of the code):
 
-1. Búsqueda de disponibilidad de la marca «HearthBit» en SIC Colombia
-   (clases 9 y 42) y registro si procede.
-2. Nombres en Google Play y App Store, y dominio(s) del proyecto.
-3. Revisión de licencias de dependencias en cada actualización
-   (`flutter pub deps`).
-4. Ejecutar la matriz física completa de `docs/field-test.md`, incluida la
-   prueba manual HearthBit↔BitChat, antes de declarar interoperabilidad.
+1. Trademark availability search for "HearthBit" (classes 9 and 42) and
+   registration where applicable.
+2. Names on Google Play and the App Store, and project domain(s).
+3. Dependency license review on every update (`flutter pub deps`).
+4. Run the full physical matrix in `docs/field-test.md`, including the manual
+   HearthBit↔BitChat test, before declaring interoperability.

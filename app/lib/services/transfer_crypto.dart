@@ -88,7 +88,7 @@ class TransferCipher {
 
   Future<Uint8List> decryptChunk(int chunkIndex, List<int> payload) async {
     if (payload.length < 16) {
-      throw const FormatException('Chunk cifrado demasiado corto');
+      throw const FormatException('Encrypted chunk too short');
     }
     final cipherText = payload.sublist(0, payload.length - 16);
     final mac = payload.sublist(payload.length - 16);

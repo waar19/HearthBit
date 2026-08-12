@@ -6,6 +6,15 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>es</string>
+		<string>de</string>
+		<string>fr</string>
+		<string>zh</string>
+		<string>ja</string>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>HearthBit</string>
 	<key>CFBundleExecutable</key>
@@ -27,15 +36,15 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>HearthBit usa Bluetooth para encontrar teléfonos cercanos y retransmitir mensajes cuando no hay internet.</string>
+	<string>HearthBit usa Bluetooth para encontrar teléfonos cercanos y retransmitir mensajes cuando no hay internet. / HearthBit uses Bluetooth to find nearby phones and relay messages when there is no internet.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>HearthBit usa la cámara para recibir archivos mediante códigos QR cuando no hay ninguna radio disponible.</string>
+	<string>HearthBit usa la cámara para recibir archivos mediante códigos QR cuando no hay ninguna radio disponible. / HearthBit uses the camera to receive files via QR codes when no radio is available.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>HearthBit anuncia este teléfono como un nodo de la malla de emergencia.</string>
+	<string>HearthBit anuncia este teléfono como un nodo de la malla de emergencia. / HearthBit advertises this phone as a node of the emergency mesh.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>La ubicación se adjunta a tus alertas SOS para que los rescatistas puedan encontrarte.</string>
+	<string>La ubicación se adjunta a tus alertas SOS para que los rescatistas puedan encontrarte. / Your location is attached to your SOS alerts so rescuers can find you.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Con acceso permanente, el modo rescate reenvía tu posición GPS por la malla aunque la pantalla esté apagada, para ayudar a los rescatistas a ubicarte.</string>
+	<string>Con acceso permanente, el modo rescate reenvía tu posición GPS por la malla aunque la pantalla esté apagada. / With always-on access, rescue mode re-broadcasts your GPS position over the mesh even with the screen off.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>
