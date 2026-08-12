@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../models/transfer_models.dart';
 import '../services/lan_transport.dart';
@@ -64,7 +65,7 @@ class TransferController extends ChangeNotifier {
     for (final record in _transfers) {
       if (record.isActive) {
         record.state = TransferState.failed;
-        record.error = 'Interrumpida al cerrar la aplicación';
+        record.error = currentL10n.terrInterrupted;
         await _repository.save(record);
       }
     }
@@ -94,7 +95,7 @@ class TransferController extends ChangeNotifier {
     final file = File(filePath);
     final fileSize = await file.length();
     if (fileSize == 0 || fileSize > maxFileBytes) {
-      throw StateError('El archivo debe pesar entre 1 byte y 512 MiB');
+      throw StateError(currentL10n.terrFileSize);
     }
     final transferId = _randomBytes(16);
     final idHex = _hex(transferId);
@@ -126,7 +127,7 @@ class TransferController extends ChangeNotifier {
     );
     final session = _TransferSession(keyPair: keyPair);
     session.expiryTimer = Timer(offerLifetime, () {
-      _fail(record, 'La oferta caducó sin respuesta');
+      _fail(record, currentL10n.terrOfferExpired);
     });
     _sessions[idHex] = session;
     _transfers.insert(0, record);
@@ -178,7 +179,7 @@ class TransferController extends ChangeNotifier {
     record.state = TransferState.connecting;
     record.transport = _chooseTransport(record, session);
     if (record.transport == null) {
-      _fail(record, 'Sin transporte compatible con el emisor');
+      _fail(record, currentL10n.terrNoTransport);
       return;
     }
     await _repository.save(record);
@@ -249,7 +250,9 @@ class TransferController extends ChangeNotifier {
     final record = TransferRecord(
       id: transferIdHex,
       peerId: peerId,
-      peerNickname: peerId.isEmpty ? 'QR óptico' : peerId.substring(0, 8),
+      peerNickname: peerId.isEmpty
+          ? currentL10n.transportOptical
+          : peerId.substring(0, 8),
       direction: TransferDirection.incoming,
       fileName: fileName,
       mimeType: _guessMime(fileName),
@@ -400,7 +403,7 @@ class TransferController extends ChangeNotifier {
       signature,
     );
     if (!verified) {
-      lastError = 'Se descartó una oferta con firma inválida';
+      lastError = currentL10n.terrInvalidSignature;
       notifyListeners();
       return;
     }
@@ -469,7 +472,7 @@ class TransferController extends ChangeNotifier {
         break;
       case TransferTransport.optical:
       case null:
-        _fail(record, 'Transporte no soportado en esta versión');
+        _fail(record, currentL10n.terrUnsupportedTransport);
         break;
     }
   }
@@ -513,10 +516,10 @@ class TransferController extends ChangeNotifier {
       if (complete) {
         await _completeIncoming(record);
       } else {
-        _fail(record, 'La conexión LAN terminó incompleta');
+        _fail(record, currentL10n.terrLanIncomplete);
       }
     } catch (error) {
-      await _receiverFallback(record, session, 'LAN falló: $error');
+      await _receiverFallback(record, session, currentL10n.terrLanFailed('$error'));
     }
   }
 
@@ -573,7 +576,7 @@ class TransferController extends ChangeNotifier {
         await _completeIncoming(record);
       }
     } catch (error) {
-      _fail(record, 'Chunk BLE inválido: $error');
+      _fail(record, currentL10n.terrBleChunk('$error'));
     }
   }
 
@@ -597,7 +600,7 @@ class TransferController extends ChangeNotifier {
         break;
       case 'nearbyError':
       case 'wifiAwareError':
-        final message = event['message'] as String? ?? 'Error de transporte';
+        final message = event['message'] as String? ?? currentL10n.terrTransport;
         final session = _sessions[transferId];
         if (record.direction == TransferDirection.incoming && session != null) {
           unawaited(_receiverFallback(record, session, message));
@@ -667,7 +670,7 @@ class TransferController extends ChangeNotifier {
         filePath: container.path,
       );
     } catch (error) {
-      _fail(record, 'No se pudo iniciar Nearby: $error');
+      _fail(record, currentL10n.terrNearbyStart('$error'));
     }
   }
 
@@ -683,7 +686,7 @@ class TransferController extends ChangeNotifier {
         filePath: container.path,
       );
     } catch (error) {
-      _fail(record, 'No se pudo iniciar Wi-Fi Aware: $error');
+      _fail(record, currentL10n.terrWifiAwareStart('$error'));
     }
   }
 
@@ -722,7 +725,7 @@ class TransferController extends ChangeNotifier {
       }
       // El COMPLETE del receptor confirma la verificación SHA-256.
     } catch (error) {
-      _fail(record, 'Envío BLE interrumpido: $error');
+      _fail(record, currentL10n.terrBleInterrupted('$error'));
     } finally {
       await raf.close();
     }
@@ -739,7 +742,7 @@ class TransferController extends ChangeNotifier {
           .firstWhere((count) => count >= minimum)
           .timeout(const Duration(seconds: 30));
     } on TimeoutException {
-      throw StateError('El receptor dejó de confirmar chunks');
+      throw StateError(currentL10n.terrReceiverSilent);
     }
   }
 
@@ -764,7 +767,11 @@ class TransferController extends ChangeNotifier {
         destinationPath: container,
       );
     } catch (error) {
-      await _receiverFallback(record, session, 'Nearby no disponible: $error');
+      await _receiverFallback(
+        record,
+        session,
+        currentL10n.terrNearbyUnavailable('$error'),
+      );
     }
   }
 
@@ -787,7 +794,7 @@ class TransferController extends ChangeNotifier {
       await _receiverFallback(
         record,
         session,
-        'Wi-Fi Aware no disponible: $error',
+        currentL10n.terrWifiAwareUnavailable('$error'),
       );
     }
   }
@@ -807,10 +814,10 @@ class TransferController extends ChangeNotifier {
       if (session.bitmap!.isComplete) {
         await _completeIncoming(record);
       } else {
-        _fail(record, 'El contenedor llegó incompleto');
+        _fail(record, currentL10n.terrContainerIncomplete);
       }
     } catch (error) {
-      _fail(record, 'No se pudo descifrar el contenedor: $error');
+      _fail(record, currentL10n.terrContainerDecrypt('$error'));
     }
   }
 
@@ -857,7 +864,7 @@ class TransferController extends ChangeNotifier {
     final digest = await TransferCrypto.hashFile(partial);
     if (digest != record.sha256Hex) {
       await partial.delete();
-      _fail(record, 'La verificación SHA-256 falló; archivo descartado');
+      _fail(record, currentL10n.terrShaMismatch);
       return;
     }
     final finalPath = await _incomingPath(record, partial: false);
@@ -888,7 +895,7 @@ class TransferController extends ChangeNotifier {
       await _mesh.sendTransferFrame(peerId, frame.encode());
     } catch (error) {
       if (record.isActive) {
-        _fail(record, 'Sin conexión de malla con el peer: $error');
+        _fail(record, currentL10n.terrNoMeshSession('$error'));
       }
       rethrow;
     }
@@ -922,7 +929,7 @@ class TransferController extends ChangeNotifier {
     session.connectTimer = Timer(const Duration(seconds: 45), () {
       if (record.state == TransferState.connecting) {
         unawaited(
-          _receiverFallback(record, session, 'El transporte no respondió'),
+          _receiverFallback(record, session, currentL10n.terrTransportTimeout),
         );
       }
     });

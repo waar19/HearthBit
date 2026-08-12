@@ -138,39 +138,3 @@ class RadarSignalProcessor {
       .pow(10, (txPowerAtOneMeter - rssi) / (10 * pathLossExponent))
       .toDouble();
 }
-
-/// Texto corto de proximidad para la UI.
-String radarProximityLabel(RadarProximity proximity) {
-  switch (proximity) {
-    case RadarProximity.veryClose:
-      return 'MUY CERCA';
-    case RadarProximity.close:
-      return 'CERCA';
-    case RadarProximity.inRange:
-      return 'EN RANGO';
-    case RadarProximity.far:
-      return 'LEJOS';
-  }
-}
-
-/// Texto de tendencia para la UI.
-String radarTrendLabel(RadarTrend trend) {
-  switch (trend) {
-    case RadarTrend.approaching:
-      return 'Te estás acercando';
-    case RadarTrend.receding:
-      return 'La señal se está debilitando';
-    case RadarTrend.steady:
-      return 'Señal estable';
-    case RadarTrend.unknown:
-      return 'Midiendo señal…';
-  }
-}
-
-/// Distancia orientativa legible: nunca prometemos precisión de metro.
-String radarDistanceLabel(double meters) {
-  if (meters < 1.5) return 'a menos de 2 m';
-  if (meters < 5) return '≈ ${meters.round()} m';
-  if (meters < 15) return '≈ ${(meters / 5).round() * 5} m';
-  return 'más de 15 m';
-}

@@ -1,0 +1,567 @@
+// ignore: unused_import
+import 'package:intl/intl.dart' as intl;
+import 'app_localizations.dart';
+
+// ignore_for_file: type=lint
+
+/// The translations for English (`en`).
+class AppLocalizationsEn extends AppLocalizations {
+  AppLocalizationsEn([String locale = 'en']) : super(locale);
+
+  @override
+  String get appTitle => 'HearthBit';
+
+  @override
+  String storageOpenError(String error) {
+    return 'Could not open local storage:\n$error';
+  }
+
+  @override
+  String statusActiveLabel(String nickname, int count) {
+    return '$nickname · $count nearby';
+  }
+
+  @override
+  String statusDegradedLabel(String nickname) {
+    return '$nickname · receive-only (no BLE advertising)';
+  }
+
+  @override
+  String get statusStarting => 'Starting mesh…';
+
+  @override
+  String get statusError => 'Mesh error';
+
+  @override
+  String get statusStopped => 'Mesh stopped';
+
+  @override
+  String get actionStop => 'STOP';
+
+  @override
+  String get actionRestart => 'RESTART';
+
+  @override
+  String get actionActivate => 'TURN ON';
+
+  @override
+  String get actionRetry => 'RETRY';
+
+  @override
+  String get tooltipChangeName => 'Change name';
+
+  @override
+  String get tooltipPanicWipe => 'Emergency wipe';
+
+  @override
+  String get tabChannel => 'Channel';
+
+  @override
+  String get tabNearby => 'Nearby';
+
+  @override
+  String get tabFiles => 'Files';
+
+  @override
+  String get tabSos => 'SOS';
+
+  @override
+  String get emptyChatTitle => 'No messages yet';
+
+  @override
+  String get emptyChatBody =>
+      'Turn on the mesh. Messages will hop between nearby phones without using the internet.';
+
+  @override
+  String get composerPublicHint => 'Message for everyone nearby';
+
+  @override
+  String get composerPrivateHint => 'Encrypted message';
+
+  @override
+  String get privateChatIntro =>
+      'The first message will start a Noise XX handshake.';
+
+  @override
+  String get emptyPeersTitle => 'No nearby devices';
+
+  @override
+  String get emptyPeersBody =>
+      'Keep Bluetooth on and bring another phone with HearthBit or BitChat nearby.';
+
+  @override
+  String get peerSecure => 'encrypted channel ready';
+
+  @override
+  String get peerTapToEncrypt => 'tap to encrypt';
+
+  @override
+  String get tooltipRadar => 'Proximity radar';
+
+  @override
+  String get tooltipSendFile => 'Send a file';
+
+  @override
+  String get sosCardTitle => 'Send priority alert';
+
+  @override
+  String get sosCardBody =>
+      'Your GPS location will be attached if possible. The alert is public and relayed across the mesh.';
+
+  @override
+  String get sosMedical => 'I need medical help';
+
+  @override
+  String get sosTrapped => 'I am trapped';
+
+  @override
+  String get sosImOk => 'I am OK';
+
+  @override
+  String get sosDefaultMessage => 'I need help';
+
+  @override
+  String get sosReceivedTitle => 'Received alerts';
+
+  @override
+  String get sosNoneReceived => 'No SOS alerts received.';
+
+  @override
+  String get actionTrack => 'TRACK';
+
+  @override
+  String get rescueModeTitle => 'Rescue mode';
+
+  @override
+  String rescueModeActive(int minutes) {
+    return 'Re-sending your SOS with location every $minutes min.';
+  }
+
+  @override
+  String rescueModeLastPing(String time) {
+    return 'Last sent: $time.';
+  }
+
+  @override
+  String rescueModeInactive(int minutes) {
+    return 'Re-sends your SOS with fresh GPS every $minutes minutes, even with the screen off.';
+  }
+
+  @override
+  String get rescueModeNoBackgroundLocation =>
+      'Without always-on location, GPS only updates while the app is open.';
+
+  @override
+  String get actionAllow => 'ALLOW';
+
+  @override
+  String get powerCardTitle => 'Battery & location';
+
+  @override
+  String get powerCardSubtitle =>
+      'Settings that keep the mesh beating and help rescuers find you.';
+
+  @override
+  String get powerBatteryOptimization =>
+      'Battery optimization disabled for HearthBit';
+
+  @override
+  String get actionDisable => 'DISABLE';
+
+  @override
+  String get powerLocationAndroid => 'Location allowed \"all the time\"';
+
+  @override
+  String get powerLocationIos => 'Location allowed \"always\"';
+
+  @override
+  String get powerSaverAndroid =>
+      'The system battery saver is on and may shut down the mesh';
+
+  @override
+  String get powerSaverIos =>
+      'Low Power Mode is on and reduces background Bluetooth';
+
+  @override
+  String get powerTipsTitle => 'Battery saving tips';
+
+  @override
+  String get actionAdjust => 'ADJUST';
+
+  @override
+  String get powerTipBrightness =>
+      'Lower the screen brightness to the minimum and shorten the lock timeout.';
+
+  @override
+  String get powerTipMobileData =>
+      'If there is no internet, turn off mobile data and 5G: the mesh does not use them and searching for signal drains the battery.';
+
+  @override
+  String get powerTipCloseApps =>
+      'Close apps you do not need; keep Bluetooth and location on.';
+
+  @override
+  String get powerTipAndroidRecents =>
+      'Do not swipe HearthBit away from recents: the system would kill the mesh.';
+
+  @override
+  String get powerTipAndroidVendor =>
+      'Some manufacturers (Xiaomi, Huawei, Samsung) have their own battery saver: exclude HearthBit there too.';
+
+  @override
+  String get powerTipAndroidSync =>
+      'Turn off automatic account sync while the emergency lasts.';
+
+  @override
+  String get powerTipIosForceClose =>
+      'Do not force-quit HearthBit: iOS will not relaunch it on its own.';
+
+  @override
+  String get powerTipIosBackgroundRefresh =>
+      'Turn off Background App Refresh for other apps in Settings.';
+
+  @override
+  String get powerTipIosLowPower =>
+      'Avoid Low Power Mode unless HearthBit is on screen: it reduces background Bluetooth.';
+
+  @override
+  String get powerTipShareBattery =>
+      'Share power banks between neighbors: a single phone that stays on keeps the whole block linked.';
+
+  @override
+  String get nicknameDialogTitle => 'Display name';
+
+  @override
+  String get nicknameDialogHint => 'E.g. House 12 or Ana';
+
+  @override
+  String get actionCancel => 'CANCEL';
+
+  @override
+  String get actionSave => 'SAVE';
+
+  @override
+  String get wipeDialogTitle => 'Erase all identity?';
+
+  @override
+  String get wipeDialogBody =>
+      'Keys, history and pending messages will be deleted. This cannot be undone.';
+
+  @override
+  String get actionWipe => 'ERASE EVERYTHING';
+
+  @override
+  String get photoProfileTitle => 'Emergency profile';
+
+  @override
+  String photoProfileBody(String size) {
+    return 'The photo is $size MiB. Compressing it speeds up delivery and saves battery across the mesh.';
+  }
+
+  @override
+  String get actionSendOriginal => 'SEND ORIGINAL';
+
+  @override
+  String get actionCompress => 'COMPRESS';
+
+  @override
+  String offerFileError(String error) {
+    return 'Could not offer the file: $error';
+  }
+
+  @override
+  String get sendByQr => 'Send via QR';
+
+  @override
+  String get receiveByQr => 'Receive via QR';
+
+  @override
+  String get emptyTransfersTitle => 'No transfers';
+
+  @override
+  String get emptyTransfersBody =>
+      'Tap the paper clip next to a nearby device to offer it a file. The offer travels encrypted over the mesh and the content uses the fastest transport available. QR mode even works with no radios at all.';
+
+  @override
+  String transferFrom(String nickname) {
+    return 'From $nickname';
+  }
+
+  @override
+  String transferTo(String nickname) {
+    return 'To $nickname';
+  }
+
+  @override
+  String transferProgress(String done, String total) {
+    return '$done of $total';
+  }
+
+  @override
+  String transferSavedAt(String path) {
+    return 'Saved to $path';
+  }
+
+  @override
+  String get stateOffered => 'Offer';
+
+  @override
+  String get stateConnecting => 'Connecting';
+
+  @override
+  String get stateTransferring => 'Sending';
+
+  @override
+  String get stateCompleted => 'Done';
+
+  @override
+  String get stateRejected => 'Rejected';
+
+  @override
+  String get stateCancelled => 'Cancelled';
+
+  @override
+  String get stateFailed => 'Failed';
+
+  @override
+  String get transportBle => 'Bluetooth';
+
+  @override
+  String get transportLan => 'Local Wi-Fi';
+
+  @override
+  String get transportNearby => 'Nearby';
+
+  @override
+  String get transportWifiAware => 'Wi-Fi Aware';
+
+  @override
+  String get transportOptical => 'Optical QR';
+
+  @override
+  String get actionReject => 'REJECT';
+
+  @override
+  String get actionAccept => 'ACCEPT';
+
+  @override
+  String get actionDelete => 'REMOVE';
+
+  @override
+  String get opticalFileEmpty => 'The file is empty';
+
+  @override
+  String opticalSendStats(String fileName, int chunks, int symbol) {
+    return '$fileName · $chunks chunks · symbol $symbol';
+  }
+
+  @override
+  String get opticalConfirmed => 'The receiver confirmed reception over BLE';
+
+  @override
+  String get opticalSpeedLabel => 'Speed';
+
+  @override
+  String opticalFps(int fps) {
+    return '$fps QR/s';
+  }
+
+  @override
+  String get densityCompact => 'Compact';
+
+  @override
+  String get densityMedium => 'Medium';
+
+  @override
+  String get densityHigh => 'High';
+
+  @override
+  String get opticalSendHint =>
+      'If the receiving camera misses many frames, lower the speed or density. The code is rateless: repeating symbols never corrupts the transfer.';
+
+  @override
+  String get opticalShaFailed =>
+      'SHA-256 verification failed; restart the send';
+
+  @override
+  String opticalSavedTitle(String fileName) {
+    return '$fileName verified and saved';
+  }
+
+  @override
+  String get genericFile => 'File';
+
+  @override
+  String get actionDone => 'DONE';
+
+  @override
+  String get opticalScanHint =>
+      'Point the camera at the sender\'s QR. The header repeats every few frames.';
+
+  @override
+  String opticalReceiveStats(
+    String fileName,
+    int decoded,
+    int total,
+    int symbols,
+  ) {
+    return '$fileName · $decoded of $total chunks · $symbols symbols';
+  }
+
+  @override
+  String radarTitle(String nickname) {
+    return 'Radar · $nickname';
+  }
+
+  @override
+  String get radarSignalLost => 'SIGNAL LOST';
+
+  @override
+  String get radarSignalLostHint =>
+      'Walk back slowly along your path until the signal returns.';
+
+  @override
+  String get radarSearching => 'Searching for signal…';
+
+  @override
+  String get radarSearchingHint =>
+      'Walk slowly in a wide circle. The radar picks up the direct Bluetooth signal (tens of meters).';
+
+  @override
+  String get proximityVeryClose => 'VERY CLOSE';
+
+  @override
+  String get proximityClose => 'CLOSE';
+
+  @override
+  String get proximityInRange => 'IN RANGE';
+
+  @override
+  String get proximityFar => 'FAR';
+
+  @override
+  String get trendApproaching => 'You are getting closer';
+
+  @override
+  String get trendReceding => 'The signal is getting weaker';
+
+  @override
+  String get trendSteady => 'Signal steady';
+
+  @override
+  String get trendUnknown => 'Measuring signal…';
+
+  @override
+  String get distanceVeryNear => 'less than 2 m away';
+
+  @override
+  String distanceApprox(int meters) {
+    return '≈ $meters m';
+  }
+
+  @override
+  String get distanceFar => 'more than 15 m away';
+
+  @override
+  String radarDbm(int dbm) {
+    return 'Signal $dbm dBm';
+  }
+
+  @override
+  String radarGpsDistance(String distance) {
+    return 'Last reported GPS: $distance away in a straight line';
+  }
+
+  @override
+  String get errorPermissions =>
+      'Bluetooth and notification permissions are required to build the mesh.';
+
+  @override
+  String get errorLocationOff => 'Turn on system location for rescue mode';
+
+  @override
+  String get errorUnknown => 'Unknown error';
+
+  @override
+  String get terrInterrupted => 'Interrupted when the app closed';
+
+  @override
+  String get terrFileSize => 'The file must be between 1 byte and 512 MiB';
+
+  @override
+  String get terrOfferExpired => 'The offer expired without an answer';
+
+  @override
+  String get terrNoTransport => 'No transport compatible with the sender';
+
+  @override
+  String get terrInvalidSignature =>
+      'An offer with an invalid signature was discarded';
+
+  @override
+  String get terrUnsupportedTransport =>
+      'Transport not supported in this version';
+
+  @override
+  String get terrLanIncomplete => 'The LAN connection ended incomplete';
+
+  @override
+  String terrLanFailed(String error) {
+    return 'LAN failed: $error';
+  }
+
+  @override
+  String terrBleChunk(String error) {
+    return 'Invalid BLE chunk: $error';
+  }
+
+  @override
+  String get terrTransport => 'Transport error';
+
+  @override
+  String terrNearbyStart(String error) {
+    return 'Could not start Nearby: $error';
+  }
+
+  @override
+  String terrWifiAwareStart(String error) {
+    return 'Could not start Wi-Fi Aware: $error';
+  }
+
+  @override
+  String terrBleInterrupted(String error) {
+    return 'BLE send interrupted: $error';
+  }
+
+  @override
+  String get terrReceiverSilent => 'The receiver stopped acknowledging chunks';
+
+  @override
+  String terrNearbyUnavailable(String error) {
+    return 'Nearby unavailable: $error';
+  }
+
+  @override
+  String terrWifiAwareUnavailable(String error) {
+    return 'Wi-Fi Aware unavailable: $error';
+  }
+
+  @override
+  String get terrContainerIncomplete => 'The container arrived incomplete';
+
+  @override
+  String terrContainerDecrypt(String error) {
+    return 'Could not decrypt the container: $error';
+  }
+
+  @override
+  String get terrShaMismatch => 'SHA-256 verification failed; file discarded';
+
+  @override
+  String terrNoMeshSession(String error) {
+    return 'No mesh connection with the peer: $error';
+  }
+
+  @override
+  String get terrTransportTimeout => 'The transport did not respond';
+}

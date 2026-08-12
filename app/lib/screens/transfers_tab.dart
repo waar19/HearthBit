@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../controllers/transfer_controller.dart';
+import '../l10n/l10n.dart';
 import '../models/transfer_models.dart';
 
 class TransfersTab extends StatelessWidget {
@@ -28,7 +29,7 @@ class TransfersTab extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: onSendOptical,
                   icon: const Icon(Icons.qr_code_2),
-                  label: const Text('Enviar por QR'),
+                  label: Text(context.l10n.sendByQr),
                 ),
               ),
               const SizedBox(width: 10),
@@ -36,7 +37,7 @@ class TransfersTab extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: onReceiveOptical,
                   icon: const Icon(Icons.qr_code_scanner),
-                  label: const Text('Recibir por QR'),
+                  label: Text(context.l10n.receiveByQr),
                 ),
               ),
             ],
@@ -44,28 +45,24 @@ class TransfersTab extends StatelessWidget {
         ),
         Expanded(
           child: records.isEmpty
-              ? const Center(
+              ? Center(
                   child: Padding(
-                    padding: EdgeInsets.all(32),
+                    padding: const EdgeInsets.all(32),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.folder_shared_outlined, size: 64),
-                        SizedBox(height: 16),
+                        const Icon(Icons.folder_shared_outlined, size: 64),
+                        const SizedBox(height: 16),
                         Text(
-                          'Sin transferencias',
-                          style: TextStyle(
+                          context.l10n.emptyTransfersTitle,
+                          style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        SizedBox(height: 8),
+                        const SizedBox(height: 8),
                         Text(
-                          'Toca el clip junto a un dispositivo cercano para '
-                          'ofrecerle un archivo. La oferta viaja cifrada por '
-                          'la malla y el contenido usa el transporte más '
-                          'rápido disponible. El modo QR funciona incluso sin '
-                          'ninguna radio.',
+                          context.l10n.emptyTransfersBody,
                           textAlign: TextAlign.center,
                         ),
                       ],
@@ -153,9 +150,9 @@ class _TransferCardState extends State<_TransferCard> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        '${incoming ? "De" : "Para"} ${record.peerNickname} · '
+                        '${incoming ? context.l10n.transferFrom(record.peerNickname) : context.l10n.transferTo(record.peerNickname)} · '
                         '${_formatBytes(record.fileSize)}'
-                        '${record.transport != null ? " · ${_transportLabel(record.transport!)}" : ""}',
+                        '${record.transport != null ? " · ${_transportLabel(context, record.transport!)}" : ""}',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -174,7 +171,7 @@ class _TransferCardState extends State<_TransferCard> {
               ),
               const SizedBox(height: 4),
               Text(
-                '${_formatBytes(record.bytesDone)} de ${_formatBytes(record.fileSize)}'
+                '${context.l10n.transferProgress(_formatBytes(record.bytesDone), _formatBytes(record.fileSize))}'
                 '${_speedBps > 0 ? " · ${_formatBytes(_speedBps.round())}/s" : ""}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
@@ -191,7 +188,7 @@ class _TransferCardState extends State<_TransferCard> {
                 record.filePath != null) ...[
               const SizedBox(height: 6),
               Text(
-                'Guardado en ${record.filePath}',
+                context.l10n.transferSavedAt(record.filePath!),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -212,12 +209,12 @@ class _TransferCardState extends State<_TransferCard> {
       return [
         TextButton(
           onPressed: () => transfers.rejectOffer(record.id),
-          child: const Text('RECHAZAR'),
+          child: Text(context.l10n.actionReject),
         ),
         const SizedBox(width: 8),
         FilledButton(
           onPressed: () => transfers.acceptOffer(record.id),
-          child: const Text('ACEPTAR'),
+          child: Text(context.l10n.actionAccept),
         ),
       ];
     }
@@ -225,14 +222,14 @@ class _TransferCardState extends State<_TransferCard> {
       return [
         TextButton(
           onPressed: () => transfers.cancel(record.id),
-          child: const Text('CANCELAR'),
+          child: Text(context.l10n.actionCancel),
         ),
       ];
     }
     return [
       TextButton(
         onPressed: () => transfers.remove(record.id),
-        child: const Text('ELIMINAR'),
+        child: Text(context.l10n.actionDelete),
       ),
     ];
   }
@@ -246,14 +243,30 @@ class _StateChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
     final (label, color) = switch (state) {
-      TransferState.offered => ('Oferta', scheme.secondaryContainer),
-      TransferState.connecting => ('Conectando', scheme.secondaryContainer),
-      TransferState.transferring => ('Enviando', scheme.primaryContainer),
-      TransferState.completed => ('Completa', scheme.primaryContainer),
-      TransferState.rejected => ('Rechazada', scheme.surfaceContainerHighest),
-      TransferState.cancelled => ('Cancelada', scheme.surfaceContainerHighest),
-      TransferState.failed => ('Falló', scheme.errorContainer),
+      TransferState.offered => (l10n.stateOffered, scheme.secondaryContainer),
+      TransferState.connecting => (
+        l10n.stateConnecting,
+        scheme.secondaryContainer,
+      ),
+      TransferState.transferring => (
+        l10n.stateTransferring,
+        scheme.primaryContainer,
+      ),
+      TransferState.completed => (
+        l10n.stateCompleted,
+        scheme.primaryContainer,
+      ),
+      TransferState.rejected => (
+        l10n.stateRejected,
+        scheme.surfaceContainerHighest,
+      ),
+      TransferState.cancelled => (
+        l10n.stateCancelled,
+        scheme.surfaceContainerHighest,
+      ),
+      TransferState.failed => (l10n.stateFailed, scheme.errorContainer),
     };
     return Chip(
       label: Text(label, style: const TextStyle(fontSize: 12)),
@@ -264,13 +277,14 @@ class _StateChip extends StatelessWidget {
   }
 }
 
-String _transportLabel(TransferTransport transport) => switch (transport) {
-  TransferTransport.ble => 'Bluetooth',
-  TransferTransport.lan => 'Wi-Fi local',
-  TransferTransport.nearby => 'Nearby',
-  TransferTransport.wifiAware => 'Wi-Fi Aware',
-  TransferTransport.optical => 'QR óptico',
-};
+String _transportLabel(BuildContext context, TransferTransport transport) =>
+    switch (transport) {
+      TransferTransport.ble => context.l10n.transportBle,
+      TransferTransport.lan => context.l10n.transportLan,
+      TransferTransport.nearby => context.l10n.transportNearby,
+      TransferTransport.wifiAware => context.l10n.transportWifiAware,
+      TransferTransport.optical => context.l10n.transportOptical,
+    };
 
 String _formatBytes(int bytes) {
   if (bytes < 1024) return '$bytes B';

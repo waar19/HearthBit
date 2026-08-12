@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../controllers/transfer_controller.dart';
+import '../l10n/l10n.dart';
 import '../services/fountain_code.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/optical_protocol.dart';
@@ -87,7 +88,7 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
       final data = decoder.assemble(header.fileSize);
       final digest = Uint8List.fromList(sha256.convert(data).bytes);
       if (!_sameId(digest, header.sha256)) {
-        throw StateError('La verificación SHA-256 falló; reinicia el envío');
+        throw StateError(currentL10n.opticalShaFailed);
       }
       final documents = await getApplicationDocumentsDirectory();
       final directory = Directory(
@@ -115,7 +116,7 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = error.toString();
+        _error = error is StateError ? error.message : error.toString();
         _finishing = false;
         _header = null;
         _decoder = null;
@@ -160,7 +161,7 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
     final header = _header;
     final decoder = _decoder;
     return Scaffold(
-      appBar: AppBar(title: const Text('Recibir por QR')),
+      appBar: AppBar(title: Text(context.l10n.receiveByQr)),
       body: SafeArea(
         child: _savedPath != null
             ? Center(
@@ -176,7 +177,9 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        '${header?.fileName ?? "Archivo"} verificado y guardado',
+                        context.l10n.opticalSavedTitle(
+                          header?.fileName ?? context.l10n.genericFile,
+                        ),
                         style: const TextStyle(fontWeight: FontWeight.bold),
                         textAlign: TextAlign.center,
                       ),
@@ -185,7 +188,7 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
                       const SizedBox(height: 16),
                       FilledButton(
                         onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('LISTO'),
+                        child: Text(context.l10n.actionDone),
                       ),
                     ],
                   ),
@@ -211,17 +214,18 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
                             ),
                           )
                         else if (header == null)
-                          const Text(
-                            'Apunta la cámara al QR del emisor. La cabecera '
-                            'se repite cada pocos frames.',
+                          Text(
+                            context.l10n.opticalScanHint,
                             textAlign: TextAlign.center,
                           )
                         else ...[
                           Text(
-                            '${header.fileName} · '
-                            '${decoder?.decodedCount ?? 0} de '
-                            '${header.chunkCount} chunks · '
-                            '${decoder?.symbolsReceived ?? 0} símbolos',
+                            context.l10n.opticalReceiveStats(
+                              header.fileName,
+                              decoder?.decodedCount ?? 0,
+                              header.chunkCount,
+                              decoder?.symbolsReceived ?? 0,
+                            ),
                           ),
                           const SizedBox(height: 8),
                           LinearProgressIndicator(

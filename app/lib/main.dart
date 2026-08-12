@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'controllers/mesh_controller.dart';
 import 'controllers/transfer_controller.dart';
+import 'l10n/l10n.dart';
 import 'screens/home_screen.dart';
 import 'services/mesh_platform_service.dart';
 
@@ -44,7 +45,9 @@ class _HearthBitAppState extends State<HearthBitApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'HearthBit',
+      onGenerateTitle: (context) => context.l10n.appTitle,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
@@ -74,7 +77,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
                 child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Text(
-                    'No se pudo abrir el almacenamiento local:\n${snapshot.error}',
+                    context.l10n.storageOpenError('${snapshot.error}'),
                     textAlign: TextAlign.center,
                   ),
                 ),

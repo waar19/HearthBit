@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../controllers/mesh_controller.dart';
 import '../controllers/transfer_controller.dart';
+import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../models/transfer_models.dart';
 import '../services/photo_profile.dart';
@@ -86,8 +87,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       setState(() => _tab = 2);
     } catch (error) {
       if (!mounted) return;
+      final detail = error is StateError ? error.message : '$error';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo ofrecer el archivo: $error')),
+        SnackBar(content: Text(context.l10n.offerFileError(detail))),
       );
     }
   }
@@ -153,19 +155,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Perfil de emergencia'),
+        title: Text(context.l10n.photoProfileTitle),
         content: Text(
-          'La foto pesa ${(size / (1024 * 1024)).toStringAsFixed(1)} MiB. '
-          'Comprimirla acelera el envío y ahorra batería en la malla.',
+          context.l10n.photoProfileBody(
+            (size / (1024 * 1024)).toStringAsFixed(1),
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('ENVIAR ORIGINAL'),
+            child: Text(context.l10n.actionSendOriginal),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('COMPRIMIR'),
+            child: Text(context.l10n.actionCompress),
           ),
         ],
       ),
@@ -188,15 +191,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         final controller = widget.controller;
         return Scaffold(
           appBar: AppBar(
-            title: const Text('HearthBit'),
+            title: Text(context.l10n.appTitle),
             actions: [
               IconButton(
-                tooltip: 'Cambiar nombre',
+                tooltip: context.l10n.tooltipChangeName,
                 onPressed: () => _changeNickname(controller),
                 icon: const Icon(Icons.badge_outlined),
               ),
               IconButton(
-                tooltip: 'Borrado de emergencia',
+                tooltip: context.l10n.tooltipPanicWipe,
                 onPressed: () => _confirmWipe(controller),
                 icon: const Icon(Icons.delete_forever_outlined),
               ),
@@ -213,7 +216,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     actions: [
                       TextButton(
                         onPressed: () => controller.start(),
-                        child: const Text('REINTENTAR'),
+                        child: Text(context.l10n.actionRetry),
                       ),
                     ],
                   ),
@@ -239,15 +242,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             selectedIndex: _tab,
             onDestinationSelected: (value) => setState(() => _tab = value),
             destinations: [
-              const NavigationDestination(
-                icon: Icon(Icons.forum_outlined),
-                selectedIcon: Icon(Icons.forum),
-                label: 'Canal',
+              NavigationDestination(
+                icon: const Icon(Icons.forum_outlined),
+                selectedIcon: const Icon(Icons.forum),
+                label: context.l10n.tabChannel,
               ),
-              const NavigationDestination(
-                icon: Icon(Icons.hub_outlined),
-                selectedIcon: Icon(Icons.hub),
-                label: 'Cercanos',
+              NavigationDestination(
+                icon: const Icon(Icons.hub_outlined),
+                selectedIcon: const Icon(Icons.hub),
+                label: context.l10n.tabNearby,
               ),
               NavigationDestination(
                 icon: Badge(
@@ -256,12 +259,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   child: const Icon(Icons.folder_shared_outlined),
                 ),
                 selectedIcon: const Icon(Icons.folder_shared),
-                label: 'Archivos',
+                label: context.l10n.tabFiles,
               ),
-              const NavigationDestination(
-                icon: Icon(Icons.sos_outlined),
-                selectedIcon: Icon(Icons.sos),
-                label: 'SOS',
+              NavigationDestination(
+                icon: const Icon(Icons.sos_outlined),
+                selectedIcon: const Icon(Icons.sos),
+                label: context.l10n.tabSos,
               ),
             ],
           ),
@@ -278,11 +281,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       children: [
         Expanded(
           child: publicMessages.isEmpty
-              ? const _EmptyState(
+              ? _EmptyState(
                   icon: Icons.bluetooth_searching,
-                  title: 'Aún no hay mensajes',
-                  description:
-                      'Activa la malla. Los mensajes saltarán entre teléfonos cercanos sin usar internet.',
+                  title: context.l10n.emptyChatTitle,
+                  description: context.l10n.emptyChatBody,
                 )
               : ListView.builder(
                   controller: _scrollController,
@@ -295,7 +297,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _MessageComposer(
           controller: _messageController,
           enabled: controller.canSend,
-          hint: 'Mensaje para todos los cercanos',
+          hint: context.l10n.composerPublicHint,
           onSend: () async {
             final text = _messageController.text;
             _messageController.clear();
@@ -309,11 +311,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildPeers(MeshController controller) {
     if (controller.peers.isEmpty) {
-      return const _EmptyState(
+      return _EmptyState(
         icon: Icons.portable_wifi_off,
-        title: 'No hay dispositivos cercanos',
-        description:
-            'Mantén Bluetooth activo y acerca otro teléfono con HearthBit o BitChat.',
+        title: context.l10n.emptyPeersTitle,
+        description: context.l10n.emptyPeersBody,
       );
     }
     return ListView.separated(
@@ -328,13 +329,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
           title: Text(peer.nickname),
           subtitle: Text(
-            '${peer.id.substring(0, 8)} · ${peer.secure ? "canal cifrado listo" : "toca para cifrar"}',
+            '${peer.id.substring(0, 8)} · '
+            '${peer.secure ? context.l10n.peerSecure : context.l10n.peerTapToEncrypt}',
           ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                tooltip: 'Radar de proximidad',
+                tooltip: context.l10n.tooltipRadar,
                 onPressed: () => _openRadar(
                   peerId: peer.id,
                   nickname: peer.nickname,
@@ -342,7 +344,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 icon: const Icon(Icons.radar),
               ),
               IconButton(
-                tooltip: 'Enviar archivo',
+                tooltip: context.l10n.tooltipSendFile,
                 onPressed: () => _sendFileTo(peer),
                 icon: const Icon(Icons.attach_file),
               ),
@@ -376,13 +378,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   color: Theme.of(context).colorScheme.onErrorContainer,
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'Enviar alerta prioritaria',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                Text(
+                  context.l10n.sosCardTitle,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Se intentará incluir tu ubicación GPS. La alerta será pública y se retransmitirá por la malla.',
+                Text(
+                  context.l10n.sosCardBody,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
@@ -393,21 +398,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   children: [
                     FilledButton(
                       onPressed: controller.canSend
-                          ? () => controller.sendSos('Necesito ayuda médica')
+                          ? () => controller.sendSos(context.l10n.sosMedical)
                           : null,
-                      child: const Text('AYUDA MÉDICA'),
+                      child: Text(context.l10n.sosMedical.toUpperCase()),
                     ),
                     FilledButton.tonal(
                       onPressed: controller.canSend
-                          ? () => controller.sendSos('Estoy atrapado')
+                          ? () => controller.sendSos(context.l10n.sosTrapped)
                           : null,
-                      child: const Text('ESTOY ATRAPADO'),
+                      child: Text(context.l10n.sosTrapped.toUpperCase()),
                     ),
                     FilledButton.tonal(
                       onPressed: controller.canSend
-                          ? () => controller.sendSos('Estoy bien')
+                          ? () => controller.sendSos(context.l10n.sosImOk)
                           : null,
-                      child: const Text('ESTOY BIEN'),
+                      child: Text(context.l10n.sosImOk.toUpperCase()),
                     ),
                   ],
                 ),
@@ -421,12 +426,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         PowerSavingCard(controller: controller),
         const SizedBox(height: 16),
         Text(
-          'Alertas recibidas',
+          context.l10n.sosReceivedTitle,
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 8),
         if (sosMessages.isEmpty)
-          const Text('No se han recibido alertas SOS.')
+          Text(context.l10n.sosNoneReceived)
         else
           ...sosMessages.map(
             (message) => Card(
@@ -451,7 +456,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           longitude: message.sosLongitude,
                         ),
                         icon: const Icon(Icons.radar, size: 18),
-                        label: const Text('RASTREAR'),
+                        label: Text(context.l10n.actionTrack),
                       ),
               ),
             ),
@@ -500,9 +505,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 const Divider(),
                 Expanded(
                   child: privateMessages.isEmpty
-                      ? const Center(
+                      ? Center(
                           child: Text(
-                            'El primer mensaje iniciará un handshake Noise XX.',
+                            context.l10n.privateChatIntro,
                             textAlign: TextAlign.center,
                           ),
                         )
@@ -517,7 +522,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 _MessageComposer(
                   controller: textController,
                   enabled: true,
-                  hint: 'Mensaje cifrado',
+                  hint: context.l10n.composerPrivateHint,
                   onSend: () async {
                     final text = textController.text;
                     textController.clear();
@@ -539,21 +544,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final value = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Nombre visible'),
+        title: Text(context.l10n.nicknameDialogTitle),
         content: TextField(
           controller: textController,
           autofocus: true,
           maxLength: 31,
-          decoration: const InputDecoration(hintText: 'Ej. Casa 12 o Ana'),
+          decoration: InputDecoration(
+            hintText: context.l10n.nicknameDialogHint,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('CANCELAR'),
+            child: Text(context.l10n.actionCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, textController.text),
-            child: const Text('GUARDAR'),
+            child: Text(context.l10n.actionSave),
           ),
         ],
       ),
@@ -566,18 +573,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('¿Borrar toda la identidad?'),
-        content: const Text(
-          'Se eliminarán claves, historial y mensajes pendientes. Esta acción no se puede deshacer.',
-        ),
+        title: Text(context.l10n.wipeDialogTitle),
+        content: Text(context.l10n.wipeDialogBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('CANCELAR'),
+            child: Text(context.l10n.actionCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('BORRAR TODO'),
+            child: Text(context.l10n.actionWipe),
           ),
         ],
       ),
@@ -614,27 +619,30 @@ class _StatusBanner extends StatelessWidget {
       MeshConnectionStatus.active => (
         scheme.primaryContainer,
         Icons.bluetooth_connected,
-        '${controller.nickname} · ${controller.peers.length} cercanos',
+        context.l10n.statusActiveLabel(
+          controller.nickname,
+          controller.peers.length,
+        ),
       ),
       MeshConnectionStatus.degraded => (
         scheme.tertiaryContainer,
         Icons.bluetooth_searching,
-        '${controller.nickname} · solo recepción (sin anuncio BLE)',
+        context.l10n.statusDegradedLabel(controller.nickname),
       ),
       MeshConnectionStatus.starting => (
         scheme.surfaceContainerHighest,
         Icons.bluetooth_searching,
-        'Iniciando malla…',
+        context.l10n.statusStarting,
       ),
       MeshConnectionStatus.error => (
         scheme.errorContainer,
         Icons.bluetooth_disabled,
-        'Error en la malla',
+        context.l10n.statusError,
       ),
       MeshConnectionStatus.stopped => (
         scheme.surfaceContainerHighest,
         Icons.bluetooth_disabled,
-        'Malla detenida',
+        context.l10n.statusStopped,
       ),
     };
     return ColoredBox(
@@ -654,17 +662,17 @@ class _StatusBanner extends StatelessWidget {
             else if (status == MeshConnectionStatus.active)
               FilledButton.tonal(
                 onPressed: controller.stop,
-                child: const Text('DETENER'),
+                child: Text(context.l10n.actionStop),
               )
             else if (status == MeshConnectionStatus.degraded)
               FilledButton.tonal(
                 onPressed: controller.start,
-                child: const Text('REINICIAR'),
+                child: Text(context.l10n.actionRestart),
               )
             else
               FilledButton.tonal(
                 onPressed: controller.start,
-                child: const Text('ACTIVAR'),
+                child: Text(context.l10n.actionActivate),
               ),
           ],
         ),

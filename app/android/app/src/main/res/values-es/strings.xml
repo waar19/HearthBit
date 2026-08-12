@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notification_channel_name">Malla de emergencia</string>
+    <string name="notification_channel_description">Mantiene la conexión Bluetooth activa durante una emergencia</string>
+    <string name="notification_title">HearthBit está conectado</string>
+    <string name="notification_text">Retransmitiendo mensajes de la malla BLE</string>
+    <string name="error_ble_start">No se pudo iniciar BLE</string>
+    <string name="error_bluetooth_off">Bluetooth está apagado</string>
+    <string name="error_no_advertising">El dispositivo no soporta anuncios BLE; modo solo recepción</string>
+    <string name="error_advertise_failed">No se pudo anunciar la malla BLE (%1$d); otros teléfonos no verán este dispositivo, pero puede recibir</string>
+    <string name="error_scan_failed">Falló el escaneo BLE (%1$d)</string>
+    <string name="error_private_channel">No se pudo iniciar el canal privado: %1$s</string>
+    <string name="error_private_encrypt">Falló el cifrado del mensaje privado</string>
+    <string name="error_frame_encrypt">Falló el cifrado de la trama de transferencia</string>
+    <string name="error_identity_rejected">Un canal privado fue rechazado por identidad inválida</string>
+    <string name="error_peer_unavailable">El dispositivo ya no está disponible</string>
+    <string name="error_frame_too_large">Trama de transferencia demasiado grande</string>
+    <string name="error_mesh_generic">Error de malla</string>
+    <string name="error_wifi_aware_unsupported">Wi-Fi Aware no soportado</string>
+    <string name="error_nearby_advertise">No se pudo anunciar Nearby: %1$s</string>
+    <string name="error_nearby_discover">No se pudo descubrir Nearby: %1$s</string>
+    <string name="error_nearby_rejected">Conexión Nearby rechazada: %1$s</string>
+    <string name="error_nearby_not_connected">Nearby no conectó (%1$d)</string>
+    <string name="error_nearby_send">No se pudo enviar por Nearby: %1$s</string>
+    <string name="error_nearby_save">No se pudo guardar el archivo Nearby: %1$s</string>
+    <string name="error_nearby_interrupted">Transferencia Nearby interrumpida (%1$d)</string>
+    <string name="error_wifi_aware_publish">Wi-Fi Aware rechazó la publicación</string>
+    <string name="error_wifi_aware_subscribe">Wi-Fi Aware rechazó la suscripción</string>
+    <string name="error_wifi_aware_unavailable_now">Wi-Fi Aware no está disponible en este momento</string>
+    <string name="error_wifi_aware_session">No se pudo iniciar la sesión Wi-Fi Aware</string>
+    <string name="error_wifi_aware_datapath">El data path Wi-Fi Aware no se estableció</string>
+    <string name="error_wifi_aware_send_interrupted">Envío Wi-Fi Aware interrumpido: %1$s</string>
+    <string name="error_wifi_aware_receive_interrupted">Descarga Wi-Fi Aware interrumpida: %1$s</string>
+</resources>

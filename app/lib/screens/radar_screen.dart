@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../l10n/l10n.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/radar_signal.dart';
 
@@ -176,7 +177,7 @@ class _RadarScreenState extends State<RadarScreen>
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
-        title: Text('Radar · ${widget.nickname}'),
+        title: Text(context.l10n.radarTitle(widget.nickname)),
       ),
       body: SafeArea(
         child: Column(
@@ -217,9 +218,9 @@ class _RadarScreenState extends State<RadarScreen>
         children: [
           const Icon(Icons.wifi_off, color: red, size: 40),
           const SizedBox(height: 8),
-          const Text(
-            'SEÑAL PERDIDA',
-            style: TextStyle(
+          Text(
+            context.l10n.radarSignalLost,
+            style: const TextStyle(
               color: red,
               fontSize: 24,
               fontWeight: FontWeight.bold,
@@ -227,10 +228,10 @@ class _RadarScreenState extends State<RadarScreen>
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Vuelve despacio sobre tus pasos hasta recuperar la señal.',
+          Text(
+            context.l10n.radarSignalLostHint,
             textAlign: TextAlign.center,
-            style: TextStyle(color: dim),
+            style: const TextStyle(color: dim),
           ),
           if (_gpsDistanceMeters != null) _gpsRow(dim),
         ],
@@ -245,16 +246,15 @@ class _RadarScreenState extends State<RadarScreen>
             child: CircularProgressIndicator(strokeWidth: 3, color: green),
           ),
           const SizedBox(height: 12),
-          const Text(
-            'Buscando señal…',
-            style: TextStyle(color: Colors.white, fontSize: 20),
+          Text(
+            context.l10n.radarSearching,
+            style: const TextStyle(color: Colors.white, fontSize: 20),
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Camina despacio describiendo un círculo amplio. El radar '
-            'detecta la señal Bluetooth directa (decenas de metros).',
+          Text(
+            context.l10n.radarSearchingHint,
             textAlign: TextAlign.center,
-            style: TextStyle(color: dim),
+            style: const TextStyle(color: dim),
           ),
           if (_gpsDistanceMeters != null) _gpsRow(dim),
         ],
@@ -269,7 +269,7 @@ class _RadarScreenState extends State<RadarScreen>
     return _panelCard(
       children: [
         Text(
-          radarProximityLabel(reading.proximity),
+          _proximityLabel(context.l10n, reading.proximity),
           style: const TextStyle(
             color: Colors.white,
             fontSize: 32,
@@ -279,7 +279,7 @@ class _RadarScreenState extends State<RadarScreen>
         ),
         const SizedBox(height: 2),
         Text(
-          radarDistanceLabel(reading.approxDistanceMeters),
+          _distanceLabel(context.l10n, reading.approxDistanceMeters),
           style: const TextStyle(color: dim, fontSize: 16),
         ),
         const SizedBox(height: 12),
@@ -289,7 +289,7 @@ class _RadarScreenState extends State<RadarScreen>
             Icon(trendIcon, color: trendColor),
             const SizedBox(width: 8),
             Text(
-              radarTrendLabel(reading.trend),
+              _trendLabel(context.l10n, reading.trend),
               style: TextStyle(color: trendColor, fontSize: 18),
             ),
           ],
@@ -306,12 +306,36 @@ class _RadarScreenState extends State<RadarScreen>
         ),
         const SizedBox(height: 6),
         Text(
-          'Señal ${reading.smoothedRssi.round()} dBm',
+          context.l10n.radarDbm(reading.smoothedRssi.round()),
           style: const TextStyle(color: dim, fontSize: 12),
         ),
         if (_gpsDistanceMeters != null) _gpsRow(dim),
       ],
     );
+  }
+
+  String _proximityLabel(AppLocalizations l10n, RadarProximity proximity) =>
+      switch (proximity) {
+        RadarProximity.veryClose => l10n.proximityVeryClose,
+        RadarProximity.close => l10n.proximityClose,
+        RadarProximity.inRange => l10n.proximityInRange,
+        RadarProximity.far => l10n.proximityFar,
+      };
+
+  String _trendLabel(AppLocalizations l10n, RadarTrend trend) =>
+      switch (trend) {
+        RadarTrend.approaching => l10n.trendApproaching,
+        RadarTrend.receding => l10n.trendReceding,
+        RadarTrend.steady => l10n.trendSteady,
+        RadarTrend.unknown => l10n.trendUnknown,
+      };
+
+  /// Distancia orientativa legible: nunca prometemos precisión de metro.
+  String _distanceLabel(AppLocalizations l10n, double meters) {
+    if (meters < 1.5) return l10n.distanceVeryNear;
+    if (meters < 5) return l10n.distanceApprox(meters.round());
+    if (meters < 15) return l10n.distanceApprox((meters / 5).round() * 5);
+    return l10n.distanceFar;
   }
 
   Widget _gpsRow(Color color) {
@@ -327,7 +351,7 @@ class _RadarScreenState extends State<RadarScreen>
           Icon(Icons.gps_fixed, size: 16, color: color),
           const SizedBox(width: 6),
           Text(
-            'Último GPS reportado: a $label en línea recta',
+            context.l10n.radarGpsDistance(label),
             style: TextStyle(color: color, fontSize: 13),
           ),
         ],

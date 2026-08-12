@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/message_repository.dart';
@@ -33,7 +34,9 @@ class MeshController extends ChangeNotifier {
   bool rescueMode = false;
   DateTime? lastRescuePing;
   Timer? _rescueTimer;
-  String _rescueDescription = 'Necesito ayuda';
+
+  /// Vacía significa «usar el texto por defecto localizado» ([sendSos]).
+  String _rescueDescription = '';
 
   // Estado de energía/ubicación reportado por el sistema.
   bool ignoringBatteryOptimizations = true;
@@ -82,7 +85,7 @@ class MeshController extends ChangeNotifier {
   Future<bool> ensureAlwaysLocation() async {
     try {
       if (!await Geolocator.isLocationServiceEnabled()) {
-        lastError = 'Activa la ubicación del sistema para el modo rescate';
+        lastError = currentL10n.errorLocationOff;
         notifyListeners();
       }
       var permission = await Geolocator.checkPermission();
@@ -145,9 +148,10 @@ class MeshController extends ChangeNotifier {
     notifyListeners();
     try {
       if (!await _platform.requestPermissions()) {
-        throw StateError(
-          'Se necesitan permisos de Bluetooth y notificaciones para crear la malla.',
-        );
+        status = MeshConnectionStatus.error;
+        lastError = currentL10n.errorPermissions;
+        notifyListeners();
+        return;
       }
       await _platform.start();
     } catch (error) {
@@ -199,7 +203,7 @@ class MeshController extends ChangeNotifier {
     await _run(
       () => _platform.sendSos(
         content: description.trim().isEmpty
-            ? 'Necesito ayuda'
+            ? currentL10n.sosDefaultMessage
             : description.trim(),
         latitude: position?.latitude,
         longitude: position?.longitude,
@@ -270,7 +274,7 @@ class MeshController extends ChangeNotifier {
         }
         break;
       case 'error':
-        lastError = event['message'] as String? ?? 'Error desconocido';
+        lastError = event['message'] as String? ?? currentL10n.errorUnknown;
         if (status == MeshConnectionStatus.starting) {
           status = MeshConnectionStatus.error;
         }

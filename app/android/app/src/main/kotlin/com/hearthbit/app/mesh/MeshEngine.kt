@@ -23,6 +23,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
+import com.hearthbit.app.R
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -85,7 +86,9 @@ internal class MeshEngine(
 
     @SuppressLint("MissingPermission")
     fun start() {
-        check(adapter != null && adapter.isEnabled) { "Bluetooth está apagado" }
+        check(adapter != null && adapter.isEnabled) {
+            context.getString(R.string.error_bluetooth_off)
+        }
         // Reinicio real: si ya estaba corriendo (por ejemplo tras un fallo de
         // advertising) se liberan los recursos antes de volver a intentarlo.
         if (running) stopInternal(notify = false)
@@ -122,7 +125,7 @@ internal class MeshEngine(
     }
 
     fun updateNickname(value: String) {
-        identity.nickname = value.trim().ifEmpty { "Emergencia-${peerId.takeLast(4)}" }
+        identity.nickname = value.trim().ifEmpty { "SOS-${peerId.takeLast(4)}" }
         sendAnnouncement()
     }
 
@@ -158,7 +161,9 @@ internal class MeshEngine(
     }
 
     fun sendPrivate(peerIdHex: String, content: String): String {
-        require(peers.containsKey(peerIdHex)) { "El dispositivo ya no está disponible" }
+        require(peers.containsKey(peerIdHex)) {
+            context.getString(R.string.error_peer_unavailable)
+        }
         val id = UUID.randomUUID().toString().uppercase()
         val session = sessions[peerIdHex]
         if (session?.established == true) {
@@ -186,8 +191,12 @@ internal class MeshEngine(
      * la trama queda en cola y se dispara el handshake.
      */
     fun sendTransferFrame(peerIdHex: String, frame: ByteArray) {
-        require(peers.containsKey(peerIdHex)) { "El dispositivo ya no está disponible" }
-        require(frame.size <= MAX_TRANSFER_FRAME) { "Trama de transferencia demasiado grande" }
+        require(peers.containsKey(peerIdHex)) {
+            context.getString(R.string.error_peer_unavailable)
+        }
+        require(frame.size <= MAX_TRANSFER_FRAME) {
+            context.getString(R.string.error_frame_too_large)
+        }
         val session = sessions[peerIdHex]
         if (session?.established == true) {
             sendEncryptedFrame(peerIdHex, frame)
@@ -210,7 +219,7 @@ internal class MeshEngine(
         val session = sessions[peerIdHex] ?: return
         val typedPayload = byteArrayOf(MeshProtocol.NOISE_TRANSFER_FRAME) + frame
         val encrypted = runCatching { session.encrypt(typedPayload) }.getOrElse {
-            emitError("Falló el cifrado de la trama de transferencia")
+            emitError(context.getString(R.string.error_frame_encrypt))
             return
         }
         sendNoisePacket(
@@ -306,7 +315,7 @@ internal class MeshEngine(
         sessions[peerIdHex] = session
         val first = runCatching { session.start() }.getOrElse {
             sessions.remove(peerIdHex)
-            emitError("No se pudo iniciar el canal privado: ${it.message}")
+            emitError(context.getString(R.string.error_private_channel, it.message))
             return
         }
         sendNoisePacket(MeshProtocol.TYPE_NOISE_HANDSHAKE, peerBytes, first)
@@ -317,7 +326,7 @@ internal class MeshEngine(
         val privateData = MeshProtocol.encodePrivateMessage(id, content)
         val typedPayload = byteArrayOf(MeshProtocol.NOISE_PRIVATE_MESSAGE) + privateData
         val encrypted = runCatching { session.encrypt(typedPayload) }.getOrElse {
-            emitError("Falló el cifrado del mensaje privado")
+            emitError(context.getString(R.string.error_private_encrypt))
             return
         }
         sendNoisePacket(
@@ -475,7 +484,7 @@ internal class MeshEngine(
         }
         val response = runCatching { session.processHandshake(packet.payload) }.getOrElse {
             sessions.remove(senderHex)?.close()
-            emitError("Un canal privado fue rechazado por identidad inválida")
+            emitError(context.getString(R.string.error_identity_rejected))
             return
         }
         if (response != null) {
@@ -554,7 +563,7 @@ internal class MeshEngine(
     private fun startAdvertising() {
         val advertiser = adapter.bluetoothLeAdvertiser
         if (advertiser == null) {
-            emitError("El dispositivo no soporta anuncios BLE; modo solo recepción")
+            emitError(context.getString(R.string.error_no_advertising))
             emitStatus("degraded")
             return
         }
@@ -597,10 +606,7 @@ internal class MeshEngine(
         override fun onStartFailure(errorCode: Int) {
             if (!running) return
             advertising = false
-            emitError(
-                "No se pudo anunciar la malla BLE ($errorCode); " +
-                    "otros teléfonos no verán este dispositivo, pero puede recibir",
-            )
+            emitError(context.getString(R.string.error_advertise_failed, errorCode))
             emitStatus("degraded")
         }
     }
@@ -631,7 +637,7 @@ internal class MeshEngine(
         }
 
         override fun onScanFailed(errorCode: Int) {
-            emitError("Falló el escaneo BLE ($errorCode)")
+            emitError(context.getString(R.string.error_scan_failed, errorCode))
         }
     }
 

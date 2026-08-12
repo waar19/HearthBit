@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notification_channel_name">緊急メッシュ</string>
+    <string name="notification_channel_description">緊急時に Bluetooth 接続を維持します</string>
+    <string name="notification_title">HearthBit は接続中です</string>
+    <string name="notification_text">BLE メッシュのメッセージを中継しています</string>
+    <string name="error_ble_start">BLE を開始できませんでした</string>
+    <string name="error_bluetooth_off">Bluetooth がオフです</string>
+    <string name="error_no_advertising">この端末は BLE アドバタイズに対応していません。受信専用モードです</string>
+    <string name="error_advertise_failed">BLE メッシュをアドバタイズできませんでした（%1$d）。他の端末からは見えませんが、受信は可能です</string>
+    <string name="error_scan_failed">BLE スキャンに失敗しました（%1$d）</string>
+    <string name="error_private_channel">プライベートチャネルを開始できませんでした：%1$s</string>
+    <string name="error_private_encrypt">プライベートメッセージの暗号化に失敗しました</string>
+    <string name="error_frame_encrypt">転送フレームの暗号化に失敗しました</string>
+    <string name="error_identity_rejected">無効な ID のためプライベートチャネルが拒否されました</string>
+    <string name="error_peer_unavailable">端末が利用できなくなりました</string>
+    <string name="error_frame_too_large">転送フレームが大きすぎます</string>
+    <string name="error_mesh_generic">メッシュのエラー</string>
+    <string name="error_wifi_aware_unsupported">Wi-Fi Aware 非対応</string>
+    <string name="error_nearby_advertise">Nearby をアドバタイズできませんでした：%1$s</string>
+    <string name="error_nearby_discover">Nearby を検出できませんでした：%1$s</string>
+    <string name="error_nearby_rejected">Nearby 接続が拒否されました：%1$s</string>
+    <string name="error_nearby_not_connected">Nearby が接続できませんでした（%1$d）</string>
+    <string name="error_nearby_send">Nearby で送信できませんでした：%1$s</string>
+    <string name="error_nearby_save">Nearby ファイルを保存できませんでした：%1$s</string>
+    <string name="error_nearby_interrupted">Nearby 転送が中断されました（%1$d）</string>
+    <string name="error_wifi_aware_publish">Wi-Fi Aware がパブリッシュを拒否しました</string>
+    <string name="error_wifi_aware_subscribe">Wi-Fi Aware がサブスクライブを拒否しました</string>
+    <string name="error_wifi_aware_unavailable_now">Wi-Fi Aware は現在利用できません</string>
+    <string name="error_wifi_aware_session">Wi-Fi Aware セッションを開始できませんでした</string>
+    <string name="error_wifi_aware_datapath">Wi-Fi Aware のデータパスが確立されませんでした</string>
+    <string name="error_wifi_aware_send_interrupted">Wi-Fi Aware の送信が中断されました：%1$s</string>
+    <string name="error_wifi_aware_receive_interrupted">Wi-Fi Aware のダウンロードが中断されました：%1$s</string>
+</resources>

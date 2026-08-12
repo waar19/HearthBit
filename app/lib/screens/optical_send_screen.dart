@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:qr/qr.dart';
 
+import '../l10n/l10n.dart';
 import '../services/fountain_code.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/optical_protocol.dart';
@@ -35,14 +36,19 @@ class OpticalSendScreen extends StatefulWidget {
 }
 
 enum _Density {
-  compact(200, 'Compacta'),
-  medium(420, 'Media'),
-  high(650, 'Alta');
+  compact(200),
+  medium(420),
+  high(650);
 
-  const _Density(this.chunkSize, this.label);
+  const _Density(this.chunkSize);
 
   final int chunkSize;
-  final String label;
+
+  String label(AppLocalizations l10n) => switch (this) {
+    _Density.compact => l10n.densityCompact,
+    _Density.medium => l10n.densityMedium,
+    _Density.high => l10n.densityHigh,
+  };
 }
 
 class _OpticalSendScreenState extends State<OpticalSendScreen> {
@@ -77,7 +83,10 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
   Future<void> _prepare() async {
     try {
       final bytes = await File(widget.filePath).readAsBytes();
-      if (bytes.isEmpty) throw StateError('El archivo está vacío');
+      if (bytes.isEmpty) {
+        setState(() => _error = currentL10n.opticalFileEmpty);
+        return;
+      }
       final random = Random.secure();
       setState(() {
         _fileBytes = bytes;
@@ -179,7 +188,7 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
   Widget build(BuildContext context) {
     final encoder = _encoder;
     return Scaffold(
-      appBar: AppBar(title: const Text('Enviar por QR')),
+      appBar: AppBar(title: Text(context.l10n.sendByQr)),
       body: SafeArea(
         child: _error != null
             ? Center(child: Text(_error!))
@@ -190,8 +199,11 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
                   Padding(
                     padding: const EdgeInsets.all(12),
                     child: Text(
-                      '${widget.fileName} · ${encoder.chunkCount} chunks · '
-                      'símbolo ${_symbolIndex + 1}',
+                      context.l10n.opticalSendStats(
+                        widget.fileName,
+                        encoder.chunkCount,
+                        _symbolIndex + 1,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -207,8 +219,8 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
                                   color: Theme.of(context).colorScheme.primary,
                                 ),
                                 const SizedBox(height: 12),
-                                const Text(
-                                  'El receptor confirmó la recepción por BLE',
+                                Text(
+                                  context.l10n.opticalConfirmed,
                                   textAlign: TextAlign.center,
                                 ),
                               ],
@@ -236,14 +248,14 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
                         children: [
                           Row(
                             children: [
-                              const Text('Velocidad'),
+                              Text(context.l10n.opticalSpeedLabel),
                               Expanded(
                                 child: Slider(
                                   value: _fps,
                                   min: 2,
                                   max: 15,
                                   divisions: 13,
-                                  label: '${_fps.round()} QR/s',
+                                  label: context.l10n.opticalFps(_fps.round()),
                                   onChanged: (value) {
                                     setState(() => _fps = value);
                                     _restartTimer();
@@ -257,7 +269,7 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
                                 .map(
                                   (density) => ButtonSegment(
                                     value: density,
-                                    label: Text(density.label),
+                                    label: Text(density.label(context.l10n)),
                                   ),
                                 )
                                 .toList(),
@@ -267,14 +279,11 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
                               _rebuildEncoder();
                             },
                           ),
-                          const Padding(
-                            padding: EdgeInsets.all(12),
+                          Padding(
+                            padding: const EdgeInsets.all(12),
                             child: Text(
-                              'Si la cámara receptora pierde muchos frames, '
-                              'baja la velocidad o la densidad. El código es '
-                              'rateless: repetir símbolos nunca corrompe la '
-                              'transferencia.',
-                              style: TextStyle(fontSize: 12),
+                              context.l10n.opticalSendHint,
+                              style: const TextStyle(fontSize: 12),
                               textAlign: TextAlign.center,
                             ),
                           ),

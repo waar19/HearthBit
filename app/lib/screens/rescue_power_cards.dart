@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../controllers/mesh_controller.dart';
+import '../l10n/l10n.dart';
 
 /// Tarjeta del modo rescate: reenvía el SOS con GPS fresco periódicamente
 /// para que los rescatistas puedan seguir la posición de la persona.
@@ -14,21 +15,21 @@ class RescueModeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final minutes = MeshController.rescueInterval.inMinutes;
+    final l10n = context.l10n;
     return Card(
       child: Column(
         children: [
           SwitchListTile(
             secondary: const Icon(Icons.my_location),
-            title: const Text(
-              'Modo rescate',
-              style: TextStyle(fontWeight: FontWeight.bold),
+            title: Text(
+              l10n.rescueModeTitle,
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Text(
               controller.rescueMode
-                  ? 'Reenviando tu SOS con ubicación cada $minutes min.'
-                        '${controller.lastRescuePing != null ? " Último envío: ${_hourLabel(controller.lastRescuePing!)}." : ""}'
-                  : 'Reenvía tu SOS con GPS actualizado cada $minutes minutos, '
-                        'incluso con la pantalla apagada.',
+                  ? '${l10n.rescueModeActive(minutes)}'
+                        '${controller.lastRescuePing != null ? " ${l10n.rescueModeLastPing(_hourLabel(controller.lastRescuePing!))}" : ""}'
+                  : l10n.rescueModeInactive(minutes),
             ),
             value: controller.rescueMode,
             onChanged: controller.canSend
@@ -45,16 +46,15 @@ class RescueModeCard extends StatelessWidget {
                     color: Theme.of(context).colorScheme.error,
                   ),
                   const SizedBox(width: 8),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Sin ubicación permanente, el GPS solo se actualiza con '
-                      'la app abierta.',
-                      style: TextStyle(fontSize: 12),
+                      l10n.rescueModeNoBackgroundLocation,
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ),
                   TextButton(
                     onPressed: controller.ensureAlwaysLocation,
-                    child: const Text('PERMITIR'),
+                    child: Text(l10n.actionAllow),
                   ),
                 ],
               ),
@@ -78,53 +78,47 @@ class PowerSavingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isAndroid = Platform.isAndroid;
+    final l10n = context.l10n;
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const ListTile(
-              leading: Icon(Icons.battery_saver),
+            ListTile(
+              leading: const Icon(Icons.battery_saver),
               title: Text(
-                'Batería y ubicación',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                l10n.powerCardTitle,
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              subtitle: Text(
-                'Ajustes para que la malla siga latiendo y los rescatistas '
-                'puedan ubicarte.',
-              ),
+              subtitle: Text(l10n.powerCardSubtitle),
             ),
             if (isAndroid)
               _StatusRow(
                 ok: controller.ignoringBatteryOptimizations,
-                label: 'Optimización de batería desactivada para HearthBit',
-                actionLabel: 'DESACTIVAR',
+                label: l10n.powerBatteryOptimization,
+                actionLabel: l10n.actionDisable,
                 onAction: controller.requestDisableBatteryOptimizations,
               ),
             _StatusRow(
               ok: controller.backgroundLocationGranted,
               label: isAndroid
-                  ? 'Ubicación permitida «todo el tiempo»'
-                  : 'Ubicación permitida «siempre»',
-              actionLabel: 'PERMITIR',
+                  ? l10n.powerLocationAndroid
+                  : l10n.powerLocationIos,
+              actionLabel: l10n.actionAllow,
               onAction: controller.ensureAlwaysLocation,
             ),
             if (controller.lowPowerMode)
               _StatusRow(
                 ok: false,
-                label: isAndroid
-                    ? 'El ahorro de batería del sistema está activo y puede '
-                          'apagar la malla'
-                    : 'El Modo de bajo consumo está activo y reduce el '
-                          'Bluetooth en segundo plano',
+                label: isAndroid ? l10n.powerSaverAndroid : l10n.powerSaverIos,
               ),
             ExpansionTile(
               leading: const Icon(Icons.tips_and_updates_outlined),
-              title: const Text('Consejos para ahorrar batería'),
+              title: Text(l10n.powerTipsTitle),
               childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               children: [
-                for (final tip in _tips(isAndroid))
+                for (final tip in _tips(l10n, isAndroid))
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Padding(
@@ -143,25 +137,20 @@ class PowerSavingCard extends StatelessWidget {
     );
   }
 
-  List<String> _tips(bool isAndroid) => [
-    'Baja el brillo de la pantalla al mínimo y reduce el tiempo de bloqueo.',
-    'Si no hay internet, desactiva los datos móviles y el 5G: la malla no '
-        'los usa y la búsqueda de señal gasta mucha batería.',
-    'Cierra las apps que no necesites; deja Bluetooth y ubicación activos.',
+  List<String> _tips(AppLocalizations l10n, bool isAndroid) => [
+    l10n.powerTipBrightness,
+    l10n.powerTipMobileData,
+    l10n.powerTipCloseApps,
     if (isAndroid) ...[
-      'No cierres HearthBit desde «recientes»: el sistema mataría la malla.',
-      'Algunos fabricantes (Xiaomi, Huawei, Samsung) tienen su propio '
-          'ahorro de energía: excluye a HearthBit también allí.',
-      'Desactiva la sincronización automática de cuentas mientras dure la '
-          'emergencia.',
+      l10n.powerTipAndroidRecents,
+      l10n.powerTipAndroidVendor,
+      l10n.powerTipAndroidSync,
     ] else ...[
-      'No fuerces el cierre de HearthBit: iOS no la relanza sola.',
-      'Desactiva «Actualización en segundo plano» de otras apps en Ajustes.',
-      'Evita el Modo de bajo consumo salvo que HearthBit esté en pantalla: '
-          'reduce el Bluetooth en segundo plano.',
+      l10n.powerTipIosForceClose,
+      l10n.powerTipIosBackgroundRefresh,
+      l10n.powerTipIosLowPower,
     ],
-    'Comparte batería externa entre vecinos: un solo teléfono encendido '
-        'mantiene el enlace de toda la manzana.',
+    l10n.powerTipShareBattery,
   ];
 }
 
@@ -195,7 +184,7 @@ class _StatusRow extends StatelessWidget {
           if (!ok && onAction != null)
             TextButton(
               onPressed: () => onAction!(),
-              child: Text(actionLabel ?? 'AJUSTAR'),
+              child: Text(actionLabel ?? context.l10n.actionAdjust),
             ),
         ],
       ),

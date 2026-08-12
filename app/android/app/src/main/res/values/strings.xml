@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notification_channel_name">Emergency mesh</string>
+    <string name="notification_channel_description">Keeps the Bluetooth connection alive during an emergency</string>
+    <string name="notification_title">HearthBit is connected</string>
+    <string name="notification_text">Relaying BLE mesh messages</string>
+    <string name="error_ble_start">Could not start BLE</string>
+    <string name="error_bluetooth_off">Bluetooth is off</string>
+    <string name="error_no_advertising">This device does not support BLE advertising; receive-only mode</string>
+    <string name="error_advertise_failed">Could not advertise the BLE mesh (%1$d); other phones will not see this device, but it can still receive</string>
+    <string name="error_scan_failed">BLE scan failed (%1$d)</string>
+    <string name="error_private_channel">Could not start the private channel: %1$s</string>
+    <string name="error_private_encrypt">Failed to encrypt the private message</string>
+    <string name="error_frame_encrypt">Failed to encrypt the transfer frame</string>
+    <string name="error_identity_rejected">A private channel was rejected due to an invalid identity</string>
+    <string name="error_peer_unavailable">The device is no longer available</string>
+    <string name="error_frame_too_large">Transfer frame too large</string>
+    <string name="error_mesh_generic">Mesh error</string>
+    <string name="error_wifi_aware_unsupported">Wi-Fi Aware not supported</string>
+    <string name="error_nearby_advertise">Could not advertise Nearby: %1$s</string>
+    <string name="error_nearby_discover">Could not discover Nearby: %1$s</string>
+    <string name="error_nearby_rejected">Nearby connection rejected: %1$s</string>
+    <string name="error_nearby_not_connected">Nearby did not connect (%1$d)</string>
+    <string name="error_nearby_send">Could not send via Nearby: %1$s</string>
+    <string name="error_nearby_save">Could not save the Nearby file: %1$s</string>
+    <string name="error_nearby_interrupted">Nearby transfer interrupted (%1$d)</string>
+    <string name="error_wifi_aware_publish">Wi-Fi Aware rejected the publication</string>
+    <string name="error_wifi_aware_subscribe">Wi-Fi Aware rejected the subscription</string>
+    <string name="error_wifi_aware_unavailable_now">Wi-Fi Aware is not available right now</string>
+    <string name="error_wifi_aware_session">Could not start the Wi-Fi Aware session</string>
+    <string name="error_wifi_aware_datapath">The Wi-Fi Aware data path was not established</string>
+    <string name="error_wifi_aware_send_interrupted">Wi-Fi Aware send interrupted: %1$s</string>
+    <string name="error_wifi_aware_receive_interrupted">Wi-Fi Aware download interrupted: %1$s</string>
+</resources>
