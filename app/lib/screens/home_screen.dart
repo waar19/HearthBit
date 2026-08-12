@@ -818,17 +818,70 @@ class _PrivateChatSheet extends StatefulWidget {
 
 class _PrivateChatSheetState extends State<_PrivateChatSheet> {
   late final TextEditingController _textController;
+  final ScrollController _scrollController = ScrollController();
+  var _privateMessageCount = 0;
+  var _scrollScheduled = false;
 
   @override
   void initState() {
     super.initState();
     _textController = TextEditingController();
+    _privateMessageCount = _countPrivateMessages();
+    widget.controller.addListener(_handleControllerUpdate);
+    _scrollToBottom(animate: false);
+  }
+
+  @override
+  void didUpdateWidget(covariant _PrivateChatSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_handleControllerUpdate);
+      widget.controller.addListener(_handleControllerUpdate);
+      _privateMessageCount = _countPrivateMessages();
+      _scrollToBottom(animate: false);
+    }
   }
 
   @override
   void dispose() {
+    widget.controller.removeListener(_handleControllerUpdate);
     _textController.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  int _countPrivateMessages() => widget.controller.messages
+      .where(
+        (message) =>
+            message.isPrivate && message.senderPeerId == widget.peer.id,
+      )
+      .length;
+
+  void _handleControllerUpdate() {
+    final count = _countPrivateMessages();
+    if (count == _privateMessageCount || !mounted) return;
+    final hasNewMessage = count > _privateMessageCount;
+    setState(() => _privateMessageCount = count);
+    if (hasNewMessage) _scrollToBottom();
+  }
+
+  void _scrollToBottom({bool animate = true}) {
+    if (_scrollScheduled) return;
+    _scrollScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollScheduled = false;
+      if (!mounted || !_scrollController.hasClients) return;
+      final target = _scrollController.position.maxScrollExtent;
+      if (animate) {
+        _scrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      } else {
+        _scrollController.jumpTo(target);
+      }
+    });
   }
 
   @override
@@ -887,6 +940,7 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
                       ),
                     )
                   : ListView(
+                      controller: _scrollController,
                       children: _messageTimeline(context, privateMessages),
                     ),
             ),
