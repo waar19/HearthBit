@@ -55,7 +55,7 @@ class MeshForegroundService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        runCatching { MeshRuntime.engine(this).start() }.onFailure {
+        runCatching { MeshRuntime.engine(this).ensureStarted() }.onFailure {
             MeshRuntime.eventListener?.invoke(
                 mapOf(
                     "type" to "error",

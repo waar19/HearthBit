@@ -468,6 +468,33 @@ class AppLocalizationsJa extends AppLocalizations {
   String get errorUnknown => '不明なエラー';
 
   @override
+  String get tooltipSupport => 'HearthBit を支援';
+
+  @override
+  String get aboutTitle => 'HearthBit について';
+
+  @override
+  String get aboutBody =>
+      'HearthBit はオープンソースの緊急通信プロジェクトです。ご支援は実機テストと堅牢な中継ハードウェアの開発に役立ちます。';
+
+  @override
+  String aboutVersion(String version) {
+    return 'バージョン $version';
+  }
+
+  @override
+  String get aboutSourceCode => 'ソースコード';
+
+  @override
+  String get supportButton => 'コーヒーで支援';
+
+  @override
+  String get openLinkError => 'リンクを開けませんでした';
+
+  @override
+  String get actionClose => '閉じる';
+
+  @override
   String get terrInterrupted => 'アプリ終了時に中断されました';
 
   @override

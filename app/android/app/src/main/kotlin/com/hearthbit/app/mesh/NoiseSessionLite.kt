@@ -73,10 +73,7 @@ internal class NoiseSessionLite(
                 ((input[1].toLong() and 0xFF) shl 16) or
                 ((input[2].toLong() and 0xFF) shl 8) or
                 (input[3].toLong() and 0xFF)
-        check(receivedNonces.add(nonce)) { "Repeated Noise nonce" }
-        while (receivedNonces.size > 1024) {
-            receivedNonces.remove(receivedNonces.first())
-        }
+        check(nonce !in receivedNonces) { "Repeated Noise nonce" }
         val cipher = checkNotNull(receiveCipher)
         cipher.setNonce(nonce)
         val ciphertext = input.copyOfRange(4, input.size)
@@ -89,6 +86,10 @@ internal class NoiseSessionLite(
             0,
             ciphertext.size,
         )
+        receivedNonces.add(nonce)
+        while (receivedNonces.size > 1024) {
+            receivedNonces.remove(receivedNonces.first())
+        }
         return plaintext.copyOf(length)
     }
 

@@ -119,6 +119,29 @@ void main() {
     expect(controller.status, MeshConnectionStatus.active);
   });
 
+  test('snapshot resincroniza estado, identidad y cercanos', () async {
+    platform.emit({
+      'type': 'snapshot',
+      'status': 'active',
+      'nickname': 'Nodo 7',
+      'peerId': '0102030405060708',
+      'peers': [
+        {
+          'id': '1112131415161718',
+          'nickname': 'Rescate',
+          'lastSeen': 1234,
+          'secure': true,
+        },
+      ],
+    });
+    await pumpEvents();
+
+    expect(controller.status, MeshConnectionStatus.active);
+    expect(controller.nickname, 'Nodo 7');
+    expect(controller.peerId, '0102030405060708');
+    expect(controller.peers.single.nickname, 'Rescate');
+  });
+
   test('un error durante el arranque marca estado de error', () async {
     unawaited(controller.start());
     await pumpEvents();

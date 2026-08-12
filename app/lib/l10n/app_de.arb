@@ -150,6 +150,15 @@
   "errorLocationOff": "Aktiviere den Systemstandort für den Rettungsmodus",
   "errorUnknown": "Unbekannter Fehler",
 
+  "tooltipSupport": "HearthBit unterstützen",
+  "aboutTitle": "Über HearthBit",
+  "aboutBody": "HearthBit ist ein quelloffenes Projekt für Notfallkommunikation. Deine Unterstützung finanziert Gerätetests und robuste Relais-Hardware.",
+  "aboutVersion": "Version {version}",
+  "aboutSourceCode": "Quellcode",
+  "supportButton": "Spendiere mir einen Kaffee",
+  "openLinkError": "Der Link konnte nicht geöffnet werden",
+  "actionClose": "Schließen",
+
   "terrInterrupted": "Beim Schließen der App unterbrochen",
   "terrFileSize": "Die Datei muss zwischen 1 Byte und 512 MiB groß sein",
   "terrOfferExpired": "Das Angebot ist ohne Antwort abgelaufen",

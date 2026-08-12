@@ -8,6 +8,7 @@
     <string name="error_bluetooth_off">Le Bluetooth est désactivé</string>
     <string name="error_no_advertising">Cet appareil ne prend pas en charge l\'annonce BLE ; mode réception seule</string>
     <string name="error_advertise_failed">Impossible d\'annoncer le maillage BLE (%1$d) ; les autres téléphones ne verront pas cet appareil, mais il peut recevoir</string>
+    <string name="error_advertise_timeout">L\'annonce BLE n\'a pas répondu après une nouvelle tentative ; le mode réception seule est actif</string>
     <string name="error_scan_failed">Échec du scan BLE (%1$d)</string>
     <string name="error_private_channel">Impossible de démarrer le canal privé : %1$s</string>
     <string name="error_private_encrypt">Échec du chiffrement du message privé</string>

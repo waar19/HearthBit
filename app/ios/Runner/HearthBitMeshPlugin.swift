@@ -1,6 +1,7 @@
 import CoreBluetooth
 import CoreLocation
 import CryptoKit
+import Compression
 import Flutter
 import Foundation
 import Security
@@ -300,24 +301,20 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   @discardableResult
   private func sendPublic(content: String, channel: String?) throws -> String {
     guard running else { throw IOSMeshError.notRunning }
-    let message = IOSMeshProtocol.publicMessage(
-      nickname: identity.nickname,
-      peerID: identity.peerIDHex,
-      content: String(content.prefix(2000)),
-      channel: channel
-    )
+    let id = UUID().uuidString.uppercased()
+    let payload = Data(String(content.prefix(2000)).utf8)
     let packet = identity.sign(
       IOSMeshPacket(
         type: IOSMeshProtocol.message,
         ttl: IOSMeshProtocol.defaultTTL,
         timestamp: UInt64(Date().timeIntervalSince1970 * 1000),
         senderID: identity.peerID,
-        payload: message.data
+        payload: payload
       )
     )
     broadcast(packet)
     emitMessage(
-      id: message.id,
+      id: id,
       sender: identity.nickname,
       content: content,
       senderPeerID: identity.peerIDHex,
@@ -326,7 +323,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       timestamp: packet.timestamp,
       channel: channel
     )
-    return message.id
+    return id
   }
 
   private func sendPrivate(peerID: String, content: String) throws -> String {
@@ -447,7 +444,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func broadcast(_ packet: IOSMeshPacket, excluding: UUID? = nil) {
-    let bytes = IOSMeshProtocol.encode(packet)
+    let bytes = IOSMeshProtocol.encodeForBLE(packet)
     if let recipient = packet.recipientID,
        recipient != Data(repeating: 0xff, count: 8) {
       storeForward.put(packet)
@@ -522,9 +519,16 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     case IOSMeshProtocol.message:
       guard
         let peer = peers[senderID],
-        IOSMeshIdentity.verify(packet, key: peer.signingPublicKey),
-        let message = IOSMeshProtocol.decodePublicMessage(packet.payload)
+        IOSMeshIdentity.verify(packet, key: peer.signingPublicKey)
       else { return }
+      let message = IOSMeshProtocol.decodePublicMessage(packet.payload) ??
+        IOSMeshProtocol.PublicMessage(
+          id: IOSMeshProtocol.fingerprint(packet).uppercased(),
+          sender: peer.nickname,
+          content: String(data: packet.payload, encoding: .utf8) ?? "",
+          timestamp: packet.timestamp,
+          channel: packet.payload.starts(with: Data("SOS|".utf8)) ? "sos" : nil
+        )
       emitMessage(
         id: message.id,
         sender: message.sender,
@@ -852,7 +856,7 @@ private struct IOSMeshPacket {
     var copy = self
     copy.ttl = 0
     copy.signature = nil
-    return IOSMeshProtocol.encode(copy, padded: false)
+    return IOSMeshProtocol.encode(copy, padded: true)
   }
 }
 
@@ -886,9 +890,16 @@ private enum IOSMeshProtocol {
   }
 
   static func encode(_ packet: IOSMeshPacket, padded: Bool = true) -> Data {
+    var payload = packet.payload
+    var originalPayloadSize: Int?
+    if shouldCompress(payload), let compressed = compress(payload) {
+      originalPayloadSize = payload.count
+      payload = compressed
+    }
     var flags: UInt8 = 0
     if packet.recipientID != nil { flags |= 0x01 }
     if packet.signature != nil { flags |= 0x02 }
+    if originalPayloadSize != nil { flags |= 0x04 }
     var output = Data([
       packet.version,
       packet.type,
@@ -896,12 +907,32 @@ private enum IOSMeshProtocol {
     ])
     output.appendInteger(packet.timestamp)
     output.append(flags)
-    output.appendInteger(UInt16(packet.payload.count))
+    let originalSizeField = originalPayloadSize == nil ? 0 : (packet.version >= 2 ? 4 : 2)
+    let payloadDataSize = payload.count + originalSizeField
+    if packet.version >= 2 {
+      output.appendInteger(UInt32(payloadDataSize))
+    } else {
+      output.appendInteger(UInt16(payloadDataSize))
+    }
     output.append(packet.senderID)
     if let recipient = packet.recipientID { output.append(recipient) }
-    output.append(packet.payload)
+    if let originalPayloadSize {
+      if packet.version >= 2 {
+        output.appendInteger(UInt32(originalPayloadSize))
+      } else {
+        output.appendInteger(UInt16(originalPayloadSize))
+      }
+    }
+    output.append(payload)
     if let signature = packet.signature { output.append(signature) }
     return padded ? pad(output) : output
+  }
+
+  static func encodeForBLE(_ packet: IOSMeshPacket) -> Data {
+    encode(
+      packet,
+      padded: packet.type == noiseHandshake || packet.type == noiseEncrypted
+    )
   }
 
   static func decode(_ encoded: Data) -> IOSMeshPacket? {
@@ -932,7 +963,32 @@ private enum IOSMeshProtocol {
     if version >= 2, flags & 0x08 != 0 {
       guard let count = reader.byte(), reader.skip(Int(count) * 8) else { return nil }
     }
-    guard flags & 0x04 == 0, let payload = reader.data(count: payloadLength) else { return nil }
+    guard let payloadData = reader.data(count: payloadLength) else { return nil }
+    let payload: Data
+    if flags & 0x04 != 0 {
+      var compressedReader = DataReader(payloadData)
+      let originalSize: Int
+      if version >= 2 {
+        guard let size: UInt32 = compressedReader.integer() else { return nil }
+        originalSize = Int(size)
+      } else {
+        guard let size: UInt16 = compressedReader.integer() else { return nil }
+        originalSize = Int(size)
+      }
+      guard
+        originalSize > 0,
+        originalSize <= maximumPayloadLength,
+        !compressedReader.remaining.isEmpty,
+        let expanded = decompress(
+          compressedReader.remaining,
+          originalSize: originalSize
+        ),
+        expanded.count == originalSize
+      else { return nil }
+      payload = expanded
+    } else {
+      payload = payloadData
+    }
     let signature = flags & 0x02 != 0 ? reader.data(count: 64) : nil
     if flags & 0x02 != 0, signature == nil { return nil }
     return IOSMeshPacket(
@@ -1004,6 +1060,7 @@ private enum IOSMeshProtocol {
     output.appendTLV(type: 0x01, value: Data(nickname.utf8).prefix(31))
     output.appendTLV(type: 0x02, value: noisePublicKey)
     output.appendTLV(type: 0x03, value: signingPublicKey)
+    output.appendTLV(type: 0x05, value: Data([0x00]))
     return output
   }
 
@@ -1073,6 +1130,61 @@ private enum IOSMeshProtocol {
           data.suffix(count).allSatisfy({ $0 == last }) else { return data }
     return data.dropLast(count)
   }
+
+  private static func shouldCompress(_ data: Data) -> Bool {
+    guard data.count >= compressionThreshold else { return false }
+    let uniqueRatio = Double(Set(data).count) / Double(min(data.count, 256))
+    return uniqueRatio < 0.9
+  }
+
+  private static func compress(_ data: Data) -> Data? {
+    let capacity = data.count + (data.count / 255) + 16
+    var output = Data(count: capacity)
+    let compressedSize = output.withUnsafeMutableBytes { destination in
+      data.withUnsafeBytes { source in
+        guard
+          let destinationBase = destination.bindMemory(to: UInt8.self).baseAddress,
+          let sourceBase = source.bindMemory(to: UInt8.self).baseAddress
+        else { return 0 }
+        return compression_encode_buffer(
+          destinationBase,
+          capacity,
+          sourceBase,
+          data.count,
+          nil,
+          COMPRESSION_ZLIB
+        )
+      }
+    }
+    guard compressedSize > 0, compressedSize < data.count else { return nil }
+    output.count = compressedSize
+    return output
+  }
+
+  private static func decompress(_ data: Data, originalSize: Int) -> Data? {
+    var output = Data(count: originalSize)
+    let decompressedSize = output.withUnsafeMutableBytes { destination in
+      data.withUnsafeBytes { source in
+        guard
+          let destinationBase = destination.bindMemory(to: UInt8.self).baseAddress,
+          let sourceBase = source.bindMemory(to: UInt8.self).baseAddress
+        else { return 0 }
+        return compression_decode_buffer(
+          destinationBase,
+          originalSize,
+          sourceBase,
+          data.count,
+          nil,
+          COMPRESSION_ZLIB
+        )
+      }
+    }
+    guard decompressedSize == originalSize else { return nil }
+    return output
+  }
+
+  private static let compressionThreshold = 100
+  private static let maximumPayloadLength = 10_485_760
 }
 
 private final class IOSStoreForward {

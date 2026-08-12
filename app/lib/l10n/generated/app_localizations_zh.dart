@@ -458,6 +458,32 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errorUnknown => '未知错误';
 
   @override
+  String get tooltipSupport => '支持 HearthBit';
+
+  @override
+  String get aboutTitle => '关于 HearthBit';
+
+  @override
+  String get aboutBody => 'HearthBit 是一个开源应急通信项目。您的支持将帮助我们进行真机测试并开发可靠的中继硬件。';
+
+  @override
+  String aboutVersion(String version) {
+    return '版本 $version';
+  }
+
+  @override
+  String get aboutSourceCode => '源代码';
+
+  @override
+  String get supportButton => '请我喝杯咖啡';
+
+  @override
+  String get openLinkError => '无法打开链接';
+
+  @override
+  String get actionClose => '关闭';
+
+  @override
   String get terrInterrupted => '应用关闭时中断';
 
   @override

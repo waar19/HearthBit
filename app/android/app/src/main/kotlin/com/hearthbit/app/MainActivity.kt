@@ -152,6 +152,9 @@ class MainActivity : FlutterActivity() {
                     MeshRuntime.eventListener = { event ->
                         runOnUiThread { events.success(event) }
                     }
+                    MeshRuntime.stateSnapshot()?.let { snapshot ->
+                        runOnUiThread { events.success(snapshot) }
+                    }
                 }
 
                 override fun onCancel(arguments: Any?) {

@@ -8,6 +8,7 @@
     <string name="error_bluetooth_off">Bluetooth is off</string>
     <string name="error_no_advertising">This device does not support BLE advertising; receive-only mode</string>
     <string name="error_advertise_failed">Could not advertise the BLE mesh (%1$d); other phones will not see this device, but it can still receive</string>
+    <string name="error_advertise_timeout">BLE advertising did not respond after retrying; receive-only mode is active</string>
     <string name="error_scan_failed">BLE scan failed (%1$d)</string>
     <string name="error_private_channel">Could not start the private channel: %1$s</string>
     <string name="error_private_encrypt">Failed to encrypt the private message</string>

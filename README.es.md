@@ -30,6 +30,14 @@ debilitando»), vibración que acelera al acercarse y distancia GPS en línea
 recta si la alerta traía coordenadas. El **modo rescate** de la víctima
 reenvía su SOS con GPS fresco cada 5 minutos.
 
+## Apoya el proyecto
+
+HearthBit es de código abierto y se sostiene con la comunidad. Las donaciones
+ayudan a financiar pruebas con dispositivos físicos, ensayos de campo y
+hardware para los nodos repetidores.
+
+[![Apoya HearthBit en Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-apoya_HearthBit-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/wilmeralzal)
+
 ## Idiomas
 
 La app está localizada en inglés, español, alemán, francés, chino

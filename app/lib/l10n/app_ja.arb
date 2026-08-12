@@ -150,6 +150,15 @@
   "errorLocationOff": "レスキューモードにはシステムの位置情報をオンにしてください",
   "errorUnknown": "不明なエラー",
 
+  "tooltipSupport": "HearthBit を支援",
+  "aboutTitle": "HearthBit について",
+  "aboutBody": "HearthBit はオープンソースの緊急通信プロジェクトです。ご支援は実機テストと堅牢な中継ハードウェアの開発に役立ちます。",
+  "aboutVersion": "バージョン {version}",
+  "aboutSourceCode": "ソースコード",
+  "supportButton": "コーヒーで支援",
+  "openLinkError": "リンクを開けませんでした",
+  "actionClose": "閉じる",
+
   "terrInterrupted": "アプリ終了時に中断されました",
   "terrFileSize": "ファイルサイズは 1 バイト以上 512 MiB 以下にしてください",
   "terrOfferExpired": "申し出は応答がないまま期限切れになりました",

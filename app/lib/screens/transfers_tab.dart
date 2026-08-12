@@ -45,27 +45,39 @@ class TransfersTab extends StatelessWidget {
         ),
         Expanded(
           child: records.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.folder_shared_outlined, size: 64),
-                        const SizedBox(height: 16),
-                        Text(
-                          context.l10n.emptyTransfersTitle,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
+              ? LayoutBuilder(
+                  builder: (context, constraints) => SingleChildScrollView(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
+                      ),
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.folder_shared_outlined,
+                                size: 64,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                context.l10n.emptyTransfersTitle,
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                context.l10n.emptyTransfersBody,
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          context.l10n.emptyTransfersBody,
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 )

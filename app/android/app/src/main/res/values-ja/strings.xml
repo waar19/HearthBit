@@ -8,6 +8,7 @@
     <string name="error_bluetooth_off">Bluetooth がオフです</string>
     <string name="error_no_advertising">この端末は BLE アドバタイズに対応していません。受信専用モードです</string>
     <string name="error_advertise_failed">BLE メッシュをアドバタイズできませんでした（%1$d）。他の端末からは見えませんが、受信は可能です</string>
+    <string name="error_advertise_timeout">再試行後も BLE アドバタイズから応答がありません。受信専用モードを有効にしました</string>
     <string name="error_scan_failed">BLE スキャンに失敗しました（%1$d）</string>
     <string name="error_private_channel">プライベートチャネルを開始できませんでした：%1$s</string>
     <string name="error_private_encrypt">プライベートメッセージの暗号化に失敗しました</string>

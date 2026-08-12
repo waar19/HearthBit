@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../controllers/mesh_controller.dart';
 import '../controllers/transfer_controller.dart';
@@ -31,6 +33,13 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  static final Uri _donationUri = Uri.parse(
+    'https://buymeacoffee.com/wilmeralzal',
+  );
+  static final Uri _repositoryUri = Uri.parse(
+    'https://github.com/waar19/HearthBit',
+  );
+
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   int _tab = 0;
@@ -193,6 +202,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           appBar: AppBar(
             title: Text(context.l10n.appTitle),
             actions: [
+              IconButton(
+                tooltip: context.l10n.tooltipSupport,
+                onPressed: _showAbout,
+                icon: const Icon(Icons.favorite_outline),
+              ),
               IconButton(
                 tooltip: context.l10n.tooltipChangeName,
                 onPressed: () => _changeNickname(controller),
@@ -469,104 +483,82 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     MeshController controller,
     MeshPeer peer,
   ) async {
-    final textController = TextEditingController();
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) {
-        final privateMessages = controller.messages
-            .where(
-              (message) => message.isPrivate && message.senderPeerId == peer.id,
-            )
-            .toList(growable: false);
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 16,
-            bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
-          ),
-          child: SizedBox(
-            height: MediaQuery.sizeOf(context).height * .65,
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.lock),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        peer.nickname,
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    ),
-                  ],
-                ),
-                const Divider(),
-                Expanded(
-                  child: privateMessages.isEmpty
-                      ? Center(
-                          child: Text(
-                            context.l10n.privateChatIntro,
-                            textAlign: TextAlign.center,
-                          ),
-                        )
-                      : ListView(
-                          children: privateMessages
-                              .map(
-                                (message) => _MessageBubble(message: message),
-                              )
-                              .toList(growable: false),
-                        ),
-                ),
-                _MessageComposer(
-                  controller: textController,
-                  enabled: true,
-                  hint: context.l10n.composerPrivateHint,
-                  onSend: () async {
-                    final text = textController.text;
-                    textController.clear();
-                    await controller.sendPrivate(peer, text);
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      builder: (context) =>
+          _PrivateChatSheet(controller: controller, peer: peer),
     );
-    textController.dispose();
   }
 
   Future<void> _changeNickname(MeshController controller) async {
-    final textController = TextEditingController(text: controller.nickname);
     final value = await showDialog<String>(
       context: context,
+      builder: (context) => _NicknameDialog(
+        initialNickname: controller.nickname,
+      ),
+    );
+    if (value != null) await controller.updateNickname(value);
+  }
+
+  Future<void> _showAbout() async {
+    var version = '';
+    try {
+      version = (await PackageInfo.fromPlatform()).version;
+    } catch (_) {
+      // La información de paquete no está disponible en algunos tests.
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
       builder: (context) => AlertDialog(
-        title: Text(context.l10n.nicknameDialogTitle),
-        content: TextField(
-          controller: textController,
-          autofocus: true,
-          maxLength: 31,
-          decoration: InputDecoration(
-            hintText: context.l10n.nicknameDialogHint,
-          ),
+        icon: const Icon(Icons.favorite_outline),
+        title: Text(context.l10n.aboutTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(context.l10n.aboutBody),
+            if (version.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                context.l10n.aboutVersion(version),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(context.l10n.actionCancel),
+            child: Text(context.l10n.actionClose),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, textController.text),
-            child: Text(context.l10n.actionSave),
+          TextButton.icon(
+            onPressed: () => _openExternal(_repositoryUri),
+            icon: const Icon(Icons.code),
+            label: Text(context.l10n.aboutSourceCode),
+          ),
+          FilledButton.icon(
+            onPressed: () => _openExternal(_donationUri),
+            icon: const Icon(Icons.local_cafe_outlined),
+            label: Text(context.l10n.supportButton),
           ),
         ],
       ),
     );
-    textController.dispose();
-    if (value != null) await controller.updateNickname(value);
+  }
+
+  Future<void> _openExternal(Uri uri) async {
+    var opened = false;
+    try {
+      opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.openLinkError)),
+      );
+    }
   }
 
   Future<void> _confirmWipe(MeshController controller) async {
@@ -603,6 +595,143 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         );
       }
     });
+  }
+}
+
+class _PrivateChatSheet extends StatefulWidget {
+  const _PrivateChatSheet({required this.controller, required this.peer});
+
+  final MeshController controller;
+  final MeshPeer peer;
+
+  @override
+  State<_PrivateChatSheet> createState() => _PrivateChatSheetState();
+}
+
+class _PrivateChatSheetState extends State<_PrivateChatSheet> {
+  late final TextEditingController _textController;
+
+  @override
+  void initState() {
+    super.initState();
+    _textController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final privateMessages = widget.controller.messages
+        .where(
+          (message) =>
+              message.isPrivate && message.senderPeerId == widget.peer.id,
+        )
+        .toList(growable: false);
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
+      ),
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * .65,
+        child: Column(
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.lock),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.peer.nickname,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+              ],
+            ),
+            const Divider(),
+            Expanded(
+              child: privateMessages.isEmpty
+                  ? Center(
+                      child: Text(
+                        context.l10n.privateChatIntro,
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  : ListView(
+                      children: privateMessages
+                          .map((message) => _MessageBubble(message: message))
+                          .toList(growable: false),
+                    ),
+            ),
+            _MessageComposer(
+              controller: _textController,
+              enabled: true,
+              hint: context.l10n.composerPrivateHint,
+              onSend: () async {
+                final text = _textController.text;
+                _textController.clear();
+                await widget.controller.sendPrivate(widget.peer, text);
+                if (context.mounted) Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NicknameDialog extends StatefulWidget {
+  const _NicknameDialog({required this.initialNickname});
+
+  final String initialNickname;
+
+  @override
+  State<_NicknameDialog> createState() => _NicknameDialogState();
+}
+
+class _NicknameDialogState extends State<_NicknameDialog> {
+  late final TextEditingController _textController;
+
+  @override
+  void initState() {
+    super.initState();
+    _textController = TextEditingController(text: widget.initialNickname);
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(context.l10n.nicknameDialogTitle),
+      content: TextField(
+        controller: _textController,
+        autofocus: true,
+        maxLength: 31,
+        decoration: InputDecoration(hintText: context.l10n.nicknameDialogHint),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(context.l10n.actionCancel),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _textController.text),
+          child: Text(context.l10n.actionSave),
+        ),
+      ],
+    );
   }
 }
 
@@ -789,18 +918,25 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 64),
-            const SizedBox(height: 16),
-            Text(title, style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            Text(description, textAlign: TextAlign.center),
-          ],
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 64),
+                  const SizedBox(height: 16),
+                  Text(title, style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 8),
+                  Text(description, textAlign: TextAlign.center),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );

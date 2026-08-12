@@ -170,6 +170,16 @@
   "errorLocationOff": "Turn on system location for rescue mode",
   "errorUnknown": "Unknown error",
 
+  "tooltipSupport": "Support HearthBit",
+  "aboutTitle": "About HearthBit",
+  "aboutBody": "HearthBit is an open-source emergency communication project. Your support helps fund device testing and resilient relay hardware.",
+  "aboutVersion": "Version {version}",
+  "@aboutVersion": {"placeholders": {"version": {"type": "String"}}},
+  "aboutSourceCode": "Source code",
+  "supportButton": "Buy me a coffee",
+  "openLinkError": "Could not open the link",
+  "actionClose": "Close",
+
   "terrInterrupted": "Interrupted when the app closed",
   "terrFileSize": "The file must be between 1 byte and 512 MiB",
   "terrOfferExpired": "The offer expired without an answer",

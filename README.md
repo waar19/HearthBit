@@ -30,6 +30,13 @@ up as you approach, and straight-line GPS distance if the alert carried
 coordinates. The victim's **rescue mode** re-broadcasts their SOS with fresh
 GPS every 5 minutes.
 
+## Support the project
+
+HearthBit is open source and community-supported. Donations help fund physical
+device testing, emergency-field trials and relay-node hardware.
+
+[![Support HearthBit on Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-support_HearthBit-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/wilmeralzal)
+
 ## Languages
 
 The app is localized in English, Spanish, German, French, Chinese (Simplified)

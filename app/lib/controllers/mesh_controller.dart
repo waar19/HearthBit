@@ -243,24 +243,15 @@ class MeshController extends ChangeNotifier {
 
   void _handleEvent(Map<Object?, Object?> event) {
     switch (event['type']) {
+      case 'snapshot':
+        _applyStatus(event);
+        _replacePeers(event['peers']);
+        break;
       case 'status':
-        status = switch (event['status'] as String?) {
-          'active' => MeshConnectionStatus.active,
-          'degraded' => MeshConnectionStatus.degraded,
-          'starting' => MeshConnectionStatus.starting,
-          'error' => MeshConnectionStatus.error,
-          _ => MeshConnectionStatus.stopped,
-        };
-        nickname = event['nickname'] as String? ?? nickname;
-        peerId = event['peerId'] as String? ?? peerId;
+        _applyStatus(event);
         break;
       case 'peers':
-        final rawPeers = event['peers'] as List<Object?>? ?? const [];
-        _peers
-          ..clear()
-          ..addAll(
-            rawPeers.whereType<Map<Object?, Object?>>().map(MeshPeer.fromMap),
-          );
+        _replacePeers(event['peers']);
         break;
       case 'message':
         final rawMessage = event['message'];
@@ -292,6 +283,27 @@ class MeshController extends ChangeNotifier {
         break;
     }
     notifyListeners();
+  }
+
+  void _applyStatus(Map<Object?, Object?> event) {
+    status = switch (event['status'] as String?) {
+      'active' => MeshConnectionStatus.active,
+      'degraded' => MeshConnectionStatus.degraded,
+      'starting' => MeshConnectionStatus.starting,
+      'error' => MeshConnectionStatus.error,
+      _ => MeshConnectionStatus.stopped,
+    };
+    nickname = event['nickname'] as String? ?? nickname;
+    peerId = event['peerId'] as String? ?? peerId;
+  }
+
+  void _replacePeers(Object? value) {
+    final rawPeers = value as List<Object?>? ?? const [];
+    _peers
+      ..clear()
+      ..addAll(
+        rawPeers.whereType<Map<Object?, Object?>>().map(MeshPeer.fromMap),
+      );
   }
 
   @override

@@ -22,6 +22,21 @@ La interoperabilidad HearthBit↔BitChat con hardware real (pasos 2-5) es una
 prueba manual obligatoria antes de declarar compatibilidad física; los tests
 binarios automatizados no la sustituyen.
 
+## Registro de interoperabilidad
+
+### 2026-08-12 — Galaxy S25 ↔ BitChat en iPhone
+
+- Android: Samsung SM-S931B, Android 16 (API 36), HearthBit debug.
+- Distancia: teléfonos cercanos, BitChat en primer plano.
+- Resultado confirmado por log: conexión GATT, decodificación y validación
+  Ed25519 de anuncios BitChat actuales; peers directos y retransmitidos
+  aceptados (`ANNOUNCE accepted`, TTL 7 y TTL 6).
+- Correcciones necesarias para lograrlo: firma canónica con TTL=0 y padding,
+  compresión raw-deflate compatible, TLV de capacidades y serialización de
+  escrituras GATT.
+- Pendiente de confirmación visual manual: mensaje público en ambos sentidos,
+  Noise DM en ambos sentidos y relé de dos saltos.
+
 ## Matriz de transferencia de archivos
 
 Pruebe cada celda con un archivo pequeño (~100 KB) y una foto (~3 MB):
@@ -73,8 +88,9 @@ Con dos teléfonos y la malla activa:
 
 ## Prueba automatizada
 
-`MeshProtocolTest` congela la cabecera binaria v1 y la carga de mensajes usada
-por BitChat. Ejecútela con:
+`MeshProtocolTest` congela la cabecera binaria v1, la compresión, la forma
+canónica de firma y el parseo tolerante de anuncios usados por BitChat.
+Ejecútela con:
 
 ```powershell
 cd app\android

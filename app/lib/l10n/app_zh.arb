@@ -150,6 +150,15 @@
   "errorLocationOff": "请开启系统定位以使用救援模式",
   "errorUnknown": "未知错误",
 
+  "tooltipSupport": "支持 HearthBit",
+  "aboutTitle": "关于 HearthBit",
+  "aboutBody": "HearthBit 是一个开源应急通信项目。您的支持将帮助我们进行真机测试并开发可靠的中继硬件。",
+  "aboutVersion": "版本 {version}",
+  "aboutSourceCode": "源代码",
+  "supportButton": "请我喝杯咖啡",
+  "openLinkError": "无法打开链接",
+  "actionClose": "关闭",
+
   "terrInterrupted": "应用关闭时中断",
   "terrFileSize": "文件大小必须在 1 字节到 512 MiB 之间",
   "terrOfferExpired": "传输请求已超时，无人响应",

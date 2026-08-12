@@ -150,6 +150,15 @@
   "errorLocationOff": "Activa la ubicación del sistema para el modo rescate",
   "errorUnknown": "Error desconocido",
 
+  "tooltipSupport": "Apoyar HearthBit",
+  "aboutTitle": "Acerca de HearthBit",
+  "aboutBody": "HearthBit es un proyecto de comunicación de emergencia de código abierto. Tu apoyo ayuda a financiar pruebas con dispositivos y hardware repetidor resistente.",
+  "aboutVersion": "Versión {version}",
+  "aboutSourceCode": "Código fuente",
+  "supportButton": "Invítame a un café",
+  "openLinkError": "No se pudo abrir el enlace",
+  "actionClose": "Cerrar",
+
   "terrInterrupted": "Interrumpida al cerrar la aplicación",
   "terrFileSize": "El archivo debe pesar entre 1 byte y 512 MiB",
   "terrOfferExpired": "La oferta caducó sin respuesta",

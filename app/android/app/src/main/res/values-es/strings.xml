@@ -8,6 +8,7 @@
     <string name="error_bluetooth_off">Bluetooth está apagado</string>
     <string name="error_no_advertising">El dispositivo no soporta anuncios BLE; modo solo recepción</string>
     <string name="error_advertise_failed">No se pudo anunciar la malla BLE (%1$d); otros teléfonos no verán este dispositivo, pero puede recibir</string>
+    <string name="error_advertise_timeout">El anuncio BLE no respondió tras reintentarlo; está activo el modo solo recepción</string>
     <string name="error_scan_failed">Falló el escaneo BLE (%1$d)</string>
     <string name="error_private_channel">No se pudo iniciar el canal privado: %1$s</string>
     <string name="error_private_encrypt">Falló el cifrado del mensaje privado</string>

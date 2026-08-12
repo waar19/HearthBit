@@ -915,6 +915,54 @@ abstract class AppLocalizations {
   /// **'Unknown error'**
   String get errorUnknown;
 
+  /// No description provided for @tooltipSupport.
+  ///
+  /// In en, this message translates to:
+  /// **'Support HearthBit'**
+  String get tooltipSupport;
+
+  /// No description provided for @aboutTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'About HearthBit'**
+  String get aboutTitle;
+
+  /// No description provided for @aboutBody.
+  ///
+  /// In en, this message translates to:
+  /// **'HearthBit is an open-source emergency communication project. Your support helps fund device testing and resilient relay hardware.'**
+  String get aboutBody;
+
+  /// No description provided for @aboutVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Version {version}'**
+  String aboutVersion(String version);
+
+  /// No description provided for @aboutSourceCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Source code'**
+  String get aboutSourceCode;
+
+  /// No description provided for @supportButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Buy me a coffee'**
+  String get supportButton;
+
+  /// No description provided for @openLinkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open the link'**
+  String get openLinkError;
+
+  /// No description provided for @actionClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get actionClose;
+
   /// No description provided for @terrInterrupted.
   ///
   /// In en, this message translates to:

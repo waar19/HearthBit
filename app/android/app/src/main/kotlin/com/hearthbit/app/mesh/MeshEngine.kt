@@ -11,6 +11,7 @@ import android.bluetooth.BluetoothGattServerCallback
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.bluetooth.BluetoothStatusCodes
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
@@ -23,6 +24,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
+import android.util.Log
 import com.hearthbit.app.R
 import java.util.Collections
 import java.util.UUID
@@ -48,6 +50,9 @@ internal class MeshEngine(
     private val clientGatts = ConcurrentHashMap<String, BluetoothGatt>()
     private val clientCharacteristics =
         ConcurrentHashMap<String, BluetoothGattCharacteristic>()
+    private val clientWriteLock = Any()
+    private val clientWriteQueues = mutableMapOf<String, ArrayDeque<ByteArray>>()
+    private val clientWritesInFlight = mutableSetOf<String>()
     private val serverSubscribers = ConcurrentHashMap.newKeySet<BluetoothDevice>()
     private val storeForward = StoreForwardCache(context)
 
@@ -68,6 +73,14 @@ internal class MeshEngine(
     @Volatile
     private var advertising = false
 
+    @Volatile
+    private var currentStatus = "stopped"
+
+    private var advertiseCallback: AdvertiseCallback? = null
+    private var advertiseAttempt = 0
+    private var advertiseGeneration = 0
+    private var advertiseWatchdog: Runnable? = null
+
     /** Peer objetivo del radar de rescate; null cuando el radar está apagado. */
     @Volatile
     private var radarPeerId: String? = null
@@ -84,6 +97,14 @@ internal class MeshEngine(
     val peerId: String get() = identity.peerIdHex
     val nickname: String get() = identity.nickname
 
+    fun stateSnapshot(): Map<String, Any?> = mapOf(
+        "type" to "snapshot",
+        "status" to currentStatus,
+        "peerId" to peerId,
+        "nickname" to nickname,
+        "peers" to peersSnapshot(),
+    )
+
     @SuppressLint("MissingPermission")
     fun start() {
         check(adapter != null && adapter.isEnabled) {
@@ -99,6 +120,20 @@ internal class MeshEngine(
         startAdvertising()
     }
 
+    fun ensureStarted() {
+        if (running) {
+            if (advertising || currentStatus == "starting") {
+                emit(stateSnapshot())
+            } else {
+                advertiseAttempt = 0
+                emitStatus("starting")
+                startAdvertising()
+            }
+            return
+        }
+        start()
+    }
+
     fun stop() {
         if (!running) return
         stopInternal(notify = true)
@@ -108,13 +143,24 @@ internal class MeshEngine(
     private fun stopInternal(notify: Boolean) {
         running = false
         advertising = false
+        advertiseGeneration += 1
+        advertiseWatchdog?.let(mainHandler::removeCallbacks)
+        advertiseWatchdog = null
+        advertiseCallback?.let { callback ->
+            runCatching { adapter.bluetoothLeAdvertiser?.stopAdvertising(callback) }
+        }
+        advertiseCallback = null
+        advertiseAttempt = 0
         stopRadar()
         addressToPeer.clear()
         runCatching { adapter.bluetoothLeScanner?.stopScan(scanCallback) }
-        runCatching { adapter.bluetoothLeAdvertiser?.stopAdvertising(advertiseCallback) }
         clientGatts.values.forEach { runCatching { it.close() } }
         clientGatts.clear()
         clientCharacteristics.clear()
+        synchronized(clientWriteLock) {
+            clientWriteQueues.clear()
+            clientWritesInFlight.clear()
+        }
         serverSubscribers.clear()
         runCatching { gattServer?.close() }
         gattServer = null
@@ -131,12 +177,8 @@ internal class MeshEngine(
 
     fun sendPublic(content: String, channel: String? = null): String {
         check(content.isNotBlank())
-        val (id, payload) = MeshProtocol.encodePublicMessage(
-            nickname = nickname,
-            peerId = peerId,
-            content = content.take(2_000),
-            channel = channel,
-        )
+        val id = UUID.randomUUID().toString().uppercase()
+        val payload = MeshProtocol.encodeInteropPublicMessage(content.take(2_000))
         val packet = identity.sign(
             MeshProtocol.Packet(
                 type = MeshProtocol.TYPE_MESSAGE,
@@ -349,7 +391,7 @@ internal class MeshEngine(
     }
 
     private fun broadcast(packet: MeshProtocol.Packet, excludeAddress: String? = null) {
-        val bytes = MeshProtocol.encode(packet)
+        val bytes = MeshProtocol.encodeForBle(packet)
         broadcastBytes(bytes, excludeAddress)
         if (packet.recipientId != null &&
             !packet.recipientId.contentEquals(MeshProtocol.broadcastRecipient)
@@ -381,30 +423,92 @@ internal class MeshEngine(
         clientCharacteristics.forEach { (address, remoteCharacteristic) ->
             if (address != excludeAddress) {
                 val gatt = clientGatts[address] ?: return@forEach
-                runCatching {
-                    if (Build.VERSION.SDK_INT >= 33) {
-                        gatt.writeCharacteristic(
-                            remoteCharacteristic,
-                            bytes,
-                            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT,
-                        )
-                    } else {
-                        @Suppress("DEPRECATION")
-                        remoteCharacteristic.writeType =
-                            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-                        @Suppress("DEPRECATION")
-                        remoteCharacteristic.value = bytes
-                        @Suppress("DEPRECATION")
-                        gatt.writeCharacteristic(remoteCharacteristic)
-                    }
-                }
+                enqueueClientWrite(address, gatt, remoteCharacteristic, bytes)
             }
         }
     }
 
+    @SuppressLint("MissingPermission")
+    private fun enqueueClientWrite(
+        address: String,
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+        bytes: ByteArray,
+    ) {
+        val shouldStart = synchronized(clientWriteLock) {
+            val queue = clientWriteQueues.getOrPut(address) { ArrayDeque() }
+            if (queue.size >= MAX_PENDING_GATT_WRITES) queue.removeFirst()
+            queue.addLast(bytes.copyOf())
+            if (clientWritesInFlight.add(address)) true else false
+        }
+        if (shouldStart) writeNextClient(address, gatt, characteristic)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun writeNextClient(
+        address: String,
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+    ) {
+        val next = synchronized(clientWriteLock) {
+            clientWriteQueues[address]?.firstOrNull()
+        }
+        if (next == null) {
+            synchronized(clientWriteLock) { clientWritesInFlight.remove(address) }
+            return
+        }
+        val accepted = runCatching {
+            if (Build.VERSION.SDK_INT >= 33) {
+                gatt.writeCharacteristic(
+                    characteristic,
+                    next,
+                    BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT,
+                ) == BluetoothStatusCodes.SUCCESS
+            } else {
+                @Suppress("DEPRECATION")
+                characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                @Suppress("DEPRECATION")
+                characteristic.value = next
+                @Suppress("DEPRECATION")
+                gatt.writeCharacteristic(characteristic)
+            }
+        }.getOrDefault(false)
+        if (!accepted) {
+            completeClientWrite(address, gatt, characteristic)
+        }
+    }
+
+    private fun completeClientWrite(
+        address: String,
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+    ) {
+        synchronized(clientWriteLock) {
+            clientWriteQueues[address]?.let { queue ->
+                if (queue.isNotEmpty()) queue.removeFirst()
+                if (queue.isEmpty()) clientWriteQueues.remove(address)
+            }
+        }
+        writeNextClient(address, gatt, characteristic)
+    }
+
     private fun receive(bytes: ByteArray, sourceAddress: String) {
-        val packet = MeshProtocol.decode(bytes) ?: return
+        Log.d(
+            LOG_TAG,
+            "RX address=${sourceAddress.takeLast(5)} bytes=${bytes.size} " +
+                "prefix=${MeshProtocol.hex(bytes.copyOfRange(0, minOf(bytes.size, 24)))}",
+        )
+        val packet = MeshProtocol.decode(bytes)
+        if (packet == null) {
+            Log.w(LOG_TAG, "RX rejected: packet decode failed (${bytes.size} bytes)")
+            return
+        }
         val senderHex = MeshProtocol.hex(packet.senderId)
+        Log.d(
+            LOG_TAG,
+            "RX decoded: version=${packet.version} type=${packet.type.toUByte()} " +
+                "ttl=${packet.ttl.toUByte()} sender=${senderHex.take(8)}",
+        )
         // Un anuncio con TTL intacto solo puede venir del emisor original:
         // eso identifica al vecino directo detrás de esta dirección (clave
         // para el radar con iPhones, que no anuncian su peerId por BLE).
@@ -428,10 +532,10 @@ internal class MeshEngine(
             packet.type != MeshProtocol.TYPE_NOISE_ENCRYPTED
         ) {
             val relayed = packet.copy(ttl = ((packet.ttl.toInt() and 0xFF) - 1).toByte())
-            broadcastBytes(MeshProtocol.encode(relayed), sourceAddress)
+            broadcastBytes(MeshProtocol.encodeForBle(relayed), sourceAddress)
         } else if (!isForUs && packet.ttl.toInt() and 0xFF > 1) {
             val relayed = packet.copy(ttl = ((packet.ttl.toInt() and 0xFF) - 1).toByte())
-            broadcastBytes(MeshProtocol.encode(relayed), sourceAddress)
+            broadcastBytes(MeshProtocol.encodeForBle(relayed), sourceAddress)
         }
     }
 
@@ -445,13 +549,35 @@ internal class MeshEngine(
     }
 
     private fun processAnnouncement(packet: MeshProtocol.Packet, senderHex: String) {
-        val announcement = MeshProtocol.decodeAnnouncement(packet.payload) ?: return
+        val announcement = MeshProtocol.decodeAnnouncement(packet.payload)
+        if (announcement == null) {
+            Log.w(
+                LOG_TAG,
+                "ANNOUNCE rejected from ${senderHex.take(8)}: payload decode failed " +
+                    "(${packet.payload.size} bytes)",
+            )
+            return
+        }
         if (!MeshProtocol.peerIdFromNoiseKey(announcement.noisePublicKey)
                 .contentEquals(packet.senderId)
         ) {
+            Log.w(
+                LOG_TAG,
+                "ANNOUNCE rejected from ${senderHex.take(8)}: Noise key does not match peerId",
+            )
             return
         }
-        if (!identity.verify(packet, announcement.signingPublicKey)) return
+        if (!identity.verify(packet, announcement.signingPublicKey)) {
+            Log.w(
+                LOG_TAG,
+                "ANNOUNCE rejected from ${senderHex.take(8)}: Ed25519 signature invalid",
+            )
+            return
+        }
+        Log.i(
+            LOG_TAG,
+            "ANNOUNCE accepted from ${senderHex.take(8)} nickname=${announcement.nickname}",
+        )
         peers[senderHex] = Peer(
             senderHex,
             announcement.nickname,
@@ -462,9 +588,22 @@ internal class MeshEngine(
     }
 
     private fun processPublicMessage(packet: MeshProtocol.Packet, senderHex: String) {
-        val peer = peers[senderHex] ?: return
-        if (!identity.verify(packet, peer.signingPublicKey)) return
-        val message = MeshProtocol.decodePublicMessage(packet.payload) ?: return
+        val peer = peers[senderHex]
+        if (peer == null) {
+            Log.w(LOG_TAG, "MESSAGE rejected from ${senderHex.take(8)}: peer not announced")
+            return
+        }
+        if (!identity.verify(packet, peer.signingPublicKey)) {
+            Log.w(LOG_TAG, "MESSAGE rejected from ${senderHex.take(8)}: signature invalid")
+            return
+        }
+        val message = MeshProtocol.decodeCompatiblePublicMessage(
+            payload = packet.payload,
+            id = MeshProtocol.fingerprint(packet).uppercase(),
+            sender = peer.nickname,
+            timestamp = packet.timestamp,
+            senderPeerId = senderHex,
+        )
         peer.lastSeen = System.currentTimeMillis()
         emitMessage(
             message.id,
@@ -583,7 +722,28 @@ internal class MeshEngine(
             .setIncludeDeviceName(false)
             .addServiceData(ParcelUuid(SERVICE_UUID), identity.peerId)
             .build()
-        advertiser.startAdvertising(settings, data, scanResponse, advertiseCallback)
+        val generation = ++advertiseGeneration
+        val callback = object : AdvertiseCallback() {
+            override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
+                if (!running || generation != advertiseGeneration) return
+                cancelAdvertiseWatchdog()
+                advertising = true
+                advertiseAttempt = 0
+                emitStatus("active")
+                sendAnnouncement()
+            }
+
+            override fun onStartFailure(errorCode: Int) {
+                if (!running || generation != advertiseGeneration) return
+                cancelAdvertiseWatchdog()
+                advertising = false
+                emitError(context.getString(R.string.error_advertise_failed, errorCode))
+                emitStatus("degraded")
+            }
+        }
+        advertiseCallback = callback
+        advertiser.startAdvertising(settings, data, scanResponse, callback)
+        scheduleAdvertiseWatchdog(generation)
     }
 
     @SuppressLint("MissingPermission")
@@ -595,20 +755,29 @@ internal class MeshEngine(
         adapter.bluetoothLeScanner?.startScan(listOf(filter), settings, scanCallback)
     }
 
-    private val advertiseCallback = object : AdvertiseCallback() {
-        override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
-            if (!running) return
-            advertising = true
-            emitStatus("active")
-            sendAnnouncement()
-        }
+    @SuppressLint("MissingPermission")
+    private fun scheduleAdvertiseWatchdog(generation: Int) {
+        cancelAdvertiseWatchdog()
+        advertiseWatchdog = Runnable {
+            if (!running || advertising || generation != advertiseGeneration) return@Runnable
+            val callback = advertiseCallback
+            if (callback != null) {
+                runCatching { adapter.bluetoothLeAdvertiser?.stopAdvertising(callback) }
+            }
+            advertiseCallback = null
+            if (advertiseAttempt < MAX_ADVERTISE_RETRIES) {
+                advertiseAttempt += 1
+                startAdvertising()
+            } else {
+                emitError(context.getString(R.string.error_advertise_timeout))
+                emitStatus("degraded")
+            }
+        }.also { mainHandler.postDelayed(it, ADVERTISE_TIMEOUT_MS) }
+    }
 
-        override fun onStartFailure(errorCode: Int) {
-            if (!running) return
-            advertising = false
-            emitError(context.getString(R.string.error_advertise_failed, errorCode))
-            emitStatus("degraded")
-        }
+    private fun cancelAdvertiseWatchdog() {
+        advertiseWatchdog?.let(mainHandler::removeCallbacks)
+        advertiseWatchdog = null
     }
 
     private val scanCallback = object : ScanCallback() {
@@ -650,6 +819,10 @@ internal class MeshEngine(
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 clientCharacteristics.remove(gatt.device.address)
                 clientGatts.remove(gatt.device.address)
+                synchronized(clientWriteLock) {
+                    clientWriteQueues.remove(gatt.device.address)
+                    clientWritesInFlight.remove(gatt.device.address)
+                }
                 gatt.close()
             }
         }
@@ -673,11 +846,35 @@ internal class MeshEngine(
                     @Suppress("DEPRECATION")
                     gatt.writeDescriptor(descriptor)
                 }
+            } else {
+                sendAnnouncement()
             }
-            sendAnnouncement()
+        }
+
+        override fun onDescriptorWrite(
+            gatt: BluetoothGatt,
+            descriptor: BluetoothGattDescriptor,
+            status: Int,
+        ) {
+            if (descriptor.uuid == CLIENT_CONFIGURATION_UUID &&
+                status == BluetoothGatt.GATT_SUCCESS
+            ) {
+                sendAnnouncement()
+            }
+        }
+
+        override fun onCharacteristicWrite(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            status: Int,
+        ) {
+            if (characteristic.uuid == CHARACTERISTIC_UUID) {
+                completeClientWrite(gatt.device.address, gatt, characteristic)
+            }
         }
 
         @Deprecated("Deprecated in Android 13")
+        @Suppress("DEPRECATION")
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic,
@@ -740,10 +937,12 @@ internal class MeshEngine(
         ) {
             if (descriptor.uuid == CLIENT_CONFIGURATION_UUID) {
                 serverSubscribers.add(device)
-                sendAnnouncement()
             }
             if (responseNeeded) {
                 gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
+            }
+            if (descriptor.uuid == CLIENT_CONFIGURATION_UUID) {
+                mainHandler.post { sendAnnouncement() }
             }
         }
     }
@@ -776,6 +975,7 @@ internal class MeshEngine(
     }
 
     private fun emitStatus(status: String) {
+        currentStatus = status
         emit(
             mapOf(
                 "type" to "status",
@@ -801,6 +1001,12 @@ internal class MeshEngine(
 
         /** Cadencia de lectura RSSI sobre GATT conectado en modo radar. */
         const val RADAR_READ_INTERVAL_MS = 1_000L
+
+        const val ADVERTISE_TIMEOUT_MS = 10_000L
+        const val MAX_ADVERTISE_RETRIES = 1
+        const val MAX_PENDING_GATT_WRITES = 256
+
+        const val LOG_TAG = "HearthBitMesh"
 
         val SERVICE_UUID: UUID =
             UUID.fromString("F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C")

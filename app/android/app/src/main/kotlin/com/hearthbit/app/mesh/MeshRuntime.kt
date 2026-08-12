@@ -17,6 +17,8 @@ internal object MeshRuntime {
         }
     }
 
+    fun stateSnapshot(): Map<String, Any?>? = engineInstance?.stateSnapshot()
+
     fun destroy() {
         synchronized(this) {
             engineInstance?.stop()

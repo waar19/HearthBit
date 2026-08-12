@@ -485,6 +485,33 @@ class AppLocalizationsDe extends AppLocalizations {
   String get errorUnknown => 'Unbekannter Fehler';
 
   @override
+  String get tooltipSupport => 'HearthBit unterstützen';
+
+  @override
+  String get aboutTitle => 'Über HearthBit';
+
+  @override
+  String get aboutBody =>
+      'HearthBit ist ein quelloffenes Projekt für Notfallkommunikation. Deine Unterstützung finanziert Gerätetests und robuste Relais-Hardware.';
+
+  @override
+  String aboutVersion(String version) {
+    return 'Version $version';
+  }
+
+  @override
+  String get aboutSourceCode => 'Quellcode';
+
+  @override
+  String get supportButton => 'Spendiere mir einen Kaffee';
+
+  @override
+  String get openLinkError => 'Der Link konnte nicht geöffnet werden';
+
+  @override
+  String get actionClose => 'Schließen';
+
+  @override
   String get terrInterrupted => 'Beim Schließen der App unterbrochen';
 
   @override

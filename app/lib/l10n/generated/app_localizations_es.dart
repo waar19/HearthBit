@@ -484,6 +484,33 @@ class AppLocalizationsEs extends AppLocalizations {
   String get errorUnknown => 'Error desconocido';
 
   @override
+  String get tooltipSupport => 'Apoyar HearthBit';
+
+  @override
+  String get aboutTitle => 'Acerca de HearthBit';
+
+  @override
+  String get aboutBody =>
+      'HearthBit es un proyecto de comunicación de emergencia de código abierto. Tu apoyo ayuda a financiar pruebas con dispositivos y hardware repetidor resistente.';
+
+  @override
+  String aboutVersion(String version) {
+    return 'Versión $version';
+  }
+
+  @override
+  String get aboutSourceCode => 'Código fuente';
+
+  @override
+  String get supportButton => 'Invítame a un café';
+
+  @override
+  String get openLinkError => 'No se pudo abrir el enlace';
+
+  @override
+  String get actionClose => 'Cerrar';
+
+  @override
   String get terrInterrupted => 'Interrumpida al cerrar la aplicación';
 
   @override

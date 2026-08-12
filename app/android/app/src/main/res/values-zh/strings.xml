@@ -8,6 +8,7 @@
     <string name="error_bluetooth_off">蓝牙已关闭</string>
     <string name="error_no_advertising">此设备不支持 BLE 广播；仅接收模式</string>
     <string name="error_advertise_failed">无法广播 BLE 网状网络（%1$d）；其他手机看不到此设备，但仍可接收</string>
+    <string name="error_advertise_timeout">重试后 BLE 广播仍无响应；已启用仅接收模式</string>
     <string name="error_scan_failed">BLE 扫描失败（%1$d）</string>
     <string name="error_private_channel">无法启动私密通道：%1$s</string>
     <string name="error_private_encrypt">私密消息加密失败</string>

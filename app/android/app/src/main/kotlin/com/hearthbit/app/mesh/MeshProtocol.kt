@@ -1,9 +1,12 @@
 package com.hearthbit.app.mesh
 
+import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.zip.Deflater
+import java.util.zip.Inflater
 
 internal object MeshProtocol {
     const val VERSION: Byte = 1
@@ -32,7 +35,7 @@ internal object MeshProtocol {
     ) {
         fun canonicalForSigning(): ByteArray = encode(
             copy(ttl = 0, signature = null),
-            padded = false,
+            padded = true,
         )
     }
 
@@ -59,25 +62,64 @@ internal object MeshProtocol {
         require(packet.payload.size <= 0xFFFF)
         require(packet.signature == null || packet.signature.size == 64)
 
+        var payload = packet.payload
+        var originalPayloadSize: Int? = null
+        if (shouldCompress(payload)) {
+            compress(payload)?.let { compressed ->
+                originalPayloadSize = payload.size
+                payload = compressed
+            }
+        }
         var flags = 0
         if (packet.recipientId != null) flags = flags or 0x01
         if (packet.signature != null) flags = flags or 0x02
+        if (originalPayloadSize != null) flags = flags or 0x04
 
-        val size = 14 + 8 + (packet.recipientId?.size ?: 0) +
-            packet.payload.size + (packet.signature?.size ?: 0)
+        val payloadSizeField = if (originalPayloadSize == null) {
+            0
+        } else if (packet.version >= 2) {
+            4
+        } else {
+            2
+        }
+        val headerSize = if (packet.version >= 2) 16 else 14
+        val payloadDataSize = payloadSizeField + payload.size
+        val size = headerSize + 8 + (packet.recipientId?.size ?: 0) +
+            payloadDataSize + (packet.signature?.size ?: 0)
         val buffer = ByteBuffer.allocate(size).order(ByteOrder.BIG_ENDIAN)
         buffer.put(packet.version)
         buffer.put(packet.type)
         buffer.put(packet.ttl)
         buffer.putLong(packet.timestamp)
         buffer.put(flags.toByte())
-        buffer.putShort(packet.payload.size.toShort())
+        if (packet.version >= 2) {
+            buffer.putInt(payloadDataSize)
+        } else {
+            buffer.putShort(payloadDataSize.toShort())
+        }
         buffer.put(packet.senderId)
         packet.recipientId?.let(buffer::put)
-        buffer.put(packet.payload)
+        originalPayloadSize?.let { originalSize ->
+            if (packet.version >= 2) {
+                buffer.putInt(originalSize)
+            } else {
+                buffer.putShort(originalSize.toShort())
+            }
+        }
+        buffer.put(payload)
         packet.signature?.let(buffer::put)
         return if (padded) pad(buffer.array()) else buffer.array()
     }
+
+    /**
+     * BitChat solo aplica padding en el transporte BLE a tramas Noise. Los
+     * paquetes públicos siguen usando padding en su forma canónica firmada.
+     */
+    fun encodeForBle(packet: Packet): ByteArray = encode(
+        packet,
+        padded = packet.type == TYPE_NOISE_HANDSHAKE ||
+            packet.type == TYPE_NOISE_ENCRYPTED,
+    )
 
     fun decode(input: ByteArray): Packet? {
         return decodeRaw(input) ?: decodeRaw(unpad(input))
@@ -103,10 +145,25 @@ internal object MeshProtocol {
                 if (buffer.remaining() < routeBytes) return null
                 buffer.position(buffer.position() + routeBytes)
             }
-            if (flags and 0x04 != 0) return null
+            val isCompressed = flags and 0x04 != 0
             val signatureSize = if (flags and 0x02 != 0) 64 else 0
             if (payloadLength < 0 || buffer.remaining() < payloadLength + signatureSize) return null
-            val payload = ByteArray(payloadLength).also(buffer::get)
+            val payloadData = ByteArray(payloadLength).also(buffer::get)
+            val payload = if (isCompressed) {
+                val originalSizeField = if (version >= 2) 4 else 2
+                if (payloadData.size <= originalSizeField) return null
+                val compressedBuffer = ByteBuffer.wrap(payloadData).order(ByteOrder.BIG_ENDIAN)
+                val originalSize = if (version >= 2) {
+                    compressedBuffer.int
+                } else {
+                    compressedBuffer.short.toInt() and 0xFFFF
+                }
+                if (originalSize !in 1..MAX_PAYLOAD_LENGTH) return null
+                val compressed = ByteArray(compressedBuffer.remaining()).also(compressedBuffer::get)
+                decompress(compressed, originalSize) ?: return null
+            } else {
+                payloadData
+            }
             val signature = if (signatureSize > 0) ByteArray(64).also(buffer::get) else null
             Packet(version, type, ttl, timestamp, sender, recipient, payload, signature)
         }.getOrNull()
@@ -141,6 +198,35 @@ internal object MeshProtocol {
         channelBytes?.let { putByteString(buffer, it) }
         return id to buffer.array()
     }
+
+    /** BitChat 2.x usa UTF-8 directo para mensajes públicos de la malla. */
+    fun encodeInteropPublicMessage(content: String): ByteArray =
+        content.toByteArray(Charsets.UTF_8)
+
+    /**
+     * Acepta el formato UTF-8 actual y el payload estructurado emitido por
+     * clientes BitChat antiguos.
+     */
+    fun decodeCompatiblePublicMessage(
+        payload: ByteArray,
+        id: String,
+        sender: String,
+        timestamp: Long,
+        senderPeerId: String,
+    ): PublicMessage = decodePublicMessage(payload) ?: PublicMessage(
+        id = id,
+        sender = sender,
+        content = payload.toString(Charsets.UTF_8),
+        timestamp = timestamp,
+        senderPeerId = senderPeerId,
+        channel = if (payload.size >= SOS_PREFIX.size &&
+            SOS_PREFIX.indices.all { payload[it] == SOS_PREFIX[it] }
+        ) {
+            "sos"
+        } else {
+            null
+        },
+    )
 
     fun decodePublicMessage(payload: ByteArray): PublicMessage? = runCatching {
         if (payload.size < 13) return null
@@ -180,6 +266,11 @@ internal object MeshProtocol {
             add(0x03)
             add(signingPublicKey.size)
             addAll(signingPublicKey.map(Byte::toInt))
+            // TLV de capacidades actual de BitChat. Cero anuncia que HearthBit
+            // usa su propio HBT para archivos privados, no Private Media 0x20.
+            add(0x05)
+            add(0x01)
+            add(0x00)
         }.map(Int::toByte).toByteArray()
     }
 
@@ -273,4 +364,56 @@ internal object MeshProtocol {
         if ((start until input.size).any { input[it] != length.toByte() }) return input
         return input.copyOfRange(0, start)
     }
+
+    private fun shouldCompress(input: ByteArray): Boolean {
+        if (input.size < COMPRESSION_THRESHOLD) return false
+        val uniqueRatio = input.toSet().size.toDouble() / minOf(input.size, 256).toDouble()
+        return uniqueRatio < 0.9
+    }
+
+    private fun compress(input: ByteArray): ByteArray? = runCatching {
+        val deflater = Deflater(Deflater.DEFAULT_COMPRESSION, true)
+        try {
+            deflater.setInput(input)
+            deflater.finish()
+            val output = ByteArrayOutputStream(input.size)
+            val buffer = ByteArray(1_024)
+            while (!deflater.finished()) {
+                val count = deflater.deflate(buffer)
+                if (count <= 0) return null
+                output.write(buffer, 0, count)
+            }
+            output.toByteArray().takeIf { it.isNotEmpty() && it.size < input.size }
+        } finally {
+            deflater.end()
+        }
+    }.getOrNull()
+
+    private fun decompress(input: ByteArray, expectedSize: Int): ByteArray? =
+        inflateExact(input, expectedSize, nowrap = true)
+            ?: inflateExact(input, expectedSize, nowrap = false)
+
+    private fun inflateExact(input: ByteArray, expectedSize: Int, nowrap: Boolean): ByteArray? =
+        runCatching {
+            val inflater = Inflater(nowrap)
+            try {
+                inflater.setInput(input)
+                val output = ByteArray(expectedSize)
+                var offset = 0
+                while (!inflater.finished() && offset < output.size) {
+                    val count = inflater.inflate(output, offset, output.size - offset)
+                    if (count <= 0) return null
+                    offset += count
+                }
+                output.takeIf {
+                    offset == expectedSize && inflater.finished() && inflater.remaining == 0
+                }
+            } finally {
+                inflater.end()
+            }
+        }.getOrNull()
+
+    private const val COMPRESSION_THRESHOLD = 100
+    private const val MAX_PAYLOAD_LENGTH = 10_485_760
+    private val SOS_PREFIX = "SOS|".toByteArray(Charsets.UTF_8)
 }

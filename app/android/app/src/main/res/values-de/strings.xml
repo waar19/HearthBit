@@ -8,6 +8,7 @@
     <string name="error_bluetooth_off">Bluetooth ist ausgeschaltet</string>
     <string name="error_no_advertising">Dieses Gerät unterstützt kein BLE-Advertising; Nur-Empfangsmodus</string>
     <string name="error_advertise_failed">Das BLE-Mesh konnte nicht angekündigt werden (%1$d); andere Telefone sehen dieses Gerät nicht, aber es kann weiterhin empfangen</string>
+    <string name="error_advertise_timeout">Das BLE-Advertising antwortete auch nach einem erneuten Versuch nicht; der Nur-Empfangsmodus ist aktiv</string>
     <string name="error_scan_failed">BLE-Scan fehlgeschlagen (%1$d)</string>
     <string name="error_private_channel">Der private Kanal konnte nicht gestartet werden: %1$s</string>
     <string name="error_private_encrypt">Verschlüsselung der privaten Nachricht fehlgeschlagen</string>
