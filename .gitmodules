@@ -1,0 +1,6 @@
+[submodule "vendor/bitchat-android"]
+	path = vendor/bitchat-android
+	url = https://github.com/permissionlesstech/bitchat-android.git
+[submodule "firmware/anchor-node"]
+	path = firmware/anchor-node
+	url = https://github.com/bitleproject/bitle.git
