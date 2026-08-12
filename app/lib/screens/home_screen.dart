@@ -12,6 +12,7 @@ import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../models/transfer_models.dart';
 import '../services/photo_profile.dart';
+import '../utils/message_chronology.dart';
 import 'optical_receive_screen.dart';
 import 'optical_send_screen.dart';
 import 'radar_screen.dart';
@@ -43,11 +44,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   int _tab = 0;
+  int _publicMessageCount = 0;
+  bool _scrollScheduled = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _publicMessageCount = _countPublicMessages();
+    widget.controller.addListener(_handleMeshUpdate);
+    _scrollToBottom(animate: false);
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_handleMeshUpdate);
+      widget.controller.addListener(_handleMeshUpdate);
+      _publicMessageCount = _countPublicMessages();
+      _scrollToBottom(animate: false);
+    }
   }
 
   @override
@@ -145,6 +162,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _openRadar({
     required String peerId,
     required String nickname,
+    required DateTime consentExpiresAt,
+    required String consentSource,
     double? latitude,
     double? longitude,
   }) {
@@ -153,6 +172,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         builder: (_) => RadarScreen(
           peerId: peerId,
           nickname: nickname,
+          consentExpiresAt: consentExpiresAt,
+          consentSource: consentSource,
           latitude: latitude,
           longitude: longitude,
         ),
@@ -187,6 +208,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    widget.controller.removeListener(_handleMeshUpdate);
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -254,7 +276,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: _tab,
-            onDestinationSelected: (value) => setState(() => _tab = value),
+            onDestinationSelected: (value) {
+              setState(() => _tab = value);
+              if (value == 0) _scrollToBottom(animate: false);
+            },
             destinations: [
               NavigationDestination(
                 icon: const Icon(Icons.forum_outlined),
@@ -300,12 +325,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   title: context.l10n.emptyChatTitle,
                   description: context.l10n.emptyChatBody,
                 )
-              : ListView.builder(
+              : ListView(
                   controller: _scrollController,
                   padding: const EdgeInsets.all(12),
-                  itemCount: publicMessages.length,
-                  itemBuilder: (context, index) =>
-                      _MessageBubble(message: publicMessages[index]),
+                  children: _messageTimeline(context, publicMessages),
                 ),
         ),
         _MessageComposer(
@@ -324,51 +347,181 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildPeers(MeshController controller) {
-    if (controller.peers.isEmpty) {
+    final conversations = controller.conversations;
+    final conversationIds = conversations
+        .map((conversation) => conversation.peer.id)
+        .toSet();
+    final newNearbyPeers = controller.peers
+        .where((peer) => !conversationIds.contains(peer.id))
+        .toList(growable: false);
+    if (conversations.isEmpty && newNearbyPeers.isEmpty) {
       return _EmptyState(
         icon: Icons.portable_wifi_off,
         title: context.l10n.emptyPeersTitle,
         description: context.l10n.emptyPeersBody,
       );
     }
-    return ListView.separated(
+    return ListView(
       padding: const EdgeInsets.all(12),
-      itemCount: controller.peers.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final peer = controller.peers[index];
-        return ListTile(
-          leading: CircleAvatar(
-            child: Text(peer.nickname.characters.first.toUpperCase()),
-          ),
-          title: Text(peer.nickname),
-          subtitle: Text(
-            '${peer.id.substring(0, 8)} · '
-            '${peer.secure ? context.l10n.peerSecure : context.l10n.peerTapToEncrypt}',
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                tooltip: context.l10n.tooltipRadar,
-                onPressed: () => _openRadar(
-                  peerId: peer.id,
-                  nickname: peer.nickname,
+      children: [
+        if (conversations.isNotEmpty) ...[
+          _ListSectionTitle(title: context.l10n.recentChatsTitle),
+          ...conversations.map((conversation) {
+            final peer = conversation.peer;
+            final message = conversation.lastMessage;
+            return Card(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => _openPrivateChat(controller, peer),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: CircleAvatar(
+                          child: Text(_avatarLetter(peer.nickname)),
+                        ),
+                        title: Text(peer.nickname),
+                        subtitle: Text(
+                          message.content,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(_formatConversationTime(message.timestamp)),
+                            const SizedBox(height: 4),
+                            Text(
+                              conversation.isOnline
+                                  ? context.l10n.peerOnline
+                                  : context.l10n.peerOffline,
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: conversation.isOnline
+                                        ? Colors.green
+                                        : null,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      _peerControls(
+                        controller,
+                        peer,
+                        online: conversation.isOnline,
+                      ),
+                    ],
+                  ),
                 ),
-                icon: const Icon(Icons.radar),
               ),
-              IconButton(
-                tooltip: context.l10n.tooltipSendFile,
-                onPressed: () => _sendFileTo(peer),
-                icon: const Icon(Icons.attach_file),
+            );
+          }),
+        ],
+        if (newNearbyPeers.isNotEmpty) ...[
+          _ListSectionTitle(title: context.l10n.nearbyPeopleTitle),
+          ...newNearbyPeers.map(
+            (peer) => ListTile(
+              leading: CircleAvatar(child: Text(_avatarLetter(peer.nickname))),
+              title: Text(peer.nickname),
+              subtitle: Text(
+                '${peer.id.substring(0, 8)} · '
+                '${peer.secure ? context.l10n.peerSecure : context.l10n.peerTapToEncrypt}',
               ),
-              Icon(peer.secure ? Icons.lock : Icons.lock_open),
-            ],
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: peer.radarAllowed
+                        ? context.l10n.tooltipRadar
+                        : context.l10n.radarConsentRequired,
+                    onPressed: peer.radarAllowed
+                        ? () => _openRadar(
+                            peerId: peer.id,
+                            nickname: peer.nickname,
+                            consentExpiresAt: peer.radarAllowedUntil!,
+                            consentSource:
+                                peer.radarConsentSource ?? 'temporary',
+                          )
+                        : null,
+                    icon: const Icon(Icons.radar),
+                  ),
+                  IconButton(
+                    tooltip: context.l10n.tooltipSendFile,
+                    onPressed: () => _sendFileTo(peer),
+                    icon: const Icon(Icons.attach_file),
+                  ),
+                  Icon(peer.secure ? Icons.lock : Icons.lock_open),
+                ],
+              ),
+              onTap: () => _openPrivateChat(controller, peer),
+            ),
           ),
-          onTap: () => _openPrivateChat(controller, peer),
-        );
-      },
+        ],
+      ],
     );
+  }
+
+  Widget _peerControls(
+    MeshController controller,
+    MeshPeer peer, {
+    required bool online,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          IconButton(
+            tooltip: !online
+                ? context.l10n.peerOffline
+                : peer.radarAllowed
+                ? context.l10n.tooltipRadar
+                : context.l10n.radarConsentRequired,
+            onPressed: online && peer.radarAllowed
+                ? () => _openRadar(
+                    peerId: peer.id,
+                    nickname: peer.nickname,
+                    consentExpiresAt: peer.radarAllowedUntil!,
+                    consentSource: peer.radarConsentSource ?? 'temporary',
+                  )
+                : null,
+            icon: const Icon(Icons.radar),
+          ),
+          IconButton(
+            tooltip: context.l10n.tooltipSendFile,
+            onPressed: online ? () => _sendFileTo(peer) : null,
+            icon: const Icon(Icons.attach_file),
+          ),
+          Tooltip(
+            message: peer.secure
+                ? context.l10n.peerSecure
+                : context.l10n.peerTapToEncrypt,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Icon(peer.secure ? Icons.lock : Icons.lock_open),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _avatarLetter(String nickname) =>
+      nickname.isEmpty ? '?' : nickname.characters.first.toUpperCase();
+
+  String _formatConversationTime(DateTime timestamp) {
+    final local = timestamp.toLocal();
+    final now = DateTime.now();
+    if (local.year == now.year &&
+        local.month == now.month &&
+        local.day == now.day) {
+      return MaterialLocalizations.of(
+        context,
+      ).formatTimeOfDay(TimeOfDay.fromDateTime(local));
+    }
+    return MaterialLocalizations.of(context).formatShortDate(local);
   }
 
   Widget _buildSos(MeshController controller) {
@@ -400,10 +553,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  context.l10n.sosCardBody,
-                  textAlign: TextAlign.center,
-                ),
+                Text(context.l10n.sosCardBody, textAlign: TextAlign.center),
                 const SizedBox(height: 16),
                 Wrap(
                   spacing: 8,
@@ -453,22 +603,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 leading: const Icon(Icons.crisis_alert),
                 title: Text(message.sender),
                 subtitle: Text(
-                  message.sosLatitude != null
-                      ? '${message.sosDescription}\n'
+                  '${message.sosLatitude != null ? '${message.sosDescription}\n'
                             'GPS ${message.sosLatitude!.toStringAsFixed(5)}, '
-                            '${message.sosLongitude!.toStringAsFixed(5)}'
-                      : message.sosDescription,
+                            '${message.sosLongitude!.toStringAsFixed(5)}' : message.sosDescription}'
+                  '\n${_formatMessageDateTime(context, message.timestamp)}',
                 ),
-                isThreeLine: message.sosLatitude != null,
+                isThreeLine: true,
                 trailing: message.isMine
                     ? null
                     : FilledButton.tonalIcon(
-                        onPressed: () => _openRadar(
-                          peerId: message.senderPeerId,
-                          nickname: message.sender,
-                          latitude: message.sosLatitude,
-                          longitude: message.sosLongitude,
-                        ),
+                        onPressed:
+                            controller
+                                    .peerById(message.senderPeerId)
+                                    ?.radarAllowed ==
+                                true
+                            ? () {
+                                final peer = controller.peerById(
+                                  message.senderPeerId,
+                                )!;
+                                _openRadar(
+                                  peerId: message.senderPeerId,
+                                  nickname: message.sender,
+                                  consentExpiresAt: peer.radarAllowedUntil!,
+                                  consentSource:
+                                      peer.radarConsentSource ?? 'sos',
+                                  latitude: message.sosLatitude,
+                                  longitude: message.sosLongitude,
+                                );
+                              }
+                            : null,
                         icon: const Icon(Icons.radar, size: 18),
                         label: Text(context.l10n.actionTrack),
                       ),
@@ -486,17 +649,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) =>
-          _PrivateChatSheet(controller: controller, peer: peer),
+      builder: (context) => _PrivateChatSheet(
+        controller: controller,
+        peer: peer,
+        isOnline: controller.isPeerOnline(peer.id),
+      ),
     );
   }
 
   Future<void> _changeNickname(MeshController controller) async {
     final value = await showDialog<String>(
       context: context,
-      builder: (context) => _NicknameDialog(
-        initialNickname: controller.nickname,
-      ),
+      builder: (context) =>
+          _NicknameDialog(initialNickname: controller.nickname),
     );
     if (value != null) await controller.updateNickname(value);
   }
@@ -555,9 +720,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       opened = false;
     }
     if (!opened && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.openLinkError)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.openLinkError)));
     }
   }
 
@@ -585,24 +750,67 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _scrollToBottom() {
+  int _countPublicMessages() =>
+      widget.controller.messages.where((message) => !message.isPrivate).length;
+
+  void _handleMeshUpdate() {
+    final count = _countPublicMessages();
+    if (count > _publicMessageCount && _tab == 0) {
+      _scrollToBottom();
+    }
+    _publicMessageCount = count;
+  }
+
+  void _scrollToBottom({bool animate = true}) {
+    if (_scrollScheduled) return;
+    _scrollScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollScheduled = false;
+      if (!mounted) return;
       if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOut,
-        );
+        final target = _scrollController.position.maxScrollExtent;
+        if (animate) {
+          _scrollController.animateTo(
+            target,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOut,
+          );
+        } else {
+          _scrollController.jumpTo(target);
+        }
       }
     });
   }
 }
 
+class _ListSectionTitle extends StatelessWidget {
+  const _ListSectionTitle({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+    child: Text(
+      title,
+      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+        color: Theme.of(context).colorScheme.primary,
+        fontWeight: FontWeight.bold,
+      ),
+    ),
+  );
+}
+
 class _PrivateChatSheet extends StatefulWidget {
-  const _PrivateChatSheet({required this.controller, required this.peer});
+  const _PrivateChatSheet({
+    required this.controller,
+    required this.peer,
+    required this.isOnline,
+  });
 
   final MeshController controller;
   final MeshPeer peer;
+  final bool isOnline;
 
   @override
   State<_PrivateChatSheet> createState() => _PrivateChatSheetState();
@@ -655,6 +863,21 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
               ],
             ),
             const Divider(),
+            if (!widget.isOnline)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.cloud_off_outlined,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(context.l10n.offlineChatHint)),
+                  ],
+                ),
+              ),
             Expanded(
               child: privateMessages.isEmpty
                   ? Center(
@@ -664,14 +887,12 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
                       ),
                     )
                   : ListView(
-                      children: privateMessages
-                          .map((message) => _MessageBubble(message: message))
-                          .toList(growable: false),
+                      children: _messageTimeline(context, privateMessages),
                     ),
             ),
             _MessageComposer(
               controller: _textController,
-              enabled: true,
+              enabled: widget.isOnline && widget.controller.canSend,
               hint: context.l10n.composerPrivateHint,
               onSend: () async {
                 final text = _textController.text;
@@ -898,8 +1119,78 @@ class _MessageBubble extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(message.content.replaceFirst('SOS|', 'SOS: ')),
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                MaterialLocalizations.of(context).formatTimeOfDay(
+                  TimeOfDay.fromDateTime(message.timestamp.toLocal()),
+                ),
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+List<Widget> _messageTimeline(
+  BuildContext context,
+  List<MeshMessage> messages,
+) {
+  final widgets = <Widget>[];
+  DateTime? previousDay;
+  for (final message in messages) {
+    final day = localCalendarDay(message.timestamp);
+    if (previousDay != day) {
+      widgets.add(_DateSeparator(label: _formatDayLabel(context, day)));
+      previousDay = day;
+    }
+    widgets.add(_MessageBubble(message: message));
+  }
+  return widgets;
+}
+
+String _formatDayLabel(BuildContext context, DateTime day) {
+  return switch (relativeMessageDay(day)) {
+    RelativeMessageDay.today => context.l10n.dateToday,
+    RelativeMessageDay.yesterday => context.l10n.dateYesterday,
+    RelativeMessageDay.other => MaterialLocalizations.of(
+      context,
+    ).formatMediumDate(day),
+  };
+}
+
+String _formatMessageDateTime(BuildContext context, DateTime timestamp) {
+  final local = timestamp.toLocal();
+  final date = _formatDayLabel(
+    context,
+    DateTime(local.year, local.month, local.day),
+  );
+  final time = MaterialLocalizations.of(
+    context,
+  ).formatTimeOfDay(TimeOfDay.fromDateTime(local));
+  return '$date · $time';
+}
+
+class _DateSeparator extends StatelessWidget {
+  const _DateSeparator({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(label, style: Theme.of(context).textTheme.labelMedium),
       ),
     );
   }

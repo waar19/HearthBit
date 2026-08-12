@@ -77,9 +77,7 @@ class RadarSignalProcessor {
     _smoothed = smoothed;
     _lastSampleAt = at;
     _history.add((at: at, rssi: smoothed));
-    _history.removeWhere(
-      (entry) => at.difference(entry.at) > trendWindow * 3,
-    );
+    _history.removeWhere((entry) => at.difference(entry.at) > trendWindow * 3);
     final reading = RadarReading(
       smoothedRssi: smoothed,
       strength: _strength(smoothed),

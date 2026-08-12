@@ -4,6 +4,8 @@ class MeshPeer {
     required this.nickname,
     required this.lastSeen,
     required this.secure,
+    this.radarAllowedUntil,
+    this.radarConsentSource,
   });
 
   factory MeshPeer.fromMap(Map<Object?, Object?> map) {
@@ -12,6 +14,13 @@ class MeshPeer {
       nickname: map['nickname']! as String,
       lastSeen: DateTime.fromMillisecondsSinceEpoch(map['lastSeen']! as int),
       secure: map['secure'] as bool? ?? false,
+      radarAllowedUntil: switch (map['radarAllowedUntil']) {
+        final int value when value > 0 => DateTime.fromMillisecondsSinceEpoch(
+          value,
+        ),
+        _ => null,
+      },
+      radarConsentSource: map['radarConsentSource'] as String?,
     );
   }
 
@@ -19,6 +28,25 @@ class MeshPeer {
   final String nickname;
   final DateTime lastSeen;
   final bool secure;
+  final DateTime? radarAllowedUntil;
+  final String? radarConsentSource;
+
+  bool get radarAllowed => radarAllowedUntil?.isAfter(DateTime.now()) ?? false;
+
+  factory MeshPeer.fromDatabase(Map<String, Object?> map) {
+    return MeshPeer(
+      id: map['id']! as String,
+      nickname: map['nickname']! as String,
+      lastSeen: DateTime.fromMillisecondsSinceEpoch(map['last_seen']! as int),
+      secure: false,
+    );
+  }
+
+  Map<String, Object?> toDatabase() => {
+    'id': id,
+    'nickname': nickname,
+    'last_seen': lastSeen.millisecondsSinceEpoch,
+  };
 }
 
 class MeshMessage {
@@ -103,3 +131,15 @@ class MeshMessage {
 }
 
 enum MeshConnectionStatus { stopped, starting, active, degraded, error }
+
+class MeshConversation {
+  const MeshConversation({
+    required this.peer,
+    required this.lastMessage,
+    required this.isOnline,
+  });
+
+  final MeshPeer peer;
+  final MeshMessage lastMessage;
+  final bool isOnline;
+}

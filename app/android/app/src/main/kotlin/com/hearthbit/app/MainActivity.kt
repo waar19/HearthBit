@@ -128,6 +128,14 @@ class MainActivity : FlutterActivity() {
                     MeshRuntime.engine(this).stopRadar()
                     null
                 }
+                "setRadarConsent" -> runMethod(result) {
+                    val minutes = (call.argument<Number>("minutes")?.toLong() ?: 15L)
+                    MeshRuntime.engine(this).setRadarConsent(
+                        enabled = call.argument<Boolean>("enabled") == true,
+                        durationMs = minutes.coerceIn(1L, 20L) * 60_000L,
+                    )
+                    null
+                }
                 "getPowerStatus" -> {
                     val power = getSystemService(PowerManager::class.java)
                     result.success(

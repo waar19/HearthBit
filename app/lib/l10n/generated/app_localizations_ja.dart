@@ -574,4 +574,70 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get terrTransportTimeout => '転送経路が応答しませんでした';
+
+  @override
+  String get recentChatsTitle => '最近の会話';
+
+  @override
+  String get nearbyPeopleTitle => '近くの人';
+
+  @override
+  String get peerOnline => 'オンライン';
+
+  @override
+  String get peerOffline => 'オフライン';
+
+  @override
+  String get offlineChatHint => '相手はオフラインです。履歴を確認し、再接続後にメッセージを送信できます。';
+
+  @override
+  String get radarConsentTitle => 'レーダーのプライバシー';
+
+  @override
+  String get radarConsentOff => 'レーダーによる位置確認は初期状態で無効です';
+
+  @override
+  String radarConsentActive(int minutes) {
+    return '他の人はあと $minutes 分レーダーを使用できます';
+  }
+
+  @override
+  String get radarConsentAllow => 'レーダーを15分間許可';
+
+  @override
+  String get radarConsentRevoke => '今すぐ取り消す';
+
+  @override
+  String get radarPrivacyWarning =>
+      'この設定で制限できるのは HearthBit のみです。他のソフトウェアが端末のBluetooth信号を測定する可能性は残ります。';
+
+  @override
+  String get rescueRadarWarning =>
+      '救助モードは最新のSOS位置を共有し、SOSが有効な間は近くのHearthBit救助者による信号測定を許可します。';
+
+  @override
+  String get radarConsentRequired => '相手の同意が必要です';
+
+  @override
+  String get radarConsentSos => '最近のSOSにより利用できます';
+
+  @override
+  String get radarConsentTemporary => '相手が一時的に許可しています';
+
+  @override
+  String radarConsentExpires(String time) {
+    return '許可は $time に期限切れになります';
+  }
+
+  @override
+  String get radarNotDirection => '点は方向ではなく近さを示します。ゆっくり移動し、信号が強くなるか比較してください。';
+
+  @override
+  String get radarPermissionExpired => 'レーダーの許可が期限切れ、または取り消されました。';
+
+  @override
+  String get dateToday => '今日';
+
+  @override
+  String get dateYesterday => '昨日';
 }

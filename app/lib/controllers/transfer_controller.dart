@@ -519,7 +519,11 @@ class TransferController extends ChangeNotifier {
         _fail(record, currentL10n.terrLanIncomplete);
       }
     } catch (error) {
-      await _receiverFallback(record, session, currentL10n.terrLanFailed('$error'));
+      await _receiverFallback(
+        record,
+        session,
+        currentL10n.terrLanFailed('$error'),
+      );
     }
   }
 
@@ -600,7 +604,8 @@ class TransferController extends ChangeNotifier {
         break;
       case 'nearbyError':
       case 'wifiAwareError':
-        final message = event['message'] as String? ?? currentL10n.terrTransport;
+        final message =
+            event['message'] as String? ?? currentL10n.terrTransport;
         final session = _sessions[transferId];
         if (record.direction == TransferDirection.incoming && session != null) {
           unawaited(_receiverFallback(record, session, message));

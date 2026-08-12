@@ -593,4 +593,76 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get terrTransportTimeout => 'El transporte no respondió';
+
+  @override
+  String get recentChatsTitle => 'Conversaciones recientes';
+
+  @override
+  String get nearbyPeopleTitle => 'Personas cercanas';
+
+  @override
+  String get peerOnline => 'En línea';
+
+  @override
+  String get peerOffline => 'Desconectado';
+
+  @override
+  String get offlineChatHint =>
+      'Esta persona está desconectada. Puedes leer el historial y enviar cuando vuelva a conectarse.';
+
+  @override
+  String get radarConsentTitle => 'Privacidad del radar';
+
+  @override
+  String get radarConsentOff =>
+      'La ubicación por radar está bloqueada por defecto';
+
+  @override
+  String radarConsentActive(int minutes) {
+    return 'Otros pueden usar el radar durante $minutes min más';
+  }
+
+  @override
+  String get radarConsentAllow => 'Permitir radar durante 15 minutos';
+
+  @override
+  String get radarConsentRevoke => 'Revocar ahora';
+
+  @override
+  String get radarPrivacyWarning =>
+      'Esto limita únicamente HearthBit. Otro software aún puede medir las señales Bluetooth que emite tu teléfono.';
+
+  @override
+  String get rescueRadarWarning =>
+      'El modo rescate comparte ubicaciones SOS actualizadas y permite que rescatistas HearthBit cercanos midan tu señal mientras el SOS siga activo.';
+
+  @override
+  String get radarConsentRequired =>
+      'Requiere el consentimiento de esta persona';
+
+  @override
+  String get radarConsentSos => 'Disponible por un SOS reciente';
+
+  @override
+  String get radarConsentTemporary =>
+      'Autorizado temporalmente por esta persona';
+
+  @override
+  String radarConsentExpires(String time) {
+    return 'El permiso vence a las $time';
+  }
+
+  @override
+  String get radarNotDirection =>
+      'El punto muestra proximidad, no dirección. Muévete despacio y compara si la señal se fortalece.';
+
+  @override
+  String get radarPermissionExpired =>
+      'El permiso del radar venció o fue revocado.';
+
+  @override
+  String get dateToday => 'Hoy';
+
+  @override
+  String get dateYesterday => 'Ayer';
 }

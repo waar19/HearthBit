@@ -14,6 +14,9 @@ internal object MeshProtocol {
     const val TYPE_MESSAGE: Byte = 0x02
     const val TYPE_NOISE_HANDSHAKE: Byte = 0x10
     const val TYPE_NOISE_ENCRYPTED: Byte = 0x11
+    const val TYPE_FRAGMENT: Byte = 0x20
+    const val TYPE_REQUEST_SYNC: Byte = 0x21
+    const val TYPE_RADAR_CONTROL: Byte = 0x23
     const val TTL: Byte = 7
 
     const val NOISE_PRIVATE_MESSAGE: Byte = 0x01

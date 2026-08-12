@@ -595,4 +595,73 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get terrTransportTimeout => 'Der Transport hat nicht geantwortet';
+
+  @override
+  String get recentChatsTitle => 'Letzte Unterhaltungen';
+
+  @override
+  String get nearbyPeopleTitle => 'Personen in der Nähe';
+
+  @override
+  String get peerOnline => 'Online';
+
+  @override
+  String get peerOffline => 'Offline';
+
+  @override
+  String get offlineChatHint =>
+      'Diese Person ist offline. Du kannst den Verlauf lesen und senden, sobald sie wieder verbunden ist.';
+
+  @override
+  String get radarConsentTitle => 'Radar-Datenschutz';
+
+  @override
+  String get radarConsentOff => 'Die Radarortung ist standardmäßig gesperrt';
+
+  @override
+  String radarConsentActive(int minutes) {
+    return 'Andere können das Radar noch $minutes Min. verwenden';
+  }
+
+  @override
+  String get radarConsentAllow => 'Radar für 15 Minuten erlauben';
+
+  @override
+  String get radarConsentRevoke => 'Jetzt widerrufen';
+
+  @override
+  String get radarPrivacyWarning =>
+      'Dies beschränkt nur HearthBit. Andere Software kann weiterhin die Bluetooth-Signale deines Telefons messen.';
+
+  @override
+  String get rescueRadarWarning =>
+      'Der Rettungsmodus teilt aktuelle SOS-Positionen und erlaubt nahen HearthBit-Rettungskräften, dein Signal zu messen, solange SOS aktiv ist.';
+
+  @override
+  String get radarConsentRequired => 'Erfordert die Zustimmung dieser Person';
+
+  @override
+  String get radarConsentSos => 'Wegen eines aktuellen SOS verfügbar';
+
+  @override
+  String get radarConsentTemporary => 'Von dieser Person vorübergehend erlaubt';
+
+  @override
+  String radarConsentExpires(String time) {
+    return 'Die Erlaubnis endet um $time';
+  }
+
+  @override
+  String get radarNotDirection =>
+      'Der Punkt zeigt Nähe, nicht Richtung. Bewege dich langsam und prüfe, ob das Signal stärker wird.';
+
+  @override
+  String get radarPermissionExpired =>
+      'Die Radar-Erlaubnis ist abgelaufen oder wurde widerrufen.';
+
+  @override
+  String get dateToday => 'Heute';
+
+  @override
+  String get dateYesterday => 'Gestern';
 }

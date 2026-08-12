@@ -33,7 +33,35 @@ class RescueModeCard extends StatelessWidget {
             ),
             value: controller.rescueMode,
             onChanged: controller.canSend
-                ? (value) => controller.setRescueMode(value)
+                ? (value) async {
+                    if (value) {
+                      final accepted = await showDialog<bool>(
+                        context: context,
+                        builder: (dialogContext) => AlertDialog(
+                          title: Text(l10n.rescueModeTitle),
+                          content: Text(l10n.rescueRadarWarning),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(false),
+                              child: Text(
+                                MaterialLocalizations.of(
+                                  dialogContext,
+                                ).cancelButtonLabel,
+                              ),
+                            ),
+                            FilledButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(true),
+                              child: Text(l10n.actionAllow),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (accepted != true) return;
+                    }
+                    await controller.setRescueMode(value);
+                  }
                 : null,
           ),
           if (controller.rescueMode && !controller.backgroundLocationGranted)
@@ -59,6 +87,8 @@ class RescueModeCard extends StatelessWidget {
                 ],
               ),
             ),
+          const Divider(height: 1),
+          _RadarConsentTile(controller: controller),
         ],
       ),
     );
@@ -66,6 +96,79 @@ class RescueModeCard extends StatelessWidget {
 
   String _hourLabel(DateTime time) =>
       '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+}
+
+class _RadarConsentTile extends StatefulWidget {
+  const _RadarConsentTile({required this.controller});
+
+  final MeshController controller;
+
+  @override
+  State<_RadarConsentTile> createState() => _RadarConsentTileState();
+}
+
+class _RadarConsentTileState extends State<_RadarConsentTile> {
+  late final Stream<int> _clock = Stream.periodic(
+    const Duration(seconds: 30),
+    (value) => value,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<int>(
+      stream: _clock,
+      builder: (context, _) {
+        final expiresAt = widget.controller.radarConsentUntil;
+        final active = widget.controller.radarConsentActive;
+        final remaining = expiresAt?.difference(DateTime.now());
+        final minutes = remaining == null
+            ? 0
+            : (remaining.inSeconds / 60).ceil().clamp(0, 20).toInt();
+        return Column(
+          children: [
+            ListTile(
+              leading: Icon(active ? Icons.radar : Icons.radar_outlined),
+              title: Text(
+                context.l10n.radarConsentTitle,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(
+                active
+                    ? context.l10n.radarConsentActive(minutes)
+                    : context.l10n.radarConsentOff,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: SizedBox(
+                width: double.infinity,
+                child: active
+                    ? OutlinedButton.icon(
+                        onPressed: widget.controller.revokeRadarConsent,
+                        icon: const Icon(Icons.block),
+                        label: Text(context.l10n.radarConsentRevoke),
+                      )
+                    : FilledButton.tonalIcon(
+                        onPressed: widget.controller.canSend
+                            ? widget.controller.allowRadarFor15Minutes
+                            : null,
+                        icon: const Icon(Icons.timer_outlined),
+                        label: Text(context.l10n.radarConsentAllow),
+                      ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Text(
+                context.l10n.radarPrivacyWarning,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 /// Lista de verificación de energía: qué desactivar o conceder para que la

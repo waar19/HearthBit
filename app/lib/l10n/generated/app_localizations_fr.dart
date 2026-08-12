@@ -594,4 +594,75 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get terrTransportTimeout => 'Le transport n\'a pas répondu';
+
+  @override
+  String get recentChatsTitle => 'Conversations récentes';
+
+  @override
+  String get nearbyPeopleTitle => 'Personnes à proximité';
+
+  @override
+  String get peerOnline => 'En ligne';
+
+  @override
+  String get peerOffline => 'Hors ligne';
+
+  @override
+  String get offlineChatHint =>
+      'Cette personne est hors ligne. Vous pouvez lire l\'historique et envoyer lorsqu\'elle se reconnectera.';
+
+  @override
+  String get radarConsentTitle => 'Confidentialité du radar';
+
+  @override
+  String get radarConsentOff => 'La localisation radar est bloquée par défaut';
+
+  @override
+  String radarConsentActive(int minutes) {
+    return 'Les autres peuvent utiliser le radar encore $minutes min';
+  }
+
+  @override
+  String get radarConsentAllow => 'Autoriser le radar pendant 15 minutes';
+
+  @override
+  String get radarConsentRevoke => 'Révoquer maintenant';
+
+  @override
+  String get radarPrivacyWarning =>
+      'Cela limite uniquement HearthBit. Un autre logiciel peut toujours mesurer les signaux Bluetooth émis par votre téléphone.';
+
+  @override
+  String get rescueRadarWarning =>
+      'Le mode secours partage des positions SOS actualisées et permet aux secouristes HearthBit proches de mesurer votre signal tant que le SOS reste actif.';
+
+  @override
+  String get radarConsentRequired =>
+      'Nécessite le consentement de cette personne';
+
+  @override
+  String get radarConsentSos => 'Disponible grâce à un SOS récent';
+
+  @override
+  String get radarConsentTemporary =>
+      'Autorisé temporairement par cette personne';
+
+  @override
+  String radarConsentExpires(String time) {
+    return 'L\'autorisation expire à $time';
+  }
+
+  @override
+  String get radarNotDirection =>
+      'Le point indique la proximité, pas la direction. Déplacez-vous lentement et vérifiez si le signal se renforce.';
+
+  @override
+  String get radarPermissionExpired =>
+      'L\'autorisation radar a expiré ou a été révoquée.';
+
+  @override
+  String get dateToday => 'Aujourd’hui';
+
+  @override
+  String get dateYesterday => 'Hier';
 }

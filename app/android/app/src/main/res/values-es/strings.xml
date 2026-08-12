@@ -15,6 +15,7 @@
     <string name="error_frame_encrypt">Falló el cifrado de la trama de transferencia</string>
     <string name="error_identity_rejected">Un canal privado fue rechazado por identidad inválida</string>
     <string name="error_peer_unavailable">El dispositivo ya no está disponible</string>
+    <string name="error_radar_consent_required">Esta persona no ha permitido la ubicación por radar</string>
     <string name="error_frame_too_large">Trama de transferencia demasiado grande</string>
     <string name="error_mesh_generic">Error de malla</string>
     <string name="error_wifi_aware_unsupported">Wi-Fi Aware no soportado</string>

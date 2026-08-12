@@ -22,6 +22,7 @@ class MeshController extends ChangeNotifier {
   final MessageRepository _repository;
   final List<MeshMessage> _messages = [];
   final List<MeshPeer> _peers = [];
+  final Map<String, MeshPeer> _knownPeers = {};
 
   StreamSubscription<Map<Object?, Object?>>? _subscription;
   MeshConnectionStatus status = MeshConnectionStatus.stopped;
@@ -29,11 +30,13 @@ class MeshController extends ChangeNotifier {
   String peerId = '';
   String? lastError;
   bool supportsBackgroundRelay = false;
+  DateTime? radarConsentUntil;
 
   // Modo rescate: reenvía el SOS con ubicación actualizada periódicamente.
   bool rescueMode = false;
   DateTime? lastRescuePing;
   Timer? _rescueTimer;
+  Timer? _consentTimer;
 
   /// Vacía significa «usar el texto por defecto localizado» ([sendSos]).
   String _rescueDescription = '';
@@ -45,6 +48,49 @@ class MeshController extends ChangeNotifier {
 
   List<MeshMessage> get messages => List.unmodifiable(_messages);
   List<MeshPeer> get peers => List.unmodifiable(_peers);
+  bool isPeerOnline(String id) => _peers.any((peer) => peer.id == id);
+  MeshPeer? peerById(String id) {
+    for (final peer in _peers) {
+      if (peer.id == id) return peer;
+    }
+    return null;
+  }
+
+  bool get radarConsentActive =>
+      radarConsentUntil?.isAfter(DateTime.now()) ?? false;
+
+  List<MeshConversation> get conversations {
+    final latestByPeer = <String, MeshMessage>{};
+    for (final message in _messages) {
+      if (message.isPrivate) {
+        latestByPeer[message.senderPeerId] = message;
+      }
+    }
+    final onlineById = {for (final peer in _peers) peer.id: peer};
+    final conversations = latestByPeer.entries.map((entry) {
+      final online = onlineById[entry.key];
+      final known = _knownPeers[entry.key];
+      final peer =
+          online ??
+          known ??
+          MeshPeer(
+            id: entry.key,
+            nickname: _conversationNickname(entry.key),
+            lastSeen: entry.value.timestamp,
+            secure: false,
+          );
+      return MeshConversation(
+        peer: peer,
+        lastMessage: entry.value,
+        isOnline: online != null,
+      );
+    }).toList();
+    conversations.sort(
+      (first, second) =>
+          second.lastMessage.timestamp.compareTo(first.lastMessage.timestamp),
+    );
+    return List.unmodifiable(conversations);
+  }
 
   /// La malla puede enviar mensajes: anuncio completo o modo solo recepción,
   /// donde las conexiones salientes hacia otros nodos siguen funcionando.
@@ -56,10 +102,21 @@ class MeshController extends ChangeNotifier {
     _messages
       ..clear()
       ..addAll(await _repository.load());
+    _knownPeers
+      ..clear()
+      ..addEntries(
+        (await _repository.loadKnownPeers()).map(
+          (peer) => MapEntry(peer.id, peer),
+        ),
+      );
     _subscription = _platform.events.listen(_handleEvent);
     final capabilities = await _platform.getCapabilities();
     supportsBackgroundRelay = capabilities['backgroundRelay'] as bool? ?? false;
     await refreshPowerStatus();
+    _consentTimer ??= Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => notifyListeners(),
+    );
     notifyListeners();
   }
 
@@ -118,6 +175,7 @@ class MeshController extends ChangeNotifier {
       _rescueTimer?.cancel();
       _rescueTimer = null;
       rescueMode = false;
+      await revokeRadarConsent();
       notifyListeners();
       return;
     }
@@ -126,9 +184,11 @@ class MeshController extends ChangeNotifier {
     }
     rescueMode = true;
     notifyListeners();
+    await _platform.setRadarConsent(enabled: true, minutes: 10);
     await ensureAlwaysLocation();
     await _rescuePing();
     _rescueTimer?.cancel();
+    _consentTimer?.cancel();
     _rescueTimer = Timer.periodic(
       interval ?? rescueInterval,
       (_) => unawaited(_rescuePing()),
@@ -137,6 +197,7 @@ class MeshController extends ChangeNotifier {
 
   Future<void> _rescuePing() async {
     if (!rescueMode) return;
+    await _platform.setRadarConsent(enabled: true, minutes: 10);
     await sendSos(_rescueDescription);
     lastRescuePing = DateTime.now();
     notifyListeners();
@@ -219,15 +280,29 @@ class MeshController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> allowRadarFor15Minutes() async {
+    await _platform.setRadarConsent(enabled: true);
+    radarConsentUntil = DateTime.now().add(const Duration(minutes: 15));
+    notifyListeners();
+  }
+
+  Future<void> revokeRadarConsent() async {
+    await _platform.setRadarConsent(enabled: false);
+    radarConsentUntil = null;
+    notifyListeners();
+  }
+
   Future<void> panicWipe() async {
     await setRescueMode(false);
     await _platform.panicWipe();
     await _repository.clear();
     _messages.clear();
     _peers.clear();
+    _knownPeers.clear();
     status = MeshConnectionStatus.stopped;
     nickname = '';
     peerId = '';
+    radarConsentUntil = null;
     notifyListeners();
   }
 
@@ -253,6 +328,10 @@ class MeshController extends ChangeNotifier {
       case 'peers':
         _replacePeers(event['peers']);
         break;
+      case 'radarConsent':
+        _applyRadarConsent(event);
+        _replacePeers(event['peers']);
+        break;
       case 'message':
         final rawMessage = event['message'];
         if (rawMessage is Map<Object?, Object?>) {
@@ -273,7 +352,9 @@ class MeshController extends ChangeNotifier {
       case 'wiped':
         _messages.clear();
         _peers.clear();
+        _knownPeers.clear();
         status = MeshConnectionStatus.stopped;
+        radarConsentUntil = null;
         break;
       case 'rssi':
         // Lecturas del radar de rescate: las consume RadarScreen directamente
@@ -295,6 +376,16 @@ class MeshController extends ChangeNotifier {
     };
     nickname = event['nickname'] as String? ?? nickname;
     peerId = event['peerId'] as String? ?? peerId;
+    _applyRadarConsent(event);
+  }
+
+  void _applyRadarConsent(Map<Object?, Object?> event) {
+    final value = event['radarConsentUntil'];
+    if (value is num) {
+      radarConsentUntil = value.toInt() > 0
+          ? DateTime.fromMillisecondsSinceEpoch(value.toInt())
+          : null;
+    }
   }
 
   void _replacePeers(Object? value) {
@@ -304,6 +395,23 @@ class MeshController extends ChangeNotifier {
       ..addAll(
         rawPeers.whereType<Map<Object?, Object?>>().map(MeshPeer.fromMap),
       );
+    for (final peer in _peers) {
+      _knownPeers[peer.id] = peer;
+    }
+    if (_peers.isNotEmpty) {
+      unawaited(_repository.saveKnownPeers(_peers));
+    }
+  }
+
+  String _conversationNickname(String peerId) {
+    for (final message in _messages.reversed) {
+      if (message.isPrivate &&
+          message.senderPeerId == peerId &&
+          !message.isMine) {
+        return message.sender;
+      }
+    }
+    return peerId.length >= 8 ? peerId.substring(0, 8) : peerId;
   }
 
   @override

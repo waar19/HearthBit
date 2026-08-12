@@ -15,6 +15,7 @@
     <string name="error_frame_encrypt">転送フレームの暗号化に失敗しました</string>
     <string name="error_identity_rejected">無効な ID のためプライベートチャネルが拒否されました</string>
     <string name="error_peer_unavailable">端末が利用できなくなりました</string>
+    <string name="error_radar_consent_required">相手はレーダーによる位置確認を許可していません</string>
     <string name="error_frame_too_large">転送フレームが大きすぎます</string>
     <string name="error_mesh_generic">メッシュのエラー</string>
     <string name="error_wifi_aware_unsupported">Wi-Fi Aware 非対応</string>

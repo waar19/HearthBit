@@ -15,6 +15,7 @@
     <string name="error_frame_encrypt">Failed to encrypt the transfer frame</string>
     <string name="error_identity_rejected">A private channel was rejected due to an invalid identity</string>
     <string name="error_peer_unavailable">The device is no longer available</string>
+    <string name="error_radar_consent_required">This person has not allowed radar location</string>
     <string name="error_frame_too_large">Transfer frame too large</string>
     <string name="error_mesh_generic">Mesh error</string>
     <string name="error_wifi_aware_unsupported">Wi-Fi Aware not supported</string>

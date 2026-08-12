@@ -1088,6 +1088,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The transport did not respond'**
   String get terrTransportTimeout;
+
+  /// No description provided for @recentChatsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent conversations'**
+  String get recentChatsTitle;
+
+  /// No description provided for @nearbyPeopleTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby people'**
+  String get nearbyPeopleTitle;
+
+  /// No description provided for @peerOnline.
+  ///
+  /// In en, this message translates to:
+  /// **'Online'**
+  String get peerOnline;
+
+  /// No description provided for @peerOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline'**
+  String get peerOffline;
+
+  /// No description provided for @offlineChatHint.
+  ///
+  /// In en, this message translates to:
+  /// **'This person is offline. You can read the history and send when they reconnect.'**
+  String get offlineChatHint;
+
+  /// No description provided for @radarConsentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Radar privacy'**
+  String get radarConsentTitle;
+
+  /// No description provided for @radarConsentOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Radar location is blocked by default'**
+  String get radarConsentOff;
+
+  /// No description provided for @radarConsentActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Others may use radar for {minutes} more min'**
+  String radarConsentActive(int minutes);
+
+  /// No description provided for @radarConsentAllow.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow radar for 15 minutes'**
+  String get radarConsentAllow;
+
+  /// No description provided for @radarConsentRevoke.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke now'**
+  String get radarConsentRevoke;
+
+  /// No description provided for @radarPrivacyWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'This limits HearthBit only. Other software may still measure Bluetooth signals emitted by your phone.'**
+  String get radarPrivacyWarning;
+
+  /// No description provided for @rescueRadarWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescue mode shares fresh SOS locations and allows nearby HearthBit rescuers to measure your signal while SOS remains active.'**
+  String get rescueRadarWarning;
+
+  /// No description provided for @radarConsentRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Requires this person\'s consent'**
+  String get radarConsentRequired;
+
+  /// No description provided for @radarConsentSos.
+  ///
+  /// In en, this message translates to:
+  /// **'Available because of a recent SOS'**
+  String get radarConsentSos;
+
+  /// No description provided for @radarConsentTemporary.
+  ///
+  /// In en, this message translates to:
+  /// **'Temporarily authorized by this person'**
+  String get radarConsentTemporary;
+
+  /// No description provided for @radarConsentExpires.
+  ///
+  /// In en, this message translates to:
+  /// **'Permission expires at {time}'**
+  String radarConsentExpires(String time);
+
+  /// No description provided for @radarNotDirection.
+  ///
+  /// In en, this message translates to:
+  /// **'The point shows proximity, not direction. Move slowly and compare whether the signal gets stronger.'**
+  String get radarNotDirection;
+
+  /// No description provided for @radarPermissionExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Radar permission expired or was revoked.'**
+  String get radarPermissionExpired;
+
+  /// No description provided for @dateToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get dateToday;
+
+  /// No description provided for @dateYesterday.
+  ///
+  /// In en, this message translates to:
+  /// **'Yesterday'**
+  String get dateYesterday;
 }
 
 class _AppLocalizationsDelegate

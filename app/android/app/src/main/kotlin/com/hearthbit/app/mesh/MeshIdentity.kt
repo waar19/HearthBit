@@ -32,6 +32,12 @@ internal class MeshIdentity(context: Context) {
             preferences.edit().putString(KEY_NICKNAME, value.take(31)).apply()
         }
 
+    var radarConsentUntil: Long
+        get() = preferences.getLong(KEY_RADAR_CONSENT_UNTIL, 0L)
+        set(value) {
+            preferences.edit().putLong(KEY_RADAR_CONSENT_UNTIL, value).apply()
+        }
+
     val noisePrivateKey: ByteArray
     val noisePublicKey: ByteArray
     val signingPrivateKey: ByteArray
@@ -126,5 +132,6 @@ internal class MeshIdentity(context: Context) {
         const val KEY_NOISE_PUBLIC = "noise_public"
         const val KEY_SIGNING_PRIVATE = "signing_private"
         const val KEY_SIGNING_PUBLIC = "signing_public"
+        const val KEY_RADAR_CONSENT_UNTIL = "radar_consent_until"
     }
 }

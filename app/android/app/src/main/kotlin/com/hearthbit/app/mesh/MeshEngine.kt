@@ -53,8 +53,12 @@ internal class MeshEngine(
     private val clientWriteLock = Any()
     private val clientWriteQueues = mutableMapOf<String, ArrayDeque<ByteArray>>()
     private val clientWritesInFlight = mutableSetOf<String>()
+    private val clientReady = ConcurrentHashMap.newKeySet<String>()
     private val serverSubscribers = ConcurrentHashMap.newKeySet<BluetoothDevice>()
     private val storeForward = StoreForwardCache(context)
+    private val fragmentReassembler = MeshFragmentReassembler()
+    private val lastSyncRequestByAddress = ConcurrentHashMap<String, Long>()
+    private val remoteRadarConsents = ConcurrentHashMap<String, RemoteRadarConsent>()
 
     /**
      * Dirección MAC -> peerId de vecinos directos. Se alimenta con el peerId
@@ -93,6 +97,7 @@ internal class MeshEngine(
     )
 
     private data class PendingPrivate(val id: String, val content: String)
+    private data class RemoteRadarConsent(val expiresAt: Long, val source: String)
 
     val peerId: String get() = identity.peerIdHex
     val nickname: String get() = identity.nickname
@@ -102,6 +107,7 @@ internal class MeshEngine(
         "status" to currentStatus,
         "peerId" to peerId,
         "nickname" to nickname,
+        "radarConsentUntil" to activeLocalRadarConsentUntil(),
         "peers" to peersSnapshot(),
     )
 
@@ -157,6 +163,7 @@ internal class MeshEngine(
         clientGatts.values.forEach { runCatching { it.close() } }
         clientGatts.clear()
         clientCharacteristics.clear()
+        clientReady.clear()
         synchronized(clientWriteLock) {
             clientWriteQueues.clear()
             clientWritesInFlight.clear()
@@ -167,6 +174,9 @@ internal class MeshEngine(
         serverCharacteristic = null
         sessions.values.forEach(NoiseSessionLite::close)
         sessions.clear()
+        fragmentReassembler.clear()
+        lastSyncRequestByAddress.clear()
+        remoteRadarConsents.clear()
         if (notify) emitStatus("stopped")
     }
 
@@ -200,6 +210,19 @@ internal class MeshEngine(
             "||"
         }
         return sendPublic("SOS|$content$location", "sos")
+    }
+
+    fun setRadarConsent(enabled: Boolean, durationMs: Long = RadarConsentProtocol.MANUAL_DURATION_MS) {
+        val now = System.currentTimeMillis()
+        if (enabled) {
+            val boundedDuration = durationMs.coerceIn(1L, RadarConsentProtocol.MAX_GRANT_DURATION_MS)
+            identity.radarConsentUntil = now + boundedDuration
+            broadcastRadarConsent(grant = true)
+        } else {
+            identity.radarConsentUntil = 0
+            broadcastRadarConsent(grant = false)
+        }
+        emitRadarConsent()
     }
 
     fun sendPrivate(peerIdHex: String, content: String): String {
@@ -271,16 +294,23 @@ internal class MeshEngine(
         )
     }
 
-    fun peersSnapshot(): List<Map<String, Any?>> = peers.values
-        .sortedByDescending(Peer::lastSeen)
-        .map {
+    fun peersSnapshot(): List<Map<String, Any?>> {
+        val now = System.currentTimeMillis()
+        pruneRadarConsents(now)
+        return peers.values.sortedByDescending(Peer::lastSeen).map {
+            val consent = remoteRadarConsents[it.id]?.takeIf { value ->
+                value.expiresAt > now
+            }
             mapOf(
                 "id" to it.id,
                 "nickname" to it.nickname,
                 "lastSeen" to it.lastSeen,
                 "secure" to (sessions[it.id]?.established == true),
+                "radarAllowedUntil" to (consent?.expiresAt ?: 0L),
+                "radarConsentSource" to consent?.source,
             )
         }
+    }
 
     fun panicWipe() {
         stop()
@@ -296,7 +326,11 @@ internal class MeshEngine(
      * si el vecino está conectado (único camino con iOS en segundo plano).
      */
     fun startRadar(peerIdHex: String) {
-        radarPeerId = peerIdHex.lowercase()
+        val normalized = peerIdHex.lowercase()
+        check(isRadarAllowed(normalized)) {
+            context.getString(R.string.error_radar_consent_required)
+        }
+        radarPeerId = normalized
         mainHandler.removeCallbacks(radarReadTask)
         mainHandler.post(radarReadTask)
     }
@@ -310,6 +344,11 @@ internal class MeshEngine(
         @SuppressLint("MissingPermission")
         override fun run() {
             val target = radarPeerId ?: return
+            if (!isRadarAllowed(target)) {
+                stopRadar()
+                emit(mapOf("type" to "radarExpired", "peerId" to target))
+                return
+            }
             clientGatts.forEach { (address, gatt) ->
                 if (addressToPeer[address] == target) {
                     runCatching { gatt.readRemoteRssi() }
@@ -346,6 +385,87 @@ internal class MeshEngine(
                 payload = payload,
             ),
         )
+        broadcast(packet)
+        if (activeLocalRadarConsentUntil() > System.currentTimeMillis()) {
+            broadcastRadarConsent(grant = true)
+        }
+    }
+
+    private fun broadcastRadarConsent(grant: Boolean) {
+        if (!running) return
+        val expiresAt = if (grant) activeLocalRadarConsentUntil() else 0L
+        if (grant && expiresAt <= System.currentTimeMillis()) return
+        val packet = identity.sign(
+            MeshProtocol.Packet(
+                type = MeshProtocol.TYPE_RADAR_CONTROL,
+                ttl = 1,
+                timestamp = System.currentTimeMillis(),
+                senderId = identity.peerId,
+                payload = if (grant) {
+                    RadarConsentProtocol.grant(expiresAt)
+                } else {
+                    RadarConsentProtocol.revoke()
+                },
+            ),
+        )
+        broadcast(packet)
+    }
+
+    private fun activeLocalRadarConsentUntil(): Long {
+        val expiresAt = identity.radarConsentUntil
+        if (expiresAt <= System.currentTimeMillis()) {
+            if (expiresAt != 0L) identity.radarConsentUntil = 0L
+            return 0L
+        }
+        return expiresAt
+    }
+
+    private fun isRadarAllowed(peerIdHex: String, now: Long = System.currentTimeMillis()): Boolean {
+        val consent = remoteRadarConsents[peerIdHex] ?: return false
+        if (consent.expiresAt <= now) {
+            remoteRadarConsents.remove(peerIdHex, consent)
+            return false
+        }
+        return true
+    }
+
+    private fun pruneRadarConsents(now: Long) {
+        remoteRadarConsents.entries.removeIf { it.value.expiresAt <= now }
+        val target = radarPeerId
+        if (target != null && !isRadarAllowed(target, now)) stopRadar()
+    }
+
+    private fun emitRadarConsent() {
+        emit(
+            mapOf(
+                "type" to "radarConsent",
+                "radarConsentUntil" to activeLocalRadarConsentUntil(),
+                "peers" to peersSnapshot(),
+            ),
+        )
+    }
+
+    private fun requestMissingMessages(peerIdHex: String, sourceAddress: String) {
+        val now = System.currentTimeMillis()
+        val previous = lastSyncRequestByAddress[sourceAddress]
+        if (previous != null && now - previous < SYNC_REQUEST_COOLDOWN_MS) return
+        lastSyncRequestByAddress[sourceAddress] = now
+        val emptyGcsFilter = byteArrayOf(
+            0x01, 0x00, 0x01, 0x02, // P = 2
+            0x02, 0x00, 0x04, 0x00, 0x00, 0x00, 0x01, // M = 1
+            0x03, 0x00, 0x00, // filtro vacío: solicitar todo lo reciente
+        )
+        val packet = identity.sign(
+            MeshProtocol.Packet(
+                type = MeshProtocol.TYPE_REQUEST_SYNC,
+                ttl = 0,
+                timestamp = now,
+                senderId = identity.peerId,
+                recipientId = peerIdHex.hexToBytes(),
+                payload = emptyGcsFilter,
+            ),
+        )
+        Log.i(LOG_TAG, "REQUEST_SYNC sent to ${peerIdHex.take(8)}")
         broadcast(packet)
     }
 
@@ -439,7 +559,20 @@ internal class MeshEngine(
             val queue = clientWriteQueues.getOrPut(address) { ArrayDeque() }
             if (queue.size >= MAX_PENDING_GATT_WRITES) queue.removeFirst()
             queue.addLast(bytes.copyOf())
-            if (clientWritesInFlight.add(address)) true else false
+            address in clientReady && clientWritesInFlight.add(address)
+        }
+        if (shouldStart) writeNextClient(address, gatt, characteristic)
+    }
+
+    private fun markClientReady(
+        address: String,
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+    ) {
+        clientReady.add(address)
+        val shouldStart = synchronized(clientWriteLock) {
+            clientWriteQueues[address]?.isNotEmpty() == true &&
+                clientWritesInFlight.add(address)
         }
         if (shouldStart) writeNextClient(address, gatt, characteristic)
     }
@@ -525,7 +658,7 @@ internal class MeshEngine(
         val isForUs = packet.recipientId == null ||
             packet.recipientId.contentEquals(identity.peerId) ||
             packet.recipientId.contentEquals(MeshProtocol.broadcastRecipient)
-        if (isForUs) process(packet, senderHex)
+        if (isForUs) process(packet, senderHex, sourceAddress)
 
         if (packet.ttl.toInt() and 0xFF > 1 &&
             packet.type != MeshProtocol.TYPE_NOISE_HANDSHAKE &&
@@ -539,16 +672,36 @@ internal class MeshEngine(
         }
     }
 
-    private fun process(packet: MeshProtocol.Packet, senderHex: String) {
+    private fun process(
+        packet: MeshProtocol.Packet,
+        senderHex: String,
+        sourceAddress: String,
+    ) {
         when (packet.type) {
-            MeshProtocol.TYPE_ANNOUNCE -> processAnnouncement(packet, senderHex)
+            MeshProtocol.TYPE_ANNOUNCE -> processAnnouncement(packet, senderHex, sourceAddress)
             MeshProtocol.TYPE_MESSAGE -> processPublicMessage(packet, senderHex)
             MeshProtocol.TYPE_NOISE_HANDSHAKE -> processHandshake(packet, senderHex)
             MeshProtocol.TYPE_NOISE_ENCRYPTED -> processEncrypted(packet, senderHex)
+            MeshProtocol.TYPE_RADAR_CONTROL -> processRadarControl(packet, senderHex)
+            MeshProtocol.TYPE_FRAGMENT -> {
+                val reassembled = fragmentReassembler.accept(packet)
+                if (reassembled != null) {
+                    Log.i(
+                        LOG_TAG,
+                        "FRAGMENT reassembled: type=${reassembled.type.toUByte()} " +
+                            "sender=${senderHex.take(8)} bytes=${reassembled.payload.size}",
+                    )
+                    process(reassembled, senderHex, sourceAddress)
+                }
+            }
         }
     }
 
-    private fun processAnnouncement(packet: MeshProtocol.Packet, senderHex: String) {
+    private fun processAnnouncement(
+        packet: MeshProtocol.Packet,
+        senderHex: String,
+        sourceAddress: String,
+    ) {
         val announcement = MeshProtocol.decodeAnnouncement(packet.payload)
         if (announcement == null) {
             Log.w(
@@ -584,6 +737,7 @@ internal class MeshEngine(
             announcement.signingPublicKey,
         )
         emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
+        requestMissingMessages(senderHex, sourceAddress)
         storeForward.forRecipient(packet.senderId).forEach(::broadcast)
     }
 
@@ -605,6 +759,13 @@ internal class MeshEngine(
             senderPeerId = senderHex,
         )
         peer.lastSeen = System.currentTimeMillis()
+        if (message.channel == "sos") {
+            val expiresAt = packet.timestamp + RadarConsentProtocol.SOS_DURATION_MS
+            if (expiresAt > System.currentTimeMillis()) {
+                remoteRadarConsents[senderHex] = RemoteRadarConsent(expiresAt, "sos")
+                emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
+            }
+        }
         emitMessage(
             message.id,
             message.sender,
@@ -615,6 +776,23 @@ internal class MeshEngine(
             message.timestamp,
             message.channel,
         )
+    }
+
+    private fun processRadarControl(packet: MeshProtocol.Packet, senderHex: String) {
+        val peer = peers[senderHex] ?: return
+        if (!identity.verify(packet, peer.signingPublicKey)) return
+        val consent = RadarConsentProtocol.decode(packet.payload) ?: return
+        if (!RadarConsentProtocol.hasValidTimestamp(packet.timestamp)) return
+        if (consent.action == RadarConsentProtocol.ACTION_REVOKE) {
+            remoteRadarConsents.remove(senderHex)
+            if (radarPeerId == senderHex) stopRadar()
+        } else if (RadarConsentProtocol.isValidGrant(consent, packet.timestamp)) {
+            remoteRadarConsents[senderHex] =
+                RemoteRadarConsent(consent.expiresAt, "temporary")
+        } else {
+            return
+        }
+        emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
     }
 
     private fun processHandshake(packet: MeshProtocol.Packet, senderHex: String) {
@@ -814,17 +992,23 @@ internal class MeshEngine(
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
-                gatt.requestMtu(517)
-                gatt.discoverServices()
+                if (!gatt.requestMtu(517)) gatt.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 clientCharacteristics.remove(gatt.device.address)
                 clientGatts.remove(gatt.device.address)
+                clientReady.remove(gatt.device.address)
+                lastSyncRequestByAddress.remove(gatt.device.address)
                 synchronized(clientWriteLock) {
                     clientWriteQueues.remove(gatt.device.address)
                     clientWritesInFlight.remove(gatt.device.address)
                 }
                 gatt.close()
             }
+        }
+
+        @SuppressLint("MissingPermission")
+        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+            gatt.discoverServices()
         }
 
         @SuppressLint("MissingPermission")
@@ -835,18 +1019,23 @@ internal class MeshEngine(
             gatt.setCharacteristicNotification(characteristic, true)
             val descriptor = characteristic.getDescriptor(CLIENT_CONFIGURATION_UUID)
             if (descriptor != null) {
-                if (Build.VERSION.SDK_INT >= 33) {
+                val descriptorStarted = if (Build.VERSION.SDK_INT >= 33) {
                     gatt.writeDescriptor(
                         descriptor,
                         BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE,
-                    )
+                    ) == BluetoothStatusCodes.SUCCESS
                 } else {
                     @Suppress("DEPRECATION")
                     descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                     @Suppress("DEPRECATION")
                     gatt.writeDescriptor(descriptor)
                 }
+                if (!descriptorStarted) {
+                    markClientReady(gatt.device.address, gatt, characteristic)
+                    sendAnnouncement()
+                }
             } else {
+                markClientReady(gatt.device.address, gatt, characteristic)
                 sendAnnouncement()
             }
         }
@@ -856,9 +1045,15 @@ internal class MeshEngine(
             descriptor: BluetoothGattDescriptor,
             status: Int,
         ) {
-            if (descriptor.uuid == CLIENT_CONFIGURATION_UUID &&
-                status == BluetoothGatt.GATT_SUCCESS
-            ) {
+            if (descriptor.uuid == CLIENT_CONFIGURATION_UUID) {
+                val characteristic = clientCharacteristics[gatt.device.address] ?: return
+                markClientReady(gatt.device.address, gatt, characteristic)
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    Log.w(
+                        LOG_TAG,
+                        "CCCD write failed for ${gatt.device.address.takeLast(5)}: $status",
+                    )
+                }
                 sendAnnouncement()
             }
         }
@@ -1005,6 +1200,7 @@ internal class MeshEngine(
         const val ADVERTISE_TIMEOUT_MS = 10_000L
         const val MAX_ADVERTISE_RETRIES = 1
         const val MAX_PENDING_GATT_WRITES = 256
+        const val SYNC_REQUEST_COOLDOWN_MS = 60_000L
 
         const val LOG_TAG = "HearthBitMesh"
 

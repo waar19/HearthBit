@@ -15,6 +15,7 @@
     <string name="error_frame_encrypt">Échec du chiffrement de la trame de transfert</string>
     <string name="error_identity_rejected">Un canal privé a été rejeté pour identité invalide</string>
     <string name="error_peer_unavailable">L\'appareil n\'est plus disponible</string>
+    <string name="error_radar_consent_required">Cette personne n\'a pas autorisé la localisation par radar</string>
     <string name="error_frame_too_large">Trame de transfert trop grande</string>
     <string name="error_mesh_generic">Erreur de maillage</string>
     <string name="error_wifi_aware_unsupported">Wi-Fi Aware non pris en charge</string>

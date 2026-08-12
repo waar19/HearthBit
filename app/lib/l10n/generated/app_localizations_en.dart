@@ -591,4 +591,73 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get terrTransportTimeout => 'The transport did not respond';
+
+  @override
+  String get recentChatsTitle => 'Recent conversations';
+
+  @override
+  String get nearbyPeopleTitle => 'Nearby people';
+
+  @override
+  String get peerOnline => 'Online';
+
+  @override
+  String get peerOffline => 'Offline';
+
+  @override
+  String get offlineChatHint =>
+      'This person is offline. You can read the history and send when they reconnect.';
+
+  @override
+  String get radarConsentTitle => 'Radar privacy';
+
+  @override
+  String get radarConsentOff => 'Radar location is blocked by default';
+
+  @override
+  String radarConsentActive(int minutes) {
+    return 'Others may use radar for $minutes more min';
+  }
+
+  @override
+  String get radarConsentAllow => 'Allow radar for 15 minutes';
+
+  @override
+  String get radarConsentRevoke => 'Revoke now';
+
+  @override
+  String get radarPrivacyWarning =>
+      'This limits HearthBit only. Other software may still measure Bluetooth signals emitted by your phone.';
+
+  @override
+  String get rescueRadarWarning =>
+      'Rescue mode shares fresh SOS locations and allows nearby HearthBit rescuers to measure your signal while SOS remains active.';
+
+  @override
+  String get radarConsentRequired => 'Requires this person\'s consent';
+
+  @override
+  String get radarConsentSos => 'Available because of a recent SOS';
+
+  @override
+  String get radarConsentTemporary => 'Temporarily authorized by this person';
+
+  @override
+  String radarConsentExpires(String time) {
+    return 'Permission expires at $time';
+  }
+
+  @override
+  String get radarNotDirection =>
+      'The point shows proximity, not direction. Move slowly and compare whether the signal gets stronger.';
+
+  @override
+  String get radarPermissionExpired =>
+      'Radar permission expired or was revoked.';
+
+  @override
+  String get dateToday => 'Today';
+
+  @override
+  String get dateYesterday => 'Yesterday';
 }

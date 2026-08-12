@@ -22,6 +22,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var pendingPrivate: [String: [(String, String)]] = [:]
   private var pendingFrames: [String: [Data]] = [:]
   private var seen: [String: Date] = [:]
+  private var remoteRadarConsents: [String: IOSRemoteRadarConsent] = [:]
   private var notifyQueue: [Data] = []
   private var eventSink: FlutterEventSink?
   private var running = false
@@ -174,6 +175,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         storeForward.clear()
         peers.removeAll()
         sessions.removeAll()
+        remoteRadarConsents.removeAll()
         result(nil)
         emit(["type": "wiped"])
       case "getPowerStatus":
@@ -199,10 +201,15 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         guard let peerID = arguments["peerId"] as? String else {
           throw IOSMeshError.peerUnavailable
         }
-        startRadar(peerID: peerID.lowercased())
+        try startRadar(peerID: peerID.lowercased())
         result(nil)
       case "stopRadar":
         stopRadar()
+        result(nil)
+      case "setRadarConsent":
+        let enabled = arguments["enabled"] as? Bool ?? false
+        let minutes = min(max(arguments["minutes"] as? Int ?? 15, 1), 20)
+        setRadarConsent(enabled: enabled, duration: TimeInterval(minutes * 60))
         result(nil)
       default:
         result(FlutterMethodNotImplemented)
@@ -252,18 +259,27 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     peripheralManager?.stopAdvertising()
     peripheralManager?.removeAllServices()
     sessions.removeAll()
+    remoteRadarConsents.removeAll()
     if notify { emitStatus("stopped") }
   }
 
   /// Radar de rescate: emite lecturas RSSI del peer objetivo combinando los
   /// anuncios captados por el escaneo (con duplicados activados) y lecturas
   /// periódicas `readRSSI()` sobre periféricos conectados.
-  private func startRadar(peerID: String) {
+  private func startRadar(peerID: String) throws {
+    guard isRadarAllowed(peerID: peerID) else {
+      throw IOSMeshError.radarConsentRequired
+    }
     radarPeerID = peerID
     restartScan()
     radarTimer?.invalidate()
     radarTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
       guard let self, let target = self.radarPeerID else { return }
+      guard self.isRadarAllowed(peerID: target) else {
+        self.stopRadar()
+        self.emit(["type": "radarExpired", "peerId": target])
+        return
+      }
       for (identifier, peripheral) in self.connectedPeripherals
       where self.peripheralPeers[identifier] == target && peripheral.state == .connected {
         peripheral.readRSSI()
@@ -276,6 +292,15 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     radarTimer?.invalidate()
     radarTimer = nil
     restartScan()
+  }
+
+  private func setRadarConsent(enabled: Bool, duration: TimeInterval) {
+    let expiresAt = enabled
+      ? Date().addingTimeInterval(duration).timeIntervalSince1970 * 1000
+      : 0
+    UserDefaults.standard.set(expiresAt, forKey: IOSRadarConsentProtocol.localConsentKey)
+    broadcastRadarConsent(grant: enabled)
+    emitRadarConsent()
   }
 
   /// Reinicia el escaneo BLE; con radar activo se permiten duplicados para
@@ -441,6 +466,70 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         )
       )
     )
+    if activeLocalRadarConsentUntil() > currentMilliseconds() {
+      broadcastRadarConsent(grant: true)
+    }
+  }
+
+  private func broadcastRadarConsent(grant: Bool) {
+    guard running else { return }
+    let expiresAt = grant ? activeLocalRadarConsentUntil() : 0
+    guard !grant || expiresAt > currentMilliseconds() else { return }
+    let packet = identity.sign(
+      IOSMeshPacket(
+        type: IOSMeshProtocol.radarControl,
+        ttl: 1,
+        timestamp: currentMilliseconds(),
+        senderID: identity.peerID,
+        payload: grant
+          ? IOSRadarConsentProtocol.grant(expiresAt: expiresAt)
+          : IOSRadarConsentProtocol.revoke()
+      )
+    )
+    broadcast(packet)
+  }
+
+  private func activeLocalRadarConsentUntil() -> UInt64 {
+    let value = UserDefaults.standard.double(
+      forKey: IOSRadarConsentProtocol.localConsentKey
+    )
+    let expiresAt = value > 0 ? UInt64(value) : 0
+    if expiresAt <= currentMilliseconds() {
+      if value != 0 {
+        UserDefaults.standard.removeObject(forKey: IOSRadarConsentProtocol.localConsentKey)
+      }
+      return 0
+    }
+    return expiresAt
+  }
+
+  private func currentMilliseconds() -> UInt64 {
+    UInt64(Date().timeIntervalSince1970 * 1000)
+  }
+
+  private func isRadarAllowed(peerID: String) -> Bool {
+    guard let consent = remoteRadarConsents[peerID] else { return false }
+    if consent.expiresAt <= currentMilliseconds() {
+      remoteRadarConsents.removeValue(forKey: peerID)
+      return false
+    }
+    return true
+  }
+
+  private func pruneRadarConsents() {
+    let now = currentMilliseconds()
+    remoteRadarConsents = remoteRadarConsents.filter { $0.value.expiresAt > now }
+    if let target = radarPeerID, remoteRadarConsents[target] == nil {
+      stopRadar()
+    }
+  }
+
+  private func emitRadarConsent() {
+    emit([
+      "type": "radarConsent",
+      "radarConsentUntil": activeLocalRadarConsentUntil(),
+      "peers": peerMaps(),
+    ])
   }
 
   private func broadcast(_ packet: IOSMeshPacket, excluding: UUID? = nil) {
@@ -529,6 +618,16 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           timestamp: packet.timestamp,
           channel: packet.payload.starts(with: Data("SOS|".utf8)) ? "sos" : nil
         )
+      if message.channel == "sos" {
+        let expiresAt = packet.timestamp + IOSRadarConsentProtocol.sosDurationMilliseconds
+        if expiresAt > currentMilliseconds() {
+          remoteRadarConsents[senderID] = IOSRemoteRadarConsent(
+            expiresAt: expiresAt,
+            source: "sos"
+          )
+          emit(["type": "peers", "peers": peerMaps()])
+        }
+      }
       emitMessage(
         id: message.id,
         sender: message.sender,
@@ -543,9 +642,38 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       processHandshake(packet, senderID: senderID)
     case IOSMeshProtocol.noiseEncrypted:
       processEncrypted(packet, senderID: senderID)
+    case IOSMeshProtocol.radarControl:
+      processRadarControl(packet, senderID: senderID)
     default:
       break
     }
+  }
+
+  private func processRadarControl(_ packet: IOSMeshPacket, senderID: String) {
+    guard
+      let peer = peers[senderID],
+      IOSMeshIdentity.verify(packet, key: peer.signingPublicKey),
+      let consent = IOSRadarConsentProtocol.decode(packet.payload),
+      IOSRadarConsentProtocol.hasValidTimestamp(
+        packet.timestamp,
+        now: currentMilliseconds()
+      )
+    else { return }
+    if consent.action == IOSRadarConsentProtocol.revokeAction {
+      remoteRadarConsents.removeValue(forKey: senderID)
+      if radarPeerID == senderID { stopRadar() }
+    } else if IOSRadarConsentProtocol.isValidGrant(
+      consent,
+      packetTimestamp: packet.timestamp
+    ) {
+      remoteRadarConsents[senderID] = IOSRemoteRadarConsent(
+        expiresAt: consent.expiresAt,
+        source: "temporary"
+      )
+    } else {
+      return
+    }
+    emit(["type": "peers", "peers": peerMaps()])
   }
 
   private func processHandshake(_ packet: IOSMeshPacket, senderID: String) {
@@ -612,12 +740,16 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func peerMaps() -> [[String: Any]] {
-    peers.values.map {
-      [
+    pruneRadarConsents()
+    return peers.values.map {
+      let consent = remoteRadarConsents[$0.id]
+      return [
         "id": $0.id,
         "nickname": $0.nickname,
         "lastSeen": Int($0.lastSeen.timeIntervalSince1970 * 1000),
         "secure": sessions[$0.id]?.established ?? false,
+        "radarAllowedUntil": consent?.expiresAt ?? 0,
+        "radarConsentSource": consent?.source ?? "",
       ]
     }
   }
@@ -628,6 +760,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       "status": status,
       "peerId": identity.peerIDHex,
       "nickname": identity.nickname,
+      "radarConsentUntil": activeLocalRadarConsentUntil(),
     ])
   }
 
@@ -842,6 +975,82 @@ private struct IOSMeshPeer {
   let lastSeen: Date
 }
 
+private struct IOSRemoteRadarConsent {
+  let expiresAt: UInt64
+  let source: String
+}
+
+private enum IOSRadarConsentProtocol {
+  static let localConsentKey = "hearthbit.radar_consent_until"
+  static let version: UInt8 = 1
+  static let grantAction: UInt8 = 1
+  static let revokeAction: UInt8 = 2
+  static let nonceSize = 16
+  static let payloadSize = 26
+  static let sosDurationMilliseconds: UInt64 = 10 * 60 * 1000
+  static let maximumGrantMilliseconds: UInt64 = 20 * 60 * 1000
+  static let clockSkewMilliseconds: UInt64 = 2 * 60 * 1000
+
+  struct Consent {
+    let action: UInt8
+    let expiresAt: UInt64
+    let nonce: Data
+  }
+
+  static func grant(expiresAt: UInt64) -> Data {
+    encode(action: grantAction, expiresAt: expiresAt)
+  }
+
+  static func revoke() -> Data {
+    encode(action: revokeAction, expiresAt: 0)
+  }
+
+  static func decode(_ payload: Data) -> Consent? {
+    guard payload.count == payloadSize else { return nil }
+    var reader = DataReader(payload)
+    guard
+      reader.byte() == version,
+      let action = reader.byte(),
+      action == grantAction || action == revokeAction,
+      let expiresAt: UInt64 = reader.integer(),
+      let nonce = reader.data(count: nonceSize),
+      (action != revokeAction || expiresAt == 0)
+    else { return nil }
+    return Consent(action: action, expiresAt: expiresAt, nonce: nonce)
+  }
+
+  static func hasValidTimestamp(_ timestamp: UInt64, now: UInt64) -> Bool {
+    timestamp <= now + clockSkewMilliseconds &&
+      timestamp + clockSkewMilliseconds >= now
+  }
+
+  static func isValidGrant(
+    _ consent: Consent,
+    packetTimestamp: UInt64,
+    now: UInt64 = UInt64(Date().timeIntervalSince1970 * 1000)
+  ) -> Bool {
+    consent.action == grantAction &&
+      hasValidTimestamp(packetTimestamp, now: now) &&
+      consent.expiresAt > now &&
+      consent.expiresAt <= now + maximumGrantMilliseconds + clockSkewMilliseconds
+  }
+
+  private static func encode(action: UInt8, expiresAt: UInt64) -> Data {
+    var output = Data([version, action])
+    output.appendInteger(expiresAt)
+    var nonce = Data(count: nonceSize)
+    let randomStatus = nonce.withUnsafeMutableBytes { buffer in
+      guard let address = buffer.baseAddress else { return errSecParam }
+      return SecRandomCopyBytes(kSecRandomDefault, nonceSize, address)
+    }
+    if randomStatus != errSecSuccess {
+      nonce = Data(SHA256.hash(data: Data(UUID().uuidString.utf8))).prefix(nonceSize)
+    }
+    output.append(nonce)
+    return output
+  }
+}
+
 private struct IOSMeshPacket {
   var version: UInt8 = 1
   var type: UInt8
@@ -865,6 +1074,7 @@ private enum IOSMeshProtocol {
   static let message: UInt8 = 0x02
   static let noiseHandshake: UInt8 = 0x10
   static let noiseEncrypted: UInt8 = 0x11
+  static let radarControl: UInt8 = 0x23
   static let noisePrivate: UInt8 = 0x01
   /// Trama HBT (HearthBit Transfer) encapsulada dentro de la sesión Noise.
   static let noiseTransferFrame: UInt8 = 0x30
@@ -1302,6 +1512,7 @@ private final class IOSMeshIdentity {
       ] as CFDictionary)
     }
     UserDefaults.standard.removeObject(forKey: "hearthbit.nickname")
+    UserDefaults.standard.removeObject(forKey: IOSRadarConsentProtocol.localConsentKey)
   }
 
   private static func load(_ account: String) -> Data? {
@@ -1711,6 +1922,7 @@ private enum IOSMeshError: LocalizedError {
   case identityMismatch
   case noise
   case invalidPayload
+  case radarConsentRequired
 
   var errorDescription: String? {
     switch self {
@@ -1720,6 +1932,7 @@ private enum IOSMeshError: LocalizedError {
     case .identityMismatch: return HearthBitL10n.string("identity_mismatch")
     case .noise: return HearthBitL10n.string("noise_failed")
     case .invalidPayload: return HearthBitL10n.string("invalid_payload")
+    case .radarConsentRequired: return HearthBitL10n.string("radar_consent_required")
     }
   }
 }
@@ -1756,6 +1969,7 @@ enum HearthBitL10n {
       "identity_mismatch": "The Noise identity does not match",
       "noise_failed": "The Noise encrypted channel failed",
       "invalid_payload": "The transfer payload is not valid",
+      "radar_consent_required": "This person has not allowed radar location",
     ],
     "es": [
       "sos_default": "Necesito ayuda",
@@ -1770,6 +1984,7 @@ enum HearthBitL10n {
       "identity_mismatch": "La identidad Noise no coincide",
       "noise_failed": "Falló el canal cifrado Noise",
       "invalid_payload": "La carga de la transferencia no es válida",
+      "radar_consent_required": "Esta persona no ha permitido la ubicación por radar",
     ],
     "de": [
       "sos_default": "Ich brauche Hilfe",
@@ -1784,6 +1999,7 @@ enum HearthBitL10n {
       "identity_mismatch": "Die Noise-Identität stimmt nicht überein",
       "noise_failed": "Der verschlüsselte Noise-Kanal ist fehlgeschlagen",
       "invalid_payload": "Die Übertragungsdaten sind ungültig",
+      "radar_consent_required": "Diese Person hat die Ortung per Radar nicht erlaubt",
     ],
     "fr": [
       "sos_default": "J'ai besoin d'aide",
@@ -1798,6 +2014,7 @@ enum HearthBitL10n {
       "identity_mismatch": "L'identité Noise ne correspond pas",
       "noise_failed": "Le canal chiffré Noise a échoué",
       "invalid_payload": "La charge du transfert n'est pas valide",
+      "radar_consent_required": "Cette personne n'a pas autorisé la localisation par radar",
     ],
     "zh": [
       "sos_default": "我需要帮助",
@@ -1812,6 +2029,7 @@ enum HearthBitL10n {
       "identity_mismatch": "Noise 身份不匹配",
       "noise_failed": "Noise 加密通道失败",
       "invalid_payload": "传输数据无效",
+      "radar_consent_required": "对方尚未允许通过雷达定位",
     ],
     "ja": [
       "sos_default": "助けが必要です",
@@ -1826,6 +2044,7 @@ enum HearthBitL10n {
       "identity_mismatch": "Noise の ID が一致しません",
       "noise_failed": "Noise 暗号化チャネルに失敗しました",
       "invalid_payload": "転送ペイロードが無効です",
+      "radar_consent_required": "相手はレーダーによる位置確認を許可していません",
     ],
   ]
 }

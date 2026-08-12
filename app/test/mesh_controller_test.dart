@@ -14,6 +14,8 @@ class _FakePlatform extends MeshPlatformService {
   int startCalls = 0;
   int stopCalls = 0;
   int sosCalls = 0;
+  final List<({bool enabled, int minutes})> radarConsentCalls = [];
+  int panicWipeCalls = 0;
   bool permissionsGranted = true;
   bool backgroundLocation = true;
   Object? startError;
@@ -65,10 +67,24 @@ class _FakePlatform extends MeshPlatformService {
 
   @override
   Future<bool> requestDisableBatteryOptimizations() async => false;
+
+  @override
+  Future<void> setRadarConsent({
+    required bool enabled,
+    int minutes = 15,
+  }) async {
+    radarConsentCalls.add((enabled: enabled, minutes: minutes));
+  }
+
+  @override
+  Future<void> panicWipe() async {
+    panicWipeCalls += 1;
+  }
 }
 
 class _FakeRepository extends MessageRepository {
   final List<MeshMessage> saved = [];
+  final List<MeshPeer> knownPeers = [];
 
   @override
   Future<List<MeshMessage>> load() async => const [];
@@ -79,8 +95,19 @@ class _FakeRepository extends MessageRepository {
   }
 
   @override
+  Future<List<MeshPeer>> loadKnownPeers() async => List.of(knownPeers);
+
+  @override
+  Future<void> saveKnownPeers(Iterable<MeshPeer> peers) async {
+    knownPeers
+      ..clear()
+      ..addAll(peers);
+  }
+
+  @override
   Future<void> clear() async {
     saved.clear();
+    knownPeers.clear();
   }
 }
 
@@ -120,17 +147,23 @@ void main() {
   });
 
   test('snapshot resincroniza estado, identidad y cercanos', () async {
+    final consentUntil = DateTime.now()
+        .add(const Duration(minutes: 12))
+        .millisecondsSinceEpoch;
     platform.emit({
       'type': 'snapshot',
       'status': 'active',
       'nickname': 'Nodo 7',
       'peerId': '0102030405060708',
+      'radarConsentUntil': consentUntil,
       'peers': [
         {
           'id': '1112131415161718',
           'nickname': 'Rescate',
           'lastSeen': 1234,
           'secure': true,
+          'radarAllowedUntil': consentUntil,
+          'radarConsentSource': 'temporary',
         },
       ],
     });
@@ -140,7 +173,49 @@ void main() {
     expect(controller.nickname, 'Nodo 7');
     expect(controller.peerId, '0102030405060708');
     expect(controller.peers.single.nickname, 'Rescate');
+    expect(controller.radarConsentActive, isTrue);
+    expect(controller.peers.single.radarAllowed, isTrue);
   });
+
+  test(
+    'conserva la conversación cuando el destinatario se desconecta',
+    () async {
+      const remoteId = '1112131415161718';
+      platform.emit({
+        'type': 'peers',
+        'peers': [
+          {
+            'id': remoteId,
+            'nickname': 'Rescate',
+            'lastSeen': 1234,
+            'secure': true,
+          },
+        ],
+      });
+      platform.emit({
+        'type': 'message',
+        'message': {
+          'id': 'private-1',
+          'sender': 'Rescate',
+          'content': '¿Sigues ahí?',
+          'senderPeerId': remoteId,
+          'private': true,
+          'mine': false,
+          'timestamp': 2000,
+        },
+      });
+      await pumpEvents();
+
+      expect(controller.conversations.single.isOnline, isTrue);
+      platform.emit({'type': 'peers', 'peers': <Object?>[]});
+      await pumpEvents();
+
+      final conversation = controller.conversations.single;
+      expect(conversation.peer.nickname, 'Rescate');
+      expect(conversation.lastMessage.content, '¿Sigues ahí?');
+      expect(conversation.isOnline, isFalse);
+    },
+  );
 
   test('un error durante el arranque marca estado de error', () async {
     unawaited(controller.start());
@@ -194,6 +269,7 @@ void main() {
     );
     expect(controller.rescueMode, isTrue);
     expect(platform.sosCalls, 1);
+    expect(platform.radarConsentCalls, contains((enabled: true, minutes: 10)));
     expect(controller.lastRescuePing, isNotNull);
 
     await Future<void>.delayed(const Duration(milliseconds: 130));
@@ -201,6 +277,7 @@ void main() {
 
     await controller.setRescueMode(false);
     expect(controller.rescueMode, isFalse);
+    expect(platform.radarConsentCalls.last.enabled, isFalse);
     final callsAtStop = platform.sosCalls;
     await Future<void>.delayed(const Duration(milliseconds: 100));
     expect(platform.sosCalls, callsAtStop);
@@ -211,5 +288,23 @@ void main() {
     await controller.stop();
     expect(controller.rescueMode, isFalse);
     expect(platform.stopCalls, 1);
+  });
+
+  test('permite y revoca el radar temporal explícitamente', () async {
+    await controller.allowRadarFor15Minutes();
+    expect(controller.radarConsentActive, isTrue);
+    expect(platform.radarConsentCalls.last, (enabled: true, minutes: 15));
+
+    await controller.revokeRadarConsent();
+    expect(controller.radarConsentActive, isFalse);
+    expect(platform.radarConsentCalls.last.enabled, isFalse);
+  });
+
+  test('el borrado de pánico elimina el consentimiento local', () async {
+    await controller.allowRadarFor15Minutes();
+    await controller.panicWipe();
+
+    expect(controller.radarConsentActive, isFalse);
+    expect(platform.panicWipeCalls, 1);
   });
 }

@@ -15,6 +15,7 @@
     <string name="error_frame_encrypt">传输帧加密失败</string>
     <string name="error_identity_rejected">一个私密通道因身份无效被拒绝</string>
     <string name="error_peer_unavailable">该设备已不可用</string>
+    <string name="error_radar_consent_required">对方尚未允许通过雷达定位</string>
     <string name="error_frame_too_large">传输帧过大</string>
     <string name="error_mesh_generic">网状网络错误</string>
     <string name="error_wifi_aware_unsupported">不支持 Wi-Fi Aware</string>

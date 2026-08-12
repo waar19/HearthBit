@@ -121,6 +121,13 @@ class MeshPlatformService {
 
   Future<void> stopRadar() => _methods.invokeMethod<void>('stopRadar');
 
+  Future<void> setRadarConsent({required bool enabled, int minutes = 15}) {
+    return _methods.invokeMethod<void>('setRadarConsent', {
+      'enabled': enabled,
+      'minutes': minutes,
+    });
+  }
+
   /// Envía una trama HBT (plano de control de transferencias) por la sesión
   /// Noise de la malla.
   Future<void> sendTransferFrame(String peerId, Uint8List frame) {

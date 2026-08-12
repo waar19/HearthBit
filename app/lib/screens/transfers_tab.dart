@@ -266,10 +266,7 @@ class _StateChip extends StatelessWidget {
         l10n.stateTransferring,
         scheme.primaryContainer,
       ),
-      TransferState.completed => (
-        l10n.stateCompleted,
-        scheme.primaryContainer,
-      ),
+      TransferState.completed => (l10n.stateCompleted, scheme.primaryContainer),
       TransferState.rejected => (
         l10n.stateRejected,
         scheme.surfaceContainerHighest,

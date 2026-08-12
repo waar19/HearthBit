@@ -16,6 +16,8 @@ class RadarScreen extends StatefulWidget {
   const RadarScreen({
     required this.peerId,
     required this.nickname,
+    required this.consentExpiresAt,
+    required this.consentSource,
     this.latitude,
     this.longitude,
     super.key,
@@ -23,6 +25,8 @@ class RadarScreen extends StatefulWidget {
 
   final String peerId;
   final String nickname;
+  final DateTime consentExpiresAt;
+  final String consentSource;
 
   /// Última posición GPS conocida del objetivo (de su alerta SOS), si existe.
   final double? latitude;
@@ -52,19 +56,36 @@ class _RadarScreenState extends State<RadarScreen>
 
   RadarReading? _reading;
   bool _stale = false;
+  bool _permissionExpired = false;
+  String? _startError;
   double? _gpsDistanceMeters;
   DateTime _lastHaptic = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
     super.initState();
-    unawaited(_platform.startRadar(widget.peerId));
+    unawaited(_startRadar());
     _events = _platform.events.listen(_onEvent);
     _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) => _tick());
     _watchGps();
   }
 
+  Future<void> _startRadar() async {
+    try {
+      await _platform.startRadar(widget.peerId);
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      setState(() => _startError = error.message ?? error.code);
+    }
+  }
+
   void _onEvent(Map<Object?, Object?> event) {
+    if (event['type'] == 'radarExpired' &&
+        (event['peerId'] as String?)?.toLowerCase() ==
+            widget.peerId.toLowerCase()) {
+      if (mounted) setState(() => _permissionExpired = true);
+      return;
+    }
     if (event['type'] != 'rssi') return;
     if ((event['peerId'] as String?)?.toLowerCase() !=
         widget.peerId.toLowerCase()) {
@@ -83,6 +104,13 @@ class _RadarScreenState extends State<RadarScreen>
 
   void _tick() {
     if (!mounted) return;
+    if (!_permissionExpired &&
+        !widget.consentExpiresAt.isAfter(DateTime.now())) {
+      _permissionExpired = true;
+      unawaited(_platform.stopRadar());
+      setState(() {});
+      return;
+    }
     final stale = _processor.isStale(DateTime.now());
     if (stale != _stale) setState(() => _stale = stale);
     _maybeVibrate();
@@ -201,7 +229,17 @@ class _RadarScreenState extends State<RadarScreen>
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-              child: _buildPanel(theme, reading, searching),
+              child: Column(
+                children: [
+                  _buildPanel(theme, reading, searching),
+                  const SizedBox(height: 10),
+                  Text(
+                    '${_consentLabel()}\n${context.l10n.radarConsentExpires(_formatExpiry())}\n${context.l10n.radarNotDirection}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Color(0xFF94A3B8)),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -213,6 +251,19 @@ class _RadarScreenState extends State<RadarScreen>
     const green = Color(0xFF4ADE80);
     const red = Color(0xFFF87171);
     const dim = Color(0xFF94A3B8);
+    if (_permissionExpired || _startError != null) {
+      return _panelCard(
+        children: [
+          const Icon(Icons.lock_clock_outlined, color: red, size: 40),
+          const SizedBox(height: 8),
+          Text(
+            context.l10n.radarPermissionExpired,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: red, fontSize: 18),
+          ),
+        ],
+      );
+    }
     if (_stale) {
       return _panelCard(
         children: [
@@ -313,6 +364,14 @@ class _RadarScreenState extends State<RadarScreen>
       ],
     );
   }
+
+  String _consentLabel() => widget.consentSource == 'sos'
+      ? context.l10n.radarConsentSos
+      : context.l10n.radarConsentTemporary;
+
+  String _formatExpiry() => MaterialLocalizations.of(
+    context,
+  ).formatTimeOfDay(TimeOfDay.fromDateTime(widget.consentExpiresAt.toLocal()));
 
   String _proximityLabel(AppLocalizations l10n, RadarProximity proximity) =>
       switch (proximity) {
@@ -420,10 +479,7 @@ class _RadarPainter extends CustomPainter {
     final sweepAngle = sweepProgress * 2 * math.pi;
     final sweepPaint = Paint()
       ..shader = SweepGradient(
-        colors: [
-          _green.withValues(alpha: 0.0),
-          _green.withValues(alpha: 0.35),
-        ],
+        colors: [_green.withValues(alpha: 0.0), _green.withValues(alpha: 0.35)],
         stops: const [0.7, 1.0],
         transform: GradientRotation(sweepAngle),
       ).createShader(Rect.fromCircle(center: center, radius: radius));

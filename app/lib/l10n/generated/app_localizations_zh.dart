@@ -563,4 +563,69 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get terrTransportTimeout => '传输通道无响应';
+
+  @override
+  String get recentChatsTitle => '最近对话';
+
+  @override
+  String get nearbyPeopleTitle => '附近的人';
+
+  @override
+  String get peerOnline => '在线';
+
+  @override
+  String get peerOffline => '离线';
+
+  @override
+  String get offlineChatHint => '对方当前离线。你可以查看历史记录，并在对方重新连接后发送消息。';
+
+  @override
+  String get radarConsentTitle => '雷达隐私';
+
+  @override
+  String get radarConsentOff => '默认禁止雷达定位';
+
+  @override
+  String radarConsentActive(int minutes) {
+    return '他人还可使用雷达 $minutes 分钟';
+  }
+
+  @override
+  String get radarConsentAllow => '允许雷达定位 15 分钟';
+
+  @override
+  String get radarConsentRevoke => '立即撤销';
+
+  @override
+  String get radarPrivacyWarning => '此设置仅限制 HearthBit。其他软件仍可能测量手机发出的蓝牙信号。';
+
+  @override
+  String get rescueRadarWarning =>
+      '救援模式会共享最新 SOS 位置，并允许附近的 HearthBit 救援人员在 SOS 激活期间测量你的信号。';
+
+  @override
+  String get radarConsentRequired => '需要对方同意';
+
+  @override
+  String get radarConsentSos => '因近期 SOS 而可用';
+
+  @override
+  String get radarConsentTemporary => '对方已临时授权';
+
+  @override
+  String radarConsentExpires(String time) {
+    return '权限于 $time 到期';
+  }
+
+  @override
+  String get radarNotDirection => '圆点表示距离而非方向。请缓慢移动并比较信号是否增强。';
+
+  @override
+  String get radarPermissionExpired => '雷达权限已到期或被撤销。';
+
+  @override
+  String get dateToday => '今天';
+
+  @override
+  String get dateYesterday => '昨天';
 }
