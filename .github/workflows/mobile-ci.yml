@@ -1,0 +1,71 @@
+name: Validar aplicaciones móviles
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  flutter:
+    name: Analizar y probar Flutter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+      - run: flutter pub get
+        working-directory: app
+      - run: dart format --output=none --set-exit-if-changed lib test
+        working-directory: app
+      - run: flutter analyze
+        working-directory: app
+      - run: flutter test
+        working-directory: app
+
+  android:
+    name: Compilar Android
+    runs-on: ubuntu-latest
+    needs: flutter
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - run: flutter pub get
+        working-directory: app
+      - run: ./gradlew :app:testDebugUnitTest
+        working-directory: app/android
+      - run: flutter build apk --release
+        working-directory: app
+
+  ios:
+    name: Compilar iOS sin firma
+    runs-on: macos-latest
+    needs: flutter
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+      - run: flutter pub get
+        working-directory: app
+      - run: flutter build ios --release --no-codesign
+        working-directory: app
