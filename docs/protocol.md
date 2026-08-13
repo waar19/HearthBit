@@ -92,6 +92,10 @@ Todo relay exige TTL mayor que 1 y lo decrementa antes del envío. Un paquete
 Noise dirigido al nodo local se consume y no se retransmite; si va dirigido a
 otro nodo sí puede retransmitirse. Los demás paquetes públicos siguen la
 política del rol. La deduplicación continúa usando el hash canónico sin TTL.
+El caché persistente no conserva handshakes ni transportes Noise crudos porque
+quedan ligados a una generación de claves y serían indescifrables después de
+renegociar. La entrega privada diferida usa la cola persistente del emisor o un
+`CourierEnvelope`, que mantiene el ciphertext dentro de su sobre firmado.
 
 ## Paquete dedicado de capacidad de nodo (`0x25`)
 

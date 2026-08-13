@@ -14,7 +14,7 @@ internal enum class MeshNotificationContent {
 
 internal object MeshNotificationStateReducer {
     fun contentFor(state: MeshNotificationState): MeshNotificationContent = when {
-        state.errorMessage != null || state.status == "error" || state.status == "degraded" ->
+        state.errorMessage != null || state.status == "error" ->
             MeshNotificationContent.ERROR
         state.status == "starting" -> MeshNotificationContent.STARTING
         else -> MeshNotificationContent.ACTIVE

@@ -18,9 +18,13 @@ class _FakePlatform extends MeshPlatformService {
   int panicWipeCalls = 0;
   final List<String> nodeRoles = [];
   final List<({String content, String? channel})> publicMessages = [];
+  final List<({String peerId, String content, String? messageId})>
+  privateMessages = [];
   bool permissionsGranted = true;
   bool backgroundLocation = true;
   Object? startError;
+  Object? privateMessageError;
+  Completer<String>? privateMessageGate;
 
   void emit(Map<Object?, Object?> event) => _controller.add(event);
 
@@ -51,6 +55,24 @@ class _FakePlatform extends MeshPlatformService {
   Future<String> sendPublic(String content, {String? channel}) async {
     publicMessages.add((content: content, channel: channel));
     return 'public-${publicMessages.length}';
+  }
+
+  @override
+  Future<String> sendPrivate(
+    String peerId,
+    String content, {
+    String? messageId,
+  }) async {
+    privateMessages.add((
+      peerId: peerId,
+      content: content,
+      messageId: messageId,
+    ));
+    final error = privateMessageError;
+    if (error != null) throw error;
+    final gate = privateMessageGate;
+    if (gate != null) return gate.future;
+    return messageId ?? 'private-${privateMessages.length}';
   }
 
   @override
@@ -101,6 +123,7 @@ class _FakePlatform extends MeshPlatformService {
 class _FakeRepository extends MessageRepository {
   final List<MeshMessage> saved = [];
   final List<MeshPeer> knownPeers = [];
+  final List<PendingPrivateMessage> outbox = [];
 
   @override
   Future<List<MeshMessage>> load() async => const [];
@@ -121,9 +144,36 @@ class _FakeRepository extends MessageRepository {
   }
 
   @override
+  Future<List<PendingPrivateMessage>> listPendingPrivateMessages() async =>
+      List.of(outbox);
+
+  @override
+  Future<void> insertPendingPrivateMessage(
+    PendingPrivateMessage message,
+  ) async {
+    if (outbox.every((item) => item.localId != message.localId)) {
+      outbox.add(message);
+    }
+  }
+
+  @override
+  Future<void> updatePendingPrivateMessage(
+    PendingPrivateMessage message,
+  ) async {
+    final index = outbox.indexWhere((item) => item.localId == message.localId);
+    if (index >= 0) outbox[index] = message;
+  }
+
+  @override
+  Future<void> deletePendingPrivateMessage(String localId) async {
+    outbox.removeWhere((item) => item.localId == localId);
+  }
+
+  @override
   Future<void> clear() async {
     saved.clear();
     knownPeers.clear();
+    outbox.clear();
   }
 }
 
@@ -131,14 +181,13 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late _FakePlatform platform;
+  late _FakeRepository repository;
   late MeshController controller;
 
   setUp(() async {
     platform = _FakePlatform();
-    controller = MeshController(
-      platform: platform,
-      repository: _FakeRepository(),
-    );
+    repository = _FakeRepository();
+    controller = MeshController(platform: platform, repository: repository);
     await controller.initialize();
   });
 
@@ -147,6 +196,29 @@ void main() {
   });
 
   Future<void> pumpEvents() => Future<void>.delayed(Duration.zero);
+
+  Map<Object?, Object?> peerSnapshot({
+    required String peerId,
+    required bool secure,
+    String nickname = 'Rescate',
+  }) {
+    return {
+      'type': 'snapshot',
+      'status': 'active',
+      'nickname': 'Yo',
+      'peerId': 'local-peer',
+      'role': 'PHONE_RELAY',
+      'peers': [
+        {
+          'id': peerId,
+          'nickname': nickname,
+          'lastSeen': DateTime.now().millisecondsSinceEpoch,
+          'secure': secure,
+          'role': 'PHONE_RELAY',
+        },
+      ],
+    };
+  }
 
   test('el estado degraded llega desde el nativo y permite enviar', () async {
     platform.emit({'type': 'status', 'status': 'degraded'});
@@ -248,6 +320,152 @@ void main() {
       expect(conversation.isOnline, isFalse);
     },
   );
+
+  test('encola un mensaje privado si el peer está desconectado', () async {
+    final peer = MeshPeer(
+      id: 'peer-offline',
+      nickname: 'Rescate',
+      lastSeen: DateTime.now(),
+      secure: false,
+    );
+
+    final result = await controller.sendPrivate(peer, 'Sigo aquí');
+
+    expect(result.disposition, PrivateMessageSendDisposition.queued);
+    expect(platform.privateMessages, isEmpty);
+    expect(repository.outbox, hasLength(1));
+    expect(repository.outbox.single.content, 'Sigo aquí');
+    expect(controller.messages.single.isPending, isTrue);
+  });
+
+  test(
+    'reintenta el outbox cuando el peer vuelve seguro y conectado',
+    () async {
+      const remoteId = 'peer-retry';
+      final peer = MeshPeer(
+        id: remoteId,
+        nickname: 'Rescate',
+        lastSeen: DateTime.now(),
+        secure: false,
+      );
+      await controller.sendPrivate(peer, 'Mensaje pendiente');
+      final localId = repository.outbox.single.localId;
+
+      platform.emit(peerSnapshot(peerId: remoteId, secure: true));
+      await pumpEvents();
+      await controller.retryPendingPrivateMessages();
+
+      expect(platform.privateMessages, hasLength(1));
+      expect(platform.privateMessages.single.peerId, remoteId);
+      expect(platform.privateMessages.single.content, 'Mensaje pendiente');
+      expect(platform.privateMessages.single.messageId, localId);
+      expect(repository.outbox, isEmpty);
+      expect(controller.messages, hasLength(1));
+      expect(controller.messages.single.isPending, isFalse);
+      expect(controller.messages.single.content, 'Mensaje pendiente');
+    },
+  );
+
+  test('carga y reintenta el outbox después de reiniciar', () async {
+    const remoteId = 'peer-restart';
+    repository.outbox.add(
+      PendingPrivateMessage(
+        localId: 'local-persisted',
+        recipientPeerId: remoteId,
+        content: 'Persistido',
+        createdAt: DateTime.fromMillisecondsSinceEpoch(1000),
+      ),
+    );
+    controller.dispose();
+    platform = _FakePlatform();
+    controller = MeshController(platform: platform, repository: repository);
+    await controller.initialize();
+
+    expect(controller.messages.single.isPending, isTrue);
+
+    platform.emit(peerSnapshot(peerId: remoteId, secure: true));
+    await pumpEvents();
+    await controller.retryPendingPrivateMessages();
+
+    expect(platform.privateMessages.single.content, 'Persistido');
+    expect(platform.privateMessages.single.messageId, 'local-persisted');
+    expect(repository.outbox, isEmpty);
+    expect(controller.messages.single.isPending, isFalse);
+  });
+
+  test('reutiliza el mismo ID al reintentar un mensaje pendiente', () async {
+    const remoteId = 'peer-idempotent';
+    final peer = MeshPeer(
+      id: remoteId,
+      nickname: 'Rescate',
+      lastSeen: DateTime.now(),
+      secure: false,
+    );
+    await controller.sendPrivate(peer, 'No duplicar');
+    final localId = repository.outbox.single.localId;
+    platform.privateMessageError = StateError('respuesta perdida');
+
+    platform.emit(peerSnapshot(peerId: remoteId, secure: true));
+    await pumpEvents();
+    await controller.retryPendingPrivateMessages();
+
+    expect(repository.outbox, hasLength(1));
+    expect(
+      platform.privateMessages.map((message) => message.messageId).toSet(),
+      {localId},
+    );
+    final failedAttempts = platform.privateMessages.length;
+
+    platform.privateMessageError = null;
+    await controller.retryPendingPrivateMessages();
+
+    expect(platform.privateMessages, hasLength(failedAttempts + 1));
+    expect(
+      platform.privateMessages.map((message) => message.messageId).toSet(),
+      {localId},
+    );
+    expect(repository.outbox, isEmpty);
+  });
+
+  test('serializa reintentos aunque lleguen snapshots duplicados', () async {
+    const remoteId = 'peer-serialized';
+    final peer = MeshPeer(
+      id: remoteId,
+      nickname: 'Rescate',
+      lastSeen: DateTime.now(),
+      secure: false,
+    );
+    await controller.sendPrivate(peer, 'Solo una vez');
+    platform.privateMessageGate = Completer<String>();
+
+    platform.emit(peerSnapshot(peerId: remoteId, secure: true));
+    platform.emit(peerSnapshot(peerId: remoteId, secure: true));
+    await pumpEvents();
+    await pumpEvents();
+
+    expect(platform.privateMessages, hasLength(1));
+
+    platform.privateMessageGate!.complete('private-accepted');
+    await controller.retryPendingPrivateMessages();
+
+    expect(platform.privateMessages, hasLength(1));
+    expect(repository.outbox, isEmpty);
+  });
+
+  test('devuelve fallo explícito si el envío privado es rechazado', () async {
+    const remoteId = 'peer-error';
+    platform.emit(peerSnapshot(peerId: remoteId, secure: true));
+    await pumpEvents();
+    platform.privateMessageError = StateError('sesión cerrada');
+    final peer = controller.peerById(remoteId)!;
+
+    final result = await controller.sendPrivate(peer, 'No borrar');
+
+    expect(result.disposition, PrivateMessageSendDisposition.failed);
+    expect(result.error, contains('sesión cerrada'));
+    expect(repository.outbox, isEmpty);
+    expect(controller.messages, isEmpty);
+  });
 
   test('un error durante el arranque marca estado de error', () async {
     unawaited(controller.start());

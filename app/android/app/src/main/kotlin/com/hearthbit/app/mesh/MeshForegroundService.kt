@@ -138,7 +138,6 @@ class MeshForegroundService : Service() {
                     errorMessage = message,
                 ),
             )
-            stopSelf()
         }
         return START_STICKY
     }
@@ -169,7 +168,8 @@ class MeshForegroundService : Service() {
 
     private fun scheduleNotification(state: MeshNotificationState) {
         mainHandler.post {
-            if (state == displayedNotificationState || state == pendingNotificationState) return@post
+            if (state == pendingNotificationState) return@post
+            if (state == displayedNotificationState && notificationUpdateRunnable == null) return@post
             pendingNotificationState = state
             if (notificationUpdateRunnable != null) return@post
             val elapsed = SystemClock.elapsedRealtime() - lastNotificationUpdateAt
@@ -203,10 +203,7 @@ class MeshForegroundService : Service() {
                 state.nearbyPeerCount,
                 state.nearbyPeerCount,
             )
-            MeshNotificationContent.ERROR -> getString(
-                R.string.notification_status_error,
-                state.errorMessage ?: getString(R.string.error_mesh_generic),
-            )
+            MeshNotificationContent.ERROR -> getString(R.string.notification_status_error)
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)

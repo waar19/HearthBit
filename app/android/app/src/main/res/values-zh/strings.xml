@@ -4,10 +4,10 @@
     <string name="notification_channel_description">在紧急情况下保持蓝牙连接</string>
     <string name="notification_title">HearthBit 应急网状网络</string>
     <string name="notification_text">正在转发 BLE 网状网络消息</string>
-    <string name="notification_status_starting">正在启动应急网状网络…</string>
-    <string name="notification_status_error">网状网络错误：%1$s</string>
+    <string name="notification_status_starting">正在启动网状网络…</string>
+    <string name="notification_status_error">网状网络错误 — 点按打开</string>
     <plurals name="notification_status_active">
-        <item quantity="other">%1$d 台附近设备</item>
+        <item quantity="other">网状网络已启用 · %1$d 台附近设备</item>
     </plurals>
     <string name="error_ble_start">无法启动 BLE</string>
     <string name="error_bluetooth_off">蓝牙已关闭</string>

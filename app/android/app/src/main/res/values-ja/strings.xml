@@ -4,10 +4,10 @@
     <string name="notification_channel_description">緊急時に Bluetooth 接続を維持します</string>
     <string name="notification_title">HearthBit 緊急メッシュ</string>
     <string name="notification_text">BLE メッシュのメッセージを中継しています</string>
-    <string name="notification_status_starting">緊急メッシュを開始しています…</string>
-    <string name="notification_status_error">メッシュエラー：%1$s</string>
+    <string name="notification_status_starting">メッシュを開始しています…</string>
+    <string name="notification_status_error">メッシュエラー — タップして開く</string>
     <plurals name="notification_status_active">
-        <item quantity="other">近くの端末：%1$d 台</item>
+        <item quantity="other">メッシュ稼働中 · 近くの端末 %1$d 台</item>
     </plurals>
     <string name="error_ble_start">BLE を開始できませんでした</string>
     <string name="error_bluetooth_off">Bluetooth がオフです</string>

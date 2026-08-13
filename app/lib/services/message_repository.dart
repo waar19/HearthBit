@@ -3,6 +3,8 @@ import 'package:sqflite/sqflite.dart';
 
 import '../models/mesh_models.dart';
 
+DatabaseFactory _defaultDatabaseFactory() => databaseFactory;
+
 enum PrivateMessageOutboxStatus {
   pending('pending'),
   retrying('retrying');
@@ -78,22 +80,24 @@ class PendingPrivateMessage {
 }
 
 class MessageRepository {
-  MessageRepository({DatabaseFactory? databaseFactory, String? databasePath})
-    : _databaseFactory = databaseFactory ?? databaseFactoryOrThrow,
-      _databasePath = databasePath;
+  MessageRepository({this.databaseFactory, this.databasePath})
+    : assert(databasePath == null || databasePath.isNotEmpty);
 
-  static DatabaseFactory get databaseFactoryOrThrow => databaseFactory;
-
-  final DatabaseFactory _databaseFactory;
-  final String? _databasePath;
+  final DatabaseFactory? databaseFactory;
+  final String? databasePath;
   Database? _database;
 
   Future<Database> get _db async {
-    final databasePath =
-        _databasePath ??
-        path.join(await _databaseFactory.getDatabasesPath(), 'hearth_bit.db');
-    return _database ??= await _databaseFactory.openDatabase(
-      databasePath,
+    final resolvedDatabaseFactory =
+        databaseFactory ?? _defaultDatabaseFactory();
+    final resolvedDatabasePath =
+        databasePath ??
+        path.join(
+          await resolvedDatabaseFactory.getDatabasesPath(),
+          'hearth_bit.db',
+        );
+    return _database ??= await resolvedDatabaseFactory.openDatabase(
+      resolvedDatabasePath,
       options: OpenDatabaseOptions(
         version: 3,
         onCreate: (database, version) async {

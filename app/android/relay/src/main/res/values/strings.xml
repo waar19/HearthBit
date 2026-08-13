@@ -21,6 +21,12 @@
     <string name="notification_channel_description">Mantiene la malla Bluetooth activa</string>
     <string name="notification_title">HearthBit relay activo</string>
     <string name="notification_text">Retransmitiendo mensajes BLE de la malla</string>
+    <string name="notification_status_starting">Iniciando relay…</string>
+    <string name="notification_status_error">Error en el relay — toca para abrir</string>
+    <plurals name="notification_status_active">
+        <item quantity="one">Relay activo · %1$d dispositivo cercano</item>
+        <item quantity="other">Relay activo · %1$d dispositivos cercanos</item>
+    </plurals>
     <string name="error_ble_start">No se pudo iniciar BLE</string>
     <string name="error_bluetooth_off">Bluetooth está desactivado</string>
     <string name="error_no_advertising">Este equipo no admite advertising BLE; se usa el modo central</string>

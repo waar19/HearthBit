@@ -125,6 +125,7 @@ class MainActivity : FlutterActivity() {
                     MeshRuntime.engine(this).sendPrivate(
                         requireNotNull(call.argument<String>("peerId")),
                         call.argument<String>("content").orEmpty(),
+                        call.argument<String>("messageId"),
                     )
                 }
                 "sendSos" -> runMethod(result) {

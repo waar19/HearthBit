@@ -1130,7 +1130,12 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
       _sending = true;
       _sendError = null;
     });
-    final result = await widget.controller.sendPrivate(peer, text);
+    PrivateMessageSendResult result;
+    try {
+      result = await widget.controller.sendPrivate(peer, text);
+    } catch (error) {
+      result = PrivateMessageSendResult.failed(error.toString());
+    }
     if (!mounted) return;
     setState(() {
       _sending = false;
@@ -1170,8 +1175,10 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
         widget.peer;
     final isOnline = widget.controller.isPeerOnline(peer.id);
     final secure = isOnline && peer.secure;
-    final canCompose =
+    final canUseLivePrivateChannel =
         isOnline && secure && widget.controller.canSend && !_sending;
+    final canQueueText =
+        peer.role.canChat && widget.controller.canSend && !_sending;
     final privateMessages = widget.controller.messages
         .where(
           (message) =>
@@ -1288,7 +1295,7 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
                   tooltip: _recording
                       ? context.l10n.voiceStop
                       : context.l10n.voiceRecord,
-                  onPressed: canCompose && peer.supportsTransfers
+                  onPressed: canUseLivePrivateChannel && peer.supportsTransfers
                       ? () => _toggleVoiceRecording(peer)
                       : null,
                   icon: Icon(_recording ? Icons.stop : Icons.mic),
@@ -1296,7 +1303,7 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
                 Expanded(
                   child: _MessageComposer(
                     controller: _textController,
-                    enabled: canCompose,
+                    enabled: canQueueText,
                     hint: context.l10n.composerPrivateHint,
                     onSend: () => _sendMessage(peer),
                   ),

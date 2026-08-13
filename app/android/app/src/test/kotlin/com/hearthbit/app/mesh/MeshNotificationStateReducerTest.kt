@@ -15,6 +15,10 @@ class MeshNotificationStateReducerTest {
             MeshNotificationStateReducer.contentFor(MeshNotificationState("active", 2)),
         )
         assertEquals(
+            MeshNotificationContent.ACTIVE,
+            MeshNotificationStateReducer.contentFor(MeshNotificationState("degraded", 1)),
+        )
+        assertEquals(
             MeshNotificationContent.ERROR,
             MeshNotificationStateReducer.contentFor(
                 MeshNotificationState("active", 2, "scan failed"),

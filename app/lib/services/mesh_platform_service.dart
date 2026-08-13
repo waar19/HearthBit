@@ -72,10 +72,15 @@ class MeshPlatformService {
     }))!;
   }
 
-  Future<String> sendPrivate(String peerId, String content) async {
+  Future<String> sendPrivate(
+    String peerId,
+    String content, {
+    String? messageId,
+  }) async {
     return (await _methods.invokeMethod<String>('sendPrivate', {
       'peerId': peerId,
       'content': content,
+      'messageId': messageId,
     }))!;
   }
 

@@ -48,7 +48,16 @@ internal class MeshEngine(
     }
     private val noiseSessions = NoiseSessionManagerLite(identity.peerIdHex, identity.noisePrivateKey)
     private val noiseFailureTracker = NoiseFailureRecoveryTracker()
-    private val peersWithSessionHistory = ConcurrentHashMap.newKeySet<String>()
+    private val relationshipPreferences = context.getSharedPreferences(
+        RELATIONSHIP_PREFERENCES,
+        Context.MODE_PRIVATE,
+    )
+    private val peersWithSessionHistory = ConcurrentHashMap.newKeySet<String>().apply {
+        addAll(
+            relationshipPreferences.getStringSet(KEY_SESSION_PEERS, emptySet())
+                .orEmpty(),
+        )
+    }
     private val lastHandshakeAttemptByPeer = ConcurrentHashMap<String, Long>()
     private val seen = Collections.synchronizedMap(
         object : LinkedHashMap<String, Long>(512, 0.75f, true) {
@@ -496,7 +505,7 @@ internal class MeshEngine(
         emitRadarConsent()
     }
 
-    fun sendPrivate(peerIdHex: String, content: String): String {
+    fun sendPrivate(peerIdHex: String, content: String, messageId: String? = null): String {
         check(localRole.canOriginateChat) {
             "El rol ${localRole.wireName} no puede originar chat"
         }
@@ -507,7 +516,8 @@ internal class MeshEngine(
         require(peer.role.canOriginateChat) {
             "El rol ${peer.role.wireName} no admite chat"
         }
-        val id = UUID.randomUUID().toString().uppercase()
+        val id = messageId?.trim()?.takeIf { it.isNotEmpty() }?.take(255)
+            ?: UUID.randomUUID().toString().uppercase()
         if (noiseSessions.isEstablished(peerIdHex)) {
             sendEncryptedPrivate(peerIdHex, id, content)
         } else {
@@ -592,6 +602,8 @@ internal class MeshEngine(
     fun panicWipe() {
         stop()
         storeForward.clear()
+        relationshipPreferences.edit().clear().apply()
+        peersWithSessionHistory.clear()
         syncPackets.clear()
         identity.clear()
         emit(mapOf("type" to "wiped"))
@@ -824,6 +836,25 @@ internal class MeshEngine(
         peersWithSessionHistory.contains(peerIdHex) ||
             hasPendingRelationship(peerIdHex)
 
+    @Synchronized
+    private fun rememberSessionPeer(peerIdHex: String) {
+        if (!peersWithSessionHistory.add(peerIdHex)) return
+        val overflow = peersWithSessionHistory.size - MAX_REMEMBERED_SESSION_PEERS
+        if (overflow > 0) {
+            peersWithSessionHistory.asSequence()
+                .filterNot { it == peerIdHex }
+                .take(overflow)
+                .toList()
+                .forEach(peersWithSessionHistory::remove)
+        }
+        relationshipPreferences.edit()
+            .putStringSet(
+                KEY_SESSION_PEERS,
+                peersWithSessionHistory.toSet(),
+            )
+            .apply()
+    }
+
     private fun sendEncryptedPrivate(peerIdHex: String, id: String, content: String) {
         val privateData = MeshProtocol.encodePrivateMessage(id, content)
         val typedPayload = byteArrayOf(MeshProtocol.NOISE_PRIVATE_MESSAGE) + privateData
@@ -1046,6 +1077,7 @@ internal class MeshEngine(
         characteristic: BluetoothGattCharacteristic,
     ) {
         clientReady.add(address)
+        notifyNotificationObserver()
         val shouldStart = synchronized(clientWriteLock) {
             clientWriteQueues[address]?.isNotEmpty() == true &&
                 clientWritesInFlight.add(address)
@@ -1274,7 +1306,6 @@ internal class MeshEngine(
         if (packet.ttl == MeshProtocol.TTL) {
             addressToPeer[sourceAddress] = senderHex
         }
-        val wasKnownPeer = peers.containsKey(senderHex) || isKnownRelationship(senderHex)
         val previouslySupported = peers[senderHex]?.supportsTransfers == true
         val previousRole = peers[senderHex]?.role ?: if (announcement.isInfrastructure) {
             MeshNodeRole.INFRA_DATA_ANCHOR
@@ -1294,9 +1325,7 @@ internal class MeshEngine(
         notifyNotificationObserver()
         requestMissingMessages(senderHex, sourceAddress)
         storeForward.forRecipient(packet.senderId).forEach(::broadcast)
-        if ((wasKnownPeer || hasPendingRelationship(senderHex)) &&
-            !noiseSessions.isEstablished(senderHex)
-        ) {
+        if (isKnownRelationship(senderHex) && !noiseSessions.isEstablished(senderHex)) {
             initiateHandshake(senderHex)
         }
     }
@@ -1393,7 +1422,7 @@ internal class MeshEngine(
             sendNoisePacket(MeshProtocol.TYPE_NOISE_HANDSHAKE, packet.senderId, result.response)
         }
         if (result.establishedNow) {
-            peersWithSessionHistory += senderHex
+            rememberSessionPeer(senderHex)
             noiseFailureTracker.recordSuccess(senderHex)
             lastHandshakeAttemptByPeer.remove(senderHex)
             emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
@@ -1922,7 +1951,7 @@ internal class MeshEngine(
         val disconnectedPeer = addressToPeer.remove(address) ?: return
         if (addressToPeer.values.none { it == disconnectedPeer }) {
             if (noiseSessions.isEstablished(disconnectedPeer)) {
-                peersWithSessionHistory += disconnectedPeer
+                rememberSessionPeer(disconnectedPeer)
             }
             noiseSessions.invalidate(disconnectedPeer)
             noiseFailureTracker.clear(disconnectedPeer)
@@ -2134,6 +2163,7 @@ internal class MeshEngine(
                 } else {
                     serverSubscribers.remove(device)
                 }
+                notifyNotificationObserver()
             }
             if (responseNeeded) {
                 gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
@@ -2208,7 +2238,9 @@ internal class MeshEngine(
 
     private fun nearbyPeerCount(): Int {
         val knownPeers = peers.keys
-        return addressToPeer.values.asSequence()
+        val activeAddresses = clientReady.toSet() + serverSubscribers.map { it.address }
+        return activeAddresses.asSequence()
+            .mapNotNull(addressToPeer::get)
             .filter(knownPeers::contains)
             .toSet()
             .size
@@ -2308,6 +2340,9 @@ internal class MeshEngine(
         const val HANDSHAKE_RETRY_THROTTLE_MS = 5_000L
         const val HANDSHAKE_CLEANUP_INTERVAL_MS = 10_000L
         const val RECOVERY_SCAN_BURST_MS = 15_000L
+        const val MAX_REMEMBERED_SESSION_PEERS = 256
+        const val RELATIONSHIP_PREFERENCES = "hearthbit_mesh_relationships"
+        const val KEY_SESSION_PEERS = "session_peers"
 
         const val LOG_TAG = "HearthBitMesh"
 

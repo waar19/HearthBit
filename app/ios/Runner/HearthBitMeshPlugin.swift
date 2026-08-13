@@ -267,7 +267,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         result(
           try sendPrivate(
             peerID: arguments["peerId"] as? String ?? "",
-            content: arguments["content"] as? String ?? ""
+            content: arguments["content"] as? String ?? "",
+            messageID: arguments["messageId"] as? String
           )
         )
       case "sendSos":
@@ -549,6 +550,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     radarPeerID = nil
     radarTimer?.invalidate()
     radarTimer = nil
+    adaptiveScanTimer?.invalidate()
+    adaptiveScanTimer = nil
     linkLossScanTimer?.invalidate()
     linkLossScanTimer = nil
     central?.stopScan()
@@ -777,11 +780,21 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     return id
   }
 
-  private func sendPrivate(peerID: String, content: String) throws -> String {
+  private func sendPrivate(
+    peerID: String,
+    content: String,
+    messageID: String? = nil
+  ) throws -> String {
     guard localRole.canChat else { throw IOSMeshError.roleCannotChat }
     guard peers[peerID] != nil else { throw IOSMeshError.peerUnavailable }
     privateChatPeerIDs.insert(peerID)
-    let id = UUID().uuidString.uppercased()
+    let requestedID = messageID?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let id: String
+    if let requestedID, !requestedID.isEmpty {
+      id = String(requestedID.prefix(255))
+    } else {
+      id = UUID().uuidString.uppercased()
+    }
     if let session = sessions[peerID], session.established {
       try sendEncryptedPrivate(peerID: peerID, id: id, content: content)
     } else {
@@ -2186,7 +2199,12 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
 
 extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
   func centralManagerDidUpdateState(_ central: CBCentralManager) {
-    guard running, central.state == .poweredOn else { return }
+    guard
+      let activeCentral = self.central,
+      activeCentral === central,
+      running,
+      central.state == .poweredOn
+    else { return }
     restartScan()
     reconnectKnownPeripherals()
   }
@@ -2197,7 +2215,12 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
     advertisementData: [String: Any],
     rssi RSSI: NSNumber
   ) {
-    guard running, localRole.allowsDataPlane else { return }
+    guard
+      let activeCentral = self.central,
+      activeCentral === central,
+      running,
+      localRole.allowsDataPlane
+    else { return }
     guard isMeshAdvertisement(advertisementData) else {
       if RSSI.intValue != 127 {
         recordGenericPresence(advertisementData: advertisementData, rssi: RSSI.intValue)
@@ -2230,6 +2253,10 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
   }
 
   func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+    guard
+      let activeCentral = self.central,
+      activeCentral === central
+    else { return }
     guard running, localRole.allowsDataPlane else {
       central.cancelPeripheralConnection(peripheral)
       return
@@ -2250,6 +2277,10 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
     didFailToConnect peripheral: CBPeripheral,
     error: Error?
   ) {
+    guard
+      let activeCentral = self.central,
+      activeCentral === central
+    else { return }
     let identifier = peripheral.identifier
     establishedPeripheralIDs.remove(identifier)
     clearCentralTransportState(identifier)
@@ -2262,6 +2293,10 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
     didDisconnectPeripheral peripheral: CBPeripheral,
     error: Error?
   ) {
+    guard
+      let activeCentral = self.central,
+      activeCentral === central
+    else { return }
     let identifier = peripheral.identifier
     let wasEstablished = establishedPeripheralIDs.remove(identifier) != nil
     clearCentralTransportState(identifier)
@@ -2273,6 +2308,10 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
   }
 
   func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+    guard
+      let activeCentral = self.central,
+      activeCentral === central
+    else { return }
     let restored = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] ?? []
     guard running, localRole.allowsDataPlane else {
       restored.forEach { central.cancelPeripheralConnection($0) }
@@ -2378,7 +2417,11 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
 
 extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
   func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
-    guard running else { return }
+    guard
+      let activePeripheralManager = peripheralManager,
+      activePeripheralManager === peripheral,
+      running
+    else { return }
     guard peripheral.state == .poweredOn else {
       if peripheral.state == .unsupported || peripheral.state == .unauthorized {
         emitError(HearthBitL10n.string("no_advertising"))
@@ -2408,7 +2451,11 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
     _ peripheral: CBPeripheralManager,
     error: Error?
   ) {
-    guard running else { return }
+    guard
+      let activePeripheralManager = peripheralManager,
+      activePeripheralManager === peripheral,
+      running
+    else { return }
     if let error {
       emitError(
         String(
@@ -2429,6 +2476,10 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
     _ peripheral: CBPeripheralManager,
     didReceiveWrite requests: [CBATTRequest]
   ) {
+    guard
+      let activePeripheralManager = peripheralManager,
+      activePeripheralManager === peripheral
+    else { return }
     guard localRole.allowsDataPlane else {
       requests.forEach { peripheral.respond(to: $0, withResult: .writeNotPermitted) }
       return
@@ -2442,6 +2493,10 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
   }
 
   func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
+    guard
+      let activePeripheralManager = peripheralManager,
+      activePeripheralManager === peripheral
+    else { return }
     guard let characteristic = localCharacteristic else { return }
     for identifier in Array(peripheralNotifyQueues.keys) {
       drainPeripheralNotifyQueue(
@@ -2457,6 +2512,10 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
     central: CBCentral,
     didSubscribeTo characteristic: CBCharacteristic
   ) {
+    guard
+      let activePeripheralManager = peripheralManager,
+      activePeripheralManager === peripheral
+    else { return }
     guard characteristic.uuid == Self.characteristicUUID else { return }
     sendSubscriptionAnnouncement(to: central)
   }
@@ -2466,6 +2525,10 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
     central: CBCentral,
     didUnsubscribeFrom characteristic: CBCharacteristic
   ) {
+    guard
+      let activePeripheralManager = peripheralManager,
+      activePeripheralManager === peripheral
+    else { return }
     let identifier = central.identifier
     let hasCentralLink = remoteCharacteristics[identifier] != nil &&
       connectedPeripherals[identifier]?.state == .connected
@@ -2478,6 +2541,10 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
   }
 
   func peripheralManager(_ peripheral: CBPeripheralManager, willRestoreState dict: [String: Any]) {
+    guard
+      let activePeripheralManager = peripheralManager,
+      activePeripheralManager === peripheral
+    else { return }
     guard localRole.allowsDataPlane else {
       localCharacteristic = nil
       restoredPeripheralService = false

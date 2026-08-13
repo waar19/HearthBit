@@ -51,6 +51,7 @@ class MeshController extends ChangeNotifier {
   StreamSubscription<Map<Object?, Object?>>? _subscription;
   bool _drainingPrivateMessageOutbox = false;
   bool _privateMessageOutboxDrainRequested = false;
+  Completer<void>? _privateMessageOutboxDrainCompleter;
   MeshConnectionStatus status = MeshConnectionStatus.stopped;
   String nickname = '';
   String peerId = '';
@@ -569,12 +570,22 @@ class MeshController extends ChangeNotifier {
 
   Future<void> retryPendingPrivateMessages() async {
     _privateMessageOutboxDrainRequested = true;
+    final activeDrain = _privateMessageOutboxDrainCompleter;
+    if (activeDrain != null) {
+      await activeDrain.future;
+      return;
+    }
     await _drainPrivateMessageOutbox();
   }
 
   Future<void> _drainPrivateMessageOutbox() async {
-    if (_drainingPrivateMessageOutbox) return;
+    if (_drainingPrivateMessageOutbox) {
+      await _privateMessageOutboxDrainCompleter?.future;
+      return;
+    }
     _drainingPrivateMessageOutbox = true;
+    final completer = Completer<void>();
+    _privateMessageOutboxDrainCompleter = completer;
     try {
       do {
         _privateMessageOutboxDrainRequested = false;
@@ -582,6 +593,8 @@ class MeshController extends ChangeNotifier {
       } while (_privateMessageOutboxDrainRequested);
     } finally {
       _drainingPrivateMessageOutbox = false;
+      _privateMessageOutboxDrainCompleter = null;
+      completer.complete();
     }
   }
 
@@ -603,6 +616,7 @@ class MeshController extends ChangeNotifier {
         final messageId = await _platform.sendPrivate(
           pending.recipientPeerId,
           pending.content,
+          messageId: pending.localId,
         );
         if (messageId.trim().isEmpty) {
           throw StateError(currentL10n.errorUnknown);
@@ -699,6 +713,7 @@ class MeshController extends ChangeNotifier {
   }
 
   void _applyStatus(Map<Object?, Object?> event) {
+    final couldSend = canSend;
     status = switch (event['status'] as String?) {
       'active' => MeshConnectionStatus.active,
       'degraded' => MeshConnectionStatus.degraded,
@@ -715,6 +730,9 @@ class MeshController extends ChangeNotifier {
     adaptivePowerSaving =
         event['adaptivePowerSaving'] as bool? ?? powerProfile.savesPower;
     _applyRadarConsent(event);
+    if (!couldSend && canSend) {
+      _requestPrivateMessageOutboxDrain();
+    }
   }
 
   void _applyRadarConsent(Map<Object?, Object?> event) {
@@ -727,6 +745,10 @@ class MeshController extends ChangeNotifier {
   }
 
   void _replacePeers(Object? value) {
+    final previouslyEligible = {
+      for (final peer in _peers)
+        if (peer.secure && peer.role.canChat) peer.id,
+    };
     final rawPeers = value as List<Object?>? ?? const [];
     _peers
       ..clear()
@@ -739,7 +761,15 @@ class MeshController extends ChangeNotifier {
     if (_peers.isNotEmpty) {
       unawaited(_repository.saveKnownPeers(_peers));
     }
-    _requestPrivateMessageOutboxDrain();
+    final hasNewlyEligiblePeer = _peers.any(
+      (peer) =>
+          peer.secure &&
+          peer.role.canChat &&
+          !previouslyEligible.contains(peer.id),
+    );
+    if (hasNewlyEligiblePeer) {
+      _requestPrivateMessageOutboxDrain();
+    }
   }
 
   void _replacePresences(Object? value) {
