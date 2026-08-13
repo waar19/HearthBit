@@ -3,6 +3,23 @@ import 'package:hearth_bit/controllers/emergency_gateway_controller.dart';
 import 'package:hearth_bit/models/mesh_models.dart';
 
 void main() {
+  test('reconoce únicamente el formato de nombre automático SOS', () {
+    expect(isDefaultMeshNickname('SOS-83cf'), isTrue);
+    expect(isDefaultMeshNickname('SOS-83CF'), isTrue);
+    expect(isDefaultMeshNickname('Ana'), isFalse);
+    expect(isDefaultMeshNickname('SOS-ayuda'), isFalse);
+  });
+
+  test('decodifica todos los perfiles de energía nativos', () {
+    for (final profile in MeshPowerProfile.values) {
+      expect(MeshPowerProfile.fromWire(profile.wireName), profile);
+    }
+    expect(
+      MeshPowerProfile.fromWire('future-profile'),
+      MeshPowerProfile.balanced,
+    );
+  });
+
   test('check-in conserva texto legible y metadatos estructurados', () {
     final timestamp = DateTime.fromMillisecondsSinceEpoch(1_700_000_000_000);
     final content = EmergencyCheckIn.encode(

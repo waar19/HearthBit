@@ -119,6 +119,9 @@ internal class MeshEngine(
     private var adaptiveScanStartRunnable: Runnable? = null
     private var adaptiveScanStopRunnable: Runnable? = null
     private var batteryLevel = 100
+    private var charging = false
+    private var screenOn = true
+    private var powerProfile = PowerProfile.BALANCED
     private var adaptivePowerSaving = false
 
     /** Peer objetivo del radar de rescate; null cuando el radar está apagado. */
@@ -149,6 +152,7 @@ internal class MeshEngine(
         "role" to localRole.wireName,
         "batteryLevel" to batteryLevel,
         "adaptivePowerSaving" to adaptivePowerSaving,
+        "powerProfile" to powerProfile.wireName,
         "radarConsentUntil" to activeLocalRadarConsentUntil(),
         "links" to activeLinks().map { it.capabilities.toEventMap() },
         "peers" to peersSnapshot(),
@@ -304,14 +308,23 @@ internal class MeshEngine(
         sendAnnouncement()
     }
 
-    fun updateBatteryLevel(percent: Int) {
+    fun updatePowerState(percent: Int, isCharging: Boolean, isScreenOn: Boolean) {
         val normalized = percent.coerceIn(0, 100)
-        val nextSaving = AdaptivePowerPolicy.shouldSavePower(normalized)
-        val changed = nextSaving != adaptivePowerSaving
         batteryLevel = normalized
-        adaptivePowerSaving = nextSaving
+        charging = isCharging
+        screenOn = isScreenOn
+        val nextProfile = AdaptivePowerPolicy.profileFor(
+            batteryPercent = batteryLevel,
+            isCharging = charging,
+            screenOn = screenOn,
+            survivalMode = localRole == MeshNodeRole.PHONE_BEACON,
+        )
+        val changed = nextProfile != powerProfile
+        powerProfile = nextProfile
+        adaptivePowerSaving = powerProfile.savesPower
         if (changed && running && localRole != MeshNodeRole.PHONE_BEACON && radarPeerId == null) {
             cancelAdaptiveScanning()
+            stopBleScans()
             startScanning()
             startGenericBeaconScanning()
             restartAdvertising()
@@ -321,6 +334,7 @@ internal class MeshEngine(
                 "type" to "power",
                 "batteryLevel" to batteryLevel,
                 "adaptivePowerSaving" to adaptivePowerSaving,
+                "powerProfile" to powerProfile.wireName,
             ),
         )
     }
@@ -333,6 +347,13 @@ internal class MeshEngine(
         val previousRole = localRole
         localRole = nextRole
         identity.nodeRole = localRole
+        powerProfile = AdaptivePowerPolicy.profileFor(
+            batteryPercent = batteryLevel,
+            isCharging = charging,
+            screenOn = screenOn,
+            survivalMode = localRole == MeshNodeRole.PHONE_BEACON,
+        )
+        adaptivePowerSaving = powerProfile.savesPower
         sendNodeCapability()
         if (running) {
             if (localRole == MeshNodeRole.PHONE_BEACON) {
@@ -1520,20 +1541,8 @@ internal class MeshEngine(
             return
         }
         val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(
-                if (adaptivePowerSaving) {
-                    AdvertiseSettings.ADVERTISE_MODE_LOW_POWER
-                } else {
-                    AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY
-                },
-            )
-            .setTxPowerLevel(
-                if (adaptivePowerSaving) {
-                    AdvertiseSettings.ADVERTISE_TX_POWER_LOW
-                } else {
-                    AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM
-                },
-            )
+            .setAdvertiseMode(powerProfile.advertiseMode)
+            .setTxPowerLevel(powerProfile.advertiseTxPower)
             .setConnectable(localRole != MeshNodeRole.PHONE_BEACON)
             .build()
         // El PDU legado de BLE admite 31 bytes. UUID (18B + banderas) viaja en
@@ -1573,13 +1582,18 @@ internal class MeshEngine(
 
     @SuppressLint("MissingPermission")
     private fun startScanning(aggressive: Boolean = false) {
-        if (adaptivePowerSaving && !aggressive) {
+        if (powerProfile.scanMode == null && !aggressive) return
+        if (powerProfile.usesDutyCycle && !aggressive) {
             scheduleAdaptiveScanning()
             return
         }
         if (aggressive) cancelAdaptiveScanning()
         startMeshScan(
-            scanMode = ScanSettings.SCAN_MODE_LOW_LATENCY,
+            scanMode = if (aggressive) {
+                ScanSettings.SCAN_MODE_LOW_LATENCY
+            } else {
+                powerProfile.scanMode ?: return
+            },
             aggressive = aggressive,
         )
     }
@@ -1607,7 +1621,8 @@ internal class MeshEngine(
      */
     @SuppressLint("MissingPermission")
     private fun startGenericBeaconScanning() {
-        if (adaptivePowerSaving) {
+        if (powerProfile.scanMode == null) return
+        if (powerProfile.usesDutyCycle) {
             scheduleAdaptiveScanning()
             return
         }
@@ -1632,7 +1647,7 @@ internal class MeshEngine(
     private fun scheduleAdaptiveScanning() {
         if (
             !running ||
-            !adaptivePowerSaving ||
+            !powerProfile.usesDutyCycle ||
             localRole == MeshNodeRole.PHONE_BEACON ||
             radarPeerId != null ||
             adaptiveScanStartRunnable != null ||
@@ -1644,13 +1659,13 @@ internal class MeshEngine(
             adaptiveScanStartRunnable = null
             if (
                 !running ||
-                !adaptivePowerSaving ||
+                !powerProfile.usesDutyCycle ||
                 localRole == MeshNodeRole.PHONE_BEACON ||
                 radarPeerId != null
             ) {
                 return@Runnable
             }
-            startMeshScan(ScanSettings.SCAN_MODE_LOW_POWER, aggressive = false)
+            startMeshScan(powerProfile.scanMode ?: return@Runnable, aggressive = false)
             startGenericBeaconScanNow()
             adaptiveScanStopRunnable = Runnable {
                 adaptiveScanStopRunnable = null
@@ -1661,10 +1676,10 @@ internal class MeshEngine(
                     adaptiveScanStartRunnable = null
                     scheduleAdaptiveScanning()
                 }.also {
-                    mainHandler.postDelayed(it, AdaptivePowerPolicy.SCAN_PAUSE_MS)
+                    mainHandler.postDelayed(it, powerProfile.scanPauseMs)
                 }
             }.also {
-                mainHandler.postDelayed(it, AdaptivePowerPolicy.SCAN_BURST_MS)
+                mainHandler.postDelayed(it, powerProfile.scanBurstMs)
             }
         }
         adaptiveScanStartRunnable = start
@@ -1676,6 +1691,17 @@ internal class MeshEngine(
         adaptiveScanStopRunnable?.let(mainHandler::removeCallbacks)
         adaptiveScanStartRunnable = null
         adaptiveScanStopRunnable = null
+    }
+
+    private fun hasReachedConnectionLimit(): Boolean {
+        val maximum = powerProfile.maximumClientConnections
+        return maximum <= 0 || clientGatts.size + serverMaximumGattValueSizes.size >= maximum
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun stopBleScans() {
+        runCatching { adapter.bluetoothLeScanner?.stopScan(scanCallback) }
+        runCatching { adapter.bluetoothLeScanner?.stopScan(genericBeaconScanCallback) }
     }
 
     @SuppressLint("MissingPermission")
@@ -1742,6 +1768,7 @@ internal class MeshEngine(
             emitRssi(radarTarget, result.rssi)
         }
         if (clientGatts.containsKey(address)) return
+        if (hasReachedConnectionLimit()) return
         clientGatts[address] = result.device.connectGatt(
             context,
             false,
@@ -1916,6 +1943,10 @@ internal class MeshEngine(
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
+                if (hasReachedConnectionLimit()) {
+                    runCatching { gattServer?.cancelConnection(device) }
+                    return
+                }
                 serverMaximumGattValueSizes.putIfAbsent(device.address, DEFAULT_GATT_VALUE_SIZE)
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 serverSubscribers.remove(device)

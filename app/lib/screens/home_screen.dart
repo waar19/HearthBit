@@ -28,6 +28,8 @@ import 'optical_send_screen.dart';
 import 'radar_screen.dart';
 import 'transfers_tab.dart';
 
+enum _AppMenuAction { changeNickname, support, about, panicWipe }
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     required this.controller,
@@ -265,11 +267,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 icon: const Icon(Icons.contrast),
               ),
               IconButton(
-                tooltip: context.l10n.tooltipSupport,
-                onPressed: _showAbout,
-                icon: const Icon(Icons.favorite_outline),
-              ),
-              IconButton(
                 tooltip: context.l10n.nodeModeTooltip,
                 onPressed: () => _showNodeMode(controller),
                 icon: Icon(
@@ -278,15 +275,46 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       : Icons.hub_outlined,
                 ),
               ),
-              IconButton(
-                tooltip: context.l10n.tooltipChangeName,
-                onPressed: () => _changeNickname(controller),
-                icon: const Icon(Icons.badge_outlined),
-              ),
-              IconButton(
-                tooltip: context.l10n.tooltipPanicWipe,
-                onPressed: () => _confirmWipe(controller),
-                icon: const Icon(Icons.delete_forever_outlined),
+              PopupMenuButton<_AppMenuAction>(
+                tooltip: MaterialLocalizations.of(context).showMenuTooltip,
+                onSelected: (action) => _handleAppMenu(action, controller),
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: _AppMenuAction.changeNickname,
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.badge_outlined),
+                      title: Text(context.l10n.tooltipChangeName),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: _AppMenuAction.support,
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.favorite_outline),
+                      title: Text(context.l10n.tooltipSupport),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: _AppMenuAction.about,
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.info_outline),
+                      title: Text(context.l10n.aboutTitle),
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  PopupMenuItem(
+                    value: _AppMenuAction.panicWipe,
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      textColor: Theme.of(context).colorScheme.error,
+                      iconColor: Theme.of(context).colorScheme.error,
+                      leading: const Icon(Icons.delete_forever_outlined),
+                      title: Text(context.l10n.tooltipPanicWipe),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -416,7 +444,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               : ListView(
                   controller: _scrollController,
                   padding: const EdgeInsets.all(12),
-                  children: _messageTimeline(context, publicMessages),
+                  children: _messageTimeline(
+                    context,
+                    publicMessages,
+                    compactSos: true,
+                  ),
                 ),
         ),
         _MessageComposer(
@@ -583,13 +615,32 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ],
         if (genericPresences.isNotEmpty) ...[
           _ListSectionTitle(title: context.l10n.genericPresenceSectionTitle),
-          ...genericPresences.map(
-            (presence) => ListTile(
+          Card(
+            child: ExpansionTile(
               leading: const CircleAvatar(child: Icon(Icons.sensors)),
-              title: Text(context.l10n.genericPresenceNoChat),
-              subtitle: Text(context.l10n.genericPresenceSignal(presence.rssi)),
-              trailing: const Icon(Icons.chat_bubble_outline),
-              enabled: false,
+              title: Text(
+                context.l10n.genericPresenceSummary(
+                  genericPresences.length,
+                  genericPresences
+                      .map((presence) => presence.rssi)
+                      .reduce(
+                        (first, second) => first > second ? first : second,
+                      ),
+                ),
+              ),
+              subtitle: Text(context.l10n.genericPresenceExpand),
+              children: genericPresences
+                  .map(
+                    (presence) => ListTile(
+                      leading: const Icon(Icons.bluetooth),
+                      title: Text(context.l10n.genericPresenceNoChat),
+                      subtitle: Text(
+                        context.l10n.genericPresenceSignal(presence.rssi),
+                      ),
+                      enabled: false,
+                    ),
+                  )
+                  .toList(growable: false),
             ),
           ),
         ],
@@ -687,6 +738,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _NicknameDialog(initialNickname: controller.nickname),
     );
     if (value != null) await controller.updateNickname(value);
+  }
+
+  Future<void> _handleAppMenu(
+    _AppMenuAction action,
+    MeshController controller,
+  ) async {
+    switch (action) {
+      case _AppMenuAction.changeNickname:
+        await _changeNickname(controller);
+        return;
+      case _AppMenuAction.support:
+        await _openExternal(InviteShareService.donationUri);
+        return;
+      case _AppMenuAction.about:
+        await _showAbout();
+        return;
+      case _AppMenuAction.panicWipe:
+        await _confirmWipe(controller);
+        return;
+    }
   }
 
   Future<void> _showNodeMode(MeshController controller) async {
@@ -855,7 +926,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void _handleMeshUpdate() {
     final count = _countPublicMessages();
-    if (count > _publicMessageCount && _tab == 0) {
+    if (count > _publicMessageCount && _tab == 1) {
       _scrollToBottom();
     }
     _publicMessageCount = count;
@@ -1216,13 +1287,18 @@ class _StatusBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final status = controller.status;
+    final displayNickname =
+        controller.nickname.trim().isEmpty ||
+            isDefaultMeshNickname(controller.nickname)
+        ? context.l10n.statusBannerYou
+        : controller.nickname;
     final (color, accent, icon, label) = switch (status) {
       MeshConnectionStatus.active => (
         scheme.surfaceContainerHigh,
         scheme.primary,
         Icons.bluetooth_connected,
         context.l10n.statusActiveLabel(
-          controller.nickname,
+          displayNickname,
           controller.peers.length,
         ),
       ),
@@ -1230,7 +1306,7 @@ class _StatusBanner extends StatelessWidget {
         scheme.tertiaryContainer,
         scheme.onTertiaryContainer,
         Icons.bluetooth_searching,
-        context.l10n.statusDegradedLabel(controller.nickname),
+        context.l10n.statusDegradedLabel(displayNickname),
       ),
       MeshConnectionStatus.starting => (
         scheme.surfaceContainerHighest,
@@ -1361,7 +1437,9 @@ class _MessageBubble extends StatelessWidget {
     return Align(
       alignment: alignment,
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 420),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width * 0.78,
+        ),
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -1371,20 +1449,23 @@ class _MessageBubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (message.isPrivate) ...[
-                  const Icon(Icons.lock, size: 14),
-                  const SizedBox(width: 4),
+            if (!message.isMine || message.isPrivate) ...[
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (message.isPrivate) ...[
+                    const Icon(Icons.lock, size: 14),
+                    const SizedBox(width: 4),
+                  ],
+                  if (!message.isMine)
+                    Text(
+                      message.sender,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                 ],
-                Text(
-                  message.sender,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
+              ),
+              const SizedBox(height: 4),
+            ],
             if (message.isVoiceNote)
               _VoiceNoteContent(
                 message: message,
@@ -1415,6 +1496,7 @@ List<Widget> _messageTimeline(
   List<MeshMessage> messages, {
   TransferController? transfers,
   AudioPlayer? audioPlayer,
+  bool compactSos = false,
 }) {
   final widgets = <Widget>[];
   DateTime? previousDay;
@@ -1425,14 +1507,72 @@ List<Widget> _messageTimeline(
       previousDay = day;
     }
     widgets.add(
-      _MessageBubble(
-        message: message,
-        transfers: transfers,
-        audioPlayer: audioPlayer,
-      ),
+      compactSos && message.isSos
+          ? _CompactSosMessage(message: message)
+          : _MessageBubble(
+              message: message,
+              transfers: transfers,
+              audioPlayer: audioPlayer,
+            ),
     );
   }
   return widgets;
+}
+
+class _CompactSosMessage extends StatelessWidget {
+  const _CompactSosMessage({required this.message});
+
+  final MeshMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final latitude = message.sosLatitude;
+    final longitude = message.sosLongitude;
+    final coordinates = latitude == null || longitude == null
+        ? null
+        : '${latitude.toStringAsFixed(3)}, ${longitude.toStringAsFixed(3)}';
+    final scheme = Theme.of(context).colorScheme;
+    final time = MaterialLocalizations.of(
+      context,
+    ).formatTimeOfDay(TimeOfDay.fromDateTime(message.timestamp.toLocal()));
+    return Semantics(
+      label: '${message.sender}: ${message.sosDescription}',
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: scheme.errorContainer,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: scheme.onErrorContainer),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${message.sender} · ${message.sosDescription}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  if (coordinates != null)
+                    Text(
+                      coordinates,
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(time, style: Theme.of(context).textTheme.labelSmall),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _VoiceNoteContent extends StatelessWidget {

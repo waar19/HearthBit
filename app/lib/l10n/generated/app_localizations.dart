@@ -130,6 +130,12 @@ abstract class AppLocalizations {
   /// **'{nickname} · receive-only (no BLE advertising)'**
   String statusDegradedLabel(String nickname);
 
+  /// No description provided for @statusBannerYou.
+  ///
+  /// In en, this message translates to:
+  /// **'You'**
+  String get statusBannerYou;
+
   /// No description provided for @statusStarting.
   ///
   /// In en, this message translates to:
@@ -1323,6 +1329,18 @@ abstract class AppLocalizations {
   /// **'Generic Bluetooth signal · {rssi} dBm'**
   String genericPresenceSignal(int rssi);
 
+  /// No description provided for @genericPresenceSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} nearby Bluetooth signals · strongest {rssi} dBm'**
+  String genericPresenceSummary(int count, int rssi);
+
+  /// No description provided for @genericPresenceExpand.
+  ///
+  /// In en, this message translates to:
+  /// **'Show signal details'**
+  String get genericPresenceExpand;
+
   /// No description provided for @nodeModeTooltip.
   ///
   /// In en, this message translates to:
@@ -1479,6 +1497,12 @@ abstract class AppLocalizations {
   /// **'Allow background location and exempt HearthBit from battery restrictions so SOS positions can stay current.'**
   String get onboardingReadyBody;
 
+  /// No description provided for @onboardingNicknameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Your visible name (optional)'**
+  String get onboardingNicknameLabel;
+
   /// No description provided for @onboardingNext.
   ///
   /// In en, this message translates to:
@@ -1560,13 +1584,13 @@ abstract class AppLocalizations {
   /// No description provided for @meshHealthRelays.
   ///
   /// In en, this message translates to:
-  /// **'{count} relays'**
+  /// **'{count} phones relaying messages'**
   String meshHealthRelays(int count);
 
   /// No description provided for @meshHealthAnchors.
   ///
   /// In en, this message translates to:
-  /// **'{count} data anchors'**
+  /// **'{count} message storage points'**
   String meshHealthAnchors(int count);
 
   /// No description provided for @meshHealthSignals.
@@ -1578,13 +1602,13 @@ abstract class AppLocalizations {
   /// No description provided for @meshHealthAnchorReady.
   ///
   /// In en, this message translates to:
-  /// **'A persistent data anchor is nearby.'**
+  /// **'A message storage point is nearby.'**
   String get meshHealthAnchorReady;
 
   /// No description provided for @meshHealthNoAnchor.
   ///
   /// In en, this message translates to:
-  /// **'No persistent data anchor is currently visible.'**
+  /// **'No nearby message storage point is visible.'**
   String get meshHealthNoAnchor;
 
   /// No description provided for @adaptivePowerTitle.
@@ -1604,6 +1628,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Battery saving: scanning in short bursts'**
   String get adaptivePowerSaving;
+
+  /// No description provided for @powerProfilePerformance.
+  ///
+  /// In en, this message translates to:
+  /// **'Performance: fast discovery'**
+  String get powerProfilePerformance;
+
+  /// No description provided for @powerProfileBalanced.
+  ///
+  /// In en, this message translates to:
+  /// **'Balanced: full mesh coverage'**
+  String get powerProfileBalanced;
+
+  /// No description provided for @powerProfilePowerSaver.
+  ///
+  /// In en, this message translates to:
+  /// **'Power saving: scanning in intervals'**
+  String get powerProfilePowerSaver;
+
+  /// No description provided for @powerProfileCritical.
+  ///
+  /// In en, this message translates to:
+  /// **'Critical: minimum connections and scanning'**
+  String get powerProfileCritical;
+
+  /// No description provided for @powerProfileSurvival.
+  ///
+  /// In en, this message translates to:
+  /// **'Survival: SOS beacon only'**
+  String get powerProfileSurvival;
 
   /// No description provided for @survivalModeTitle.
   ///

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../controllers/mesh_controller.dart';
 import '../l10n/l10n.dart';
+import '../models/mesh_models.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({
@@ -19,12 +20,14 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _pages = PageController();
+  final _nicknameController = TextEditingController();
   var _page = 0;
   var _busy = false;
 
   @override
   void dispose() {
     _pages.dispose();
+    _nicknameController.dispose();
     super.dispose();
   }
 
@@ -41,6 +44,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await widget.controller.start();
       if (!mounted) return;
       setState(() => _busy = false);
+      final currentNickname = widget.controller.nickname;
+      if (_nicknameController.text.isEmpty &&
+          currentNickname.isNotEmpty &&
+          !isDefaultMeshNickname(currentNickname)) {
+        _nicknameController.text = currentNickname;
+      }
       await _pages.nextPage(
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOut,
@@ -48,6 +57,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       return;
     }
     setState(() => _busy = true);
+    final nickname = _nicknameController.text.trim();
+    if (nickname.isNotEmpty && nickname != widget.controller.nickname) {
+      await widget.controller.updateNickname(nickname);
+    }
     await widget.controller.ensureAlwaysLocation();
     if (!widget.controller.ignoringBatteryOptimizations) {
       await widget.controller.requestDisableBatteryOptimizations();
@@ -103,6 +116,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     icon: Icons.shield_outlined,
                     title: context.l10n.onboardingReadyTitle,
                     body: context.l10n.onboardingReadyBody,
+                    child: TextField(
+                      controller: _nicknameController,
+                      maxLength: 31,
+                      textInputAction: TextInputAction.done,
+                      decoration: InputDecoration(
+                        labelText: context.l10n.onboardingNicknameLabel,
+                        hintText: context.l10n.nicknameDialogHint,
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -171,11 +194,13 @@ class _OnboardingPage extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.body,
+    this.child,
   });
 
   final IconData icon;
   final String title;
   final String body;
+  final Widget? child;
 
   @override
   Widget build(BuildContext context) {
@@ -209,6 +234,7 @@ class _OnboardingPage extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodyLarge,
                     textAlign: TextAlign.center,
                   ),
+                  if (child != null) ...[const SizedBox(height: 24), child!],
                 ],
               ),
             ),

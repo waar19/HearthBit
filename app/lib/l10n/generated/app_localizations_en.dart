@@ -27,6 +27,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get statusBannerYou => 'You';
+
+  @override
   String get statusStarting => 'Starting mesh…';
 
   @override
@@ -736,6 +739,14 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String genericPresenceSummary(int count, int rssi) {
+    return '$count nearby Bluetooth signals · strongest $rssi dBm';
+  }
+
+  @override
+  String get genericPresenceExpand => 'Show signal details';
+
+  @override
   String get nodeModeTooltip => 'Node mode';
 
   @override
@@ -822,6 +833,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Allow background location and exempt HearthBit from battery restrictions so SOS positions can stay current.';
 
   @override
+  String get onboardingNicknameLabel => 'Your visible name (optional)';
+
+  @override
   String get onboardingNext => 'NEXT';
 
   @override
@@ -866,12 +880,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String meshHealthRelays(int count) {
-    return '$count relays';
+    return '$count phones relaying messages';
   }
 
   @override
   String meshHealthAnchors(int count) {
-    return '$count data anchors';
+    return '$count message storage points';
   }
 
   @override
@@ -880,11 +894,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get meshHealthAnchorReady => 'A persistent data anchor is nearby.';
+  String get meshHealthAnchorReady => 'A message storage point is nearby.';
 
   @override
   String get meshHealthNoAnchor =>
-      'No persistent data anchor is currently visible.';
+      'No nearby message storage point is visible.';
 
   @override
   String get adaptivePowerTitle => 'Adaptive battery mode';
@@ -894,6 +908,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adaptivePowerSaving => 'Battery saving: scanning in short bursts';
+
+  @override
+  String get powerProfilePerformance => 'Performance: fast discovery';
+
+  @override
+  String get powerProfileBalanced => 'Balanced: full mesh coverage';
+
+  @override
+  String get powerProfilePowerSaver => 'Power saving: scanning in intervals';
+
+  @override
+  String get powerProfileCritical =>
+      'Critical: minimum connections and scanning';
+
+  @override
+  String get powerProfileSurvival => 'Survival: SOS beacon only';
 
   @override
   String get survivalModeTitle => 'Survival mode';

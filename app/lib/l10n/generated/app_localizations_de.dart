@@ -27,6 +27,9 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String get statusBannerYou => 'Du';
+
+  @override
   String get statusStarting => 'Mesh wird gestartet…';
 
   @override
@@ -741,6 +744,14 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String genericPresenceSummary(int count, int rssi) {
+    return '$count Bluetooth-Signale in der Nähe · stärkstes $rssi dBm';
+  }
+
+  @override
+  String get genericPresenceExpand => 'Signaldetails anzeigen';
+
+  @override
   String get nodeModeTooltip => 'Knotenmodus';
 
   @override
@@ -827,6 +838,9 @@ class AppLocalizationsDe extends AppLocalizations {
       'Hintergrundstandort erlauben und HearthBit von Akku-Einschränkungen ausnehmen.';
 
   @override
+  String get onboardingNicknameLabel => 'Dein sichtbarer Name (optional)';
+
+  @override
   String get onboardingNext => 'WEITER';
 
   @override
@@ -872,12 +886,12 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String meshHealthRelays(int count) {
-    return '$count Relays';
+    return '$count Telefone leiten Nachrichten weiter';
   }
 
   @override
   String meshHealthAnchors(int count) {
-    return '$count Datenanker';
+    return '$count Nachrichtenspeicherpunkte';
   }
 
   @override
@@ -887,10 +901,11 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get meshHealthAnchorReady =>
-      'Ein dauerhafter Datenanker ist in der Nähe.';
+      'Ein Nachrichtenspeicherpunkt ist in der Nähe.';
 
   @override
-  String get meshHealthNoAnchor => 'Kein dauerhafter Datenanker sichtbar.';
+  String get meshHealthNoAnchor =>
+      'Kein Nachrichtenspeicherpunkt in der Nähe sichtbar.';
 
   @override
   String get adaptivePowerTitle => 'Adaptiver Akkumodus';
@@ -900,6 +915,22 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get adaptivePowerSaving => 'Stromsparen: Suche in kurzen Intervallen';
+
+  @override
+  String get powerProfilePerformance => 'Leistung: schnelle Erkennung';
+
+  @override
+  String get powerProfileBalanced => 'Ausgewogen: volle Mesh-Abdeckung';
+
+  @override
+  String get powerProfilePowerSaver => 'Stromsparen: Suche in Intervallen';
+
+  @override
+  String get powerProfileCritical =>
+      'Kritisch: minimale Verbindungen und Suche';
+
+  @override
+  String get powerProfileSurvival => 'Überleben: nur SOS-Signal';
 
   @override
   String get survivalModeTitle => 'Überlebensmodus';

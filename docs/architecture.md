@@ -54,7 +54,14 @@
    el cierre de la app y evitar el Modo de bajo consumo, que reduce el BLE en
    segundo plano. El modo de fondo `location` mantiene viva la app mientras
    siga la actualización de posición.
-4. La pestaña SOS muestra una lista de verificación (optimización de batería,
+4. La radio elige uno de cinco perfiles (`performance`, `balanced`,
+   `powerSaver`, `critical`, `survival`) según carga, batería, estado de la
+   pantalla y modo supervivencia. Android ajusta modo de escaneo, ciclos,
+   potencia de anuncio y nuevas conexiones GATT. CoreBluetooth no permite
+   controlar intervalos ni potencia de anuncio en iOS: allí los perfiles
+   ajustan filtros, duplicados, ciclos en primer plano y conexiones salientes;
+   en segundo plano se mantiene un escaneo filtrado porque iOS suspende timers.
+5. La pestaña SOS muestra una lista de verificación (optimización de batería,
    ubicación permanente, modo de ahorro activo) con acciones directas y
    consejos de ahorro para prolongar la autonomía durante la emergencia.
 

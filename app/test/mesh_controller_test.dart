@@ -68,6 +68,9 @@ class _FakePlatform extends MeshPlatformService {
     'ignoringBatteryOptimizations': false,
     'lowPowerMode': true,
     'backgroundLocation': backgroundLocation,
+    'batteryLevel': 14,
+    'adaptivePowerSaving': true,
+    'powerProfile': 'critical',
   };
 
   @override
@@ -286,6 +289,19 @@ void main() {
     expect(controller.ignoringBatteryOptimizations, isFalse);
     expect(controller.lowPowerMode, isTrue);
     expect(controller.backgroundLocationGranted, isTrue);
+    expect(controller.batteryLevel, 14);
+    expect(controller.powerProfile, MeshPowerProfile.critical);
+    expect(controller.adaptivePowerSaving, isTrue);
+
+    platform.emit({
+      'type': 'power',
+      'batteryLevel': 100,
+      'adaptivePowerSaving': false,
+      'powerProfile': 'performance',
+    });
+    await pumpEvents();
+    expect(controller.powerProfile, MeshPowerProfile.performance);
+    expect(controller.adaptivePowerSaving, isFalse);
   });
 
   test('el modo rescate reenvía el SOS y se detiene al apagarse', () async {

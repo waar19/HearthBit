@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../controllers/mesh_controller.dart';
 import '../l10n/l10n.dart';
+import '../models/mesh_models.dart';
 
 /// Tarjeta del modo rescate: reenvía el SOS con GPS fresco periódicamente
 /// para que los rescatistas puedan seguir la posición de la persona.
@@ -223,11 +224,7 @@ class PowerSavingCard extends StatelessWidget {
                     : Icons.battery_full,
               ),
               title: Text(l10n.adaptivePowerTitle),
-              subtitle: Text(
-                controller.adaptivePowerSaving
-                    ? l10n.adaptivePowerSaving
-                    : l10n.adaptivePowerNormal,
-              ),
+              subtitle: Text(_profileLabel(l10n, controller.powerProfile)),
               trailing: Text('${controller.batteryLevel}%'),
             ),
             if (controller.batteryLevel < 10 && !controller.survivalMode)
@@ -290,6 +287,15 @@ class PowerSavingCard extends StatelessWidget {
     ],
     l10n.powerTipShareBattery,
   ];
+
+  String _profileLabel(AppLocalizations l10n, MeshPowerProfile profile) =>
+      switch (profile) {
+        MeshPowerProfile.performance => l10n.powerProfilePerformance,
+        MeshPowerProfile.balanced => l10n.powerProfileBalanced,
+        MeshPowerProfile.powerSaver => l10n.powerProfilePowerSaver,
+        MeshPowerProfile.critical => l10n.powerProfileCritical,
+        MeshPowerProfile.survival => l10n.powerProfileSurvival,
+      };
 }
 
 class _StatusRow extends StatelessWidget {

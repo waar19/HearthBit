@@ -27,6 +27,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get statusBannerYou => '你';
+
+  @override
   String get statusStarting => '正在启动网状网络…';
 
   @override
@@ -699,6 +702,14 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String genericPresenceSummary(int count, int rssi) {
+    return '附近有 $count 个蓝牙信号 · 最强 $rssi dBm';
+  }
+
+  @override
+  String get genericPresenceExpand => '显示信号详情';
+
+  @override
   String get nodeModeTooltip => '节点模式';
 
   @override
@@ -778,6 +789,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onboardingReadyBody => '允许后台位置并解除电池限制，以保持 SOS 位置最新。';
 
   @override
+  String get onboardingNicknameLabel => '你的显示名称（可选）';
+
+  @override
   String get onboardingNext => '下一步';
 
   @override
@@ -820,12 +834,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String meshHealthRelays(int count) {
-    return '$count 个中继';
+    return '$count 台手机正在转发消息';
   }
 
   @override
   String meshHealthAnchors(int count) {
-    return '$count 个数据锚点';
+    return '$count 个消息存储点';
   }
 
   @override
@@ -834,10 +848,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get meshHealthAnchorReady => '附近有持久数据锚点。';
+  String get meshHealthAnchorReady => '附近有消息存储点。';
 
   @override
-  String get meshHealthNoAnchor => '当前未发现持久数据锚点。';
+  String get meshHealthNoAnchor => '附近没有消息存储点。';
 
   @override
   String get adaptivePowerTitle => '自适应省电';
@@ -847,6 +861,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get adaptivePowerSaving => '省电：短时扫描';
+
+  @override
+  String get powerProfilePerformance => '性能：快速发现';
+
+  @override
+  String get powerProfileBalanced => '均衡：完整网状网络覆盖';
+
+  @override
+  String get powerProfilePowerSaver => '省电：间歇扫描';
+
+  @override
+  String get powerProfileCritical => '电量危急：最少连接和扫描';
+
+  @override
+  String get powerProfileSurvival => '生存：仅 SOS 信标';
 
   @override
   String get survivalModeTitle => '生存模式';

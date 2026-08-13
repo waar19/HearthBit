@@ -7,6 +7,57 @@ import Foundation
 import Security
 import UIKit
 
+private enum IOSPowerProfile: String {
+  case performance
+  case balanced
+  case powerSaver
+  case critical
+  case survival
+
+  var savesPower: Bool {
+    self != .performance && self != .balanced
+  }
+
+  var scanBurst: TimeInterval {
+    switch self {
+    case .powerSaver: return 10
+    case .critical: return 5
+    case .performance, .balanced, .survival: return 0
+    }
+  }
+
+  var scanPause: TimeInterval {
+    switch self {
+    case .powerSaver: return 50
+    case .critical: return 115
+    case .performance, .balanced, .survival: return 0
+    }
+  }
+
+  var maximumOutgoingConnections: Int {
+    switch self {
+    case .critical: return 3
+    case .survival: return 0
+    case .performance, .balanced, .powerSaver: return .max
+    }
+  }
+
+  static func resolve(
+    batteryLevel: Int,
+    charging: Bool,
+    foreground: Bool,
+    lowPowerMode: Bool,
+    survivalMode: Bool
+  ) -> IOSPowerProfile {
+    let battery = min(max(batteryLevel, 0), 100)
+    if survivalMode || battery < 10 { return .survival }
+    if charging { return .performance }
+    if battery < 20 { return .critical }
+    if lowPowerMode || battery <= 40 || !foreground { return .powerSaver }
+    return .balanced
+  }
+}
+
 final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private struct PendingCentralWrite {
     let data: Data
@@ -50,7 +101,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var eventSink: FlutterEventSink?
   private var running = false
   private var batteryLevel = 100
+  private var powerProfile = IOSPowerProfile.balanced
   private var adaptivePowerSaving = false
+  private var adaptiveScanTimer: Timer?
   private var lanBridgeGatewayID: String?
   private var lanBridgeMaximumFrameSize = 2048
   private var suppressLanBridge = false
@@ -210,6 +263,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         let previousRole = localRole
         localRole = role
         role.persist()
+        refreshPowerState(emitEvent: false)
         broadcastNodeCapability()
         if running, previousRole != role {
           if role == .phoneBeacon {
@@ -272,6 +326,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           "backgroundLocation": locationAuthorization() == .authorizedAlways,
           "batteryLevel": batteryLevel,
           "adaptivePowerSaving": adaptivePowerSaving,
+          "powerProfile": powerProfile.rawValue,
         ])
       case "requestBackgroundLocation":
         // Pide «Permitir siempre»; el sistema decide cuándo mostrar el
@@ -338,14 +393,19 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           forName: UIApplication.didEnterBackgroundNotification,
           object: nil,
           queue: .main
-        ) { [weak self] _ in self?.restartScan() },
+        ) { [weak self] _ in self?.refreshPowerState() },
         center.addObserver(
           forName: UIApplication.didBecomeActiveNotification,
           object: nil,
           queue: .main
-        ) { [weak self] _ in self?.restartScan() },
+        ) { [weak self] _ in self?.refreshPowerState() },
         center.addObserver(
           forName: UIDevice.batteryLevelDidChangeNotification,
+          object: nil,
+          queue: .main
+        ) { [weak self] _ in self?.refreshPowerState() },
+        center.addObserver(
+          forName: UIDevice.batteryStateDidChangeNotification,
           object: nil,
           queue: .main
         ) { [weak self] _ in self?.refreshPowerState() },
@@ -366,6 +426,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func stopInternal(notify: Bool) {
     running = false
     stopRadar()
+    adaptiveScanTimer?.invalidate()
+    adaptiveScanTimer = nil
     central?.stopScan()
     connectedPeripherals.values.forEach { central?.cancelPeripheralConnection($0) }
     connectedPeripherals.removeAll()
@@ -512,25 +574,90 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   /// mesh llegan a conexión; los demás se convierten en IDs locales efímeros.
   private func restartScan() {
     guard running, let central, central.state == .poweredOn else { return }
+    adaptiveScanTimer?.invalidate()
+    adaptiveScanTimer = nil
     central.stopScan()
     guard localRole.allowsDataPlane else { return }
     let foreground = UIApplication.shared.applicationState == .active
-    let broadForegroundScan = foreground && !adaptivePowerSaving
+    guard powerProfile != .survival || radarPeerID != nil else { return }
+    if radarPeerID != nil {
+      central.scanForPeripherals(
+        withServices: [Self.serviceUUID],
+        options: [CBCentralManagerScanOptionAllowDuplicatesKey: true]
+      )
+      return
+    }
+    // En segundo plano iOS ya coalescea y limita el escaneo. Mantener un scan
+    // filtrado continuo es más fiable que depender de timers que el SO suspende.
+    if !foreground {
+      central.scanForPeripherals(
+        withServices: [Self.serviceUUID],
+        options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+      )
+      return
+    }
+    if powerProfile.scanBurst > 0 {
+      startAdaptiveScanBurst()
+      return
+    }
     central.scanForPeripherals(
-      // En background iOS exige filtro de servicio y coalescea duplicados;
-      // la presencia genérica es por tanto una capacidad best-effort foreground.
-      withServices: broadForegroundScan ? nil : [Self.serviceUUID],
-      options: [CBCentralManagerScanOptionAllowDuplicatesKey: broadForegroundScan]
+      withServices: nil,
+      options: [
+        CBCentralManagerScanOptionAllowDuplicatesKey: powerProfile == .performance
+      ]
     )
+  }
+
+  private func startAdaptiveScanBurst() {
+    guard
+      running,
+      let central,
+      central.state == .poweredOn,
+      localRole.allowsDataPlane,
+      powerProfile.scanBurst > 0
+    else { return }
+    let profile = powerProfile
+    central.stopScan()
+    central.scanForPeripherals(
+      withServices: profile == .critical ? [Self.serviceUUID] : nil,
+      options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+    )
+    adaptiveScanTimer = Timer.scheduledTimer(
+      withTimeInterval: profile.scanBurst,
+      repeats: false
+    ) { [weak self] _ in
+      guard let self, self.running, self.powerProfile == profile else { return }
+      self.central?.stopScan()
+      self.adaptiveScanTimer = Timer.scheduledTimer(
+        withTimeInterval: profile.scanPause,
+        repeats: false
+      ) { [weak self] _ in
+        guard let self, self.running, self.powerProfile == profile else { return }
+        self.restartScan()
+      }
+    }
   }
 
   private func refreshPowerState(emitEvent: Bool = true) {
     let deviceLevel = UIDevice.current.batteryLevel
     let level = deviceLevel < 0 ? 100 : Int((deviceLevel * 100).rounded())
-    let saving = level < 20 || ProcessInfo.processInfo.isLowPowerModeEnabled
-    let changed = saving != adaptivePowerSaving
+    let charging: Bool
+    switch UIDevice.current.batteryState {
+    case .charging, .full: charging = true
+    case .unknown, .unplugged: charging = false
+    @unknown default: charging = false
+    }
+    let nextProfile = IOSPowerProfile.resolve(
+      batteryLevel: level,
+      charging: charging,
+      foreground: UIApplication.shared.applicationState == .active,
+      lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled,
+      survivalMode: localRole == .phoneBeacon
+    )
+    let changed = nextProfile != powerProfile
     batteryLevel = level
-    adaptivePowerSaving = saving
+    powerProfile = nextProfile
+    adaptivePowerSaving = powerProfile.savesPower
     if changed && running && radarPeerID == nil {
       restartScan()
     }
@@ -539,6 +666,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         "type": "power",
         "batteryLevel": batteryLevel,
         "adaptivePowerSaving": adaptivePowerSaving,
+        "powerProfile": powerProfile.rawValue,
       ])
     }
   }
@@ -1524,6 +1652,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       "role": localRole.rawValue,
       "batteryLevel": batteryLevel,
       "adaptivePowerSaving": adaptivePowerSaving,
+      "powerProfile": powerProfile.rawValue,
       "radarConsentUntil": activeLocalRadarConsentUntil(),
     ])
   }
@@ -1660,6 +1789,7 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
       emitRssi(peerID: target, rssi: RSSI.intValue)
     }
     guard connectedPeripherals[peripheral.identifier] == nil else { return }
+    guard connectedPeripherals.count < powerProfile.maximumOutgoingConnections else { return }
     connectedPeripherals[peripheral.identifier] = peripheral
     peripheral.delegate = self
     central.connect(peripheral)

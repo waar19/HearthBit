@@ -14,6 +14,7 @@ import android.provider.Settings
 import androidx.core.content.ContextCompat
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
+import com.hearthbit.app.mesh.AdaptivePowerPolicy
 import com.hearthbit.app.mesh.MeshForegroundService
 import com.hearthbit.app.mesh.MeshRuntime
 import com.hearthbit.app.transfer.NearbyTransport
@@ -192,14 +193,26 @@ class MainActivity : FlutterActivity() {
                 }
                 "getPowerStatus" -> {
                     val power = getSystemService(PowerManager::class.java)
+                    val batteryLevel = batteryLevel()
+                    val snapshot = MeshRuntime.stateSnapshot()
+                    val profile = snapshot?.get("powerProfile") as? String
+                        ?: AdaptivePowerPolicy.profileFor(
+                            batteryPercent = batteryLevel,
+                            isCharging = isCharging(),
+                            screenOn = power?.isInteractive != false,
+                            survivalMode = false,
+                        ).wireName
                     result.success(
                         mapOf(
                             "ignoringBatteryOptimizations" to
                                 (power?.isIgnoringBatteryOptimizations(packageName) == true),
                             "lowPowerMode" to (power?.isPowerSaveMode == true),
                             "backgroundLocation" to backgroundLocationGranted(),
-                            "batteryLevel" to batteryLevel(),
-                            "adaptivePowerSaving" to (batteryLevel() < 20),
+                            "batteryLevel" to batteryLevel,
+                            "adaptivePowerSaving" to
+                                (snapshot?.get("adaptivePowerSaving") as? Boolean
+                                    ?: (profile != "performance" && profile != "balanced")),
+                            "powerProfile" to profile,
                         ),
                     )
                 }
@@ -371,6 +384,16 @@ class MainActivity : FlutterActivity() {
         val level = battery?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
         val scale = battery?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
         return if (level >= 0 && scale > 0) level * 100 / scale else 100
+    }
+
+    private fun isCharging(): Boolean {
+        val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val status = battery?.getIntExtra(
+            BatteryManager.EXTRA_STATUS,
+            BatteryManager.BATTERY_STATUS_UNKNOWN,
+        ) ?: BatteryManager.BATTERY_STATUS_UNKNOWN
+        return status == BatteryManager.BATTERY_STATUS_CHARGING ||
+            status == BatteryManager.BATTERY_STATUS_FULL
     }
 
     private fun backgroundLocationGranted(): Boolean =

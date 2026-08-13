@@ -27,6 +27,9 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get statusBannerYou => 'あなた';
+
+  @override
   String get statusStarting => 'メッシュを起動中…';
 
   @override
@@ -714,6 +717,14 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String genericPresenceSummary(int count, int rssi) {
+    return '近くの Bluetooth 信号 $count 件 · 最強 $rssi dBm';
+  }
+
+  @override
+  String get genericPresenceExpand => '信号の詳細を表示';
+
+  @override
   String get nodeModeTooltip => 'ノードモード';
 
   @override
@@ -796,6 +807,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onboardingReadyBody => 'バックグラウンド位置情報を許可し、バッテリー制限から除外してください。';
 
   @override
+  String get onboardingNicknameLabel => '表示名（任意）';
+
+  @override
   String get onboardingNext => '次へ';
 
   @override
@@ -838,12 +852,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String meshHealthRelays(int count) {
-    return '中継 $count 台';
+    return 'メッセージを中継する端末 $count 台';
   }
 
   @override
   String meshHealthAnchors(int count) {
-    return 'データアンカー $count 台';
+    return 'メッセージ保存地点 $count 台';
   }
 
   @override
@@ -852,10 +866,10 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get meshHealthAnchorReady => '永続データアンカーが近くにあります。';
+  String get meshHealthAnchorReady => 'メッセージ保存地点が近くにあります。';
 
   @override
-  String get meshHealthNoAnchor => '永続データアンカーは見つかりません。';
+  String get meshHealthNoAnchor => '近くにメッセージ保存地点はありません。';
 
   @override
   String get adaptivePowerTitle => '適応バッテリーモード';
@@ -865,6 +879,21 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get adaptivePowerSaving => '省電力：短い間隔でスキャン';
+
+  @override
+  String get powerProfilePerformance => '高性能：高速検出';
+
+  @override
+  String get powerProfileBalanced => 'バランス：メッシュ全体を維持';
+
+  @override
+  String get powerProfilePowerSaver => '省電力：間隔を空けてスキャン';
+
+  @override
+  String get powerProfileCritical => '危険：接続とスキャンを最小化';
+
+  @override
+  String get powerProfileSurvival => 'サバイバル：SOS ビーコンのみ';
 
   @override
   String get survivalModeTitle => 'サバイバルモード';

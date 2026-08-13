@@ -49,6 +49,7 @@ class MeshController extends ChangeNotifier {
   bool lowPowerMode = false;
   bool backgroundLocationGranted = false;
   int batteryLevel = 100;
+  MeshPowerProfile powerProfile = MeshPowerProfile.balanced;
   bool adaptivePowerSaving = false;
   bool survivalMode = false;
 
@@ -156,8 +157,9 @@ class MeshController extends ChangeNotifier {
     lowPowerMode = power['lowPowerMode'] as bool? ?? false;
     backgroundLocationGranted = power['backgroundLocation'] as bool? ?? false;
     batteryLevel = (power['batteryLevel'] as num?)?.toInt() ?? batteryLevel;
+    powerProfile = MeshPowerProfile.fromWire(power['powerProfile']);
     adaptivePowerSaving =
-        power['adaptivePowerSaving'] as bool? ?? batteryLevel < 20;
+        power['adaptivePowerSaving'] as bool? ?? powerProfile.savesPower;
     notifyListeners();
   }
 
@@ -430,8 +432,9 @@ class MeshController extends ChangeNotifier {
         break;
       case 'power':
         batteryLevel = (event['batteryLevel'] as num?)?.toInt() ?? batteryLevel;
+        powerProfile = MeshPowerProfile.fromWire(event['powerProfile']);
         adaptivePowerSaving =
-            event['adaptivePowerSaving'] as bool? ?? adaptivePowerSaving;
+            event['adaptivePowerSaving'] as bool? ?? powerProfile.savesPower;
         break;
       case 'peers':
         _replacePeers(event['peers']);
@@ -491,8 +494,9 @@ class MeshController extends ChangeNotifier {
     localRole = MeshNodeRole.fromWire(event['role']);
     survivalMode = localRole == MeshNodeRole.phoneBeacon;
     batteryLevel = (event['batteryLevel'] as num?)?.toInt() ?? batteryLevel;
+    powerProfile = MeshPowerProfile.fromWire(event['powerProfile']);
     adaptivePowerSaving =
-        event['adaptivePowerSaving'] as bool? ?? adaptivePowerSaving;
+        event['adaptivePowerSaving'] as bool? ?? powerProfile.savesPower;
     _applyRadarConsent(event);
   }
 

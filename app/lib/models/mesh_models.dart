@@ -20,6 +20,34 @@ enum MeshNodeRole {
   bool get canChat => this == MeshNodeRole.phoneRelay;
 }
 
+bool isDefaultMeshNickname(String value) =>
+    RegExp(r'^SOS-[0-9a-fA-F]{4}$').hasMatch(value.trim());
+
+enum MeshPowerProfile {
+  performance('performance'),
+  balanced('balanced'),
+  powerSaver('powerSaver'),
+  critical('critical'),
+  survival('survival');
+
+  const MeshPowerProfile(this.wireName);
+
+  final String wireName;
+
+  static MeshPowerProfile fromWire(Object? value) {
+    return switch (value) {
+      'performance' => MeshPowerProfile.performance,
+      'powerSaver' => MeshPowerProfile.powerSaver,
+      'critical' => MeshPowerProfile.critical,
+      'survival' => MeshPowerProfile.survival,
+      _ => MeshPowerProfile.balanced,
+    };
+  }
+
+  bool get savesPower =>
+      this != MeshPowerProfile.performance && this != MeshPowerProfile.balanced;
+}
+
 enum CheckInStatus {
   ok('OK'),
   needsHelp('HELP'),

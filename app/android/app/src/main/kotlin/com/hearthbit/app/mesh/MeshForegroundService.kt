@@ -15,6 +15,7 @@ import android.content.pm.ServiceInfo
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.hearthbit.app.MainActivity
@@ -23,18 +24,42 @@ import com.hearthbit.app.R
 class MeshForegroundService : Service() {
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
-            val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+            val battery = if (intent?.action == Intent.ACTION_BATTERY_CHANGED) {
+                intent
+            } else {
+                registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            }
+            val level = battery?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = battery?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
             if (level >= 0 && scale > 0) {
+                val status = battery?.getIntExtra(
+                    BatteryManager.EXTRA_STATUS,
+                    BatteryManager.BATTERY_STATUS_UNKNOWN,
+                ) ?: BatteryManager.BATTERY_STATUS_UNKNOWN
+                val charging =
+                    status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                        status == BatteryManager.BATTERY_STATUS_FULL
+                val screenOn = getSystemService(PowerManager::class.java)?.isInteractive != false
                 MeshRuntime.engine(this@MeshForegroundService)
-                    .updateBatteryLevel(level * 100 / scale)
+                    .updatePowerState(
+                        percent = level * 100 / scale,
+                        isCharging = charging,
+                        isScreenOn = screenOn,
+                    )
             }
         }
     }
 
     override fun onCreate() {
         super.onCreate()
-        registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        registerReceiver(
+            batteryReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_BATTERY_CHANGED)
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+            },
+        )
         createChannel()
         if (Build.VERSION.SDK_INT >= 29) {
             startForeground(NOTIFICATION_ID, notification(), foregroundServiceTypes())

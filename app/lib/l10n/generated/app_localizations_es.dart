@@ -27,6 +27,9 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get statusBannerYou => 'Tú';
+
+  @override
   String get statusStarting => 'Iniciando malla…';
 
   @override
@@ -742,6 +745,14 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String genericPresenceSummary(int count, int rssi) {
+    return '$count señales Bluetooth cercanas · más fuerte $rssi dBm';
+  }
+
+  @override
+  String get genericPresenceExpand => 'Mostrar detalles de las señales';
+
+  @override
   String get nodeModeTooltip => 'Modo del nodo';
 
   @override
@@ -828,6 +839,9 @@ class AppLocalizationsEs extends AppLocalizations {
       'Permite la ubicación en segundo plano y excluye HearthBit de las restricciones de batería para mantener actualizado el GPS del SOS.';
 
   @override
+  String get onboardingNicknameLabel => 'Tu nombre visible (opcional)';
+
+  @override
   String get onboardingNext => 'SIGUIENTE';
 
   @override
@@ -872,12 +886,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String meshHealthRelays(int count) {
-    return '$count relays';
+    return '$count teléfonos retransmitiendo';
   }
 
   @override
   String meshHealthAnchors(int count) {
-    return '$count anclas de datos';
+    return '$count puntos de guardado de mensajes';
   }
 
   @override
@@ -887,11 +901,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get meshHealthAnchorReady =>
-      'Hay un ancla de datos persistente cerca.';
+      'Hay un punto de guardado de mensajes cerca.';
 
   @override
   String get meshHealthNoAnchor =>
-      'No se ve ningún ancla de datos persistente.';
+      'No hay un punto de guardado de mensajes cercano.';
 
   @override
   String get adaptivePowerTitle => 'Batería adaptativa';
@@ -902,6 +916,22 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get adaptivePowerSaving =>
       'Ahorro activo: escaneo en intervalos cortos';
+
+  @override
+  String get powerProfilePerformance => 'Rendimiento: detección rápida';
+
+  @override
+  String get powerProfileBalanced =>
+      'Equilibrado: cobertura completa de la malla';
+
+  @override
+  String get powerProfilePowerSaver => 'Ahorro: escaneo por intervalos';
+
+  @override
+  String get powerProfileCritical => 'Crítico: conexiones y escaneo mínimos';
+
+  @override
+  String get powerProfileSurvival => 'Supervivencia: solo baliza SOS';
 
   @override
   String get survivalModeTitle => 'Modo supervivencia';
