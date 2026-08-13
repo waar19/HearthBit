@@ -664,6 +664,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get nearbyPeopleTitle => 'Personas cercanas';
 
   @override
+  String get peerRoleInfraRelay => 'Relay de infraestructura';
+
+  @override
+  String get peerRoleStorageAnchor => 'Ancla de almacenamiento de mensajes';
+
+  @override
+  String get peerLongRangeTrunkActive => 'Troncal de largo alcance activo';
+
+  @override
   String get peerOnline => 'En línea';
 
   @override
@@ -950,6 +959,11 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String meshHealthAnchors(int count) {
     return '$count puntos de guardado de mensajes';
+  }
+
+  @override
+  String meshHealthTrunks(int count) {
+    return '$count troncales de largo alcance activos';
   }
 
   @override

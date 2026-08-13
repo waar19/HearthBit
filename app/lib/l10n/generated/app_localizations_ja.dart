@@ -643,6 +643,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get nearbyPeopleTitle => '近くの人';
 
   @override
+  String get peerRoleInfraRelay => 'Infrastructure relay';
+
+  @override
+  String get peerRoleStorageAnchor => 'Message storage anchor';
+
+  @override
+  String get peerLongRangeTrunkActive => 'Long-range trunk active';
+
+  @override
   String get peerOnline => 'オンライン';
 
   @override
@@ -915,6 +924,11 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String meshHealthAnchors(int count) {
     return 'メッセージ保存地点 $count 台';
+  }
+
+  @override
+  String meshHealthTrunks(int count) {
+    return '$count active long-range trunks';
   }
 
   @override

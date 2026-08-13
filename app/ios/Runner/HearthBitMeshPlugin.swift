@@ -1808,6 +1808,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         isInfrastructure: announcement.isInfrastructure ||
           (peers[senderID]?.isInfrastructure ?? false),
         role: peers[senderID]?.role ?? .phoneRelay,
+        hasLongRangeTrunk: peers[senderID]?.hasLongRangeTrunk ?? false,
         lastSeen: Date()
       )
       latestAnnouncementTimestampByPeer[senderID] = max(
@@ -1917,11 +1918,12 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func processNodeCapability(_ packet: IOSMeshPacket, senderID: String) {
     guard
       var peer = peers[senderID],
-      let role = IOSMeshNodeRole.decodeCapability(packet.payload),
+      let capability = IOSMeshNodeRole.decodeCapability(packet.payload),
       IOSMeshIdentity.verify(packet, key: peer.signingPublicKey)
     else { return }
-    peer.role = role
-    peer.isInfrastructure = role.isInfrastructure || peer.isInfrastructure
+    peer.role = capability.role
+    peer.hasLongRangeTrunk = capability.hasLongRangeTrunk
+    peer.isInfrastructure = capability.role.isInfrastructure || peer.isInfrastructure
     peer.lastSeen = Date()
     peers[senderID] = peer
     emit(["type": "peers", "peers": peerMaps()])
@@ -2401,6 +2403,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         "signingPublicKey": FlutterStandardTypedData(bytes: $0.signingPublicKey),
         "supportsTransfers": $0.supportsTransfers,
         "role": $0.role.rawValue,
+        "hasLongRangeTrunk": $0.hasLongRangeTrunk,
         "radarAllowedUntil": consent?.expiresAt ?? 0,
         "radarConsentSource": consent?.source ?? "",
       ]
@@ -3026,6 +3029,7 @@ enum IOSMeshNodeRole: String, CaseIterable {
 
   private static let defaultsKey = "hearthbit.node_role"
   private static let capabilityVersion: UInt8 = 1
+  static let longRangeTrunkFlag: UInt8 = 0x10
 
   var code: UInt8 {
     switch self {
@@ -3057,11 +3061,16 @@ enum IOSMeshNodeRole: String, CaseIterable {
   }
 
   var capabilityPayload: Data {
+    capabilityPayload(hasLongRangeTrunk: false)
+  }
+
+  func capabilityPayload(hasLongRangeTrunk: Bool) -> Data {
     var flags: UInt8 = 0
     if relaysPackets { flags |= 0x01 }
     if canChat { flags |= 0x02 }
     if storesDirectedPackets { flags |= 0x04 }
     if self == .phoneBeacon { flags |= 0x08 }
+    if hasLongRangeTrunk { flags |= Self.longRangeTrunkFlag }
     return Data([Self.capabilityVersion, code, flags])
   }
 
@@ -3077,15 +3086,26 @@ enum IOSMeshNodeRole: String, CaseIterable {
     return role
   }
 
-  static func decodeCapability(_ payload: Data) -> IOSMeshNodeRole? {
+  static func decodeCapability(_ payload: Data) -> IOSNodeCapability? {
     guard payload.count == 3, payload[0] == capabilityVersion else { return nil }
+    let role: IOSMeshNodeRole
     switch payload[1] {
-    case 1: return .phoneRelay
-    case 2: return .phoneBeacon
-    case 3: return .infraRelay
-    case 4: return .infraDataAnchor
+    case 1: role = .phoneRelay
+    case 2: role = .phoneBeacon
+    case 3: role = .infraRelay
+    case 4: role = .infraDataAnchor
     default: return nil
     }
+    return IOSNodeCapability(role: role, flags: payload[2])
+  }
+}
+
+struct IOSNodeCapability {
+  let role: IOSMeshNodeRole
+  let flags: UInt8
+
+  var hasLongRangeTrunk: Bool {
+    flags & IOSMeshNodeRole.longRangeTrunkFlag != 0
   }
 }
 
@@ -3294,6 +3314,7 @@ private struct IOSMeshPeer {
   var supportsTransfers: Bool
   var isInfrastructure: Bool
   var role: IOSMeshNodeRole
+  var hasLongRangeTrunk: Bool
   var lastSeen: Date
 }
 

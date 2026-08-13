@@ -204,10 +204,17 @@ Flags informativos:
 | 1 | `0x02` | puede originar chat |
 | 2 | `0x04` | conserva paquetes dirigidos |
 | 3 | `0x08` | presencia solamente |
+| 4 | `0x10` | `LONG_RANGE_TRUNK`: troncal de largo alcance operativo |
 
 La política se deriva del `role`; los flags sirven para diagnóstico y futura
 validación. Un receptor **SHOULD** comprobar que coincidan y **MUST NOT**
 conceder más privilegios por flags inconsistentes.
+
+`LONG_RANGE_TRUNK` significa únicamente que el emisor declara operativo su
+enlace troncal en ese momento. **MUST NOT** inferirse del nickname, del rol ni
+de un indicador de infraestructura, y **MUST NOT** conceder relay,
+store-forward, chat, autorización o confianza adicional. Si falta el bit, el
+receptor conserva solo el rol anunciado y no presenta una troncal visible.
 
 ### 7.2 Admisión y almacenamiento
 

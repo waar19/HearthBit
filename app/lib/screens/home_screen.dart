@@ -555,10 +555,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           child: Text(_avatarLetter(peer.nickname)),
                         ),
                         title: Text(peer.nickname),
-                        subtitle: Text(
-                          message.content,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              message.content,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            _peerCapabilityBadges(peer),
+                          ],
                         ),
                         trailing: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -598,9 +604,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             (peer) => ListTile(
               leading: CircleAvatar(child: Text(_avatarLetter(peer.nickname))),
               title: Text(peer.nickname),
-              subtitle: Text(
-                '${peer.id.substring(0, 8)} · '
-                '${peer.role.canChat ? (peer.secure ? context.l10n.peerSecure : context.l10n.peerTapToEncrypt) : context.l10n.genericPresenceNoChat}',
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${peer.id.substring(0, 8)} · '
+                    '${peer.role.canChat ? (peer.secure ? context.l10n.peerSecure : context.l10n.peerTapToEncrypt) : context.l10n.genericPresenceNoChat}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  _peerCapabilityBadges(peer),
+                ],
               ),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -666,6 +680,50 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
         ],
       ],
+    );
+  }
+
+  Widget _peerCapabilityBadges(MeshPeer peer) {
+    final badges = <({IconData icon, String label})>[
+      if (peer.role == MeshNodeRole.infraRelay)
+        (icon: Icons.router_outlined, label: context.l10n.peerRoleInfraRelay),
+      if (peer.role == MeshNodeRole.infraDataAnchor)
+        (
+          icon: Icons.inventory_2_outlined,
+          label: context.l10n.peerRoleStorageAnchor,
+        ),
+      if (peer.hasLongRangeTrunk)
+        (
+          icon: Icons.settings_input_antenna,
+          label: context.l10n.peerLongRangeTrunkActive,
+        ),
+    ];
+    if (badges.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: LayoutBuilder(
+        builder: (context, constraints) => Wrap(
+          spacing: 4,
+          runSpacing: 4,
+          children: badges
+              .map(
+                (badge) => ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                  child: Chip(
+                    avatar: Icon(badge.icon, size: 16),
+                    label: Text(
+                      badge.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              )
+              .toList(growable: false),
+        ),
+      ),
     );
   }
 

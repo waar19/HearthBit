@@ -1203,6 +1203,24 @@ abstract class AppLocalizations {
   /// **'Nearby people'**
   String get nearbyPeopleTitle;
 
+  /// No description provided for @peerRoleInfraRelay.
+  ///
+  /// In en, this message translates to:
+  /// **'Infrastructure relay'**
+  String get peerRoleInfraRelay;
+
+  /// No description provided for @peerRoleStorageAnchor.
+  ///
+  /// In en, this message translates to:
+  /// **'Message storage anchor'**
+  String get peerRoleStorageAnchor;
+
+  /// No description provided for @peerLongRangeTrunkActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Long-range trunk active'**
+  String get peerLongRangeTrunkActive;
+
   /// No description provided for @peerOnline.
   ///
   /// In en, this message translates to:
@@ -1688,6 +1706,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} message storage points'**
   String meshHealthAnchors(int count);
+
+  /// No description provided for @meshHealthTrunks.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} active long-range trunks'**
+  String meshHealthTrunks(int count);
 
   /// No description provided for @meshHealthSignals.
   ///

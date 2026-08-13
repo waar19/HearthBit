@@ -53,6 +53,27 @@ void main() {
     expect(MeshNodeRole.infraRelay.canChat, isFalse);
   });
 
+  test('solo expone trunk largo cuando llega el flag nativo', () {
+    final advertised = MeshPeer.fromMap({
+      'id': '0123456789abcdef',
+      'nickname': 'Bitle',
+      'lastSeen': 1234,
+      'secure': false,
+      'role': 'INFRA_RELAY',
+      'hasLongRangeTrunk': true,
+    });
+    final roleOnly = MeshPeer.fromMap({
+      'id': 'fedcba9876543210',
+      'nickname': 'LoRa Anchor',
+      'lastSeen': 1234,
+      'secure': false,
+      'role': 'INFRA_RELAY',
+    });
+
+    expect(advertised.hasLongRangeTrunk, isTrue);
+    expect(roleOnly.hasLongRangeTrunk, isFalse);
+  });
+
   test('presencia BLE genérica queda marcada sin chat', () {
     final presence = GenericBlePresence.fromMap({
       'id': 'aabbccddeeff001122334455',

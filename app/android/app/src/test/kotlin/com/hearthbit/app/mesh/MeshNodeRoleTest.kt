@@ -17,7 +17,25 @@ class MeshNodeRoleTest {
             assertNotNull(decoded)
             assertEquals(role, decoded!!.role)
             assertEquals(role.capabilityFlags, decoded.flags)
+            assertFalse(decoded.hasLongRangeTrunk)
         }
+    }
+
+    @Test
+    fun `trunk de largo alcance usa bit 4 sin cambiar rol ni longitud`() {
+        val encoded = NodeCapabilityProtocol.encode(
+            MeshNodeRole.INFRA_RELAY,
+            hasLongRangeTrunk = true,
+        )
+        val decoded = NodeCapabilityProtocol.decode(encoded)
+
+        assertEquals(3, encoded.size)
+        assertEquals(
+            MeshNodeRole.INFRA_RELAY.capabilityFlags.toInt() or 0x10,
+            encoded[2].toInt(),
+        )
+        assertEquals(MeshNodeRole.INFRA_RELAY, decoded?.role)
+        assertTrue(decoded?.hasLongRangeTrunk == true)
     }
 
     @Test

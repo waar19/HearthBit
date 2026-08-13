@@ -283,6 +283,23 @@ class RunnerTests: XCTestCase {
     XCTAssertTrue(IOSMeshNodeRole.phoneRelay.canChat)
   }
 
+  func testLongRangeTrunkCapabilityUsesBitFourWithoutChangingRole() throws {
+    let original = IOSMeshNodeRole.infraRelay.capabilityPayload
+    let withTrunk = IOSMeshNodeRole.infraRelay.capabilityPayload(
+      hasLongRangeTrunk: true
+    )
+    let decoded = try XCTUnwrap(IOSMeshNodeRole.decodeCapability(withTrunk))
+
+    XCTAssertEqual(original.count, 3)
+    XCTAssertEqual(withTrunk.count, 3)
+    XCTAssertEqual(original[2] | 0x10, withTrunk[2])
+    XCTAssertEqual(decoded.role, .infraRelay)
+    XCTAssertTrue(decoded.hasLongRangeTrunk)
+    XCTAssertFalse(
+      try XCTUnwrap(IOSMeshNodeRole.decodeCapability(original)).hasLongRangeTrunk
+    )
+  }
+
   func testBeaconControlUsesDirectedSignedType26WithStrictFiveMinutePayload() throws {
     let now: UInt64 = 1_000_000
     let nonce = Data((0..<IOSBeaconControlProtocol.nonceSize).map { UInt8($0) })
@@ -450,7 +467,9 @@ final class ConformanceFixtureTests: XCTestCase {
 
     XCTAssertEqual(fixtures.bytes("extension.hbt_capability.v1"), Data([0x01]))
     XCTAssertEqual(
-      IOSMeshNodeRole.decodeCapability(fixtures.bytes("extension.node_capability.anchor")),
+      IOSMeshNodeRole.decodeCapability(
+        fixtures.bytes("extension.node_capability.anchor")
+      )?.role,
       .infraDataAnchor
     )
     let radar = try XCTUnwrap(

@@ -15,6 +15,42 @@ En Colombia, verifique con la ANE la frecuencia y potencia permitidas antes de
 activar LoRa. El perfil Bitle documenta 915 MHz; no asuma que una configuración
 de otro país es legal localmente.
 
+## D1-LORA-01 — dos islas BLE (guion no ejecutado)
+
+Este caso es una especificación reproducible pendiente de hardware; no afirma
+que el troncal haya sido probado. Requiere dos kits Seeed XIAO ESP32-S3 +
+Wio-SX1262, cada uno con antena adecuada conectada antes de energizar, y dos
+teléfonos HearthBit, `HB-A` y `HB-B`. Los nodos se denominan `LR-A` y `LR-B`.
+
+La topología objetivo es
+`HB-A ↔BLE↔ LR-A ↔LoRa↔ LR-B ↔BLE↔ HB-B`. Las dos islas BLE deben aislarse de
+modo que los teléfonos no se descubran ni entreguen mensajes directamente. Con
+ambos SX1262 deshabilitados o con uno de los nodos apagado, un marcador de
+control no debe llegar. Sin cambiar distancias ni obstáculos, se habilita el
+troncal, se comprueba en cada consola `trunk up`, y se envía un marcador único
+de ida y otro de vuelta.
+
+La app solo debe mostrar «troncal de largo alcance activo» después de recibir
+un `NODE_CAPABILITY` autenticado con `LONG_RANGE_TRUNK` (`bit 4`, `0x10`). El
+nombre Bitle, el rol `INFRA_RELAY`/`INFRA_DATA_ANCHOR` o el indicador histórico
+de infraestructura no prueban que exista una radio operativa. Un firmware que
+no emita ese bit puede transportar el experimento, pero la UI debe mostrar
+únicamente el rol conocido y la evidencia queda incompleta para validar la
+visibilidad de capacidad.
+
+Conserve por separado los logs serie saneados de ambos nodos y los logs de app,
+incluyendo horas UTC, marcadores, `trunk TX`, `trunk RX packet`, RSSI/SNR,
+recepción visual y los dos controles negativos. `PASS` exige entrega exacta y
+única en ambos sentidos solo con el troncal activo, además del flag `0x10`
+visible. Entrega durante un control negativo, una dirección ausente,
+duplicados, rol/capacidad inferidos o logs insuficientes es `FAIL` o `BLOCKED`
+según corresponda. El procedimiento completo está en `docs/field-test.md`.
+
+**Antes de cualquier transmisión**, valide con la ANE Colombia la frecuencia,
+potencia, antena, ciclo de trabajo y demás condiciones aplicables al lugar y a
+la fecha de la prueba. Si no existe confirmación normativa, mantenga las radios
+sin transmitir y registre el caso como `BLOCKED`.
+
 ## Preparación
 
 ```powershell

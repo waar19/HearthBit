@@ -45,14 +45,24 @@ internal object MeshStartupRolePolicy {
 
 internal object NodeCapabilityProtocol {
     const val VERSION: Byte = 0x01
+    const val FLAG_LONG_RANGE_TRUNK = 0x10
 
     data class Capability(
         val role: MeshNodeRole,
         val flags: Byte,
-    )
+    ) {
+        val hasLongRangeTrunk: Boolean
+            get() = flags.toInt() and FLAG_LONG_RANGE_TRUNK != 0
+    }
 
-    fun encode(role: MeshNodeRole): ByteArray =
-        byteArrayOf(VERSION, role.code, role.capabilityFlags)
+    fun encode(
+        role: MeshNodeRole,
+        hasLongRangeTrunk: Boolean = false,
+    ): ByteArray {
+        val flags = role.capabilityFlags.toInt() or
+            if (hasLongRangeTrunk) FLAG_LONG_RANGE_TRUNK else 0
+        return byteArrayOf(VERSION, role.code, flags.toByte())
+    }
 
     fun decode(payload: ByteArray): Capability? {
         if (payload.size != 3 || payload[0] != VERSION) return null

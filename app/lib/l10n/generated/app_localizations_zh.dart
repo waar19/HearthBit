@@ -630,6 +630,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get nearbyPeopleTitle => '附近的人';
 
   @override
+  String get peerRoleInfraRelay => 'Infrastructure relay';
+
+  @override
+  String get peerRoleStorageAnchor => 'Message storage anchor';
+
+  @override
+  String get peerLongRangeTrunkActive => 'Long-range trunk active';
+
+  @override
   String get peerOnline => '在线';
 
   @override
@@ -894,6 +903,11 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String meshHealthAnchors(int count) {
     return '$count 个消息存储点';
+  }
+
+  @override
+  String meshHealthTrunks(int count) {
+    return '$count active long-range trunks';
   }
 
   @override

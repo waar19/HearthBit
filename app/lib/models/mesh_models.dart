@@ -258,6 +258,7 @@ class MeshPeer {
     required this.secure,
     this.supportsTransfers = false,
     this.role = MeshNodeRole.phoneRelay,
+    this.hasLongRangeTrunk = false,
     this.radarAllowedUntil,
     this.radarConsentSource,
     this.signingPublicKey,
@@ -271,6 +272,7 @@ class MeshPeer {
       secure: map['secure'] as bool? ?? false,
       supportsTransfers: map['supportsTransfers'] as bool? ?? false,
       role: MeshNodeRole.fromWire(map['role']),
+      hasLongRangeTrunk: map['hasLongRangeTrunk'] as bool? ?? false,
       radarAllowedUntil: switch (map['radarAllowedUntil']) {
         final int value when value > 0 => DateTime.fromMillisecondsSinceEpoch(
           value,
@@ -294,6 +296,7 @@ class MeshPeer {
   final bool secure;
   final bool supportsTransfers;
   final MeshNodeRole role;
+  final bool hasLongRangeTrunk;
   final DateTime? radarAllowedUntil;
   final String? radarConsentSource;
 

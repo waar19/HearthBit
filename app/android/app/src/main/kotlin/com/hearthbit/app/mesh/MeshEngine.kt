@@ -179,6 +179,7 @@ internal class MeshEngine(
         val noisePublicKey: ByteArray,
         var supportsTransfers: Boolean,
         var role: MeshNodeRole = MeshNodeRole.PHONE_RELAY,
+        var hasLongRangeTrunk: Boolean = false,
         var lastSeen: Long = System.currentTimeMillis(),
     )
 
@@ -784,6 +785,7 @@ internal class MeshEngine(
                 "signingPublicKey" to it.signingPublicKey,
                 "supportsTransfers" to it.supportsTransfers,
                 "role" to it.role.wireName,
+                "hasLongRangeTrunk" to it.hasLongRangeTrunk,
                 "radarAllowedUntil" to (consent?.expiresAt ?: 0L),
                 "radarConsentSource" to consent?.source,
             )
@@ -1649,11 +1651,8 @@ internal class MeshEngine(
             addressToPeer[sourceAddress] = senderHex
         }
         val previouslySupported = peers[senderHex]?.supportsTransfers == true
-        val previousRole = peers[senderHex]?.role ?: if (announcement.isInfrastructure) {
-            MeshNodeRole.INFRA_DATA_ANCHOR
-        } else {
-            MeshNodeRole.PHONE_RELAY
-        }
+        val previousRole = peers[senderHex]?.role ?: MeshNodeRole.PHONE_RELAY
+        val previousLongRangeTrunk = peers[senderHex]?.hasLongRangeTrunk == true
         peers[senderHex] = Peer(
             senderHex,
             announcement.nickname,
@@ -1661,6 +1660,7 @@ internal class MeshEngine(
             announcement.noisePublicKey,
             announcement.supportsTransfers || previouslySupported,
             previousRole,
+            previousLongRangeTrunk,
         )
         latestAnnouncementTimestampByPeer.merge(senderHex, packet.timestamp) { current, candidate ->
             maxOf(current, candidate)
@@ -1689,6 +1689,7 @@ internal class MeshEngine(
         val capability = NodeCapabilityProtocol.decode(packet.payload) ?: return
         if (!identity.verify(packet, peer.signingPublicKey)) return
         peer.role = capability.role
+        peer.hasLongRangeTrunk = capability.hasLongRangeTrunk
         peer.lastSeen = System.currentTimeMillis()
         emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
     }

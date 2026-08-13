@@ -24,11 +24,13 @@ class MeshHealthCard extends StatelessWidget {
     final anchors = peers
         .where((peer) => peer.role == MeshNodeRole.infraDataAnchor)
         .length;
+    final trunks = peers.where((peer) => peer.hasLongRangeTrunk).length;
     final signals = controller.genericPresences.length;
     final summary = [
       context.l10n.meshHealthDirect(peers.length),
       context.l10n.meshHealthRelays(relays),
       context.l10n.meshHealthAnchors(anchors),
+      context.l10n.meshHealthTrunks(trunks),
       context.l10n.meshHealthSignals(signals),
     ].join(', ');
 
@@ -76,6 +78,7 @@ class MeshHealthCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(context.l10n.meshHealthDirect(peers.length)),
                   Text(context.l10n.meshHealthRelays(relays)),
+                  Text(context.l10n.meshHealthTrunks(trunks)),
                   Text(context.l10n.meshHealthSignals(signals)),
                   const SizedBox(height: 6),
                   Text(
