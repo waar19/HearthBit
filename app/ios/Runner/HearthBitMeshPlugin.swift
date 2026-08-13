@@ -101,6 +101,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var decryptFailures: [String: Int] = [:]
   private var lastAutoHandshake: [String: Date] = [:]
   private var lastNoisePeerActivity: [String: Date] = [:]
+  private var latestAnnouncementTimestampByPeer: [String: UInt64] = [:]
   private var handshakeRestartAttempts: [String: Int] = [:]
   private var autoHandshakeTokens: [String: UUID] = [:]
   private var activeHandshakeTimeoutTokens: [String: UUID] = [:]
@@ -486,6 +487,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     decryptFailures.removeAll()
     lastAutoHandshake.removeAll()
     lastNoisePeerActivity.removeAll()
+    latestAnnouncementTimestampByPeer.removeAll()
     handshakeRestartAttempts.removeAll()
     autoHandshakeTokens.removeAll()
     activeHandshakeTimeoutTokens.removeAll()
@@ -578,6 +580,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     decryptFailures.removeAll()
     lastAutoHandshake.removeAll()
     lastNoisePeerActivity.removeAll()
+    latestAnnouncementTimestampByPeer.removeAll()
     handshakeRestartAttempts.removeAll()
     autoHandshakeTokens.removeAll()
     activeHandshakeTimeoutTokens.removeAll()
@@ -1522,6 +1525,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         role: peers[senderID]?.role ?? .phoneRelay,
         lastSeen: Date()
       )
+      latestAnnouncementTimestampByPeer[senderID] = max(
+        latestAnnouncementTimestampByPeer[senderID] ?? 0,
+        packet.timestamp
+      )
       rememberSyncPacket(packet)
       emit(["type": "peers", "peers": peerMaps()])
       if let source {
@@ -1654,6 +1661,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func processHandshake(_ packet: IOSMeshPacket, senderID: String) {
+    guard IOSNoiseReplayPolicy.isCurrent(
+      packetTimestamp: packet.timestamp,
+      latestAnnouncementTimestamp: latestAnnouncementTimestampByPeer[senderID]
+    ) else { return }
     lastNoisePeerActivity[senderID] = Date()
     handshakeRestartAttempts.removeValue(forKey: senderID)
     let isMessageOne = packet.payload.count == 32
@@ -1775,6 +1786,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func processEncrypted(_ packet: IOSMeshPacket, senderID: String) {
+    guard IOSNoiseReplayPolicy.isCurrent(
+      packetTimestamp: packet.timestamp,
+      latestAnnouncementTimestamp: latestAnnouncementTimestampByPeer[senderID]
+    ) else { return }
     lastNoisePeerActivity[senderID] = Date()
     guard let session = sessions[senderID], session.established else {
       securePeerIDs.insert(senderID)
@@ -2531,6 +2546,10 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
       activePeripheralManager === peripheral
     else { return }
     guard characteristic.uuid == Self.characteristicUUID else { return }
+    peripheralNotifyQueues.removeValue(forKey: central.identifier)
+    if let peerID = peripheralPeers[central.identifier] {
+      invalidateNoiseState(peerID: peerID)
+    }
     sendSubscriptionAnnouncement(to: central)
   }
 
@@ -3926,12 +3945,28 @@ final class IOSMeshFragmentReassembler {
   }
 }
 
+enum IOSNoiseReplayPolicy {
+  static func isCurrent(
+    packetTimestamp: UInt64,
+    latestAnnouncementTimestamp: UInt64?
+  ) -> Bool {
+    guard let latestAnnouncementTimestamp else { return true }
+    return packetTimestamp >= latestAnnouncementTimestamp
+  }
+
+  static func isStoreForwardSafe(_ packet: IOSMeshPacket) -> Bool {
+    packet.type != IOSMeshProtocol.noiseHandshake &&
+      packet.type != IOSMeshProtocol.noiseEncrypted
+  }
+}
+
 private final class IOSStoreForward {
   private let key = "hearthbit.store_forward"
   private let lifetime: TimeInterval = 12 * 60 * 60
   private let maximum = 100
 
   func put(_ packet: IOSMeshPacket) {
+    guard IOSNoiseReplayPolicy.isStoreForwardSafe(packet) else { return }
     let now = Date().timeIntervalSince1970
     var entries = validEntries(now: now)
     let encoded = IOSMeshProtocol.encode(packet, padded: false).base64EncodedString()
@@ -3964,7 +3999,10 @@ private final class IOSStoreForward {
       guard
         let expiry = $0["expiry"] as? TimeInterval,
         let encoded = $0["encoded"] as? String,
-        expiry > now
+        expiry > now,
+        let data = Data(base64Encoded: encoded),
+        let packet = IOSMeshProtocol.decode(data),
+        IOSNoiseReplayPolicy.isStoreForwardSafe(packet)
       else { return nil }
       return (expiry, encoded)
     }.sorted { $0.expiry < $1.expiry }

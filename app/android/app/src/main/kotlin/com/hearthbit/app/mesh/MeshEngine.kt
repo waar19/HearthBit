@@ -59,6 +59,7 @@ internal class MeshEngine(
         )
     }
     private val lastHandshakeAttemptByPeer = ConcurrentHashMap<String, Long>()
+    private val latestAnnouncementTimestampByPeer = ConcurrentHashMap<String, Long>()
     private val seen = Collections.synchronizedMap(
         object : LinkedHashMap<String, Long>(512, 0.75f, true) {
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean =
@@ -383,6 +384,7 @@ internal class MeshEngine(
         noiseSessions.close()
         noiseFailureTracker.clear()
         lastHandshakeAttemptByPeer.clear()
+        latestAnnouncementTimestampByPeer.clear()
         meshScanRunning = false
         meshScanStartedAt = 0L
         lastMeshScanResultAt = 0L
@@ -508,6 +510,7 @@ internal class MeshEngine(
         noiseSessions.close()
         noiseFailureTracker.clear()
         lastHandshakeAttemptByPeer.clear()
+        latestAnnouncementTimestampByPeer.clear()
         rescheduleKeepAlive()
         restartAdvertising()
     }
@@ -1420,6 +1423,9 @@ internal class MeshEngine(
             announcement.supportsTransfers || previouslySupported,
             previousRole,
         )
+        latestAnnouncementTimestampByPeer.merge(senderHex, packet.timestamp) { current, candidate ->
+            maxOf(current, candidate)
+        }
         rememberSyncPacket(packet)
         emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
         notifyNotificationObserver()
@@ -1504,6 +1510,14 @@ internal class MeshEngine(
     }
 
     private fun processHandshake(packet: MeshProtocol.Packet, senderHex: String) {
+        if (!NoiseReplayPolicy.isCurrent(
+                packet.timestamp,
+                latestAnnouncementTimestampByPeer[senderHex],
+            )
+        ) {
+            Log.i(LOG_TAG, "Ignoring stale Noise handshake from ${senderHex.take(8)}")
+            return
+        }
         val result = runCatching {
             noiseSessions.process(senderHex, packet.senderId, packet.payload)
         }.getOrElse { error ->
@@ -1522,6 +1536,7 @@ internal class MeshEngine(
             sendNoisePacket(MeshProtocol.TYPE_NOISE_HANDSHAKE, packet.senderId, result.response)
         }
         if (result.establishedNow) {
+            Log.i(LOG_TAG, "Noise session established with ${senderHex.take(8)}")
             rememberSessionPeer(senderHex)
             noiseFailureTracker.recordSuccess(senderHex)
             lastHandshakeAttemptByPeer.remove(senderHex)
@@ -1539,6 +1554,14 @@ internal class MeshEngine(
     }
 
     private fun processEncrypted(packet: MeshProtocol.Packet, senderHex: String) {
+        if (!NoiseReplayPolicy.isCurrent(
+                packet.timestamp,
+                latestAnnouncementTimestampByPeer[senderHex],
+            )
+        ) {
+            Log.i(LOG_TAG, "Ignoring stale Noise ciphertext from ${senderHex.take(8)}")
+            return
+        }
         val hadEstablishedSession = noiseSessions.isEstablished(senderHex)
         if (!hadEstablishedSession) {
             noiseSessions.cleanupStaleHandshakes()
@@ -1578,6 +1601,7 @@ internal class MeshEngine(
         if (plaintext[0] != MeshProtocol.NOISE_PRIVATE_MESSAGE) return
         val message = MeshProtocol.decodePrivateMessage(plaintext.copyOfRange(1, plaintext.size))
             ?: return
+        Log.i(LOG_TAG, "Private message decrypted from ${senderHex.take(8)}")
         emitMessage(
             message.id,
             peers[senderHex]?.nickname ?: senderHex.take(8),

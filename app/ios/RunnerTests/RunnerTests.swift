@@ -431,6 +431,57 @@ final class ConformanceFixtureTests: XCTestCase {
       "5156f7de89ec9f6a3429630d90f709b68f6fd7fd"
     )
   }
+
+  func testNoiseReplayPolicyRejectsPreviousTransportEpoch() {
+    XCTAssertTrue(
+      IOSNoiseReplayPolicy.isCurrent(
+        packetTimestamp: 100,
+        latestAnnouncementTimestamp: nil
+      )
+    )
+    XCTAssertFalse(
+      IOSNoiseReplayPolicy.isCurrent(
+        packetTimestamp: 99,
+        latestAnnouncementTimestamp: 100
+      )
+    )
+    XCTAssertTrue(
+      IOSNoiseReplayPolicy.isCurrent(
+        packetTimestamp: 100,
+        latestAnnouncementTimestamp: 100
+      )
+    )
+  }
+
+  func testStoreForwardNeverPersistsNoiseState() {
+    let handshake = IOSMeshPacket(
+      type: IOSMeshProtocol.noiseHandshake,
+      ttl: 7,
+      timestamp: 100,
+      senderID: sender,
+      recipientID: Data(repeating: 0x22, count: 8),
+      payload: Data(repeating: 0x33, count: 32)
+    )
+    let encrypted = IOSMeshPacket(
+      type: IOSMeshProtocol.noiseEncrypted,
+      ttl: 7,
+      timestamp: 101,
+      senderID: sender,
+      recipientID: Data(repeating: 0x22, count: 8),
+      payload: Data([0x44])
+    )
+    let message = IOSMeshPacket(
+      type: IOSMeshProtocol.message,
+      ttl: 7,
+      timestamp: 102,
+      senderID: sender,
+      payload: Data("rescate".utf8)
+    )
+
+    XCTAssertFalse(IOSNoiseReplayPolicy.isStoreForwardSafe(handshake))
+    XCTAssertFalse(IOSNoiseReplayPolicy.isStoreForwardSafe(encrypted))
+    XCTAssertTrue(IOSNoiseReplayPolicy.isStoreForwardSafe(message))
+  }
 }
 
 private final class ConformanceFixtures {
