@@ -22,6 +22,36 @@ La interoperabilidad HearthBit↔BitChat con hardware real (pasos 2-5) es una
 prueba manual obligatoria antes de declarar compatibilidad física; los tests
 binarios automatizados no la sustituyen.
 
+## Matriz ampliada de mega-red
+
+Ejecute estos casos además de la matriz móvil:
+
+1. **Modo presencia:** con dos HearthBit ya identificados, cambie uno a
+   `PHONE_BEACON`. Confirme que se deshabilitan los compositores y el relay. En
+   Android, compruebe por log que se cierran GATT y los escáneres y que el
+   anuncio se reinicia como no conectable; al volver a `PHONE_RELAY`, chat y
+   GATT deben recuperarse sin borrar identidad ni historial.
+2. **Balizas genéricas:** acerque un TV, asistente o radio BLE no compatible.
+   Debe aparecer como «Presencia detectada, sin chat», desaparecer en unos
+   45 s al apagarlo y cambiar de identificador después de 15 min. Confirme que
+   eventos, SQLite y logs no contienen nombre Bluetooth ni MAC.
+3. **Raspberry Pi/Home Assistant:** coloque el daemon BlueZ entre dos teléfonos
+   sin alcance directo. Verifique un solo reenvío por paquete, decremento TTL,
+   deduplicación tras reiniciar el servicio y entrega store-and-forward dentro
+   de la cuota configurada.
+4. **Android TV:** pruebe primero un equipo con advertising múltiple y luego
+   uno sin soporte. La UI debe distinguir relay dual de modo central degradado;
+   en ambos casos confirme el comportamiento real con tres nodos.
+5. **Android Automotive:** inicie el relay estacionado, salga de la actividad
+   y apague la pantalla. Servicio y advertising deben detenerse. Una unidad OEM
+   solo puede mantenerlo con una señal de ignición autorizada y debe fallar
+   cerrado cuando esa señal sea desconocida.
+6. **Courier:** use un `INFRA_DATA_ANCHOR` directo y repita depósito, expiración,
+   destinatario incorrecto y entrega después de reconexión.
+
+Linux/BlueZ, TV y Automotive requieren hardware real; compilar sus paquetes o
+usar un emulador no demuestra radio dual, alcance ni ejecución prolongada.
+
 ## Reconexión y sincronización GCS
 
 Use dos teléfonos HearthBit y un BitChat oficial:
@@ -89,8 +119,14 @@ correo.
 - Correcciones necesarias para lograrlo: firma canónica con TTL=0 y padding,
   compresión raw-deflate compatible, TLV de capacidades y serialización de
   escrituras GATT.
-- Pendiente de confirmación visual manual: mensaje público en ambos sentidos,
-  Noise DM en ambos sentidos y relé de dos saltos.
+- Confirmación visual manual del build actual: `HB_MEGA_1723` llegó de
+  HearthBit a BitChat y `BITCHAT_MEGA_1725` llegó de BitChat a HearthBit.
+- Tras apagar y reactivar Bluetooth en el iPhone, `HB_RECONNECT_1731` y
+  `BITCHAT_RECONNECT_1732` llegaron en ambos sentidos. El log confirmó
+  `REQUEST_SYNC` con TTL 0, solicitudes salientes y respuestas que reprodujeron
+  uno y dos paquetes ausentes.
+- Pendiente con hardware adicional: Noise DM deliberado en ambos sentidos y
+  relay físico de dos saltos.
 
 ## Matriz de transferencia de archivos
 
