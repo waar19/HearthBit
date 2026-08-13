@@ -1109,17 +1109,38 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
         widget.controller.peerById(widget.peer.id) ??
         widget.controller.knownPeerById(widget.peer.id) ??
         widget.peer;
-    final transferId = await widget.transfers.sendFile(
-      peer: peer,
-      filePath: path,
-      fileName: p.basename(path),
-      mimeType: 'audio/x-hearthbit-voice',
-    );
-    await widget.controller.sendPrivate(
-      peer,
-      '[HB-VOICE|$transferId|$duration]',
-    );
-    _scrollToBottom();
+    setState(() {
+      _sending = true;
+      _sendError = null;
+    });
+    String? transferId;
+    try {
+      transferId = await widget.transfers.sendFile(
+        peer: peer,
+        filePath: path,
+        fileName: p.basename(path),
+        mimeType: TransferController.voiceNoteMimeType,
+      );
+      final result = await widget.controller.sendPrivate(
+        peer,
+        '[HB-VOICE|$transferId|$duration]',
+      );
+      if (!result.accepted) {
+        throw StateError(result.error ?? currentL10n.errorUnknown);
+      }
+      _scrollToBottom();
+    } catch (error) {
+      if (transferId != null) {
+        await widget.transfers.cancel(transferId);
+      }
+      if (mounted) {
+        setState(() => _sendError = error.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _sending = false);
+      }
+    }
   }
 
   Future<void> _sendMessage(MeshPeer peer) async {
@@ -1699,20 +1720,35 @@ class _VoiceNoteContent extends StatelessWidget {
         }
       }
     }
+    final playbackPath = record?.filePath;
+    final player = audioPlayer;
+    final localFileAvailable =
+        playbackPath != null && File(playbackPath).existsSync();
     final ready =
-        record?.state == TransferState.completed &&
-        record?.filePath != null &&
-        File(record!.filePath!).existsSync();
+        localFileAvailable &&
+        (record?.direction == TransferDirection.outgoing ||
+            record?.state == TransferState.completed);
+    final failed =
+        record?.state == TransferState.failed ||
+        record?.state == TransferState.rejected ||
+        record?.state == TransferState.cancelled;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton.filledTonal(
-          tooltip: context.l10n.voicePlay,
-          onPressed: ready && audioPlayer != null
-              ? () => audioPlayer!.play(DeviceFileSource(record!.filePath!))
+          tooltip: failed && !ready
+              ? (record?.error ?? context.l10n.errorUnknown)
+              : context.l10n.voicePlay,
+          onPressed: ready && player != null
+              ? () => player.play(DeviceFileSource(playbackPath))
               : null,
           icon: ready
               ? const Icon(Icons.play_arrow)
+              : failed
+              ? Icon(
+                  Icons.error_outline,
+                  color: Theme.of(context).colorScheme.error,
+                )
               : const SizedBox.square(
                   dimension: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
@@ -1720,6 +1756,17 @@ class _VoiceNoteContent extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         Text('${message.voiceDurationSeconds ?? 0} s'),
+        if (failed && ready) ...[
+          const SizedBox(width: 6),
+          Tooltip(
+            message: record?.error ?? context.l10n.errorUnknown,
+            child: Icon(
+              Icons.error_outline,
+              size: 18,
+              color: Theme.of(context).colorScheme.error,
+            ),
+          ),
+        ],
       ],
     );
   }

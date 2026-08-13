@@ -35,6 +35,13 @@ class TransferController extends ChangeNotifier {
   static const int maxFileBytes = 512 * 1024 * 1024;
   static const Duration offerLifetime = Duration(minutes: 10);
   static const Duration priorityHold = Duration(seconds: 20);
+  static const String voiceNoteMimeType = 'audio/x-hearthbit-voice';
+
+  static bool isInlineVoiceNote({
+    required String mimeType,
+    required int bytes,
+  }) =>
+      mimeType == voiceNoteMimeType && bytes > 0 && bytes <= voiceNoteMaxBytes;
 
   /// Feature flag: Wi-Fi Aware es progresivo y puede desactivarse sin tocar
   /// el resto de transportes. QUIC sobre el data path queda para el futuro.
@@ -277,10 +284,6 @@ class TransferController extends ChangeNotifier {
     _transfers.insert(0, record);
     await _repository.save(record);
     notifyListeners();
-    if (record.mimeType == 'audio/x-hearthbit-voice' &&
-        record.fileSize <= voiceNoteMaxBytes) {
-      await acceptOffer(record.id);
-    }
   }
 
   /// Borrado de emergencia: cancela todo y elimina metadatos y archivos.
@@ -442,6 +445,9 @@ class TransferController extends ChangeNotifier {
     _transfers.insert(0, record);
     await _repository.save(record);
     notifyListeners();
+    if (isInlineVoiceNote(mimeType: record.mimeType, bytes: record.fileSize)) {
+      await acceptOffer(record.id);
+    }
   }
 
   Future<void> _handleAccept(
@@ -926,16 +932,22 @@ class TransferController extends ChangeNotifier {
     Set<TransferTransport> excluding = const {},
   }) {
     final offered = session.offeredTransports;
+    final bleAvailable =
+        offered & TransferProtocol.transportBle != 0 &&
+        record.fileSize <= bleMaxInlineBytes;
+    final preferBle = isInlineVoiceNote(
+      mimeType: record.mimeType,
+      bytes: record.fileSize,
+    );
     final candidates = <TransferTransport>[
+      if (preferBle && bleAvailable) TransferTransport.ble,
       if (offered & TransferProtocol.transportLan != 0) TransferTransport.lan,
       if (offered & TransferProtocol.transportNearby != 0 && nearbySupported)
         TransferTransport.nearby,
       if (offered & TransferProtocol.transportWifiAware != 0 &&
           wifiAwareSupported)
         TransferTransport.wifiAware,
-      if (offered & TransferProtocol.transportBle != 0 &&
-          record.fileSize <= bleMaxInlineBytes)
-        TransferTransport.ble,
+      if (!preferBle && bleAvailable) TransferTransport.ble,
     ];
     for (final candidate in candidates) {
       if (!excluding.contains(candidate)) return candidate;
