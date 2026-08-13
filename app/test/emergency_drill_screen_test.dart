@@ -204,6 +204,11 @@ void main() {
     );
 
     expect(find.textContaining('SIMULACRO — NO ES UNA EMERGENCIA'), findsOne);
+    await tester.scrollUntilVisible(
+      find.text('No se han recibido alertas SOS.'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('No se han recibido alertas SOS.'), findsOneWidget);
     expect(find.byIcon(Icons.crisis_alert), findsNothing);
   });

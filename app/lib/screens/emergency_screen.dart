@@ -80,7 +80,9 @@ class EmergencyScreen extends StatelessWidget {
         const SizedBox(height: 8),
         FilledButton.tonalIcon(
           onPressed: drillMode
-              ? null
+              ? (controller.localBeaconActive
+                    ? controller.stopLocalBeacon
+                    : null)
               : controller.localBeaconActive
               ? controller.stopLocalBeacon
               : controller.startLocalBeacon,

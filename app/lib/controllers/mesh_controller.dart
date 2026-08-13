@@ -473,6 +473,7 @@ class MeshController extends ChangeNotifier {
   Future<void> _enforceDrillIsolation() async {
     if (rescueMode) await setRescueMode(false);
     if (survivalMode) await setSurvivalMode(false);
+    if (localBeaconActive) await stopLocalBeacon();
   }
 
   Future<void> activateEmergency({String? description}) async {
@@ -1097,6 +1098,9 @@ class MeshController extends ChangeNotifier {
     localBeaconExpiresAt = localBeaconActive && expiresAt > 0
         ? DateTime.fromMillisecondsSinceEpoch(expiresAt)
         : null;
+    if (drillModeEnabled && localBeaconActive) {
+      unawaited(stopLocalBeacon());
+    }
   }
 
   void _replacePeers(Object? value) {
