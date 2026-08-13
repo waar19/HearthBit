@@ -33,6 +33,38 @@ class MeshPlatformService {
 
   Future<void> stop() => _methods.invokeMethod<void>('stopMesh');
 
+  /// Habilita el puente de frames completos para el cliente LAN opt-in.
+  ///
+  /// El transporte y la clave permanecen en Dart; native solo expone una
+  /// frontera explícita y acotada hacia el motor de malla.
+  Future<void> configureLanBridge({
+    required bool enabled,
+    String? gatewayId,
+    int maxFrameSize = 2048,
+  }) {
+    return _methods.invokeMethod<void>('configureLanBridge', {
+      'enabled': enabled,
+      'gatewayId': gatewayId,
+      'maxFrameSize': maxFrameSize,
+    });
+  }
+
+  Future<void> setLanDiscoveryEnabled(bool enabled) {
+    return _methods.invokeMethod<void>('setLanDiscoveryEnabled', {
+      'enabled': enabled,
+    });
+  }
+
+  Future<void> injectRawMeshFrame({
+    required String gatewayId,
+    required Uint8List frame,
+  }) {
+    return _methods.invokeMethod<void>('injectRawMeshFrame', {
+      'gatewayId': gatewayId,
+      'frame': frame,
+    });
+  }
+
   Future<String> sendPublic(String content, {String? channel}) async {
     return (await _methods.invokeMethod<String>('sendPublic', {
       'content': content,

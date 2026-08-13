@@ -9,11 +9,18 @@ internal object MeshRuntime {
     @Volatile
     private var engineInstance: MeshEngine? = null
 
-    fun engine(context: Context): MeshEngine {
-        return engineInstance ?: synchronized(this) {
-            engineInstance ?: MeshEngine(context.applicationContext) { event ->
-                eventListener?.invoke(event)
-            }.also { engineInstance = it }
+    fun engine(
+        context: Context,
+        requiredRole: MeshNodeRole? = null,
+    ): MeshEngine {
+        return synchronized(this) {
+            engineInstance?.also { engine ->
+                requiredRole?.let(engine::configureStartupRole)
+            } ?: MeshEngine(
+                context = context.applicationContext,
+                requiredRole = requiredRole,
+                emit = { event -> eventListener?.invoke(event) },
+            ).also { engineInstance = it }
         }
     }
 

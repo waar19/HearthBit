@@ -13,15 +13,75 @@ arch:
   - armv7
 host_dbus: true
 host_network: true
+map:
+  - ssl:ro
 apparmor: false
 options:
   adapter: "hci0"
   local_name: "Bitle Relay"
+  nickname: "Bitle Relay"
+  identity_path: "/data/identity.json"
+  node_role: "INFRA_RELAY"
+  announce_interval_seconds: 300
   central_enabled: true
   scan_interval_seconds: 20
-  max_central_links: 2
+  max_central_links: 4
   max_packet_size: 2048
   log_level: "INFO"
+  lan:
+    enabled: false
+    listen_host: "0.0.0.0"
+    port: 45893
+    psk_base64: ""
+    discovery: true
+    service_name: "HearthBit Relay"
+    max_frame_size: 2048
+    max_connections: 8
+    connect_timeout_seconds: 10
+    idle_timeout_seconds: 90
+    max_gateway_hops: 8
+  mqtt:
+    enabled: false
+    host: ""
+    port: 8883
+    community: ""
+    topic_prefix: "hearthbit"
+    tls_ca_file: ""
+    tls_client_cert_file: ""
+    tls_client_key_file: ""
+    username_env: "HEARTHBIT_MQTT_USERNAME"
+    password_env: "HEARTHBIT_MQTT_PASSWORD"
+    secrets_file: "/data/mqtt-secrets.json"
+    keepalive_seconds: 60
+    connect_timeout_seconds: 15
+    message_expiry_seconds: 3600
+    sos_expiry_seconds: 600
+    max_message_age_seconds: 3600
+    announce_max_age_seconds: 600
+    future_skew_seconds: 120
+    max_bridge_hops: 8
+  matrix:
+    enabled: false
+    homeserver_url: ""
+    rooms: []
+    sender_allowlist: []
+    bot_user_id: ""
+    application_service_mode: false
+    access_token_env: "HEARTHBIT_MATRIX_ACCESS_TOKEN"
+    access_token_file: "/data/matrix-access-token"
+    tls_ca_file: ""
+    sync_timeout_seconds: 30
+    request_timeout_seconds: 15
+    message_expiry_seconds: 3600
+    sos_expiry_seconds: 600
+    max_message_age_seconds: 3600
+    announce_max_age_seconds: 600
+    future_skew_seconds: 120
+    max_bridge_hops: 8
+    allow_insecure_localhost_for_tests: false
+    private_opaque:
+      enabled: false
+      peer_ids: []
   store:
     path: "/data/relay.db"
     max_bytes: 67108864
@@ -33,16 +93,75 @@ options:
     message_types:
       - "0x02"
       - "0x04"
-      - "0x24"
-      - "0x25"
 schema:
   adapter: str
   local_name: str
+  nickname: str
+  identity_path: str
+  node_role: list(INFRA_RELAY|INFRA_DATA_ANCHOR)
+  announce_interval_seconds: float
   central_enabled: bool
   scan_interval_seconds: float
   max_central_links: int
   max_packet_size: int
   log_level: list(TRACE|DEBUG|INFO|WARNING|ERROR|CRITICAL)
+  lan:
+    enabled: bool
+    listen_host: str
+    port: port
+    psk_base64: password
+    discovery: bool
+    service_name: str
+    max_frame_size: int
+    max_connections: int
+    connect_timeout_seconds: float
+    idle_timeout_seconds: float
+    max_gateway_hops: int
+  mqtt:
+    enabled: bool
+    host: str
+    port: port
+    community: str
+    topic_prefix: str
+    tls_ca_file: str
+    tls_client_cert_file: str
+    tls_client_key_file: str
+    username_env: str
+    password_env: str
+    secrets_file: str
+    keepalive_seconds: int
+    connect_timeout_seconds: float
+    message_expiry_seconds: int
+    sos_expiry_seconds: int
+    max_message_age_seconds: int
+    announce_max_age_seconds: int
+    future_skew_seconds: int
+    max_bridge_hops: int
+  matrix:
+    enabled: bool
+    homeserver_url: str
+    rooms:
+      - str
+    sender_allowlist:
+      - str
+    bot_user_id: str
+    application_service_mode: bool
+    access_token_env: str
+    access_token_file: str
+    tls_ca_file: str
+    sync_timeout_seconds: int
+    request_timeout_seconds: float
+    message_expiry_seconds: int
+    sos_expiry_seconds: int
+    max_message_age_seconds: int
+    announce_max_age_seconds: int
+    future_skew_seconds: int
+    max_bridge_hops: int
+    allow_insecure_localhost_for_tests: bool
+    private_opaque:
+      enabled: bool
+      peer_ids:
+        - str
   store:
     path: str
     max_bytes: int

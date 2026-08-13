@@ -5,7 +5,7 @@ import com.bitchat.android.noise.southernstorm.protocol.HandshakeState
 
 internal class NoiseSessionLite(
     private val claimedPeerId: ByteArray,
-    private val initiator: Boolean,
+    internal val initiator: Boolean,
     private val localPrivateKey: ByteArray,
 ) {
     private var handshake: HandshakeState? = null
@@ -18,26 +18,53 @@ internal class NoiseSessionLite(
     var established: Boolean = false
         private set
 
+    val handshaking: Boolean
+        get() = handshake != null && !established
+
     fun start(): ByteArray {
-        check(initiator)
+        if (!initiator || handshake != null || established) {
+            throw NoiseHandshakeFailure.State("Noise initiator is in an invalid state")
+        }
         initialize(HandshakeState.INITIATOR)
-        return writeHandshake()
+        return try {
+            writeHandshake()
+        } catch (error: NoiseHandshakeFailure) {
+            throw error
+        } catch (error: Exception) {
+            throw NoiseHandshakeFailure.Protocol(error)
+        }
     }
 
     fun processHandshake(message: ByteArray): ByteArray? {
-        if (handshake == null) initialize(HandshakeState.RESPONDER)
-        val state = checkNotNull(handshake)
-        val payload = ByteArray(256)
-        state.readMessage(message, 0, message.size, payload, 0)
-        patternCount++
-        return when (state.action) {
-            HandshakeState.WRITE_MESSAGE -> writeHandshake().also { completeIfReady() }
-            HandshakeState.SPLIT -> {
-                completeIfReady()
-                null
+        if (established) {
+            throw NoiseHandshakeFailure.State("Noise session is already established")
+        }
+        if (handshake == null) {
+            if (initiator) {
+                throw NoiseHandshakeFailure.State("Noise initiator was not started")
             }
-            HandshakeState.FAILED -> error("Noise XX rejected the handshake")
-            else -> null
+            initialize(HandshakeState.RESPONDER)
+        }
+        return try {
+            val state = checkNotNull(handshake)
+            val payload = ByteArray(256)
+            state.readMessage(message, 0, message.size, payload, 0)
+            patternCount++
+            when (state.action) {
+                HandshakeState.WRITE_MESSAGE -> writeHandshake().also { completeIfReady() }
+                HandshakeState.SPLIT -> {
+                    completeIfReady()
+                    null
+                }
+                HandshakeState.FAILED -> throw NoiseHandshakeFailure.Protocol(
+                    IllegalStateException("Noise XX rejected the handshake"),
+                )
+                else -> null
+            }
+        } catch (error: NoiseHandshakeFailure) {
+            throw error
+        } catch (error: Exception) {
+            throw NoiseHandshakeFailure.Protocol(error)
         }
     }
 
@@ -127,8 +154,8 @@ internal class NoiseSessionLite(
         val remoteDh = checkNotNull(state.remotePublicKey)
         val remotePublic = ByteArray(32)
         remoteDh.getPublicKey(remotePublic, 0)
-        check(MeshProtocol.peerIdFromNoiseKey(remotePublic).contentEquals(claimedPeerId)) {
-            "Noise identity does not match the announced peer"
+        if (!MeshProtocol.peerIdFromNoiseKey(remotePublic).contentEquals(claimedPeerId)) {
+            throw NoiseHandshakeFailure.IdentityMismatch()
         }
         val pair = state.split()
         sendCipher = pair.sender

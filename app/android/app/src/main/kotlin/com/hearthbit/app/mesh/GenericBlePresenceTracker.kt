@@ -16,6 +16,7 @@ internal class GenericBlePresenceTracker(
     private val rotationMs: Long = DEFAULT_ROTATION_MS,
     private val staleAfterMs: Long = DEFAULT_STALE_AFTER_MS,
     private val emitIntervalMs: Long = DEFAULT_EMIT_INTERVAL_MS,
+    private val maxObservations: Int = DEFAULT_MAX_OBSERVATIONS,
 ) {
     data class Presence(
         val localId: String,
@@ -36,16 +37,17 @@ internal class GenericBlePresenceTracker(
         var localId: String,
         var rssi: Int,
         var lastSeen: Long,
-        var lastEmitted: Long,
     )
 
     private val observations = LinkedHashMap<String, Observation>()
+    private var lastEmittedAt: Long? = null
 
     init {
         require(sessionSecret.isNotEmpty())
         require(rotationMs > 0)
         require(staleAfterMs > 0)
         require(emitIntervalMs >= 0)
+        require(maxObservations > 0)
     }
 
     /**
@@ -55,24 +57,38 @@ internal class GenericBlePresenceTracker(
      */
     @Synchronized
     fun observe(advertisementMaterial: ByteArray, rssi: Int, now: Long): List<Presence>? {
-        if (advertisementMaterial.isEmpty()) return null
+        if (!record(advertisementMaterial, rssi, now)) return null
+        val previous = lastEmittedAt
+        val shouldEmit = previous == null || now - previous >= emitIntervalMs
+        if (!shouldEmit) return null
+        lastEmittedAt = now
+        return snapshot(now)
+    }
+
+    /**
+     * Registra una observación sin construir el snapshot para Flutter. El motor
+     * usa este camino caliente y agrupa las emisiones en el hilo principal.
+     */
+    @Synchronized
+    fun record(advertisementMaterial: ByteArray, rssi: Int, now: Long): Boolean {
+        if (advertisementMaterial.isEmpty()) return false
         prune(now)
         val trackingDigest = hmac(byteArrayOf(TRACKING_DOMAIN) + advertisementMaterial)
         val trackingKey = trackingDigest.toHex()
         val localId = rotatingId(trackingDigest, now)
         val existing = observations[trackingKey]
-        val shouldEmit = existing == null ||
-            existing.localId != localId ||
-            now - existing.lastEmitted >= emitIntervalMs
         if (existing == null) {
-            observations[trackingKey] = Observation(localId, rssi, now, now)
+            observations[trackingKey] = Observation(localId, rssi, now)
         } else {
             existing.localId = localId
             existing.rssi = rssi
             existing.lastSeen = now
-            if (shouldEmit) existing.lastEmitted = now
         }
-        return if (shouldEmit) snapshot(now) else null
+        while (observations.size > maxObservations) {
+            val oldest = observations.minByOrNull { it.value.lastSeen }?.key ?: break
+            observations.remove(oldest)
+        }
+        return true
     }
 
     @Synchronized
@@ -86,6 +102,7 @@ internal class GenericBlePresenceTracker(
     @Synchronized
     fun clear() {
         observations.clear()
+        lastEmittedAt = null
     }
 
     private fun prune(now: Long) {
@@ -116,6 +133,7 @@ internal class GenericBlePresenceTracker(
         const val DEFAULT_ROTATION_MS = 15 * 60_000L
         const val DEFAULT_STALE_AFTER_MS = 45_000L
         const val DEFAULT_EMIT_INTERVAL_MS = 5_000L
+        const val DEFAULT_MAX_OBSERVATIONS = 64
         private const val LOCAL_ID_BYTES = 12
         private const val HMAC_ALGORITHM = "HmacSHA256"
         private const val TRACKING_DOMAIN: Byte = 0x01

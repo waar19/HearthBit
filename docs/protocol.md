@@ -1,5 +1,12 @@
 # Perfil compatible con BitChat
 
+Este archivo es un resumen no normativo. La especificación fijada al commit
+exacto del submódulo está en
+[Perfil núcleo BitChat](bitchat-core-profile.md); las asignaciones propias y
+sus reglas de negociación están en el
+[Registro de extensiones HearthBit](extension-registry.md). En caso de
+conflicto, prevalecen esos dos documentos.
+
 HearthBit usa el UUID principal de BitChat:
 
 - Servicio: `F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C`

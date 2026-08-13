@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.net.wifi.WifiManager
 import android.net.wifi.aware.WifiAwareManager
 import android.os.Build
 import android.os.PowerManager
@@ -24,6 +25,7 @@ class MainActivity : FlutterActivity() {
     private var permissionResult: MethodChannel.Result? = null
     private var backgroundLocationResult: MethodChannel.Result? = null
     private var transferEvents: EventChannel.EventSink? = null
+    private var lanMulticastLock: WifiManager.MulticastLock? = null
     private val nearbyTransport by lazy {
         NearbyTransport(applicationContext) { event ->
             runOnUiThread { transferEvents?.success(event) }
@@ -37,6 +39,11 @@ class MainActivity : FlutterActivity() {
         } else {
             null
         }
+    }
+
+    override fun onDestroy() {
+        setLanMulticastEnabled(false)
+        super.onDestroy()
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -71,6 +78,25 @@ class MainActivity : FlutterActivity() {
                             .setAction(MeshForegroundService.ACTION_STOP),
                     )
                     result.success(null)
+                }
+                "configureLanBridge" -> runMethod(result) {
+                    MeshRuntime.engine(this).configureLanBridge(
+                        enabled = call.argument<Boolean>("enabled") == true,
+                        gatewayId = call.argument<String>("gatewayId"),
+                        maxFrameSize = call.argument<Number>("maxFrameSize")?.toInt() ?: 2_048,
+                    )
+                    null
+                }
+                "setLanDiscoveryEnabled" -> runMethod(result) {
+                    setLanMulticastEnabled(call.argument<Boolean>("enabled") == true)
+                    null
+                }
+                "injectRawMeshFrame" -> runMethod(result) {
+                    MeshRuntime.engine(this).injectRawMeshFrame(
+                        gatewayId = requireNotNull(call.argument<String>("gatewayId")),
+                        frame = requireNotNull(call.argument<ByteArray>("frame")),
+                    )
+                    null
                 }
                 "sendPublic" -> runMethod(result) {
                     MeshRuntime.engine(this).sendPublic(
@@ -253,6 +279,22 @@ class MainActivity : FlutterActivity() {
     private fun nearbyAvailable(): Boolean =
         GoogleApiAvailability.getInstance()
             .isGooglePlayServicesAvailable(this) == ConnectionResult.SUCCESS
+
+    private fun setLanMulticastEnabled(enabled: Boolean) {
+        if (!enabled) {
+            lanMulticastLock?.let { lock ->
+                if (lock.isHeld) lock.release()
+            }
+            lanMulticastLock = null
+            return
+        }
+        if (lanMulticastLock?.isHeld == true) return
+        val wifi = applicationContext.getSystemService(WifiManager::class.java)
+        lanMulticastLock = wifi?.createMulticastLock("hearthbit-mdns")?.apply {
+            setReferenceCounted(false)
+            acquire()
+        }
+    }
 
     private fun wifiAwareAvailable(): Boolean {
         // El data path con puerto (WifiAwareNetworkSpecifier.Builder.setPort)

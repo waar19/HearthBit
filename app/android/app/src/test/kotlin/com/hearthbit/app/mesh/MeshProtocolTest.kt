@@ -4,11 +4,53 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.security.MessageDigest
 
 class MeshProtocolTest {
+    @Test
+    fun `FragmentPayload coincide con el formato binario BitChat`() {
+        val encoded = MeshProtocol.encodeFragmentPayload(
+            MeshProtocol.FragmentPayload(
+                fragmentId = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8),
+                index = 0x0102,
+                total = 0x0304,
+                originalType = MeshProtocol.TYPE_MESSAGE,
+                data = byteArrayOf(0x55, 0x66),
+            ),
+        )
+
+        assertEquals(
+            "010203040506070801020304025566",
+            MeshProtocol.hex(encoded),
+        )
+        val decoded = MeshProtocol.decodeFragmentPayload(encoded)
+        assertNotNull(decoded)
+        decoded!!
+        assertArrayEquals(byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8), decoded.fragmentId)
+        assertEquals(0x0102, decoded.index)
+        assertEquals(0x0304, decoded.total)
+        assertEquals(MeshProtocol.TYPE_MESSAGE, decoded.originalType)
+        assertArrayEquals(byteArrayOf(0x55, 0x66), decoded.data)
+    }
+
+    @Test
+    fun `FragmentPayload rechaza truncar contadores UInt16`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            MeshProtocol.encodeFragmentPayload(
+                MeshProtocol.FragmentPayload(
+                    fragmentId = ByteArray(8),
+                    index = 0,
+                    total = 65_536,
+                    originalType = MeshProtocol.TYPE_MESSAGE,
+                    data = byteArrayOf(1),
+                ),
+            )
+        }
+    }
+
     @Test
     fun `codifica la cabecera v1 compatible con BitChat`() {
         val packet = MeshProtocol.Packet(
@@ -121,6 +163,27 @@ class MeshProtocolTest {
         assertEquals(0, canonical[2].toInt())
         assertEquals(0, canonical[11].toInt() and 0x02)
         assertEquals(0x04, canonical[11].toInt() and 0x04)
+    }
+
+    @Test
+    fun `fingerprint de relay ignora TTL RSR y padding`() {
+        val packet = MeshProtocol.Packet(
+            type = MeshProtocol.TYPE_NOISE_ENCRYPTED,
+            ttl = 7,
+            timestamp = 1,
+            senderId = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8),
+            payload = ByteArray(40) { it.toByte() },
+        )
+        val live = MeshProtocol.encode(packet, padded = false)
+        val replay = MeshProtocol.encode(
+            packet.copy(ttl = 2, isRsr = true),
+            padded = true,
+        )
+
+        assertEquals(
+            MeshProtocol.relayFingerprint(live),
+            MeshProtocol.relayFingerprint(replay),
+        )
     }
 
     @Test

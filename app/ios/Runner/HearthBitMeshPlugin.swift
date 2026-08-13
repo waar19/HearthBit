@@ -5,10 +5,18 @@ import Compression
 import Flutter
 import Foundation
 import Security
+import UIKit
 
 final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
+  private struct PendingCentralWrite {
+    let data: Data
+    let characteristic: CBCharacteristic
+    let type: CBCharacteristicWriteType
+  }
+
   private static let serviceUUID = CBUUID(string: "F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C")
   private static let characteristicUUID = CBUUID(string: "A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D")
+  private static let maximumPendingBLEFrames = 256
 
   private var identity = IOSMeshIdentity()
   private var localRole = IOSMeshNodeRole.load()
@@ -20,6 +28,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var remoteCharacteristics: [UUID: CBCharacteristic] = [:]
   private var peers: [String: IOSMeshPeer] = [:]
   private var sessions: [String: IOSNoiseSession] = [:]
+  private var responderCandidates: [String: IOSNoiseSession] = [:]
   private var pendingPrivate: [String: [(String, String)]] = [:]
   private var pendingFrames: [String: [Data]] = [:]
   private var pendingCourier: [String: [IOSMeshPacket]] = [:]
@@ -28,9 +37,21 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var syncResponseTimes: [UUID: [Date]] = [:]
   private var lastSyncRequestBySource: [UUID: Date] = [:]
   private var remoteRadarConsents: [String: IOSRemoteRadarConsent] = [:]
-  private var notifyQueue: [Data] = []
+  private var centralWriteQueues: [UUID: [PendingCentralWrite]] = [:]
+  private var centralWritesInFlight: Set<UUID> = []
+  private var peripheralNotifyQueues: [UUID: [Data]] = [:]
+  private let packetFragmenter = IOSMeshPacketFragmenter()
+  private let fragmentReassembler = IOSMeshFragmentReassembler()
+  private let genericPresenceTracker = IOSGenericBLEPresenceTracker()
+  private var genericPresenceEmitWorkItem: DispatchWorkItem?
+  private var genericPresenceExpiryWorkItem: DispatchWorkItem?
+  private var restoredPeripheralService = false
+  private var lifecycleObservers: [NSObjectProtocol] = []
   private var eventSink: FlutterEventSink?
   private var running = false
+  private var lanBridgeGatewayID: String?
+  private var lanBridgeMaximumFrameSize = 2048
+  private var suppressLanBridge = false
   private lazy var locationManager = CLLocationManager()
 
   /// Identificador de periférico -> peerId de vecinos directos. Se alimenta
@@ -125,6 +146,38 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       case "stopMesh":
         stop()
         result(nil)
+      case "setLanDiscoveryEnabled":
+        // Network.framework/Dart owns Bonjour. The method keeps the native
+        // bridge API symmetric with Android, where a MulticastLock is needed.
+        result(nil)
+      case "configureLanBridge":
+        let enabled = arguments["enabled"] as? Bool ?? false
+        if !enabled {
+          lanBridgeGatewayID = nil
+          result(nil)
+          return
+        }
+        guard
+          let gatewayID = (arguments["gatewayId"] as? String)?.lowercased(),
+          gatewayID.range(of: "^[0-9a-f]{32}$", options: .regularExpression) != nil
+        else { throw IOSMeshError.invalidPayload }
+        let maximum = arguments["maxFrameSize"] as? Int ?? 2048
+        guard (1...65_535).contains(maximum) else { throw IOSMeshError.invalidPayload }
+        lanBridgeGatewayID = gatewayID
+        lanBridgeMaximumFrameSize = maximum
+        result(nil)
+      case "injectRawMeshFrame":
+        guard
+          let gatewayID = (arguments["gatewayId"] as? String)?.lowercased(),
+          gatewayID == lanBridgeGatewayID,
+          let frame = arguments["frame"] as? FlutterStandardTypedData,
+          !frame.data.isEmpty,
+          frame.data.count <= lanBridgeMaximumFrameSize
+        else { throw IOSMeshError.invalidPayload }
+        suppressLanBridge = true
+        defer { suppressLanBridge = false }
+        receive(frame.data, source: nil)
+        result(nil)
       case "sendPublic":
         let content = arguments["content"] as? String ?? ""
         result(try sendPublic(content: content, channel: arguments["channel"] as? String))
@@ -152,9 +205,20 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           let value = arguments["role"] as? String,
           let role = IOSMeshNodeRole(rawValue: value)
         else { throw IOSMeshError.invalidPayload }
+        let previousRole = localRole
         localRole = role
         role.persist()
         broadcastNodeCapability()
+        if running, previousRole != role {
+          if role == .phoneBeacon {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { [weak self] in
+              guard let self, self.running, self.localRole == role else { return }
+              self.applyRolePolicy()
+            }
+          } else {
+            applyRolePolicy()
+          }
+        }
         emitStatus(running ? "active" : "stopped")
         result(nil)
       case "getPeers":
@@ -191,6 +255,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         storeForward.clear()
         peers.removeAll()
         sessions.removeAll()
+        responderCandidates.removeAll()
         syncPackets.removeAll()
         remoteRadarConsents.removeAll()
         result(nil)
@@ -258,6 +323,21 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       queue: nil,
       options: [CBPeripheralManagerOptionRestoreIdentifierKey: "HearthBit.peripheral"]
     )
+    if lifecycleObservers.isEmpty {
+      let center = NotificationCenter.default
+      lifecycleObservers = [
+        center.addObserver(
+          forName: UIApplication.didEnterBackgroundNotification,
+          object: nil,
+          queue: .main
+        ) { [weak self] _ in self?.restartScan() },
+        center.addObserver(
+          forName: UIApplication.didBecomeActiveNotification,
+          object: nil,
+          queue: .main
+        ) { [weak self] _ in self?.restartScan() },
+      ]
+    }
   }
 
   private func stop() {
@@ -272,14 +352,30 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     connectedPeripherals.values.forEach { central?.cancelPeripheralConnection($0) }
     connectedPeripherals.removeAll()
     remoteCharacteristics.removeAll()
+    centralWriteQueues.removeAll()
+    centralWritesInFlight.removeAll()
+    peripheralNotifyQueues.removeAll()
     peripheralPeers.removeAll()
     peripheralManager?.stopAdvertising()
     peripheralManager?.removeAllServices()
+    localCharacteristic = nil
+    restoredPeripheralService = false
     sessions.removeAll()
+    responderCandidates.removeAll()
     pendingCourier.removeAll()
     syncResponseTimes.removeAll()
     lastSyncRequestBySource.removeAll()
     remoteRadarConsents.removeAll()
+    fragmentReassembler.clear()
+    genericPresenceEmitWorkItem?.cancel()
+    genericPresenceEmitWorkItem = nil
+    genericPresenceExpiryWorkItem?.cancel()
+    genericPresenceExpiryWorkItem = nil
+    genericPresenceTracker.clear()
+    lanBridgeGatewayID = nil
+    suppressLanBridge = false
+    lifecycleObservers.forEach { NotificationCenter.default.removeObserver($0) }
+    lifecycleObservers.removeAll()
     if notify { emitStatus("stopped") }
   }
 
@@ -314,6 +410,77 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     restartScan()
   }
 
+  private func applyRolePolicy() {
+    if localRole == .phoneBeacon {
+      enterPresenceOnlyMode()
+    } else {
+      enterDataRelayMode()
+    }
+  }
+
+  private func enterPresenceOnlyMode() {
+    radarPeerID = nil
+    radarTimer?.invalidate()
+    radarTimer = nil
+    central?.stopScan()
+    connectedPeripherals.values.forEach { central?.cancelPeripheralConnection($0) }
+    connectedPeripherals.removeAll()
+    remoteCharacteristics.removeAll()
+    centralWriteQueues.removeAll()
+    centralWritesInFlight.removeAll()
+    peripheralNotifyQueues.removeAll()
+    peripheralPeers.removeAll()
+    sessions.removeAll()
+    responderCandidates.removeAll()
+    fragmentReassembler.clear()
+    lastSyncRequestBySource.removeAll()
+    syncResponseTimes.removeAll()
+    genericPresenceEmitWorkItem?.cancel()
+    genericPresenceEmitWorkItem = nil
+    genericPresenceExpiryWorkItem?.cancel()
+    genericPresenceExpiryWorkItem = nil
+    genericPresenceTracker.clear()
+    emit(["type": "presences", "presences": []])
+    configurePeripheralMode()
+  }
+
+  private func enterDataRelayMode() {
+    restartScan()
+    configurePeripheralMode()
+  }
+
+  private func configurePeripheralMode() {
+    guard let peripheralManager, peripheralManager.state == .poweredOn else { return }
+    restoredPeripheralService = false
+    peripheralManager.stopAdvertising()
+    peripheralManager.removeAllServices()
+    localCharacteristic = nil
+    peripheralNotifyQueues.removeAll()
+
+    if localRole == .phoneBeacon {
+      // CoreBluetooth no ofrece un flag para advertising no conectable. Sin
+      // servicio GATT no hay suscripciones ni plano de datos que restaurar.
+      peripheralManager.startAdvertising([
+        CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID]
+      ])
+      return
+    }
+
+    let characteristic = CBMutableCharacteristic(
+      type: Self.characteristicUUID,
+      properties: [.read, .write, .writeWithoutResponse, .notify],
+      value: nil,
+      permissions: [.readable, .writeable]
+    )
+    let service = CBMutableService(type: Self.serviceUUID, primary: true)
+    service.characteristics = [characteristic]
+    localCharacteristic = characteristic
+    peripheralManager.add(service)
+    peripheralManager.startAdvertising([
+      CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID]
+    ])
+  }
+
   private func setRadarConsent(enabled: Bool, duration: TimeInterval) {
     let expiresAt = enabled
       ? Date().addingTimeInterval(duration).timeIntervalSince1970 * 1000
@@ -323,14 +490,18 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     emitRadarConsent()
   }
 
-  /// Reinicia el escaneo BLE; con radar activo se permiten duplicados para
-  /// recibir un RSSI por cada anuncio (solo funciona en primer plano).
+  /// Escanea sin filtro para observar presencia genérica. Solo los anuncios
+  /// mesh llegan a conexión; los demás se convierten en IDs locales efímeros.
   private func restartScan() {
     guard running, let central, central.state == .poweredOn else { return }
     central.stopScan()
+    guard localRole.allowsDataPlane else { return }
+    let foreground = UIApplication.shared.applicationState == .active
     central.scanForPeripherals(
-      withServices: [Self.serviceUUID],
-      options: [CBCentralManagerScanOptionAllowDuplicatesKey: radarPeerID != nil]
+      // En background iOS exige filtro de servicio y coalescea duplicados;
+      // la presencia genérica es por tanto una capacidad best-effort foreground.
+      withServices: foreground ? nil : [Self.serviceUUID],
+      options: [CBCentralManagerScanOptionAllowDuplicatesKey: foreground]
     )
   }
 
@@ -380,20 +551,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       try sendEncryptedPrivate(peerID: peerID, id: id, content: content)
     } else {
       pendingPrivate[peerID, default: []].append((id, content))
-      if sessions[peerID] == nil {
-        let claimed = try Data(hex: peerID)
-        let session = IOSNoiseSession(
-          claimedPeerID: claimed,
-          initiator: true,
-          localStatic: identity.noisePrivateKey
-        )
-        sessions[peerID] = session
-        sendNoise(
-          type: IOSMeshProtocol.noiseHandshake,
-          recipient: claimed,
-          payload: try session.start()
-        )
-      }
+      try initiateHandshake(peerID: peerID)
     }
     emitMessage(
       id: id,
@@ -418,19 +576,27 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       return
     }
     pendingFrames[peerID, default: []].append(frame)
-    if sessions[peerID] == nil {
-      let claimed = try Data(hex: peerID)
-      let session = IOSNoiseSession(
-        claimedPeerID: claimed,
-        initiator: true,
-        localStatic: identity.noisePrivateKey
-      )
-      sessions[peerID] = session
+    try initiateHandshake(peerID: peerID)
+  }
+
+  private func initiateHandshake(peerID: String) throws {
+    guard sessions[peerID] == nil, responderCandidates[peerID] == nil else { return }
+    let claimed = try Data(hex: peerID)
+    let session = IOSNoiseSession(
+      claimedPeerID: claimed,
+      initiator: true,
+      localStatic: identity.noisePrivateKey
+    )
+    sessions[peerID] = session
+    do {
       sendNoise(
         type: IOSMeshProtocol.noiseHandshake,
         recipient: claimed,
         payload: try session.start()
       )
+    } catch {
+      sessions.removeValue(forKey: peerID)
+      throw error
     }
   }
 
@@ -480,16 +646,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         sendCourierDeposit(anchorID: anchor.id, innerPacket: innerPacket)
       } else {
         pendingCourier[anchor.id, default: []].append(innerPacket)
-        guard sessions[anchor.id] == nil, let claimed = try? Data(hex: anchor.id) else { continue }
-        let session = IOSNoiseSession(
-          claimedPeerID: claimed,
-          initiator: true,
-          localStatic: identity.noisePrivateKey
-        )
-        sessions[anchor.id] = session
-        if let first = try? session.start() {
-          sendNoise(type: IOSMeshProtocol.noiseHandshake, recipient: claimed, payload: first)
-        }
+        try? initiateHandshake(peerID: anchor.id)
       }
     }
   }
@@ -642,17 +799,66 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       storeForward.put(packet)
     }
     if let characteristic = localCharacteristic, let manager = peripheralManager {
-      if !manager.updateValue(bytes, for: characteristic, onSubscribedCentrals: nil) {
-        notifyQueue.append(bytes)
+      for central in characteristic.subscribedCentrals ?? []
+      where central.identifier != excluding {
+        guard
+          let frames = packetFragmenter.prepare(
+            packet: packet,
+            encoded: bytes,
+            maximumValueLength: central.maximumUpdateValueLength
+          )
+        else {
+          NSLog(
+            "HearthBitMesh: dropping %d-byte notification for %@ (limit=%d)",
+            bytes.count,
+            central.identifier.uuidString,
+            central.maximumUpdateValueLength
+          )
+          continue
+        }
+        enqueuePeripheralUpdates(
+          frames,
+          central: central,
+          manager: manager,
+          characteristic: characteristic
+        )
       }
     }
     for (identifier, characteristic) in remoteCharacteristics where identifier != excluding {
       guard let peripheral = connectedPeripherals[identifier] else { continue }
       let writeType: CBCharacteristicWriteType =
         characteristic.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
-      if bytes.count <= peripheral.maximumWriteValueLength(for: writeType) {
-        peripheral.writeValue(bytes, for: characteristic, type: writeType)
+      let maximum = peripheral.maximumWriteValueLength(for: writeType)
+      guard
+        let frames = packetFragmenter.prepare(
+          packet: packet,
+          encoded: bytes,
+          maximumValueLength: maximum
+        )
+      else {
+        NSLog(
+          "HearthBitMesh: dropping %d-byte central write for %@ (limit=%d)",
+          bytes.count,
+          identifier.uuidString,
+          maximum
+        )
+        continue
       }
+      enqueueCentralWrites(
+        frames,
+        peripheral: peripheral,
+        characteristic: characteristic,
+        type: writeType
+      )
+    }
+    if !suppressLanBridge,
+       let gatewayID = lanBridgeGatewayID,
+       bytes.count <= lanBridgeMaximumFrameSize {
+      emit([
+        "type": "rawMeshFrame",
+        "gatewayId": gatewayID,
+        "frame": FlutterStandardTypedData(bytes: bytes),
+      ])
     }
   }
 
@@ -665,8 +871,20 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       {
         let writeType: CBCharacteristicWriteType =
           characteristic.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
-        if bytes.count <= peripheral.maximumWriteValueLength(for: writeType) {
-          peripheral.writeValue(bytes, for: characteristic, type: writeType)
+        let maximum = peripheral.maximumWriteValueLength(for: writeType)
+        if
+          let frames = packetFragmenter.prepare(
+            packet: packet,
+            encoded: bytes,
+            maximumValueLength: maximum
+          )
+        {
+          enqueueCentralWrites(
+            frames,
+            peripheral: peripheral,
+            characteristic: characteristic,
+            type: writeType
+          )
         }
       }
       if
@@ -676,7 +894,106 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           $0.identifier == identifier
         })
       {
-        _ = manager.updateValue(bytes, for: characteristic, onSubscribedCentrals: [central])
+        if
+          let frames = packetFragmenter.prepare(
+            packet: packet,
+            encoded: bytes,
+            maximumValueLength: central.maximumUpdateValueLength
+          )
+        {
+          enqueuePeripheralUpdates(
+            frames,
+            central: central,
+            manager: manager,
+            characteristic: characteristic
+          )
+        }
+      }
+    }
+  }
+
+  private func enqueueCentralWrites(
+    _ frames: [Data],
+    peripheral: CBPeripheral,
+    characteristic: CBCharacteristic,
+    type: CBCharacteristicWriteType
+  ) {
+    guard !frames.isEmpty else { return }
+    let identifier = peripheral.identifier
+    var queue = centralWriteQueues[identifier, default: []]
+    guard queue.count + frames.count <= Self.maximumPendingBLEFrames else {
+      NSLog("HearthBitMesh: central write queue full for %@", identifier.uuidString)
+      return
+    }
+    queue.append(contentsOf: frames.map {
+      PendingCentralWrite(data: $0, characteristic: characteristic, type: type)
+    })
+    centralWriteQueues[identifier] = queue
+    drainCentralWriteQueue(peripheral)
+  }
+
+  private func drainCentralWriteQueue(_ peripheral: CBPeripheral) {
+    let identifier = peripheral.identifier
+    while let next = centralWriteQueues[identifier]?.first {
+      if next.type == .withResponse {
+        guard !centralWritesInFlight.contains(identifier) else { return }
+        centralWritesInFlight.insert(identifier)
+        peripheral.writeValue(next.data, for: next.characteristic, type: next.type)
+        return
+      }
+      guard peripheral.canSendWriteWithoutResponse else { return }
+      peripheral.writeValue(next.data, for: next.characteristic, type: next.type)
+      centralWriteQueues[identifier]?.removeFirst()
+      if centralWriteQueues[identifier]?.isEmpty == true {
+        centralWriteQueues.removeValue(forKey: identifier)
+      }
+    }
+  }
+
+  private func enqueuePeripheralUpdates(
+    _ frames: [Data],
+    central: CBCentral,
+    manager: CBPeripheralManager,
+    characteristic: CBMutableCharacteristic
+  ) {
+    guard !frames.isEmpty else { return }
+    let identifier = central.identifier
+    var queue = peripheralNotifyQueues[identifier, default: []]
+    guard queue.count + frames.count <= Self.maximumPendingBLEFrames else {
+      NSLog("HearthBitMesh: notification queue full for %@", identifier.uuidString)
+      return
+    }
+    queue.append(contentsOf: frames)
+    peripheralNotifyQueues[identifier] = queue
+    drainPeripheralNotifyQueue(
+      identifier,
+      manager: manager,
+      characteristic: characteristic
+    )
+  }
+
+  private func drainPeripheralNotifyQueue(
+    _ identifier: UUID,
+    manager: CBPeripheralManager,
+    characteristic: CBMutableCharacteristic
+  ) {
+    guard
+      let central = characteristic.subscribedCentrals?.first(where: {
+        $0.identifier == identifier
+      })
+    else {
+      peripheralNotifyQueues.removeValue(forKey: identifier)
+      return
+    }
+    while let data = peripheralNotifyQueues[identifier]?.first {
+      guard manager.updateValue(
+        data,
+        for: characteristic,
+        onSubscribedCentrals: [central]
+      ) else { return }
+      peripheralNotifyQueues[identifier]?.removeFirst()
+      if peripheralNotifyQueues[identifier]?.isEmpty == true {
+        peripheralNotifyQueues.removeValue(forKey: identifier)
       }
     }
   }
@@ -704,9 +1021,14 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       packet.recipientID == identity.peerID ||
       packet.recipientID == Data(repeating: 0xff, count: 8)
     if forUs { process(packet, senderID: senderID, source: source) }
+    let fragmentOriginalType = packet.type == IOSMeshProtocol.fragment
+      ? IOSMeshProtocol.decodeFragmentPayload(packet.payload)?.originalType
+      : nil
     let controlForUs = forUs &&
       (packet.type == IOSMeshProtocol.noiseHandshake ||
-       packet.type == IOSMeshProtocol.noiseEncrypted)
+       packet.type == IOSMeshProtocol.noiseEncrypted ||
+       fragmentOriginalType == IOSMeshProtocol.noiseHandshake ||
+       fragmentOriginalType == IOSMeshProtocol.noiseEncrypted)
     if localRole.relaysPackets && packet.ttl > 1 && !controlForUs {
       var relayed = packet
       relayed.ttl -= 1
@@ -739,6 +1061,11 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       if let source { requestMissingMessages(peerID: senderID, source: source) }
       for stored in storeForward.packets(for: packet.senderID) {
         broadcast(stored)
+      }
+      if !(pendingPrivate[senderID] ?? []).isEmpty ||
+         !(pendingFrames[senderID] ?? []).isEmpty ||
+         !(pendingCourier[senderID] ?? []).isEmpty {
+        try? initiateHandshake(peerID: senderID)
       }
     case IOSMeshProtocol.message:
       guard
@@ -788,6 +1115,17 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       processHbtCapability(packet, senderID: senderID)
     case IOSMeshProtocol.nodeCapability:
       processNodeCapability(packet, senderID: senderID)
+    case IOSMeshProtocol.fragment:
+      if let reassembled = fragmentReassembler.accept(packet) {
+        if
+          reassembled.type == IOSMeshProtocol.announce,
+          packet.ttl == IOSMeshProtocol.defaultTTL,
+          let source
+        {
+          peripheralPeers[source] = senderID
+        }
+        process(reassembled, senderID: senderID, source: source)
+      }
     default:
       break
     }
@@ -846,13 +1184,62 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func processHandshake(_ packet: IOSMeshPacket, senderID: String) {
-    do {
-      let session = sessions[senderID] ?? IOSNoiseSession(
+    let isMessageOne = packet.payload.count == 32
+    var session: IOSNoiseSession
+    var isCandidate = false
+
+    if responderCandidates[senderID] != nil {
+      if isMessageOne {
+        responderCandidates.removeValue(forKey: senderID)
+        responderCandidates[senderID] = IOSNoiseSession(
+          claimedPeerID: packet.senderID,
+          initiator: false,
+          localStatic: identity.noisePrivateKey
+        )
+      }
+      session = responderCandidates[senderID]!
+      isCandidate = true
+    } else if let active = sessions[senderID] {
+      if active.handshaking && active.initiator && isMessageOne {
+        // El peerID menor conserva el rol iniciador; el mayor cede.
+        guard identity.peerIDHex > senderID else { return }
+        sessions.removeValue(forKey: senderID)
+        session = IOSNoiseSession(
+          claimedPeerID: packet.senderID,
+          initiator: false,
+          localStatic: identity.noisePrivateKey
+        )
+        sessions[senderID] = session
+      } else if active.established && isMessageOne {
+        session = IOSNoiseSession(
+          claimedPeerID: packet.senderID,
+          initiator: false,
+          localStatic: identity.noisePrivateKey
+        )
+        responderCandidates[senderID] = session
+        isCandidate = true
+      } else if active.established {
+        return
+      } else if active.handshaking && !active.initiator && isMessageOne {
+        session = IOSNoiseSession(
+          claimedPeerID: packet.senderID,
+          initiator: false,
+          localStatic: identity.noisePrivateKey
+        )
+        sessions[senderID] = session
+      } else {
+        session = active
+      }
+    } else {
+      session = IOSNoiseSession(
         claimedPeerID: packet.senderID,
         initiator: false,
         localStatic: identity.noisePrivateKey
       )
       sessions[senderID] = session
+    }
+
+    do {
       if let response = try session.process(packet.payload) {
         sendNoise(
           type: IOSMeshProtocol.noiseHandshake,
@@ -861,6 +1248,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         )
       }
       if session.established {
+        if isCandidate {
+          responderCandidates.removeValue(forKey: senderID)
+          sessions[senderID] = session
+        }
         emit(["type": "peers", "peers": peerMaps()])
         let queued = pendingPrivate.removeValue(forKey: senderID) ?? []
         for item in queued {
@@ -876,8 +1267,22 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         }
       }
     } catch {
-      sessions.removeValue(forKey: senderID)
-      emitError(HearthBitL10n.string("identity_rejected"))
+      if isCandidate {
+        if let candidate = responderCandidates[senderID], candidate === session {
+          responderCandidates.removeValue(forKey: senderID)
+        }
+      } else if let active = sessions[senderID], active === session {
+        sessions.removeValue(forKey: senderID)
+      }
+      if let meshError = error as? IOSMeshError, case .identityMismatch = meshError {
+        emitError(HearthBitL10n.string("identity_rejected"))
+      } else {
+        NSLog(
+          "HearthBitMesh: Noise handshake state/protocol failure from %@: %@",
+          String(senderID.prefix(8)),
+          error.localizedDescription
+        )
+      }
     }
   }
 
@@ -1110,6 +1515,75 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     emit(["type": "error", "message": message])
   }
 
+  private func handleDirectLinkLost(source: UUID) {
+    let hasCentralLink = remoteCharacteristics[source] != nil &&
+      connectedPeripherals[source]?.state == .connected
+    let hasPeripheralLink = localCharacteristic?.subscribedCentrals?.contains {
+      $0.identifier == source
+    } ?? false
+    guard !hasCentralLink, !hasPeripheralLink else { return }
+    guard let disconnectedPeer = peripheralPeers.removeValue(forKey: source) else { return }
+    guard !peripheralPeers.values.contains(disconnectedPeer) else { return }
+    sessions.removeValue(forKey: disconnectedPeer)
+    responderCandidates.removeValue(forKey: disconnectedPeer)
+    emit(["type": "peers", "peers": peerMaps()])
+  }
+
+  private func recordGenericPresence(
+    advertisementData: [String: Any],
+    rssi: Int
+  ) {
+    let material = genericAdvertisementMaterial(advertisementData)
+    let now = Int64(Date().timeIntervalSince1970 * 1000)
+    guard genericPresenceTracker.record(material: material, rssi: rssi, now: now) else {
+      return
+    }
+    if genericPresenceEmitWorkItem == nil {
+      let workItem = DispatchWorkItem { [weak self] in
+        guard let self else { return }
+        self.genericPresenceEmitWorkItem = nil
+        guard self.running, self.localRole.allowsDataPlane else { return }
+        self.emitGenericPresenceSnapshot()
+      }
+      genericPresenceEmitWorkItem = workItem
+      DispatchQueue.main.asyncAfter(
+        deadline: .now() + IOSGenericBLEPresenceTracker.emitInterval,
+        execute: workItem
+      )
+    }
+    genericPresenceExpiryWorkItem?.cancel()
+    let expiryWorkItem = DispatchWorkItem { [weak self] in
+      guard let self else { return }
+      self.genericPresenceExpiryWorkItem = nil
+      guard self.running, self.localRole.allowsDataPlane else { return }
+      self.emitGenericPresenceSnapshot()
+    }
+    genericPresenceExpiryWorkItem = expiryWorkItem
+    DispatchQueue.main.asyncAfter(
+      deadline: .now() + IOSGenericBLEPresenceTracker.staleAfter + 0.1,
+      execute: expiryWorkItem
+    )
+  }
+
+  private func emitGenericPresenceSnapshot() {
+    let now = Int64(Date().timeIntervalSince1970 * 1000)
+    emit([
+      "type": "presences",
+      "presences": genericPresenceTracker.snapshot(now: now).map(\.eventMap),
+    ])
+  }
+
+  private func isMeshAdvertisement(_ advertisementData: [String: Any]) -> Bool {
+    IOSGenericBLEAdvertisement.isMesh(
+      advertisementData,
+      meshServiceUUID: Self.serviceUUID
+    )
+  }
+
+  private func genericAdvertisementMaterial(_ advertisementData: [String: Any]) -> Data {
+    IOSGenericBLEAdvertisement.material(advertisementData)
+  }
+
   private func emit(_ event: [String: Any]) {
     DispatchQueue.main.async { [weak self] in self?.eventSink?(event) }
   }
@@ -1118,10 +1592,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
 extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
   func centralManagerDidUpdateState(_ central: CBCentralManager) {
     guard running, central.state == .poweredOn else { return }
-    central.scanForPeripherals(
-      withServices: [Self.serviceUUID],
-      options: [CBCentralManagerScanOptionAllowDuplicatesKey: radarPeerID != nil]
-    )
+    restartScan()
   }
 
   func centralManager(
@@ -1130,6 +1601,13 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
     advertisementData: [String: Any],
     rssi RSSI: NSNumber
   ) {
+    guard localRole.allowsDataPlane else { return }
+    guard isMeshAdvertisement(advertisementData) else {
+      if RSSI.intValue != 127 {
+        recordGenericPresence(advertisementData: advertisementData, rssi: RSSI.intValue)
+      }
+      return
+    }
     if let serviceData = advertisementData[CBAdvertisementDataServiceDataKey] as? [CBUUID: Data],
        let advertisedPeer = serviceData[Self.serviceUUID],
        advertisedPeer.count >= 8 {
@@ -1148,6 +1626,10 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
   }
 
   func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+    guard localRole.allowsDataPlane else {
+      central.cancelPeripheralConnection(peripheral)
+      return
+    }
     peripheral.discoverServices([Self.serviceUUID])
   }
 
@@ -1158,12 +1640,19 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
   ) {
     connectedPeripherals.removeValue(forKey: peripheral.identifier)
     remoteCharacteristics.removeValue(forKey: peripheral.identifier)
+    centralWriteQueues.removeValue(forKey: peripheral.identifier)
+    centralWritesInFlight.remove(peripheral.identifier)
     lastSyncRequestBySource.removeValue(forKey: peripheral.identifier)
     syncResponseTimes.removeValue(forKey: peripheral.identifier)
+    handleDirectLinkLost(source: peripheral.identifier)
   }
 
   func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
     let restored = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] ?? []
+    guard localRole.allowsDataPlane else {
+      restored.forEach { central.cancelPeripheralConnection($0) }
+      return
+    }
     for peripheral in restored {
       connectedPeripherals[peripheral.identifier] = peripheral
       peripheral.delegate = self
@@ -1171,6 +1660,7 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
   }
 
   func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+    guard localRole.allowsDataPlane else { return }
     peripheral.services?
       .filter { $0.uuid == Self.serviceUUID }
       .forEach { peripheral.discoverCharacteristics([Self.characteristicUUID], for: $0) }
@@ -1181,6 +1671,7 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
     didDiscoverCharacteristicsFor service: CBService,
     error: Error?
   ) {
+    guard localRole.allowsDataPlane else { return }
     guard
       let characteristic = service.characteristics?.first(where: {
         $0.uuid == Self.characteristicUUID
@@ -1196,8 +1687,39 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
     didUpdateValueFor characteristic: CBCharacteristic,
     error: Error?
   ) {
+    guard localRole.allowsDataPlane else { return }
     guard let value = characteristic.value else { return }
     receive(value, source: peripheral.identifier)
+  }
+
+  func peripheral(
+    _ peripheral: CBPeripheral,
+    didWriteValueFor characteristic: CBCharacteristic,
+    error: Error?
+  ) {
+    let identifier = peripheral.identifier
+    guard
+      characteristic.uuid == Self.characteristicUUID,
+      centralWritesInFlight.remove(identifier) != nil
+    else { return }
+    if centralWriteQueues[identifier]?.first?.type == .withResponse {
+      centralWriteQueues[identifier]?.removeFirst()
+    }
+    if centralWriteQueues[identifier]?.isEmpty == true {
+      centralWriteQueues.removeValue(forKey: identifier)
+    }
+    if let error {
+      NSLog(
+        "HearthBitMesh: central write failed for %@: %@",
+        identifier.uuidString,
+        error.localizedDescription
+      )
+    }
+    drainCentralWriteQueue(peripheral)
+  }
+
+  func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
+    drainCentralWriteQueue(peripheral)
   }
 
   func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
@@ -1221,21 +1743,19 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
       }
       return
     }
-    let characteristic = CBMutableCharacteristic(
-      type: Self.characteristicUUID,
-      properties: [.read, .write, .writeWithoutResponse, .notify],
-      value: nil,
-      permissions: [.readable, .writeable]
-    )
-    let service = CBMutableService(type: Self.serviceUUID, primary: true)
-    service.characteristics = [characteristic]
-    localCharacteristic = characteristic
-    peripheral.add(service)
-    // Solo el UUID de servicio: la identidad viaja en el anuncio GATT firmado,
-    // manteniendo el paquete publicitario dentro del presupuesto BLE.
-    peripheral.startAdvertising([
-      CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID]
-    ])
+    if
+      restoredPeripheralService,
+      localRole.allowsDataPlane,
+      localCharacteristic != nil
+    {
+      restoredPeripheralService = false
+      peripheral.startAdvertising([
+        CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID]
+      ])
+    } else {
+      restoredPeripheralService = false
+      configurePeripheralMode()
+    }
   }
 
   func peripheralManagerDidStartAdvertising(
@@ -1254,13 +1774,19 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
       return
     }
     emitStatus("active")
-    sendAnnouncement()
+    if localRole.allowsDataPlane {
+      sendAnnouncement()
+    }
   }
 
   func peripheralManager(
     _ peripheral: CBPeripheralManager,
     didReceiveWrite requests: [CBATTRequest]
   ) {
+    guard localRole.allowsDataPlane else {
+      requests.forEach { peripheral.respond(to: $0, withResult: .writeNotPermitted) }
+      return
+    }
     for request in requests {
       if request.characteristic.uuid == Self.characteristicUUID, let value = request.value {
         receive(value, source: request.central.identifier)
@@ -1271,25 +1797,43 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
 
   func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
     guard let characteristic = localCharacteristic else { return }
-    while let data = notifyQueue.first {
-      guard peripheral.updateValue(data, for: characteristic, onSubscribedCentrals: nil) else {
-        return
-      }
-      notifyQueue.removeFirst()
+    for identifier in Array(peripheralNotifyQueues.keys) {
+      drainPeripheralNotifyQueue(
+        identifier,
+        manager: peripheral,
+        characteristic: characteristic
+      )
     }
   }
 
+  func peripheralManager(
+    _ peripheral: CBPeripheralManager,
+    central: CBCentral,
+    didUnsubscribeFrom characteristic: CBCharacteristic
+  ) {
+    peripheralNotifyQueues.removeValue(forKey: central.identifier)
+    handleDirectLinkLost(source: central.identifier)
+  }
+
   func peripheralManager(_ peripheral: CBPeripheralManager, willRestoreState dict: [String: Any]) {
+    guard localRole.allowsDataPlane else {
+      localCharacteristic = nil
+      restoredPeripheralService = false
+      peripheral.stopAdvertising()
+      peripheral.removeAllServices()
+      return
+    }
     if let services = dict[CBPeripheralManagerRestoredStateServicesKey] as? [CBMutableService] {
       localCharacteristic = services
         .flatMap { $0.characteristics ?? [] }
         .compactMap { $0 as? CBMutableCharacteristic }
         .first(where: { $0.uuid == Self.characteristicUUID })
+      restoredPeripheralService = localCharacteristic != nil
     }
   }
 }
 
-private enum IOSMeshNodeRole: String, CaseIterable {
+enum IOSMeshNodeRole: String, CaseIterable {
   case phoneRelay = "PHONE_RELAY"
   case phoneBeacon = "PHONE_BEACON"
   case infraRelay = "INFRA_RELAY"
@@ -1308,6 +1852,10 @@ private enum IOSMeshNodeRole: String, CaseIterable {
   }
 
   var relaysPackets: Bool {
+    self != .phoneBeacon
+  }
+
+  var allowsDataPlane: Bool {
     self != .phoneBeacon
   }
 
@@ -1356,6 +1904,203 @@ private enum IOSMeshNodeRole: String, CaseIterable {
   }
 }
 
+final class IOSGenericBLEPresenceTracker {
+  struct Presence {
+    let localID: String
+    let rssi: Int
+    let lastSeen: Int64
+
+    var eventMap: [String: Any] {
+      [
+        "id": localID,
+        "role": IOSMeshNodeRole.phoneBeacon.rawValue,
+        "kind": "genericBle",
+        "chatAvailable": false,
+        "rssi": rssi,
+        "lastSeen": lastSeen,
+      ]
+    }
+  }
+
+  private struct Observation {
+    var localID: String
+    var rssi: Int
+    var lastSeen: Int64
+  }
+
+  static let rotationMilliseconds: Int64 = 15 * 60 * 1_000
+  static let staleMilliseconds: Int64 = 45 * 1_000
+  static let emitInterval: TimeInterval = 1
+  static let staleAfter: TimeInterval = 45
+  static let maximumObservations = 64
+
+  private let sessionSecret: Data
+  private let rotation: Int64
+  private let stale: Int64
+  private let maximum: Int
+  private var observations: [String: Observation] = [:]
+
+  init(
+    sessionSecret: Data? = nil,
+    rotationMilliseconds: Int64 = IOSGenericBLEPresenceTracker.rotationMilliseconds,
+    staleMilliseconds: Int64 = IOSGenericBLEPresenceTracker.staleMilliseconds,
+    maximumObservations: Int = IOSGenericBLEPresenceTracker.maximumObservations
+  ) {
+    let secret = sessionSecret ?? Self.secureSessionSecret()
+    precondition(!secret.isEmpty)
+    precondition(rotationMilliseconds > 0)
+    precondition(staleMilliseconds > 0)
+    precondition(maximumObservations > 0)
+    self.sessionSecret = secret
+    rotation = rotationMilliseconds
+    stale = staleMilliseconds
+    maximum = maximumObservations
+  }
+
+  @discardableResult
+  func record(material: Data, rssi: Int, now: Int64) -> Bool {
+    guard !material.isEmpty else { return false }
+    prune(now: now)
+    let trackingDigest = hmac(Data([0x01]) + material)
+    let trackingKey = trackingDigest.hex
+    let localID = rotatingID(trackingDigest: trackingDigest, now: now)
+    observations[trackingKey] = Observation(
+      localID: localID,
+      rssi: rssi,
+      lastSeen: now
+    )
+    while observations.count > maximum,
+          let oldest = observations.min(by: {
+            $0.value.lastSeen < $1.value.lastSeen
+          }) {
+      observations.removeValue(forKey: oldest.key)
+    }
+    return true
+  }
+
+  func snapshot(now: Int64) -> [Presence] {
+    prune(now: now)
+    return observations.values
+      .map { Presence(localID: $0.localID, rssi: $0.rssi, lastSeen: $0.lastSeen) }
+      .sorted { $0.lastSeen > $1.lastSeen }
+  }
+
+  func clear() {
+    observations.removeAll()
+  }
+
+  private func rotatingID(trackingDigest: Data, now: Int64) -> String {
+    let epoch = UInt64(max(0, now / rotation))
+    var epochBytes = Data()
+    epochBytes.appendInteger(epoch)
+    return Data(hmac(Data([0x02]) + epochBytes + trackingDigest).prefix(12)).hex
+  }
+
+  private func prune(now: Int64) {
+    observations = observations.filter { now - $0.value.lastSeen <= stale }
+  }
+
+  private func hmac(_ data: Data) -> Data {
+    Data(HMAC<SHA256>.authenticationCode(
+      for: data,
+      using: SymmetricKey(data: sessionSecret)
+    ))
+  }
+
+  private static func secureSessionSecret() -> Data {
+    let secretSize = 32
+    var output = Data(count: secretSize)
+    let status = output.withUnsafeMutableBytes { buffer in
+      guard let address = buffer.baseAddress else { return errSecParam }
+      return SecRandomCopyBytes(kSecRandomDefault, secretSize, address)
+    }
+    if status == errSecSuccess { return output }
+    return Data(SHA256.hash(data: Data(UUID().uuidString.utf8)))
+  }
+}
+
+enum IOSGenericBLEAdvertisement {
+  static func isMesh(
+    _ advertisementData: [String: Any],
+    meshServiceUUID: CBUUID
+  ) -> Bool {
+    let serviceLists = [
+      advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID],
+      advertisementData[CBAdvertisementDataOverflowServiceUUIDsKey] as? [CBUUID],
+      advertisementData[CBAdvertisementDataSolicitedServiceUUIDsKey] as? [CBUUID],
+    ]
+    if serviceLists.compactMap({ $0 }).flatMap({ $0 }).contains(meshServiceUUID) {
+      return true
+    }
+    let serviceData =
+      advertisementData[CBAdvertisementDataServiceDataKey] as? [CBUUID: Data] ?? [:]
+    return serviceData.keys.contains(meshServiceUUID)
+  }
+
+  static func material(_ advertisementData: [String: Any]) -> Data {
+    var output = Data()
+    func appendField(tag: UInt8, key: Data, value: Data = Data()) {
+      let size = key.count + value.count
+      guard size <= Int(UInt16.max) else { return }
+      output.append(tag)
+      output.appendInteger(UInt16(size))
+      output.append(key)
+      output.append(value)
+    }
+
+    let advertisedServices = [
+      advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID],
+      advertisementData[CBAdvertisementDataOverflowServiceUUIDsKey] as? [CBUUID],
+    ]
+      .compactMap { $0 }
+      .flatMap { $0 }
+      .map { $0.uuidString.lowercased() }
+      .sorted()
+    for uuid in advertisedServices {
+      appendField(tag: 0x01, key: Data(uuid.utf8))
+    }
+
+    let solicitedServices =
+      advertisementData[CBAdvertisementDataSolicitedServiceUUIDsKey] as? [CBUUID] ?? []
+    for uuid in solicitedServices.map({ $0.uuidString.lowercased() }).sorted() {
+      appendField(tag: 0x02, key: Data(uuid.utf8))
+    }
+
+    let serviceData =
+      advertisementData[CBAdvertisementDataServiceDataKey] as? [CBUUID: Data] ?? [:]
+    for (uuid, value) in serviceData.sorted(by: {
+      $0.key.uuidString < $1.key.uuidString
+    }) {
+      appendField(
+        tag: 0x03,
+        key: Data(uuid.uuidString.lowercased().utf8),
+        value: value
+      )
+    }
+
+    if
+      let manufacturer =
+        advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data,
+      !manufacturer.isEmpty
+    {
+      if manufacturer.count >= 2 {
+        let identifier = UInt16(manufacturer[0]) | UInt16(manufacturer[1]) << 8
+        appendField(
+          tag: 0x04,
+          key: Data([
+            UInt8(truncatingIfNeeded: identifier >> 8),
+            UInt8(truncatingIfNeeded: identifier),
+          ]),
+          value: manufacturer.dropFirst(2)
+        )
+      } else {
+        appendField(tag: 0x04, key: Data(), value: manufacturer)
+      }
+    }
+    return output
+  }
+}
+
 private struct IOSMeshPeer {
   let id: String
   let nickname: String
@@ -1372,7 +2117,7 @@ private struct IOSRemoteRadarConsent {
   let source: String
 }
 
-private enum IOSRadarConsentProtocol {
+enum IOSRadarConsentProtocol {
   static let localConsentKey = "hearthbit.radar_consent_until"
   static let version: UInt8 = 1
   static let grantAction: UInt8 = 1
@@ -1443,7 +2188,7 @@ private enum IOSRadarConsentProtocol {
   }
 }
 
-private struct IOSMeshPacket {
+struct IOSMeshPacket {
   var version: UInt8 = 1
   var type: UInt8
   var ttl: UInt8
@@ -1464,12 +2209,13 @@ private struct IOSMeshPacket {
   }
 }
 
-private enum IOSMeshProtocol {
+enum IOSMeshProtocol {
   static let announce: UInt8 = 0x01
   static let message: UInt8 = 0x02
   static let courierEnvelope: UInt8 = 0x04
   static let noiseHandshake: UInt8 = 0x10
   static let noiseEncrypted: UInt8 = 0x11
+  static let fragment: UInt8 = 0x20
   static let requestSync: UInt8 = 0x21
   static let radarControl: UInt8 = 0x23
   static let hbtCapability: UInt8 = 0x24
@@ -1514,6 +2260,82 @@ private enum IOSMeshProtocol {
     let expiry: UInt64
     let ciphertext: Data
     let copies: UInt8
+  }
+
+  struct FragmentPayload {
+    let fragmentID: Data
+    let index: Int
+    let total: Int
+    let originalType: UInt8
+    let data: Data
+  }
+
+  struct ExtensionEnvelope {
+    let namespace: String
+    let subtype: UInt16
+    let version: UInt8
+    let flags: UInt8
+    let payload: Data
+  }
+
+  static func decodeExtensionEnvelope(_ input: Data) -> ExtensionEnvelope? {
+    guard input.count >= 12 else { return nil }
+    var reader = DataReader(input)
+    guard
+      let namespaceData = reader.data(count: 4),
+      namespaceData.allSatisfy({ (0x20...0x7e).contains($0) }),
+      let namespace = String(data: namespaceData, encoding: .ascii),
+      let subtype: UInt16 = reader.integer(),
+      let version = reader.byte(),
+      let flags = reader.byte(),
+      flags & 0xfc == 0,
+      let length: UInt32 = reader.integer(),
+      Int(length) <= maximumPayloadLength,
+      let payload = reader.data(count: Int(length)),
+      reader.remaining.isEmpty
+    else { return nil }
+    return ExtensionEnvelope(
+      namespace: namespace,
+      subtype: subtype,
+      version: version,
+      flags: flags,
+      payload: payload
+    )
+  }
+
+  static func encodeFragmentPayload(_ fragment: FragmentPayload) -> Data? {
+    guard
+      fragment.fragmentID.count == fragmentIDSize,
+      (0...Int(UInt16.max)).contains(fragment.index),
+      (1...Int(UInt16.max)).contains(fragment.total),
+      fragment.index < fragment.total
+    else { return nil }
+    var output = fragment.fragmentID
+    output.appendInteger(UInt16(fragment.index))
+    output.appendInteger(UInt16(fragment.total))
+    output.append(fragment.originalType)
+    output.append(fragment.data)
+    return output
+  }
+
+  static func decodeFragmentPayload(_ payload: Data) -> FragmentPayload? {
+    guard payload.count >= fragmentHeaderSize else { return nil }
+    var reader = DataReader(payload)
+    guard
+      let fragmentID = reader.data(count: fragmentIDSize),
+      let index: UInt16 = reader.integer(),
+      let total: UInt16 = reader.integer(),
+      total > 0,
+      index < total,
+      let originalType = reader.byte()
+    else { return nil }
+    return FragmentPayload(
+      fragmentID: fragmentID,
+      index: Int(index),
+      total: Int(total),
+      originalType: originalType,
+      data: reader.remaining
+    )
   }
 
   static func encode(_ packet: IOSMeshPacket, padded: Bool = true) -> Data {
@@ -1569,6 +2391,16 @@ private enum IOSMeshProtocol {
       packet,
       padded: packet.type == noiseHandshake || packet.type == noiseEncrypted
     )
+  }
+
+  static func removeBLETransportPadding(_ packet: IOSMeshPacket, encoded: Data) -> Data {
+    guard packet.type == noiseHandshake || packet.type == noiseEncrypted else {
+      return encoded
+    }
+    let rawSize = encode(packet, padded: false).count
+    guard encoded.count > rawSize else { return encoded }
+    let unpadded = unpad(encoded)
+    return unpadded.count == rawSize ? unpadded : encoded
   }
 
   static func decode(_ encoded: Data) -> IOSMeshPacket? {
@@ -1632,6 +2464,7 @@ private enum IOSMeshProtocol {
     }
     let signature = flags & 0x02 != 0 ? reader.data(count: 64) : nil
     if flags & 0x02 != 0, signature == nil { return nil }
+    guard reader.remaining.isEmpty else { return nil }
     return IOSMeshPacket(
       version: version,
       type: type,
@@ -2032,29 +2865,79 @@ private enum IOSMeshProtocol {
   }
 
   private static func decompress(_ data: Data, originalSize: Int) -> Data? {
-    var output = Data(count: originalSize)
-    let decompressedSize = output.withUnsafeMutableBytes { destination in
+    if looksLikeZlib(data),
+       data.count >= 6,
+       let expanded = decompressRawExact(data.dropFirst(2).dropLast(4), originalSize: originalSize),
+       adler32(expanded) == data.suffix(4).reduce(UInt32(0), { ($0 << 8) | UInt32($1) }) {
+      return expanded
+    }
+    return decompressRawExact(data, originalSize: originalSize)
+  }
+
+  private static func decompressRawExact(
+    _ data: Data.SubSequence,
+    originalSize: Int
+  ) -> Data? {
+    guard !data.isEmpty else { return nil }
+    var stream = compression_stream()
+    guard compression_stream_init(
+      &stream,
+      COMPRESSION_STREAM_DECODE,
+      COMPRESSION_ZLIB
+    ) != COMPRESSION_STATUS_ERROR else { return nil }
+    defer { compression_stream_destroy(&stream) }
+
+    let outputCapacity = originalSize + 1
+    var output = Data(count: outputCapacity)
+    let valid = output.withUnsafeMutableBytes { destination in
       data.withUnsafeBytes { source in
         guard
           let destinationBase = destination.bindMemory(to: UInt8.self).baseAddress,
           let sourceBase = source.bindMemory(to: UInt8.self).baseAddress
-        else { return 0 }
-        return compression_decode_buffer(
-          destinationBase,
-          originalSize,
-          sourceBase,
-          data.count,
-          nil,
-          COMPRESSION_ZLIB
+        else { return false }
+        stream.src_ptr = sourceBase
+        stream.src_size = data.count
+        stream.dst_ptr = destinationBase
+        stream.dst_size = outputCapacity
+        let status = compression_stream_process(
+          &stream,
+          Int32(COMPRESSION_STREAM_FINALIZE.rawValue)
         )
+        return status == COMPRESSION_STATUS_END &&
+          stream.src_size == 0 &&
+          stream.dst_size == 1
       }
     }
-    guard decompressedSize == originalSize else { return nil }
+    guard valid else { return nil }
+    output.removeLast()
     return output
+  }
+
+  private static func looksLikeZlib(_ data: Data) -> Bool {
+    guard data.count >= 2 else { return false }
+    let cmf = Int(data[data.startIndex])
+    let flg = Int(data[data.index(after: data.startIndex)])
+    return cmf & 0x0F == 8 &&
+      cmf >> 4 <= 7 &&
+      ((cmf << 8) | flg).isMultiple(of: 31) &&
+      flg & 0x20 == 0
+  }
+
+  private static func adler32(_ data: Data) -> UInt32 {
+    let modulus: UInt32 = 65_521
+    var first: UInt32 = 1
+    var second: UInt32 = 0
+    for byte in data {
+      first = (first + UInt32(byte)) % modulus
+      second = (second + first) % modulus
+    }
+    return (second << 16) | first
   }
 
   private static let compressionThreshold = 100
   private static let maximumPayloadLength = 10_485_760
+  static let fragmentHeaderSize = 13
+  static let fragmentIDSize = 8
   static let syncFlagAnnounce: UInt64 = 1 << 0
   static let syncFlagMessage: UInt64 = 1 << 1
   private static let syncGCSP = 7
@@ -2065,6 +2948,231 @@ private enum IOSMeshProtocol {
   private static let courierLifetimeMilliseconds: UInt64 = 12 * 60 * 60 * 1000
   private static let courierMaximumLifetimeMilliseconds: UInt64 = 25 * 60 * 60 * 1000
   private static let courierTagContext = "bitchat-courier-tag-v1"
+}
+
+final class IOSMeshPacketFragmenter {
+  static let maximumGATTValueLength = 512
+  static let maximumFragmentDataLength = 469
+  static let maximumFragments = 256
+  static let maximumReassembledBytes = 1_048_576
+
+  private let fragmentIDGenerator: () -> Data
+
+  init(fragmentIDGenerator: (() -> Data)? = nil) {
+    self.fragmentIDGenerator = fragmentIDGenerator ?? Self.secureFragmentID
+  }
+
+  func prepare(
+    packet: IOSMeshPacket,
+    encoded: Data,
+    maximumValueLength: Int
+  ) -> [Data]? {
+    let linkLimit = min(maximumValueLength, Self.maximumGATTValueLength)
+    guard linkLimit > 0 else { return nil }
+    if encoded.count <= linkLimit { return [encoded] }
+    guard packet.type != IOSMeshProtocol.fragment else { return nil }
+
+    let originalData = IOSMeshProtocol.removeBLETransportPadding(packet, encoded: encoded)
+    guard originalData.count <= Self.maximumReassembledBytes else { return nil }
+    let fragmentID = fragmentIDGenerator()
+    guard fragmentID.count == IOSMeshProtocol.fragmentIDSize else { return nil }
+
+    guard
+      let emptyPacket = fragmentPacket(
+        source: packet,
+        fragmentID: fragmentID,
+        index: 0,
+        total: 1,
+        data: Data()
+      )
+    else { return nil }
+    let fixedSize = IOSMeshProtocol.encodeForBLE(emptyPacket).count
+    var chunkSize = min(Self.maximumFragmentDataLength, linkLimit - fixedSize)
+    guard chunkSize > 0 else { return nil }
+
+    while chunkSize > 0 {
+      let total = (originalData.count + chunkSize - 1) / chunkSize
+      guard total <= Self.maximumFragments else { return nil }
+      var frames: [Data] = []
+      frames.reserveCapacity(total)
+      var offset = 0
+      var fits = true
+      for index in 0..<total {
+        let end = min(offset + chunkSize, originalData.count)
+        guard
+          let fragment = fragmentPacket(
+            source: packet,
+            fragmentID: fragmentID,
+            index: index,
+            total: total,
+            data: originalData.subdata(in: offset..<end)
+          )
+        else { return nil }
+        let frame = IOSMeshProtocol.encodeForBLE(fragment)
+        if frame.count > linkLimit {
+          fits = false
+          break
+        }
+        frames.append(frame)
+        offset = end
+      }
+      if fits { return frames }
+      chunkSize -= 1
+    }
+    return nil
+  }
+
+  private func fragmentPacket(
+    source: IOSMeshPacket,
+    fragmentID: Data,
+    index: Int,
+    total: Int,
+    data: Data
+  ) -> IOSMeshPacket? {
+    guard
+      let payload = IOSMeshProtocol.encodeFragmentPayload(
+        IOSMeshProtocol.FragmentPayload(
+          fragmentID: fragmentID,
+          index: index,
+          total: total,
+          originalType: source.type,
+          data: data
+        )
+      )
+    else { return nil }
+    return IOSMeshPacket(
+      version: source.version,
+      type: IOSMeshProtocol.fragment,
+      ttl: source.ttl,
+      timestamp: source.timestamp,
+      senderID: source.senderID,
+      recipientID: source.recipientID,
+      payload: payload,
+      signature: nil,
+      route: source.route,
+      isRSR: false
+    )
+  }
+
+  private static func secureFragmentID() -> Data {
+    var output = Data(count: IOSMeshProtocol.fragmentIDSize)
+    let status = output.withUnsafeMutableBytes { buffer in
+      guard let address = buffer.baseAddress else { return errSecParam }
+      return SecRandomCopyBytes(kSecRandomDefault, IOSMeshProtocol.fragmentIDSize, address)
+    }
+    if status == errSecSuccess { return output }
+    return Data(SHA256.hash(data: Data(UUID().uuidString.utf8)))
+      .prefix(IOSMeshProtocol.fragmentIDSize)
+  }
+}
+
+final class IOSMeshFragmentReassembler {
+  private struct FragmentSet {
+    let originalType: UInt8
+    let total: Int
+    let senderID: Data
+    let recipientID: Data?
+    var updatedAt: Date
+    var parts: [Int: Data] = [:]
+    var bytes = 0
+  }
+
+  private static let maximumFragments = 256
+  private static let maximumSetBytes = 1_048_576
+  private static let maximumActiveSets = 64
+  private static let maximumGlobalBytes = 4 * 1_048_576
+  private static let timeout: TimeInterval = 30
+
+  private var sets: [String: FragmentSet] = [:]
+  private var bufferedBytes = 0
+
+  func accept(_ packet: IOSMeshPacket, now: Date = Date()) -> IOSMeshPacket? {
+    guard
+      packet.type == IOSMeshProtocol.fragment,
+      let fragment = IOSMeshProtocol.decodeFragmentPayload(packet.payload),
+      fragment.total <= Self.maximumFragments,
+      fragment.originalType != IOSMeshProtocol.fragment,
+      !fragment.data.isEmpty
+    else { return nil }
+
+    pruneExpired(now: now)
+    let key = "\(packet.senderID.hex):\(fragment.fragmentID.hex)"
+    var set: FragmentSet
+    if let existing = sets[key] {
+      set = existing
+    } else {
+      guard sets.count < Self.maximumActiveSets else { return nil }
+      set = FragmentSet(
+        originalType: fragment.originalType,
+        total: fragment.total,
+        senderID: packet.senderID,
+        recipientID: packet.recipientID,
+        updatedAt: now
+      )
+    }
+    guard
+      set.originalType == fragment.originalType,
+      set.total == fragment.total,
+      set.senderID == packet.senderID,
+      set.recipientID == packet.recipientID
+    else {
+      remove(key)
+      return nil
+    }
+    if let existing = set.parts[fragment.index] {
+      if existing != fragment.data { remove(key) }
+      return nil
+    }
+    guard
+      set.bytes + fragment.data.count <= Self.maximumSetBytes,
+      bufferedBytes + fragment.data.count <= Self.maximumGlobalBytes
+    else {
+      remove(key)
+      return nil
+    }
+
+    set.parts[fragment.index] = fragment.data
+    set.bytes += fragment.data.count
+    set.updatedAt = now
+    bufferedBytes += fragment.data.count
+    sets[key] = set
+    guard set.parts.count == set.total else { return nil }
+
+    var reassembled = Data()
+    reassembled.reserveCapacity(set.bytes)
+    for index in 0..<set.total {
+      guard let part = set.parts[index] else { return nil }
+      reassembled.append(part)
+    }
+    let decoded = IOSMeshProtocol.decode(reassembled)
+    remove(key)
+    guard
+      var original = decoded,
+      original.type == set.originalType,
+      original.senderID == packet.senderID,
+      original.recipientID == packet.recipientID
+    else { return nil }
+    original.ttl = 0
+    return original
+  }
+
+  func clear() {
+    sets.removeAll()
+    bufferedBytes = 0
+  }
+
+  private func pruneExpired(now: Date) {
+    for key in sets.compactMap({
+      now.timeIntervalSince($0.value.updatedAt) > Self.timeout ? $0.key : nil
+    }) {
+      remove(key)
+    }
+  }
+
+  private func remove(_ key: String) {
+    guard let removed = sets.removeValue(forKey: key) else { return }
+    bufferedBytes = max(0, bufferedBytes - removed.bytes)
+  }
 }
 
 private final class IOSStoreForward {
@@ -2216,13 +3324,14 @@ private final class IOSMeshIdentity {
 
 private final class IOSNoiseSession {
   private let claimedPeerID: Data
-  private let initiator: Bool
+  let initiator: Bool
   private let localStatic: Curve25519.KeyAgreement.PrivateKey
   private var handshake: IOSNoiseHandshake
   private var sendCipher: IOSNoiseCipher?
   private var receiveCipher: IOSNoiseCipher?
 
   private(set) var established = false
+  var handshaking: Bool { !established }
 
   init(
     claimedPeerID: Data,

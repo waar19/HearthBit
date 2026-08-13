@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .config import StoreConfig
+from .protocol import EPHEMERAL_MESSAGE_TYPES
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +54,7 @@ class PacketStore:
             );
             """
         )
+        self._remove_ephemeral_packets()
         self._operations = 0
 
     def seen_or_add(
@@ -86,7 +88,7 @@ class PacketStore:
         now_ms: int | None = None,
     ) -> bool:
         now = _now_ms() if now_ms is None else now_ms
-        if expires_at_ms <= now:
+        if message_type in EPHEMERAL_MESSAGE_TYPES or expires_at_ms <= now:
             return False
         cursor = self._db.execute(
             """
@@ -163,6 +165,13 @@ class PacketStore:
         self._operations += 1
         if self._operations % 256 == 0:
             self.purge(now_ms=now_ms)
+
+    def _remove_ephemeral_packets(self) -> None:
+        placeholders = ",".join("?" for _ in EPHEMERAL_MESSAGE_TYPES)
+        self._db.execute(
+            f"DELETE FROM packets WHERE message_type IN ({placeholders})",
+            tuple(EPHEMERAL_MESSAGE_TYPES),
+        )
 
     def _enforce_limits(self) -> None:
         while (

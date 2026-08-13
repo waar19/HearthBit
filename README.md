@@ -87,6 +87,9 @@ BitChat. HearthBit does not replace official emergency channels and does not
 guarantee delivery: BLE and background execution are constrained by each
 operating system.
 
+Protocol references: [pinned BitChat core profile](docs/bitchat-core-profile.md)
+and [HearthBit extension registry](docs/extension-registry.md).
+
 ## Licenses
 
 Our own code is distributed under MIT. BitChat is published under the

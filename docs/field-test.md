@@ -22,6 +22,237 @@ La interoperabilidad HearthBit↔BitChat con hardware real (pasos 2-5) es una
 prueba manual obligatoria antes de declarar compatibilidad física; los tests
 binarios automatizados no la sustituyen.
 
+## D1 — guion reproducible pendiente de ejecución física
+
+Esta sección define el procedimiento y la evidencia esperada; **no registra
+resultados**. Cada ejecución usa un identificador nuevo y conserva como
+`PENDING`, `PASS`, `FAIL` o `BLOCKED` solamente lo que declare la persona que
+realizó la prueba. No cambie los registros históricos de este documento.
+
+### Preparación, identificadores y captura
+
+1. Use alias no personales para los nodos: `HB-A`, `HB-B`, `BC-A`, `TV-R1`,
+   `PI-R1`, `LINUX-R1` y `BITLE-A`. No escriba nombres Bluetooth reales, MAC,
+   números de serie, nombres de personas ni lugares en mensajes o informes.
+2. Sincronice la hora de los equipos. Desactive Wi-Fi y datos móviles en los
+   teléfonos para los casos BLE. Documente aparte distancia y obstáculos sin
+   incluir ubicación exacta.
+3. Genere una ejecución y marcadores únicos en PowerShell:
+
+   ```powershell
+   $run = "RUN-" + (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
+   $hbToBc = "D1-NOISE-01-HB2BC-$run"
+   $bcToHb = "D1-NOISE-01-BC2HB-$run"
+   ```
+
+4. Conecte únicamente el Android que se va a observar. Si hay varios en
+   `adb devices`, pase `-DeviceSerial`; ese valor se usa para seleccionar el
+   equipo, pero no se escribe en la evidencia. Inicie la captura justo antes
+   del caso:
+
+   ```powershell
+   .\scripts\field-test\Collect-AdbFieldLog.ps1 `
+     -CaseId D1-NOISE-01 -RunId $run -NodeAlias HB-A `
+     -DurationSeconds 240 -DeviceSerial "<serial-adb>"
+   ```
+
+   El script no limpia `logcat`, no cambia datos ni configuración de la app y
+   solo inicia y detiene su propio proceso lector. Filtra por
+   `HearthBitMesh:V *:S` y redacta en memoria MAC, nombres Bluetooth, prefijos
+   binarios e identificadores de peers antes de escribir el log. Para dos
+   Android, ejecute una captura por nodo en terminales separadas con el mismo
+   `RunId`.
+5. Genere primero un informe pendiente. Después de revisar UI, topología y
+   logs, vuelva a generarlo con el resultado real; los informes anteriores no
+   se sobrescriben:
+
+   ```powershell
+   $capture = Get-ChildItem .\artifacts\field-test -Directory |
+     Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+   .\scripts\field-test\New-FieldTestReport.ps1 `
+     -CaptureMetadataPath (Join-Path $capture.FullName "capture.json")
+
+   .\scripts\field-test\New-FieldTestReport.ps1 `
+     -CaptureMetadataPath (Join-Path $capture.FullName "capture.json") `
+     -Result PASS -ReasonCode ALL_CRITERIA_MET `
+     -ObservedIdentifier $hbToBc,$bcToHb
+   ```
+
+   `PASS` exige que se cumplan **todos** los criterios manuales y de logs del
+   caso. `FAIL` identifica un incumplimiento reproducible. `BLOCKED` se usa
+   cuando falta interacción o hardware, no como sustituto de un fallo.
+
+En Android, los tipos útiles del log saneado son `16` (`0x10`, handshake
+Noise), `17` (`0x11`, paquete Noise cifrado), `32` (`0x20`, fragmento), `4`
+(Courier) y `37` (`0x25`, capacidad/rol). `RX decoded` prueba recepción y
+decodificación exterior; por sí solo no prueba entrega visual, contenido,
+cifrado extremo a extremo ni ausencia de un enlace directo.
+
+### D1-NOISE-01 — DM Noise HearthBit↔BitChat
+
+**Topología:** `HB-A ↔ BC-A`, a menos de cinco metros y sin otro relay.
+
+1. Inicie la captura en el Android HearthBit. Espere a que ambas apps muestren
+   al peer y abra el canal privado.
+2. Desde HearthBit envíe como único contenido `$hbToBc`. En BitChat confirme
+   recepción privada, una sola vez, y responda con `$bcToHb`.
+3. En HearthBit confirme recepción privada, una sola vez. Cierre y vuelva a
+   abrir el chat sin borrar identidad y envíe un tercer marcador de la misma
+   ejecución para comprobar continuidad de la sesión.
+
+**PASS:** ambos marcadores aparecen una vez en el chat privado correcto, las
+dos interfaces indican canal seguro y la captura HearthBit contiene recepción
+`type=16` durante establecimiento y `type=17` para la respuesta, sin
+`Noise handshake state/protocol failure`, rechazo de identidad ni cierre de
+conexión.
+
+**FAIL:** falta una dirección, aparece el marcador en chat público o texto
+claro, hay duplicado, se asocia al peer equivocado o aparece cualquiera de los
+errores anteriores. El log Android no basta para declarar PASS sin confirmar
+manualmente la recepción en BitChat.
+
+### D1-FRAG-01 — fragmentación de payload mayor de 512 B
+
+**Topología:** enlace directo `HB-A ↔ BC-A`; repita cada dirección. Cree texto
+ASCII determinista de más de 512 bytes:
+
+```powershell
+$fragHb = "D1-FRAG-01-HB2BC-$run"
+$payloadHb = $fragHb + "|" + ("F" * 700)
+[Text.Encoding]::UTF8.GetByteCount($payloadHb)
+$payloadHb | Set-Clipboard
+```
+
+1. Verifique que el conteo sea mayor de 512, pegue el payload sin modificarlo y
+   envíelo de HearthBit a BitChat.
+2. Genere `D1-FRAG-01-BC2HB-$run` con otros 700 caracteres y repita desde
+   BitChat.
+3. Compare identificador, longitud y contenido completo en el receptor; no
+   basta con ver el comienzo del texto.
+
+**PASS:** cada receptor muestra una sola copia exacta; la captura del Android
+que recibe desde BitChat contiene varios `RX decoded` con `type=32` y un único
+`FRAGMENT reassembled` cuyo `bytes` es mayor de 512, seguido del tipo interior
+esperado. No hay `RX rejected`, `packet decode failed` ni `GATT queue full`.
+
+**FAIL:** truncamiento, corrupción, duplicado, timeout, reensamblado de 512
+bytes o menos, total de fragmentos incoherente o cualquiera de los errores
+indicados. El envío HearthBit→BitChat requiere confirmación visual/log de
+BitChat porque `adb` en HearthBit no observa la recepción remota.
+
+### D1-RELAY-01 — relay físico de dos enlaces
+
+Ejecute tres variantes independientes con IDs
+`D1-RELAY-01-TV-$run`, `D1-RELAY-01-PI-$run` y
+`D1-RELAY-01-BITLE-$run`. La topología de cada variante es
+`HB-A ↔ R1 ↔ HB-B`: son dos enlaces de radio y una retransmisión.
+
+1. Separe o apantalle `HB-A` y `HB-B`. Con `R1` apagado, compruebe durante dos
+   minutos que no se descubren directamente y que un marcador de control no se
+   entrega.
+2. Coloque como `R1`, según la variante, un Android TV, Raspberry Pi/BlueZ o
+   Bitle. No cambie distancia, orientación ni obstáculos.
+3. Encienda solo `R1`, espere su anuncio y envíe el marcador desde `HB-A`.
+   Repita desde `HB-B` con sufijo `-RETURN`.
+4. Apague `R1` y repita el control negativo para demostrar que no apareció un
+   enlace directo durante la ejecución.
+
+**PASS:** ambos marcadores se entregan una vez únicamente con `R1` encendido;
+el receptor registra TTL 6 para un origen TTL 7 y el relay registra una sola
+retransmisión. TV debe indicar su modo real (dual o central degradado), Pi debe
+tener `Powered: yes` y Bitle debe registrar `Relayed ... to 1 link(s)`.
+
+**FAIL:** entrega con `R1` apagado, TTL sin decremento o decrementado más de una
+vez, más de una retransmisión, duplicado o una dirección ausente. Un build
+correcto o un relay visible sin los dos controles negativos no demuestra los
+dos enlaces físicos.
+
+### D1-COURIER-01 — Courier cifrado mediante Bitle
+
+**Topología inicial:** `HB-A ↔ BITLE-A`, directa; `HB-B` apagado o fuera de
+alcance. Bitle debe anunciar `INFRA_DATA_ANCHOR`.
+
+1. Inicie capturas en los Android disponibles y use
+   `D1-COURIER-01-DEPOSIT-$run` como DM privado de `HB-A` a `HB-B`.
+2. Confirme que `HB-A` establece Noise directamente con Bitle y que el log
+   Android contiene `Courier deposited with anchor`; en la consola saneada de
+   Bitle debe aparecer `Envelope deposited`.
+3. Retire o apague `HB-A`. Encienda `HB-B` en enlace directo solo con Bitle y
+   espere el anuncio y la entrega.
+4. Reconecte `HB-B` una segunda vez para comprobar deduplicación.
+
+**PASS:** Bitle almacena un sobre `0x04`, nunca imprime el marcador ni el
+ciphertext, registra `Handed 1 envelope(s) toward peer`, y `HB-B` muestra una
+sola copia privada exacta. El depósito ocurre solo con enlace directo,
+identidad verificada y sesión Noise; la copia se elimina o queda marcada como
+entregada según el firmware.
+
+**FAIL:** depósito por enlace multisalto o peer no verificado, texto claro en
+logs, entrega a otro destinatario, sobre vencido aceptado, duplicado o mensaje
+ausente. La consola serie de Bitle puede emitir MAC y nickname en otras líneas:
+no guarde la salida completa; conserve únicamente las líneas Courier después
+de redactarlas.
+
+### D1-ROUTE-V2-01 — paquete v2 vía relay Linux
+
+**Topología:** `HB-A ↔ LINUX-R1 ↔ HB-B`, sin enlace directo. Configure
+`LINUX-R1` como `INFRA_RELAY`, `central_enabled: true` y `log_level: DEBUG`.
+Use un cliente de prueba capaz de emitir v2 con flag route `0x08`, una ruta
+conocida y el marcador `D1-ROUTE-V2-01-$run`.
+
+1. Haga el control negativo con el relay detenido.
+2. Inicie el relay y capture por separado el log Android saneado y las líneas
+   `packet type=... ttl=... forwarded=...` del journal Linux, sustituyendo
+   cualquier ID de enlace por los alias del guion.
+3. Envíe el paquete v2 dirigido, detenga el relay y repita el control negativo.
+
+**PASS:** el destino recibe una copia exacta; Android registra `version=2` y
+TTL 6; Linux registra una sola aceptación y `forwarded=1`; los bytes capturados
+antes y después del relay conservan versión, flag y lista de ruta, y solo
+cambia TTL. La firma sigue válida porque su forma canónica usa TTL cero.
+
+**FAIL:** entrega sin relay, conversión a v1, ruta truncada/reordenada, firma
+inválida, TTL incorrecto, duplicado o más de un forward. Los logs actuales de
+Android y Linux no muestran la lista de ruta: sin captura/decodificación de los
+bytes en ambos lados este caso queda `BLOCKED`, no `PASS`.
+
+### D1-ROLE-01 — políticas PHONE e INFRA
+
+Use marcadores `D1-ROLE-01-<ROL>-$run` y anuncie cada rol por `0x25`. Reinicie
+la observación entre variantes para evitar confundir capacidades en caché.
+
+- `PHONE_RELAY`: puede originar chat, mantiene GATT y retransmite un marcador
+  entre dos nodos aislados.
+- `PHONE_BEACON`: aparece solo como presencia; no muestra compositor, no
+  acepta chat, no abre GATT y no retransmite el marcador.
+- `INFRA_RELAY`: no puede originar chat, retransmite con TTL decrementado una
+  vez y no conserva un paquete dirigido para entrega posterior.
+- `INFRA_DATA_ANCHOR`: no puede originar chat, retransmite y ejecuta el caso
+  Courier directo con cuotas y expiración.
+
+**PASS:** la UI/configuración identifica el rol anunciado y cumple todas sus
+restricciones; el receptor observa `type=37`; los controles con el nodo apagado
+prueban relay o ausencia de relay según corresponda.
+
+**FAIL:** un rol origina, conecta, retransmite o almacena algo prohibido; omite
+una capacidad obligatoria; o continúa con la política del rol anterior. El
+`type=37` solo prueba que llegó una capacidad: la conducta y el valor del rol
+requieren inspección manual/configurada.
+
+### Evidencia mínima y estado automatizable
+
+Para cada variante conserve: `capture.json`, log saneado, informe con SHA-256,
+identificadores observados, alias de topología, tiempos UTC, distancias
+aproximadas y controles negativos. No incluya capturas de pantalla que revelen
+nombres personales o notificaciones.
+
+Los scripts automatizan la ventana de `adb logcat`, el filtrado, la redacción,
+el timestamp, la integridad y el esqueleto de informe. Requieren interacción y
+hardware: confirmar UI en ambas apps; aislar físicamente enlaces; operar
+iPhone/BitChat; verificar TV/Pi/Bitle; apagar/reconectar nodos; capturar bytes
+de ruta v2; y observar que los roles impiden acciones. Ningún script de esta
+sección declara por sí mismo compatibilidad física.
+
 ## Matriz ampliada de mega-red
 
 Ejecute estos casos además de la matriz móvil:

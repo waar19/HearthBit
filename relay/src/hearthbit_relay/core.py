@@ -4,10 +4,13 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
-from typing import Protocol
 
 from .config import RelayConfig
+from .identity import RelayIdentity, validate_announcement
+from .link import RelayLink
 from .protocol import (
+    EPHEMERAL_MESSAGE_TYPES,
+    TYPE_ANNOUNCE,
     TYPE_NOISE_HANDSHAKE,
     TYPE_REQUEST_SYNC,
     Packet,
@@ -21,12 +24,6 @@ from .store import PacketStore
 LOGGER = logging.getLogger(__name__)
 
 
-class RelayLink(Protocol):
-    id: str
-
-    async def send(self, packet: bytes) -> None: ...
-
-
 @dataclass(frozen=True, slots=True)
 class RelayResult:
     accepted: bool
@@ -36,16 +33,44 @@ class RelayResult:
 
 
 class RelayCore:
-    def __init__(self, config: RelayConfig, store: PacketStore) -> None:
+    def __init__(
+        self,
+        config: RelayConfig,
+        store: PacketStore,
+        identity: RelayIdentity | None = None,
+    ) -> None:
         self.config = config
         self.store = store
+        self.identity = identity
         self._links: dict[str, RelayLink] = {}
         self._lock = asyncio.Lock()
+        self._presence_task: asyncio.Task[None] | None = None
+
+    async def start(self) -> None:
+        if self.identity is None or self._presence_task is not None:
+            return
+        self._presence_task = asyncio.create_task(self._presence_loop())
+
+    async def stop(self) -> None:
+        if self._presence_task is None:
+            return
+        self._presence_task.cancel()
+        await asyncio.gather(self._presence_task, return_exceptions=True)
+        self._presence_task = None
 
     async def register_link(self, link: RelayLink) -> int:
         async with self._lock:
             self._links[link.id] = link
-        LOGGER.info("link ready: %s", link.id)
+        capabilities = link.capabilities
+        LOGGER.info(
+            "link ready: %s kind=%s mtu=%d reliability=%s cost=%d",
+            link.id,
+            capabilities.kind,
+            capabilities.mtu,
+            capabilities.reliability,
+            capabilities.cost,
+        )
+        await self._send_presence(link)
         return await self._replay(link)
 
     async def remove_link(self, link_id: str) -> None:
@@ -53,12 +78,22 @@ class RelayCore:
             self._links.pop(link_id, None)
         LOGGER.info("link removed: %s", link_id)
 
-    async def inbound(self, source_id: str, raw: bytes) -> RelayResult:
+    async def inbound(
+        self,
+        source_id: str,
+        raw: bytes,
+        *,
+        gateway_path: tuple[bytes, ...] = (),
+    ) -> RelayResult:
         try:
             packet = decode_packet(raw, max_size=self.config.max_packet_size)
         except PacketError as error:
             LOGGER.warning("invalid packet from %s: %s", source_id, error)
             return RelayResult(False, "invalid")
+
+        if packet.message_type == TYPE_ANNOUNCE and validate_announcement(packet) is None:
+            LOGGER.warning("invalid ANNOUNCE identity from %s", source_id)
+            return RelayResult(False, "invalid-announce")
 
         fingerprint = relay_fingerprint(packet)
         now_ms = _now_ms()
@@ -80,7 +115,7 @@ class RelayCore:
         sent = 0
         for link in links:
             try:
-                await link.send(forwarded_packet)
+                await link.send_with_path(forwarded_packet, gateway_path)
                 sent += 1
                 if stored:
                     self.store.mark_delivered(fingerprint, link.id, now_ms=now_ms)
@@ -95,6 +130,44 @@ class RelayCore:
             stored,
         )
         return RelayResult(True, "relayed", sent, stored)
+
+    async def _presence_loop(self) -> None:
+        while True:
+            await self._broadcast_presence()
+            await asyncio.sleep(self.config.announce_interval_seconds)
+
+    async def _broadcast_presence(self) -> None:
+        async with self._lock:
+            links = list(self._links.values())
+        for link in links:
+            await self._send_presence(link)
+
+    async def _send_presence(self, link: RelayLink) -> None:
+        if self.identity is None:
+            return
+        now_ms = _now_ms()
+        announcement = self.identity.build_announcement(
+            nickname=self.config.nickname,
+            timestamp_ms=now_ms,
+        )
+        capability = self.identity.build_node_capability(
+            role=self.config.node_role,
+            timestamp_ms=now_ms,
+        )
+        for local_packet in (announcement, capability):
+            decoded = decode_packet(
+                local_packet,
+                max_size=self.config.max_packet_size,
+            )
+            self.store.seen_or_add(
+                relay_fingerprint(decoded),
+                now_ms=now_ms,
+            )
+        try:
+            await link.send(announcement)
+            await link.send(capability)
+        except Exception:
+            LOGGER.exception("failed sending relay identity to %s", link.id)
 
     async def _replay(self, link: RelayLink) -> int:
         pending = self.store.pending_for(
@@ -122,6 +195,8 @@ class RelayCore:
         now_ms: int,
     ) -> bool:
         policy = self.config.store
+        if packet.message_type in EPHEMERAL_MESSAGE_TYPES:
+            return False
         if packet.message_type not in policy.message_types:
             return False
         if policy.require_signature and not packet.has_signature:

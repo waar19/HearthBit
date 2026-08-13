@@ -21,6 +21,7 @@ android {
             dimension = "device"
             applicationIdSuffix = ".tv"
             buildConfigField("String", "TARGET_KIND", "\"tv\"")
+            buildConfigField("String", "MESH_NODE_ROLE", "\"INFRA_RELAY\"")
             buildConfigField("boolean", "VEHICLE_GATED", "false")
             resValue("string", "app_name", "HearthBit TV Relay")
         }
@@ -28,6 +29,7 @@ android {
             dimension = "device"
             applicationIdSuffix = ".automotive"
             buildConfigField("String", "TARGET_KIND", "\"automotive\"")
+            buildConfigField("String", "MESH_NODE_ROLE", "\"INFRA_RELAY\"")
             buildConfigField("boolean", "VEHICLE_GATED", "true")
             resValue("string", "app_name", "HearthBit Vehicle Relay")
         }

@@ -10,7 +10,7 @@ COPY src ./src
 COPY run.sh /run.sh
 RUN apk add --no-cache python3 \
     && python3 -m venv /opt/hearthbit-relay/venv \
-    && /opt/hearthbit-relay/venv/bin/pip install --no-cache-dir . \
+    && /opt/hearthbit-relay/venv/bin/pip install --no-cache-dir ".[mqtt]" \
     && chmod 0755 /run.sh
 
 RUN mkdir -p /config /var/lib/hearthbit-relay

@@ -9,6 +9,23 @@ permissions:
   contents: read
 
 jobs:
+  conformance:
+    name: Validar relay y fixtures compartidos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: relay/pyproject.toml
+      - run: python -m pip install -e ".[test]"
+        working-directory: relay
+      - run: python -m pytest
+        working-directory: relay
+
   flutter:
     name: Analizar y probar Flutter
     runs-on: ubuntu-latest

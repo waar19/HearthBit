@@ -13,6 +13,7 @@ from dbus_next.service import ServiceInterface, dbus_property, method
 
 from .config import RelayConfig
 from .core import RelayCore
+from .link import LinkCapabilities, LinkKind, LinkReliability, RelayLink
 
 LOGGER = logging.getLogger(__name__)
 
@@ -28,11 +29,13 @@ GATT_CHARACTERISTIC = "org.bluez.GattCharacteristic1"
 ADVERTISEMENT = "org.bluez.LEAdvertisement1"
 
 SERVICE_UUID = "f47b5e2d-4a9e-4c5a-9b3f-8e1d2c3a4b5c"
+SERVICE_UUID_DASHED = "f47b5e2d-4a9e-4c5a-9b3f-8e1d2c3a4b5c"
 CHARACTERISTIC_UUID = "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d"
 APP_ROOT = "/org/hearthbit/relay"
 SERVICE_PATH = f"{APP_ROOT}/service0"
 CHARACTERISTIC_PATH = f"{SERVICE_PATH}/char0"
 ADVERTISEMENT_PATH = f"{APP_ROOT}/advertisement0"
+BLUEZ_FRAME_MTU = 512
 
 
 class ManagedObjectInterface(ServiceInterface):
@@ -69,13 +72,23 @@ class HearthBitService(ServiceInterface):
         }
 
 
-class PeripheralLink:
-    def __init__(self, link_id: str, characteristic: "HearthBitCharacteristic") -> None:
-        self.id = link_id
+class PeripheralLink(RelayLink):
+    def __init__(
+        self,
+        capabilities: LinkCapabilities,
+        characteristic: "HearthBitCharacteristic",
+    ) -> None:
+        self._capabilities = capabilities
         self._characteristic = characteristic
 
-    async def send(self, packet: bytes) -> None:
-        await self._characteristic.notify(packet)
+    @property
+    def capabilities(self) -> LinkCapabilities:
+        return self._capabilities
+
+    async def send(self, frame: bytes) -> None:
+        if len(frame) > self.capabilities.mtu:
+            raise ValueError("frame exceeds BlueZ peripheral MTU")
+        await self._characteristic.notify(frame)
 
 
 class HearthBitCharacteristic(ServiceInterface):
@@ -121,7 +134,20 @@ class HearthBitCharacteristic(ServiceInterface):
         self._session += 1
         self._link_id = f"peripheral-session:{self._session}"
         self.emit_properties_changed({"Notifying": True})
-        link = PeripheralLink(self._link_id, self)
+        link = PeripheralLink(
+            LinkCapabilities(
+                id=self._link_id,
+                kind=LinkKind.BLE,
+                mtu=min(self._core.config.max_packet_size, BLUEZ_FRAME_MTU),
+                broadcast=True,
+                unicast=False,
+                reliability=LinkReliability.BEST_EFFORT,
+                background=True,
+                max_connections=self._core.config.max_central_links,
+                cost=10,
+            ),
+            self,
+        )
         asyncio.create_task(self._core.register_link(link))
 
     @method()
@@ -178,14 +204,20 @@ class HearthBitAdvertisement(ServiceInterface):
         LOGGER.info("BlueZ released the HearthBit advertisement")
 
 
-class CentralLink:
-    def __init__(self, link_id: str, characteristic: Any) -> None:
-        self.id = link_id
+class CentralLink(RelayLink):
+    def __init__(self, capabilities: LinkCapabilities, characteristic: Any) -> None:
+        self._capabilities = capabilities
         self._characteristic = characteristic
 
-    async def send(self, packet: bytes) -> None:
+    @property
+    def capabilities(self) -> LinkCapabilities:
+        return self._capabilities
+
+    async def send(self, frame: bytes) -> None:
+        if len(frame) > self.capabilities.mtu:
+            raise ValueError("frame exceeds BlueZ central MTU")
         await self._characteristic.call_write_value(
-            packet, {"type": Variant("s", "command")}
+            frame, {"type": Variant("s", "command")}
         )
 
 
@@ -261,7 +293,7 @@ class BlueZTransport:
             await adapter_iface.call_set_discovery_filter(
                 {
                     "Transport": Variant("s", "le"),
-                    "UUIDs": Variant("as", [SERVICE_UUID]),
+                    "UUIDs": Variant("as", [SERVICE_UUID_DASHED]),
                 }
             )
             await adapter_iface.call_start_discovery()
@@ -292,9 +324,7 @@ class BlueZTransport:
             device = interfaces.get(DEVICE_IFACE)
             if device is None or path in self._central_links:
                 continue
-            name = _variant_value(device.get("Name"), "")
-            uuids = [str(value).lower() for value in _variant_value(device.get("UUIDs"), [])]
-            if name != self.config.local_name or SERVICE_UUID not in uuids:
+            if not is_hearthbit_device(device):
                 continue
             if len(self._central_links) >= self.config.max_central_links:
                 break
@@ -326,12 +356,14 @@ class BlueZTransport:
                 for path, interfaces in managed.items()
                 if path.startswith(f"{device_path}/")
                 and GATT_CHARACTERISTIC in interfaces
-                and str(
-                    _variant_value(
-                        interfaces[GATT_CHARACTERISTIC].get("UUID"), ""
+                and _normalize_uuid(
+                    str(
+                        _variant_value(
+                            interfaces[GATT_CHARACTERISTIC].get("UUID"), ""
+                        )
                     )
-                ).lower()
-                == CHARACTERISTIC_UUID
+                )
+                == _normalize_uuid(CHARACTERISTIC_UUID)
             ),
             None,
         )
@@ -355,7 +387,20 @@ class BlueZTransport:
 
         properties.on_properties_changed(changed)
         await characteristic.call_start_notify()
-        link = CentralLink(device_path, characteristic)
+        link = CentralLink(
+            LinkCapabilities(
+                id=device_path,
+                kind=LinkKind.BLE,
+                mtu=min(self.config.max_packet_size, BLUEZ_FRAME_MTU),
+                broadcast=False,
+                unicast=True,
+                reliability=LinkReliability.BEST_EFFORT,
+                background=True,
+                max_connections=self.config.max_central_links,
+                cost=10,
+            ),
+            characteristic,
+        )
         self._central_links[device_path] = link
         await self.core.register_link(link)
 
@@ -380,3 +425,15 @@ def _option_value(options: dict[str, Variant], key: str, default: Any) -> Any:
 
 def _variant_value(value: Variant | None, default: Any) -> Any:
     return value.value if isinstance(value, Variant) else default
+
+
+def is_hearthbit_device(device: dict[str, Variant]) -> bool:
+    uuids = _variant_value(device.get("UUIDs"), [])
+    return any(
+        _normalize_uuid(str(value)) == _normalize_uuid(SERVICE_UUID)
+        for value in uuids
+    )
+
+
+def _normalize_uuid(value: str) -> str:
+    return value.lower().replace("-", "")

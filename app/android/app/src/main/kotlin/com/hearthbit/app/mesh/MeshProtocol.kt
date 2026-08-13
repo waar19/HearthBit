@@ -85,6 +85,74 @@ internal object MeshProtocol {
         val prekeyId: Long?,
     )
 
+    data class FragmentPayload(
+        val fragmentId: ByteArray,
+        val index: Int,
+        val total: Int,
+        val originalType: Byte,
+        val data: ByteArray,
+    )
+
+    data class ExtensionEnvelope(
+        val namespace: String,
+        val subtype: Int,
+        val version: Int,
+        val flags: Int,
+        val payload: ByteArray,
+    )
+
+    fun decodeExtensionEnvelope(input: ByteArray): ExtensionEnvelope? = runCatching {
+        if (input.size < 12) return null
+        val buffer = ByteBuffer.wrap(input).order(ByteOrder.BIG_ENDIAN)
+        val namespaceBytes = ByteArray(4).also(buffer::get)
+        if (namespaceBytes.any { it.toInt() !in 0x20..0x7E }) return null
+        val subtype = buffer.short.toInt() and 0xFFFF
+        val version = buffer.get().toInt() and 0xFF
+        val flags = buffer.get().toInt() and 0xFF
+        if (flags and 0xFC != 0) return null
+        val length = buffer.int
+        if (length < 0 || length != buffer.remaining() || length > MAX_PAYLOAD_LENGTH) return null
+        ExtensionEnvelope(
+            namespace = namespaceBytes.toString(Charsets.US_ASCII),
+            subtype = subtype,
+            version = version,
+            flags = flags,
+            payload = ByteArray(length).also(buffer::get),
+        )
+    }.getOrNull()
+
+    fun encodeFragmentPayload(fragment: FragmentPayload): ByteArray {
+        require(fragment.fragmentId.size == FRAGMENT_ID_SIZE)
+        require(fragment.index in 0..0xFFFF)
+        require(fragment.total in 1..0xFFFF)
+        require(fragment.index < fragment.total)
+        return ByteArray(FRAGMENT_HEADER_SIZE + fragment.data.size).also { output ->
+            fragment.fragmentId.copyInto(output)
+            output[8] = (fragment.index ushr 8).toByte()
+            output[9] = fragment.index.toByte()
+            output[10] = (fragment.total ushr 8).toByte()
+            output[11] = fragment.total.toByte()
+            output[12] = fragment.originalType
+            fragment.data.copyInto(output, destinationOffset = FRAGMENT_HEADER_SIZE)
+        }
+    }
+
+    fun decodeFragmentPayload(payload: ByteArray): FragmentPayload? {
+        if (payload.size < FRAGMENT_HEADER_SIZE) return null
+        val index = ((payload[8].toInt() and 0xFF) shl 8) or
+            (payload[9].toInt() and 0xFF)
+        val total = ((payload[10].toInt() and 0xFF) shl 8) or
+            (payload[11].toInt() and 0xFF)
+        if (total == 0 || index >= total) return null
+        return FragmentPayload(
+            fragmentId = payload.copyOfRange(0, FRAGMENT_ID_SIZE),
+            index = index,
+            total = total,
+            originalType = payload[12],
+            data = payload.copyOfRange(FRAGMENT_HEADER_SIZE, payload.size),
+        )
+    }
+
     fun encode(packet: Packet, padded: Boolean = true): ByteArray {
         require(packet.senderId.size == 8)
         require(packet.recipientId == null || packet.recipientId.size == 8)
@@ -161,6 +229,16 @@ internal object MeshProtocol {
             packet.type == TYPE_NOISE_ENCRYPTED,
     )
 
+    fun removeBleTransportPadding(packet: Packet, encoded: ByteArray): ByteArray {
+        if (packet.type != TYPE_NOISE_HANDSHAKE && packet.type != TYPE_NOISE_ENCRYPTED) {
+            return encoded.copyOf()
+        }
+        val rawSize = encode(packet, padded = false).size
+        if (encoded.size <= rawSize) return encoded.copyOf()
+        val unpadded = unpad(encoded)
+        return if (unpadded.size == rawSize) unpadded else encoded.copyOf()
+    }
+
     fun decode(input: ByteArray): Packet? {
         return decodeRaw(input) ?: decodeRaw(unpad(input))
     }
@@ -207,6 +285,7 @@ internal object MeshProtocol {
                 payloadData
             }
             val signature = if (signatureSize > 0) ByteArray(64).also(buffer::get) else null
+            if (buffer.hasRemaining()) return null
             Packet(
                 version = version,
                 type = type,
@@ -585,6 +664,43 @@ internal object MeshProtocol {
         return hex(MessageDigest.getInstance("SHA-256").digest(canonical).copyOfRange(0, 12))
     }
 
+    /**
+     * Fingerprint de relay sobre bytes opacos: ignora padding, TTL y RSR, pero
+     * conserva exactamente el resto de la representación recibida.
+     */
+    fun relayFingerprint(encoded: ByteArray): String? = runCatching {
+        if (encoded.size < 22) return null
+        val version = encoded[0].toInt() and 0xFF
+        val flags = encoded[11].toInt() and 0xFF
+        val headerSize = when (version) {
+            1 -> 22
+            2 -> 24
+            else -> return null
+        }
+        if (encoded.size < headerSize) return null
+        val payloadSize = if (version == 1) {
+            ((encoded[12].toInt() and 0xFF) shl 8) or
+                (encoded[13].toInt() and 0xFF)
+        } else {
+            ByteBuffer.wrap(encoded, 12, 4).order(ByteOrder.BIG_ENDIAN).int
+                .takeIf { it >= 0 } ?: return null
+        }
+        var wireSize = headerSize
+        if (flags and 0x01 != 0) wireSize += 8
+        if (version == 2 && flags and 0x08 != 0) {
+            if (wireSize >= encoded.size) return null
+            wireSize += 1 + (encoded[wireSize].toInt() and 0xFF) * 8
+        }
+        wireSize += payloadSize
+        if (flags and 0x02 != 0) wireSize += 64
+        if (wireSize > encoded.size) return null
+
+        val canonical = encoded.copyOf(wireSize)
+        canonical[2] = 0
+        canonical[11] = (canonical[11].toInt() and 0x10.inv()).toByte()
+        hex(MessageDigest.getInstance("SHA-256").digest(canonical).copyOfRange(0, 12))
+    }.getOrNull()
+
     private fun putByteString(buffer: ByteBuffer, bytes: ByteArray) {
         buffer.put(bytes.size.toByte())
         buffer.put(bytes)
@@ -706,6 +822,8 @@ internal object MeshProtocol {
 
     private const val COMPRESSION_THRESHOLD = 100
     private const val MAX_PAYLOAD_LENGTH = 10_485_760
+    const val FRAGMENT_HEADER_SIZE = 13
+    const val FRAGMENT_ID_SIZE = 8
     private const val HBT_CAPABILITY_TLV = 0xF0
     private const val INFRASTRUCTURE_TLV = 0xB1
     const val SYNC_FLAG_ANNOUNCE = 1L shl 0

@@ -63,7 +63,10 @@ class RelayForegroundService : Service() {
             stopRelay()
             return START_NOT_STICKY
         }
-        val startResult = runCatching { MeshRuntime.engine(this).ensureStarted() }
+        val startResult = runCatching {
+            val relayRole = RelayNodeRolePolicy.resolve(BuildConfig.MESH_NODE_ROLE)
+            MeshRuntime.engine(this, requiredRole = relayRole).ensureStarted()
+        }
         startResult.exceptionOrNull()?.let {
             MeshRuntime.eventListener?.invoke(
                 mapOf(
