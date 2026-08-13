@@ -1808,7 +1808,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         isInfrastructure: announcement.isInfrastructure ||
           (peers[senderID]?.isInfrastructure ?? false),
         role: peers[senderID]?.role ?? .phoneRelay,
-        hasLongRangeTrunk: peers[senderID]?.hasLongRangeTrunk ?? false,
+        hasLongRangeTrunk: false,
         lastSeen: Date()
       )
       latestAnnouncementTimestampByPeer[senderID] = max(

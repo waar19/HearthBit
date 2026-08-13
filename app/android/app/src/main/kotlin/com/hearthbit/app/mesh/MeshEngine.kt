@@ -1652,7 +1652,6 @@ internal class MeshEngine(
         }
         val previouslySupported = peers[senderHex]?.supportsTransfers == true
         val previousRole = peers[senderHex]?.role ?: MeshNodeRole.PHONE_RELAY
-        val previousLongRangeTrunk = peers[senderHex]?.hasLongRangeTrunk == true
         peers[senderHex] = Peer(
             senderHex,
             announcement.nickname,
@@ -1660,7 +1659,7 @@ internal class MeshEngine(
             announcement.noisePublicKey,
             announcement.supportsTransfers || previouslySupported,
             previousRole,
-            previousLongRangeTrunk,
+            hasLongRangeTrunk = false,
         )
         latestAnnouncementTimestampByPeer.merge(senderHex, packet.timestamp) { current, candidate ->
             maxOf(current, candidate)
