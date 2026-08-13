@@ -986,6 +986,85 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gatewayTls => '使用加密 TLS 连接';
 
   @override
+  String get mapOpen => '打开离线地图';
+
+  @override
+  String get mapOpenRescue => '打开救援地图';
+
+  @override
+  String get mapTitle => '离线救援地图';
+
+  @override
+  String get mapMyLocation => '以我的位置为中心';
+
+  @override
+  String get mapDownloadVisible => '下载可见区域';
+
+  @override
+  String mapDownloadComplete(int count) {
+    return '已保存 $count 个地图图块供离线使用。';
+  }
+
+  @override
+  String mapDownloadTooLarge(int maximum) {
+    return '区域过大。请放大地图；安全上限为 $maximum 个图块。';
+  }
+
+  @override
+  String mapDownloadError(String error) {
+    return '无法下载地图区域：$error';
+  }
+
+  @override
+  String mapDownloading(int completed, int total) {
+    return '正在保存地图：$completed/$total';
+  }
+
+  @override
+  String mapCacheError(String error) {
+    return '无法打开离线地图缓存：$error';
+  }
+
+  @override
+  String get mapYouAreHere => '你在这里';
+
+  @override
+  String get mapOfflineHint => '网络不可用。已保存的地图图块仍可查看。';
+
+  @override
+  String get mapShowOnMap => '在地图上显示';
+
+  @override
+  String get rescueListTitle => '救援队列 · 最近优先';
+
+  @override
+  String get rescueListEmpty => '没有包含救援数据的 SOS 警报或状态报告。';
+
+  @override
+  String get rescueExportCsv => '分享救援 CSV';
+
+  @override
+  String get rescueExportSubject => 'HearthBit 救援队列';
+
+  @override
+  String rescueExportError(String error) {
+    return '无法分享救援列表：$error';
+  }
+
+  @override
+  String get rescueDistanceUnknown => '距离未知';
+
+  @override
+  String rescueDistanceMeters(int meters) {
+    return '距离 $meters 米';
+  }
+
+  @override
+  String rescueDistanceKilometers(String kilometers) {
+    return '距离 $kilometers 公里';
+  }
+
+  @override
   String get voiceRecord => '录制语音消息';
 
   @override

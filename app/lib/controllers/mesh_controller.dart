@@ -8,6 +8,7 @@ import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/message_repository.dart';
+import '../services/peer_location_tracker.dart';
 
 enum PrivateMessageSendDisposition { sent, queued, failed }
 
@@ -30,9 +31,15 @@ class PrivateMessageSendResult {
 }
 
 class MeshController extends ChangeNotifier {
-  MeshController({MeshPlatformService? platform, MessageRepository? repository})
-    : _platform = platform ?? MeshPlatformService(),
-      _repository = repository ?? MessageRepository();
+  MeshController({
+    MeshPlatformService? platform,
+    MessageRepository? repository,
+    PeerLocationTracker? locationTracker,
+  }) : _platform = platform ?? MeshPlatformService(),
+       _repository = repository ?? MessageRepository(),
+       peerLocations = locationTracker ?? PeerLocationTracker() {
+    peerLocations.addListener(_notifyLocationChanged);
+  }
 
   /// Intervalo entre reenvíos de SOS con GPS fresco en modo rescate: lo
   /// bastante frecuente para seguir a una persona que se mueve, lo bastante
@@ -43,6 +50,7 @@ class MeshController extends ChangeNotifier {
 
   final MeshPlatformService _platform;
   final MessageRepository _repository;
+  final PeerLocationTracker peerLocations;
   final List<MeshMessage> _messages = [];
   final List<MeshPeer> _peers = [];
   final List<GenericBlePresence> _presences = [];
@@ -169,6 +177,7 @@ class MeshController extends ChangeNotifier {
     _messages
       ..clear()
       ..addAll(await _repository.load());
+    peerLocations.replacePersisted(_messages);
     _knownPeers
       ..clear()
       ..addEntries(
@@ -514,7 +523,7 @@ class MeshController extends ChangeNotifier {
           Geolocator.getPositionStream(
             locationSettings: const LocationSettings(
               accuracy: LocationAccuracy.high,
-          distanceFilter: radarLocationDistanceMeters,
+              distanceFilter: radarLocationDistanceMeters,
             ),
           ).listen((position) {
             _latestRadarPosition = position;
@@ -620,6 +629,7 @@ class MeshController extends ChangeNotifier {
     await _platform.panicWipe();
     await _repository.clear();
     _messages.clear();
+    peerLocations.clear();
     _privateMessageOutbox.clear();
     _peers.clear();
     _knownPeers.clear();
@@ -833,10 +843,14 @@ class MeshController extends ChangeNotifier {
         final rawMessage = event['message'];
         if (rawMessage is Map<Object?, Object?>) {
           final message = MeshMessage.fromMap(rawMessage);
-          if (message.isRadarLocation) break;
+          if (message.isRadarLocation) {
+            peerLocations.ingestLive(message);
+            break;
+          }
           if (_messages.every((existing) => existing.id != message.id)) {
             _messages.add(message);
             _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+            peerLocations.ingestPersisted(message);
             unawaited(_repository.save(message));
           }
         }
@@ -849,6 +863,7 @@ class MeshController extends ChangeNotifier {
         break;
       case 'wiped':
         _messages.clear();
+        peerLocations.clear();
         _peers.clear();
         _presences.clear();
         _knownPeers.clear();
@@ -981,12 +996,16 @@ class MeshController extends ChangeNotifier {
     return peerId.length >= 8 ? peerId.substring(0, 8) : peerId;
   }
 
+  void _notifyLocationChanged() => notifyListeners();
+
   @override
   void dispose() {
     _rescueTimer?.cancel();
     _consentTimer?.cancel();
     _stopRadarLocationSharing();
     _subscription?.cancel();
+    peerLocations.removeListener(_notifyLocationChanged);
+    peerLocations.dispose();
     super.dispose();
   }
 }

@@ -1006,6 +1006,85 @@ class AppLocalizationsJa extends AppLocalizations {
   String get gatewayTls => '暗号化TLS接続を使用';
 
   @override
+  String get mapOpen => 'オフライン地図を開く';
+
+  @override
+  String get mapOpenRescue => '救助マップを開く';
+
+  @override
+  String get mapTitle => 'オフライン救助マップ';
+
+  @override
+  String get mapMyLocation => '現在地を中央に表示';
+
+  @override
+  String get mapDownloadVisible => '表示範囲をダウンロード';
+
+  @override
+  String mapDownloadComplete(int count) {
+    return '$count枚の地図タイルをオフライン用に保存しました。';
+  }
+
+  @override
+  String mapDownloadTooLarge(int maximum) {
+    return '範囲が広すぎます。拡大してください。安全な上限は$maximum枚です。';
+  }
+
+  @override
+  String mapDownloadError(String error) {
+    return '地図範囲をダウンロードできませんでした：$error';
+  }
+
+  @override
+  String mapDownloading(int completed, int total) {
+    return '地図を保存中：$completed/$total';
+  }
+
+  @override
+  String mapCacheError(String error) {
+    return 'オフライン地図キャッシュを開けませんでした：$error';
+  }
+
+  @override
+  String get mapYouAreHere => '現在地';
+
+  @override
+  String get mapOfflineHint => 'ネットワークがありません。保存済みの地図タイルは表示できます。';
+
+  @override
+  String get mapShowOnMap => '地図に表示';
+
+  @override
+  String get rescueListTitle => '救助リスト・近い順';
+
+  @override
+  String get rescueListEmpty => '救助情報を含むSOSまたは安否確認はありません。';
+
+  @override
+  String get rescueExportCsv => '救助CSVを共有';
+
+  @override
+  String get rescueExportSubject => 'HearthBit救助リスト';
+
+  @override
+  String rescueExportError(String error) {
+    return '救助リストを共有できませんでした：$error';
+  }
+
+  @override
+  String get rescueDistanceUnknown => '距離不明';
+
+  @override
+  String rescueDistanceMeters(int meters) {
+    return '$meters m先';
+  }
+
+  @override
+  String rescueDistanceKilometers(String kilometers) {
+    return '$kilometers km先';
+  }
+
+  @override
   String get voiceRecord => '音声メモを録音';
 
   @override

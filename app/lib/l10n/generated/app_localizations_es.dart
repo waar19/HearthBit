@@ -1050,6 +1050,87 @@ class AppLocalizationsEs extends AppLocalizations {
   String get gatewayTls => 'Usar conexión TLS cifrada';
 
   @override
+  String get mapOpen => 'Abrir mapa offline';
+
+  @override
+  String get mapOpenRescue => 'ABRIR MAPA DE RESCATE';
+
+  @override
+  String get mapTitle => 'Mapa offline de rescate';
+
+  @override
+  String get mapMyLocation => 'Centrar en mi ubicación';
+
+  @override
+  String get mapDownloadVisible => 'Descargar zona visible';
+
+  @override
+  String mapDownloadComplete(int count) {
+    return 'Se guardaron $count teselas para uso offline.';
+  }
+
+  @override
+  String mapDownloadTooLarge(int maximum) {
+    return 'La zona es demasiado grande. Acerca el mapa; el límite seguro es $maximum teselas.';
+  }
+
+  @override
+  String mapDownloadError(String error) {
+    return 'No se pudo descargar la zona: $error';
+  }
+
+  @override
+  String mapDownloading(int completed, int total) {
+    return 'Guardando mapa: $completed/$total';
+  }
+
+  @override
+  String mapCacheError(String error) {
+    return 'No se pudo abrir la caché offline: $error';
+  }
+
+  @override
+  String get mapYouAreHere => 'Estás aquí';
+
+  @override
+  String get mapOfflineHint =>
+      'No hay red. Las teselas guardadas siguen disponibles.';
+
+  @override
+  String get mapShowOnMap => 'Mostrar en el mapa';
+
+  @override
+  String get rescueListTitle => 'Cola de rescate · más cercanos primero';
+
+  @override
+  String get rescueListEmpty =>
+      'No hay alertas SOS ni estados con datos de rescate.';
+
+  @override
+  String get rescueExportCsv => 'Compartir CSV de rescate';
+
+  @override
+  String get rescueExportSubject => 'Cola de rescate de HearthBit';
+
+  @override
+  String rescueExportError(String error) {
+    return 'No se pudo compartir la lista: $error';
+  }
+
+  @override
+  String get rescueDistanceUnknown => 'distancia desconocida';
+
+  @override
+  String rescueDistanceMeters(int meters) {
+    return 'a $meters m';
+  }
+
+  @override
+  String rescueDistanceKilometers(String kilometers) {
+    return 'a $kilometers km';
+  }
+
+  @override
   String get voiceRecord => 'Grabar nota de voz';
 
   @override

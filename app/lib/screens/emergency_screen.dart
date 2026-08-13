@@ -6,6 +6,7 @@ import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../services/app_preferences.dart';
 import 'emergency_gateway_card.dart';
+import 'map_screen.dart';
 import 'radar_screen.dart';
 import 'rescue_power_cards.dart';
 
@@ -62,6 +63,16 @@ class EmergencyScreen extends StatelessWidget {
         PowerSavingCard(controller: controller),
         const SizedBox(height: 12),
         EmergencyGatewayCard(controller: gateway, preferences: preferences),
+        const SizedBox(height: 12),
+        FilledButton.tonalIcon(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => MapScreen(controller: controller),
+            ),
+          ),
+          icon: const Icon(Icons.map_outlined),
+          label: Text(context.l10n.mapOpenRescue),
+        ),
         const SizedBox(height: 24),
         Text(
           context.l10n.checkInRecentTitle,

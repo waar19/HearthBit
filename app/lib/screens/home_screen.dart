@@ -24,6 +24,7 @@ import '../services/photo_profile.dart';
 import '../utils/message_chronology.dart';
 import 'emergency_screen.dart';
 import 'mesh_health_card.dart';
+import 'map_screen.dart';
 import 'optical_receive_screen.dart';
 import 'optical_send_screen.dart';
 import 'radar_screen.dart';
@@ -200,7 +201,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     double? latitude,
     double? longitude,
   }) {
-    final knownLocation = _latestKnownPeerLocation(peerId);
+    final knownLocation = widget.controller.peerLocations.latestFor(peerId);
     return Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => RadarScreen(
@@ -208,27 +209,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           nickname: nickname,
           consentExpiresAt: consentExpiresAt,
           consentSource: consentSource,
-          latitude: latitude ?? knownLocation?.$1,
-          longitude: longitude ?? knownLocation?.$2,
+          latitude: latitude ?? knownLocation?.latitude,
+          longitude: longitude ?? knownLocation?.longitude,
         ),
       ),
     );
-  }
-
-  (double, double)? _latestKnownPeerLocation(String peerId) {
-    for (final message in widget.controller.messages.reversed) {
-      if (message.senderPeerId.toLowerCase() != peerId.toLowerCase()) continue;
-      final checkIn = message.checkIn;
-      if (checkIn?.latitude != null && checkIn?.longitude != null) {
-        return (checkIn!.latitude!, checkIn.longitude!);
-      }
-      final latitude = message.sosLatitude;
-      final longitude = message.sosLongitude;
-      if (message.isSos && latitude != null && longitude != null) {
-        return (latitude, longitude);
-      }
-    }
-    return null;
   }
 
   Future<bool?> _askCompressPhoto(int size) {
@@ -279,6 +264,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           appBar: AppBar(
             title: Text(context.l10n.appTitle),
             actions: [
+              IconButton(
+                tooltip: context.l10n.mapOpen,
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => MapScreen(controller: controller),
+                  ),
+                ),
+                icon: const Icon(Icons.map_outlined),
+              ),
               IconButton(
                 tooltip: context.l10n.tooltipAppearance,
                 onPressed: _showAppearance,

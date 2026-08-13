@@ -1042,6 +1042,86 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gatewayTls => 'Use encrypted TLS connection';
 
   @override
+  String get mapOpen => 'Open offline map';
+
+  @override
+  String get mapOpenRescue => 'OPEN RESCUE MAP';
+
+  @override
+  String get mapTitle => 'Offline rescue map';
+
+  @override
+  String get mapMyLocation => 'Center on my location';
+
+  @override
+  String get mapDownloadVisible => 'Download visible area';
+
+  @override
+  String mapDownloadComplete(int count) {
+    return '$count map tiles saved for offline use.';
+  }
+
+  @override
+  String mapDownloadTooLarge(int maximum) {
+    return 'This area is too large. Zoom in; the safe limit is $maximum tiles.';
+  }
+
+  @override
+  String mapDownloadError(String error) {
+    return 'Could not download the map area: $error';
+  }
+
+  @override
+  String mapDownloading(int completed, int total) {
+    return 'Saving map tiles: $completed/$total';
+  }
+
+  @override
+  String mapCacheError(String error) {
+    return 'Could not open the offline map cache: $error';
+  }
+
+  @override
+  String get mapYouAreHere => 'You are here';
+
+  @override
+  String get mapOfflineHint =>
+      'Network unavailable. Already saved map tiles remain visible.';
+
+  @override
+  String get mapShowOnMap => 'Show on map';
+
+  @override
+  String get rescueListTitle => 'Rescue queue · nearest first';
+
+  @override
+  String get rescueListEmpty => 'No SOS alerts or check-ins with rescue data.';
+
+  @override
+  String get rescueExportCsv => 'Share rescue CSV';
+
+  @override
+  String get rescueExportSubject => 'HearthBit rescue queue';
+
+  @override
+  String rescueExportError(String error) {
+    return 'Could not share the rescue list: $error';
+  }
+
+  @override
+  String get rescueDistanceUnknown => 'distance unknown';
+
+  @override
+  String rescueDistanceMeters(int meters) {
+    return '$meters m away';
+  }
+
+  @override
+  String rescueDistanceKilometers(String kilometers) {
+    return '$kilometers km away';
+  }
+
+  @override
   String get voiceRecord => 'Record voice note';
 
   @override

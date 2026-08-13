@@ -1048,6 +1048,87 @@ class AppLocalizationsDe extends AppLocalizations {
   String get gatewayTls => 'Verschlüsselte TLS-Verbindung verwenden';
 
   @override
+  String get mapOpen => 'Offline-Karte öffnen';
+
+  @override
+  String get mapOpenRescue => 'RETTUNGSKARTE ÖFFNEN';
+
+  @override
+  String get mapTitle => 'Offline-Rettungskarte';
+
+  @override
+  String get mapMyLocation => 'Auf meinen Standort zentrieren';
+
+  @override
+  String get mapDownloadVisible => 'Sichtbaren Bereich herunterladen';
+
+  @override
+  String mapDownloadComplete(int count) {
+    return '$count Kartenkacheln wurden offline gespeichert.';
+  }
+
+  @override
+  String mapDownloadTooLarge(int maximum) {
+    return 'Der Bereich ist zu groß. Zoome hinein; das sichere Limit beträgt $maximum Kacheln.';
+  }
+
+  @override
+  String mapDownloadError(String error) {
+    return 'Der Kartenbereich konnte nicht geladen werden: $error';
+  }
+
+  @override
+  String mapDownloading(int completed, int total) {
+    return 'Karte wird gespeichert: $completed/$total';
+  }
+
+  @override
+  String mapCacheError(String error) {
+    return 'Der Offline-Kartenspeicher konnte nicht geöffnet werden: $error';
+  }
+
+  @override
+  String get mapYouAreHere => 'Du bist hier';
+
+  @override
+  String get mapOfflineHint =>
+      'Kein Netzwerk. Bereits gespeicherte Kartenkacheln bleiben sichtbar.';
+
+  @override
+  String get mapShowOnMap => 'Auf Karte zeigen';
+
+  @override
+  String get rescueListTitle => 'Rettungsliste · nächste zuerst';
+
+  @override
+  String get rescueListEmpty =>
+      'Keine SOS-Alarme oder Statusmeldungen mit Rettungsdaten.';
+
+  @override
+  String get rescueExportCsv => 'Rettungs-CSV teilen';
+
+  @override
+  String get rescueExportSubject => 'HearthBit-Rettungsliste';
+
+  @override
+  String rescueExportError(String error) {
+    return 'Die Rettungsliste konnte nicht geteilt werden: $error';
+  }
+
+  @override
+  String get rescueDistanceUnknown => 'Entfernung unbekannt';
+
+  @override
+  String rescueDistanceMeters(int meters) {
+    return '$meters m entfernt';
+  }
+
+  @override
+  String rescueDistanceKilometers(String kilometers) {
+    return '$kilometers km entfernt';
+  }
+
+  @override
   String get voiceRecord => 'Sprachnachricht aufnehmen';
 
   @override

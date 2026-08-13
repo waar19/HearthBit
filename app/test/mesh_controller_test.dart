@@ -685,6 +685,7 @@ void main() {
 
     expect(controller.messages, isEmpty);
     expect(repository.saved, isEmpty);
+    expect(controller.peerLocations.latestFor('peer-radar')?.latitude, 4.60971);
   });
 
   test('el borrado de pánico elimina el consentimiento local', () async {

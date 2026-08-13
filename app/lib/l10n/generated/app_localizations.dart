@@ -1863,6 +1863,132 @@ abstract class AppLocalizations {
   /// **'Use encrypted TLS connection'**
   String get gatewayTls;
 
+  /// No description provided for @mapOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open offline map'**
+  String get mapOpen;
+
+  /// No description provided for @mapOpenRescue.
+  ///
+  /// In en, this message translates to:
+  /// **'OPEN RESCUE MAP'**
+  String get mapOpenRescue;
+
+  /// No description provided for @mapTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline rescue map'**
+  String get mapTitle;
+
+  /// No description provided for @mapMyLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'Center on my location'**
+  String get mapMyLocation;
+
+  /// No description provided for @mapDownloadVisible.
+  ///
+  /// In en, this message translates to:
+  /// **'Download visible area'**
+  String get mapDownloadVisible;
+
+  /// No description provided for @mapDownloadComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} map tiles saved for offline use.'**
+  String mapDownloadComplete(int count);
+
+  /// No description provided for @mapDownloadTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'This area is too large. Zoom in; the safe limit is {maximum} tiles.'**
+  String mapDownloadTooLarge(int maximum);
+
+  /// No description provided for @mapDownloadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not download the map area: {error}'**
+  String mapDownloadError(String error);
+
+  /// No description provided for @mapDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving map tiles: {completed}/{total}'**
+  String mapDownloading(int completed, int total);
+
+  /// No description provided for @mapCacheError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open the offline map cache: {error}'**
+  String mapCacheError(String error);
+
+  /// No description provided for @mapYouAreHere.
+  ///
+  /// In en, this message translates to:
+  /// **'You are here'**
+  String get mapYouAreHere;
+
+  /// No description provided for @mapOfflineHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Network unavailable. Already saved map tiles remain visible.'**
+  String get mapOfflineHint;
+
+  /// No description provided for @mapShowOnMap.
+  ///
+  /// In en, this message translates to:
+  /// **'Show on map'**
+  String get mapShowOnMap;
+
+  /// No description provided for @rescueListTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescue queue · nearest first'**
+  String get rescueListTitle;
+
+  /// No description provided for @rescueListEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No SOS alerts or check-ins with rescue data.'**
+  String get rescueListEmpty;
+
+  /// No description provided for @rescueExportCsv.
+  ///
+  /// In en, this message translates to:
+  /// **'Share rescue CSV'**
+  String get rescueExportCsv;
+
+  /// No description provided for @rescueExportSubject.
+  ///
+  /// In en, this message translates to:
+  /// **'HearthBit rescue queue'**
+  String get rescueExportSubject;
+
+  /// No description provided for @rescueExportError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not share the rescue list: {error}'**
+  String rescueExportError(String error);
+
+  /// No description provided for @rescueDistanceUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'distance unknown'**
+  String get rescueDistanceUnknown;
+
+  /// No description provided for @rescueDistanceMeters.
+  ///
+  /// In en, this message translates to:
+  /// **'{meters} m away'**
+  String rescueDistanceMeters(int meters);
+
+  /// No description provided for @rescueDistanceKilometers.
+  ///
+  /// In en, this message translates to:
+  /// **'{kilometers} km away'**
+  String rescueDistanceKilometers(String kilometers);
+
   /// No description provided for @voiceRecord.
   ///
   /// In en, this message translates to:

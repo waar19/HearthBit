@@ -1048,6 +1048,87 @@ class AppLocalizationsFr extends AppLocalizations {
   String get gatewayTls => 'Utiliser une connexion TLS chiffrée';
 
   @override
+  String get mapOpen => 'Ouvrir la carte hors ligne';
+
+  @override
+  String get mapOpenRescue => 'OUVRIR LA CARTE DE SECOURS';
+
+  @override
+  String get mapTitle => 'Carte de secours hors ligne';
+
+  @override
+  String get mapMyLocation => 'Centrer sur ma position';
+
+  @override
+  String get mapDownloadVisible => 'Télécharger la zone visible';
+
+  @override
+  String mapDownloadComplete(int count) {
+    return '$count tuiles enregistrées pour une utilisation hors ligne.';
+  }
+
+  @override
+  String mapDownloadTooLarge(int maximum) {
+    return 'Cette zone est trop grande. Zoomez ; la limite sûre est de $maximum tuiles.';
+  }
+
+  @override
+  String mapDownloadError(String error) {
+    return 'Impossible de télécharger la zone : $error';
+  }
+
+  @override
+  String mapDownloading(int completed, int total) {
+    return 'Enregistrement de la carte : $completed/$total';
+  }
+
+  @override
+  String mapCacheError(String error) {
+    return 'Impossible d\'ouvrir le cache hors ligne : $error';
+  }
+
+  @override
+  String get mapYouAreHere => 'Vous êtes ici';
+
+  @override
+  String get mapOfflineHint =>
+      'Réseau indisponible. Les tuiles déjà enregistrées restent visibles.';
+
+  @override
+  String get mapShowOnMap => 'Afficher sur la carte';
+
+  @override
+  String get rescueListTitle => 'File de secours · plus proches d\'abord';
+
+  @override
+  String get rescueListEmpty =>
+      'Aucune alerte SOS ni aucun pointage avec données de secours.';
+
+  @override
+  String get rescueExportCsv => 'Partager le CSV de secours';
+
+  @override
+  String get rescueExportSubject => 'File de secours HearthBit';
+
+  @override
+  String rescueExportError(String error) {
+    return 'Impossible de partager la liste : $error';
+  }
+
+  @override
+  String get rescueDistanceUnknown => 'distance inconnue';
+
+  @override
+  String rescueDistanceMeters(int meters) {
+    return 'à $meters m';
+  }
+
+  @override
+  String rescueDistanceKilometers(String kilometers) {
+    return 'à $kilometers km';
+  }
+
+  @override
   String get voiceRecord => 'Enregistrer un message vocal';
 
   @override
