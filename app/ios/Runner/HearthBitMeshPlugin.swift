@@ -49,6 +49,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var lifecycleObservers: [NSObjectProtocol] = []
   private var eventSink: FlutterEventSink?
   private var running = false
+  private var batteryLevel = 100
+  private var adaptivePowerSaving = false
   private var lanBridgeGatewayID: String?
   private var lanBridgeMaximumFrameSize = 2048
   private var suppressLanBridge = false
@@ -261,11 +263,15 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         result(nil)
         emit(["type": "wiped"])
       case "getPowerStatus":
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        refreshPowerState(emitEvent: false)
         result([
           // iOS no tiene equivalente a Doze configurable por app.
           "ignoringBatteryOptimizations": true,
           "lowPowerMode": ProcessInfo.processInfo.isLowPowerModeEnabled,
           "backgroundLocation": locationAuthorization() == .authorizedAlways,
+          "batteryLevel": batteryLevel,
+          "adaptivePowerSaving": adaptivePowerSaving,
         ])
       case "requestBackgroundLocation":
         // Pide «Permitir siempre»; el sistema decide cuándo mostrar el
@@ -312,6 +318,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     // Reinicio real: liberar recursos previos permite reintentar tras un fallo.
     if running { stopInternal(notify: false) }
     running = true
+    UIDevice.current.isBatteryMonitoringEnabled = true
+    refreshPowerState(emitEvent: false)
     emitStatus("starting")
     central = CBCentralManager(
       delegate: self,
@@ -336,6 +344,16 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           object: nil,
           queue: .main
         ) { [weak self] _ in self?.restartScan() },
+        center.addObserver(
+          forName: UIDevice.batteryLevelDidChangeNotification,
+          object: nil,
+          queue: .main
+        ) { [weak self] _ in self?.refreshPowerState() },
+        center.addObserver(
+          forName: NSNotification.Name.NSProcessInfoPowerStateDidChange,
+          object: nil,
+          queue: .main
+        ) { [weak self] _ in self?.refreshPowerState() },
       ]
     }
   }
@@ -497,12 +515,32 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     central.stopScan()
     guard localRole.allowsDataPlane else { return }
     let foreground = UIApplication.shared.applicationState == .active
+    let broadForegroundScan = foreground && !adaptivePowerSaving
     central.scanForPeripherals(
       // En background iOS exige filtro de servicio y coalescea duplicados;
       // la presencia genérica es por tanto una capacidad best-effort foreground.
-      withServices: foreground ? nil : [Self.serviceUUID],
-      options: [CBCentralManagerScanOptionAllowDuplicatesKey: foreground]
+      withServices: broadForegroundScan ? nil : [Self.serviceUUID],
+      options: [CBCentralManagerScanOptionAllowDuplicatesKey: broadForegroundScan]
     )
+  }
+
+  private func refreshPowerState(emitEvent: Bool = true) {
+    let deviceLevel = UIDevice.current.batteryLevel
+    let level = deviceLevel < 0 ? 100 : Int((deviceLevel * 100).rounded())
+    let saving = level < 20 || ProcessInfo.processInfo.isLowPowerModeEnabled
+    let changed = saving != adaptivePowerSaving
+    batteryLevel = level
+    adaptivePowerSaving = saving
+    if changed && running && radarPeerID == nil {
+      restartScan()
+    }
+    if emitEvent {
+      emit([
+        "type": "power",
+        "batteryLevel": batteryLevel,
+        "adaptivePowerSaving": adaptivePowerSaving,
+      ])
+    }
   }
 
   private func emitRssi(peerID: String, rssi: Int) {
@@ -1484,6 +1522,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       "peerId": identity.peerIDHex,
       "nickname": identity.nickname,
       "role": localRole.rawValue,
+      "batteryLevel": batteryLevel,
+      "adaptivePowerSaving": adaptivePowerSaving,
       "radarConsentUntil": activeLocalRadarConsentUntil(),
     ])
   }

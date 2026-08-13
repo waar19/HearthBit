@@ -6,9 +6,13 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -17,8 +21,20 @@ import com.hearthbit.app.MainActivity
 import com.hearthbit.app.R
 
 class MeshForegroundService : Service() {
+    private val batteryReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+            if (level >= 0 && scale > 0) {
+                MeshRuntime.engine(this@MeshForegroundService)
+                    .updateBatteryLevel(level * 100 / scale)
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
+        registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         createChannel()
         if (Build.VERSION.SDK_INT >= 29) {
             startForeground(NOTIFICATION_ID, notification(), foregroundServiceTypes())
@@ -71,6 +87,7 @@ class MeshForegroundService : Service() {
     }
 
     override fun onDestroy() {
+        runCatching { unregisterReceiver(batteryReceiver) }
         MeshRuntime.destroy()
         super.onDestroy()
     }

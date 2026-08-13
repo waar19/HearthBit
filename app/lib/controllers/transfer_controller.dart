@@ -30,6 +30,7 @@ class TransferController extends ChangeNotifier {
 
   static const int bleChunkSize = 350;
   static const int bleMaxInlineBytes = 256 * 1024;
+  static const int voiceNoteMaxBytes = 64 * 1024;
   static const int defaultChunkSize = 64 * 1024;
   static const int maxFileBytes = 512 * 1024 * 1024;
   static const Duration offerLifetime = Duration(minutes: 10);
@@ -86,7 +87,7 @@ class TransferController extends ChangeNotifier {
   // Salida: ofrecer un archivo
   // ---------------------------------------------------------------------
 
-  Future<void> sendFile({
+  Future<String> sendFile({
     required MeshPeer peer,
     required String filePath,
     required String fileName,
@@ -161,6 +162,7 @@ class TransferController extends ChangeNotifier {
     final signature = await _mesh.signPayload(frame.signedBytes());
     frame.setBytes(TransferProtocol.tagSignature, signature);
     await _sendFrame(record.peerId, frame, record);
+    return idHex;
   }
 
   // ---------------------------------------------------------------------
@@ -275,6 +277,10 @@ class TransferController extends ChangeNotifier {
     _transfers.insert(0, record);
     await _repository.save(record);
     notifyListeners();
+    if (record.mimeType == 'audio/x-hearthbit-voice' &&
+        record.fileSize <= voiceNoteMaxBytes) {
+      await acceptOffer(record.id);
+    }
   }
 
   /// Borrado de emergencia: cancela todo y elimina metadatos y archivos.

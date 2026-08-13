@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="hearthbit_sos"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_sos_short"
+        android:shortcutLongLabel="@string/shortcut_sos_long">
+        <intent
+            android:action="com.hearthbit.app.OPEN_EMERGENCY"
+            android:targetPackage="com.hearthbit.app"
+            android:targetClass="com.hearthbit.app.MainActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+</shortcuts>

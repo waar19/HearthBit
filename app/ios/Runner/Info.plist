@@ -45,6 +45,8 @@
 	<string>La ubicación se adjunta a tus alertas SOS para que los rescatistas puedan encontrarte. / Your location is attached to your SOS alerts so rescuers can find you.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Con acceso permanente, el modo rescate reenvía tu posición GPS por la malla aunque la pantalla esté apagada. / With always-on access, rescue mode re-broadcasts your GPS position over the mesh even with the screen off.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>HearthBit usa el micrófono para enviar notas de voz cortas durante una emergencia. / HearthBit uses the microphone to send short voice notes during an emergency.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>HearthBit busca gateways de emergencia en tu Wi-Fi local para extender la malla sin internet. / HearthBit finds emergency gateways on your local Wi-Fi to extend the mesh without internet.</string>
 	<key>NSBonjourServices</key>

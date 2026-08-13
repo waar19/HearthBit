@@ -216,6 +216,41 @@ class PowerSavingCard extends StatelessWidget {
                 ok: false,
                 label: isAndroid ? l10n.powerSaverAndroid : l10n.powerSaverIos,
               ),
+            ListTile(
+              leading: Icon(
+                controller.adaptivePowerSaving
+                    ? Icons.battery_saver
+                    : Icons.battery_full,
+              ),
+              title: Text(l10n.adaptivePowerTitle),
+              subtitle: Text(
+                controller.adaptivePowerSaving
+                    ? l10n.adaptivePowerSaving
+                    : l10n.adaptivePowerNormal,
+              ),
+              trailing: Text('${controller.batteryLevel}%'),
+            ),
+            if (controller.batteryLevel < 10 && !controller.survivalMode)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Text(
+                  l10n.survivalModeSuggestion,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            SwitchListTile(
+              secondary: const Icon(Icons.sensors),
+              title: Text(
+                l10n.survivalModeTitle,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(l10n.survivalModeBody),
+              value: controller.survivalMode,
+              onChanged: controller.setSurvivalMode,
+            ),
             ExpansionTile(
               leading: const Icon(Icons.tips_and_updates_outlined),
               title: Text(l10n.powerTipsTitle),

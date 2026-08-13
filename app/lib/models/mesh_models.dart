@@ -20,6 +20,87 @@ enum MeshNodeRole {
   bool get canChat => this == MeshNodeRole.phoneRelay;
 }
 
+enum CheckInStatus {
+  ok('OK'),
+  needsHelp('HELP'),
+  injured('INJURED');
+
+  const CheckInStatus(this.wireCode);
+
+  final String wireCode;
+
+  static CheckInStatus? fromWire(String value) {
+    for (final status in values) {
+      if (status.wireCode == value) return status;
+    }
+    return null;
+  }
+}
+
+class EmergencyCheckIn {
+  const EmergencyCheckIn({
+    required this.status,
+    required this.peerId,
+    required this.sender,
+    required this.timestamp,
+    required this.message,
+    this.latitude,
+    this.longitude,
+  });
+
+  static const marker = '[HB-CHECKIN|';
+
+  factory EmergencyCheckIn.fromMessage(MeshMessage message) {
+    final markerStart = message.content.lastIndexOf(marker);
+    if (markerStart < 0 || !message.content.endsWith(']')) {
+      throw const FormatException('Not a HearthBit check-in');
+    }
+    final readable = message.content.substring(0, markerStart).trim();
+    final fields = message.content
+        .substring(markerStart + marker.length, message.content.length - 1)
+        .split('|');
+    if (fields.length != 5) {
+      throw const FormatException('Invalid HearthBit check-in');
+    }
+    final status = CheckInStatus.fromWire(fields[0]);
+    final timestampMs = int.tryParse(fields[1]);
+    if (status == null || timestampMs == null) {
+      throw const FormatException('Invalid HearthBit check-in fields');
+    }
+    return EmergencyCheckIn(
+      status: status,
+      peerId: message.senderPeerId,
+      sender: message.sender,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(timestampMs),
+      message: readable,
+      latitude: double.tryParse(fields[2]),
+      longitude: double.tryParse(fields[3]),
+    );
+  }
+
+  final CheckInStatus status;
+  final String peerId;
+  final String sender;
+  final DateTime timestamp;
+  final String message;
+  final double? latitude;
+  final double? longitude;
+
+  static String encode({
+    required CheckInStatus status,
+    required String readableMessage,
+    required DateTime timestamp,
+    double? latitude,
+    double? longitude,
+  }) {
+    final lat = latitude?.toStringAsFixed(6) ?? '';
+    final lon = longitude?.toStringAsFixed(6) ?? '';
+    return '${readableMessage.trim()}\n'
+        '$marker${status.wireCode}|${timestamp.millisecondsSinceEpoch}|'
+        '$lat|$lon|1]';
+  }
+}
+
 class MeshPeer {
   const MeshPeer({
     required this.id,
@@ -161,6 +242,28 @@ class MeshMessage {
   final String? channel;
 
   bool get isSos => channel == 'sos' || content.startsWith('SOS|');
+
+  bool get isCheckIn =>
+      channel == 'checkin' || content.contains(EmergencyCheckIn.marker);
+
+  bool get isVoiceNote =>
+      isPrivate &&
+      RegExp(r'^\[HB-VOICE\|[0-9a-f]{32}\|\d+\]$').hasMatch(content);
+
+  String? get voiceTransferId => isVoiceNote ? content.split('|')[1] : null;
+
+  int? get voiceDurationSeconds => isVoiceNote
+      ? int.tryParse(content.split('|')[2].replaceAll(']', ''))
+      : null;
+
+  EmergencyCheckIn? get checkIn {
+    if (!isCheckIn) return null;
+    try {
+      return EmergencyCheckIn.fromMessage(this);
+    } on FormatException {
+      return null;
+    }
+  }
 
   /// Las alertas viajan como 'SOS|descripción|lat|lon' (lat/lon vacíos si no
   /// hubo GPS). Estos helpers separan las partes para la UI y el radar.

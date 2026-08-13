@@ -51,6 +51,13 @@ dependencies:
   package_info_plus: ^10.2.1
   flutter_compass: ^0.8.1
   share_plus: ^13.3.0
+  shared_preferences: ^2.5.5
+  connectivity_plus: ^7.3.1
+  record: ^7.1.1
+  audioplayers: ^6.8.1
+  http: ^1.6.0
+  mqtt_client: ^10.11.11
+  flutter_secure_storage: 10.0.0
 
 dev_dependencies:
   flutter_test:

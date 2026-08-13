@@ -716,4 +716,227 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get nodeModeBeaconBody =>
       '不聊天、不转发消息，仅广播在线状态以节省电量。在 Android 上还会禁用数据连接。';
+
+  @override
+  String get tabEmergency => '紧急';
+
+  @override
+  String get emergencyHeadline => '紧急模式';
+
+  @override
+  String get emergencyInstructions => '长按 SOS 2 秒。HearthBit 将启动网状网络、共享位置并重复警报。';
+
+  @override
+  String get emergencyHoldSos => '长按发送 SOS';
+
+  @override
+  String get emergencySosActive => 'SOS 已启动';
+
+  @override
+  String get emergencyStopRescue => '停止救援模式';
+
+  @override
+  String get errorEmergencyMeshUnavailable => '无法启动蓝牙网状网络。请检查权限后重试。';
+
+  @override
+  String get checkInTitle => '报告你的状态';
+
+  @override
+  String get checkInBody => '状态将通过网状网络转发，并附带时间和可用的位置。';
+
+  @override
+  String get checkInOk => '我很安全';
+
+  @override
+  String get checkInNeedsHelp => '我需要帮助';
+
+  @override
+  String get checkInInjured => '我受伤了';
+
+  @override
+  String get checkInRecentTitle => '最新状态';
+
+  @override
+  String get checkInNone => '尚未有人报告状态。';
+
+  @override
+  String get onboardingWelcomeTitle => '网络中断时保持通信';
+
+  @override
+  String get onboardingWelcomeBody => 'HearthBit 无需移动网络或互联网，通过蓝牙在附近手机间转发紧急消息。';
+
+  @override
+  String get onboardingMeshTitle => '保持紧急网状网络运行';
+
+  @override
+  String get onboardingMeshBody => '蓝牙、附近设备和通知权限用于发现人员并转发消息。';
+
+  @override
+  String get onboardingReadyTitle => '在紧急情况前做好准备';
+
+  @override
+  String get onboardingReadyBody => '允许后台位置并解除电池限制，以保持 SOS 位置最新。';
+
+  @override
+  String get onboardingNext => '下一步';
+
+  @override
+  String get onboardingBack => '返回';
+
+  @override
+  String get onboardingAllowMesh => '允许并启动网络';
+
+  @override
+  String get onboardingAllowLocation => '允许紧急位置';
+
+  @override
+  String get onboardingFinish => '完成设置';
+
+  @override
+  String get appearanceTitle => '显示与无障碍';
+
+  @override
+  String get appearanceAmoled => 'AMOLED 纯黑主题';
+
+  @override
+  String get appearanceAmoledBody => '在 OLED 屏幕上使用纯黑以节省电量。';
+
+  @override
+  String get appearanceHighContrast => '高对比度和更大控件';
+
+  @override
+  String get appearanceHighContrastBody => '提高可读性并放大关键操作。';
+
+  @override
+  String get tooltipAppearance => '显示与无障碍';
+
+  @override
+  String get meshHealthTitle => '网状网络状态';
+
+  @override
+  String meshHealthDirect(int count) {
+    return '$count 个直接节点';
+  }
+
+  @override
+  String meshHealthRelays(int count) {
+    return '$count 个中继';
+  }
+
+  @override
+  String meshHealthAnchors(int count) {
+    return '$count 个数据锚点';
+  }
+
+  @override
+  String meshHealthSignals(int count) {
+    return '$count 个其他蓝牙信号';
+  }
+
+  @override
+  String get meshHealthAnchorReady => '附近有持久数据锚点。';
+
+  @override
+  String get meshHealthNoAnchor => '当前未发现持久数据锚点。';
+
+  @override
+  String get adaptivePowerTitle => '自适应省电';
+
+  @override
+  String get adaptivePowerNormal => '完整网状网络性能';
+
+  @override
+  String get adaptivePowerSaving => '省电：短时扫描';
+
+  @override
+  String get survivalModeTitle => '生存模式';
+
+  @override
+  String get survivalModeBody => '仅保留 SOS 信标以延长续航，聊天和中继将停止。';
+
+  @override
+  String get survivalModeEnable => '启用生存模式';
+
+  @override
+  String get survivalModeDisable => '返回网状网络模式';
+
+  @override
+  String get survivalModeSuggestion => '电量严重不足。启用生存模式可延长可被发现的时间。';
+
+  @override
+  String get gatewayTitle => '紧急互联网网关';
+
+  @override
+  String get gatewayBody => '互联网恢复后，此手机可发布排队的 SOS 和状态。';
+
+  @override
+  String get gatewayOptIn => '允许此手机提供互联网出口';
+
+  @override
+  String get gatewayAvailable => '已检测到互联网连接';
+
+  @override
+  String get gatewayUnavailable => '未检测到互联网连接';
+
+  @override
+  String get gatewayPrivacy => '仅处理 SOS 和状态。未配置可信网关前不会上传。';
+
+  @override
+  String gatewayPending(int count) {
+    return '$count 个紧急项目待发送';
+  }
+
+  @override
+  String get gatewayConfigure => '配置可信网关';
+
+  @override
+  String get gatewayKindMatrix => 'Matrix';
+
+  @override
+  String get gatewayKindMqtt => 'MQTT';
+
+  @override
+  String get gatewayHomeserver => 'Matrix 服务器 URL';
+
+  @override
+  String get gatewayBroker => 'MQTT 服务器';
+
+  @override
+  String get gatewayRoom => 'Matrix 房间 ID';
+
+  @override
+  String get gatewayTopic => 'MQTT 主题';
+
+  @override
+  String get gatewayUsername => '用户名';
+
+  @override
+  String get gatewayAccessToken => '访问令牌';
+
+  @override
+  String get gatewayPassword => '密码';
+
+  @override
+  String get gatewayPort => '端口';
+
+  @override
+  String get gatewayTls => '使用加密 TLS 连接';
+
+  @override
+  String get voiceRecord => '录制语音消息';
+
+  @override
+  String get voiceStop => '停止录音';
+
+  @override
+  String get voiceTooLong => '语音消息最长 20 秒。';
+
+  @override
+  String get voiceUnsupported => '接收设备需要安装 HearthBit。';
+
+  @override
+  String get voicePlay => '播放语音消息';
+
+  @override
+  String get voicePause => '暂停语音消息';
 }

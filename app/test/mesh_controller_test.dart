@@ -17,6 +17,7 @@ class _FakePlatform extends MeshPlatformService {
   final List<({bool enabled, int minutes})> radarConsentCalls = [];
   int panicWipeCalls = 0;
   final List<String> nodeRoles = [];
+  final List<({String content, String? channel})> publicMessages = [];
   bool permissionsGranted = true;
   bool backgroundLocation = true;
   Object? startError;
@@ -44,6 +45,12 @@ class _FakePlatform extends MeshPlatformService {
   @override
   Future<void> stop() async {
     stopCalls += 1;
+  }
+
+  @override
+  Future<String> sendPublic(String content, {String? channel}) async {
+    publicMessages.add((content: content, channel: channel));
+    return 'public-${publicMessages.length}';
   }
 
   @override
@@ -335,6 +342,38 @@ void main() {
 
     await controller.updateNodeRole(MeshNodeRole.phoneRelay);
     expect(controller.canSend, isTrue);
+  });
+
+  test(
+    'envía un check-in legible y estructurado por el canal público',
+    () async {
+      platform.emit({'type': 'status', 'status': 'active'});
+      await pumpEvents();
+
+      await controller.sendCheckIn(CheckInStatus.ok, 'Estoy bien');
+
+      expect(platform.publicMessages, hasLength(1));
+      expect(platform.publicMessages.single.channel, 'checkin');
+      expect(
+        platform.publicMessages.single.content,
+        startsWith('Estoy bien\n'),
+      );
+      expect(
+        platform.publicMessages.single.content,
+        contains(EmergencyCheckIn.marker),
+      );
+    },
+  );
+
+  test('modo supervivencia emite SOS y cambia a baliza', () async {
+    platform.emit({'type': 'status', 'status': 'active'});
+    await pumpEvents();
+
+    await controller.setSurvivalMode(true);
+
+    expect(platform.sosCalls, 1);
+    expect(platform.nodeRoles.last, MeshNodeRole.phoneBeacon.wireName);
+    expect(controller.survivalMode, isTrue);
   });
 
   test('actualiza presencias genéricas sin convertirlas en peers', () async {

@@ -1358,6 +1358,432 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Save power and advertise your presence without chat or message relay. On Android, data links are also disabled.'**
   String get nodeModeBeaconBody;
+
+  /// No description provided for @tabEmergency.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency'**
+  String get tabEmergency;
+
+  /// No description provided for @emergencyHeadline.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency mode'**
+  String get emergencyHeadline;
+
+  /// No description provided for @emergencyInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Press and hold SOS for 2 seconds. HearthBit will turn on the mesh, share your location and repeat the alert.'**
+  String get emergencyInstructions;
+
+  /// No description provided for @emergencyHoldSos.
+  ///
+  /// In en, this message translates to:
+  /// **'HOLD FOR SOS'**
+  String get emergencyHoldSos;
+
+  /// No description provided for @emergencySosActive.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS ACTIVE'**
+  String get emergencySosActive;
+
+  /// No description provided for @emergencyStopRescue.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop rescue mode'**
+  String get emergencyStopRescue;
+
+  /// No description provided for @errorEmergencyMeshUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The Bluetooth mesh could not be activated. Check Bluetooth permissions and try again.'**
+  String get errorEmergencyMeshUnavailable;
+
+  /// No description provided for @checkInTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tell people your status'**
+  String get checkInTitle;
+
+  /// No description provided for @checkInBody.
+  ///
+  /// In en, this message translates to:
+  /// **'A short update is relayed through the mesh with your time and location when available.'**
+  String get checkInBody;
+
+  /// No description provided for @checkInOk.
+  ///
+  /// In en, this message translates to:
+  /// **'I am OK'**
+  String get checkInOk;
+
+  /// No description provided for @checkInNeedsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'I need help'**
+  String get checkInNeedsHelp;
+
+  /// No description provided for @checkInInjured.
+  ///
+  /// In en, this message translates to:
+  /// **'I am injured'**
+  String get checkInInjured;
+
+  /// No description provided for @checkInRecentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest check-ins'**
+  String get checkInRecentTitle;
+
+  /// No description provided for @checkInNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No one has shared a status yet.'**
+  String get checkInNone;
+
+  /// No description provided for @onboardingWelcomeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Communication when networks fail'**
+  String get onboardingWelcomeTitle;
+
+  /// No description provided for @onboardingWelcomeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'HearthBit relays emergency messages between nearby phones using Bluetooth, without mobile service or internet.'**
+  String get onboardingWelcomeBody;
+
+  /// No description provided for @onboardingMeshTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep the emergency mesh alive'**
+  String get onboardingMeshTitle;
+
+  /// No description provided for @onboardingMeshBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth, nearby-device and notification permissions let your phone find people and relay their messages.'**
+  String get onboardingMeshBody;
+
+  /// No description provided for @onboardingReadyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Prepare before an emergency'**
+  String get onboardingReadyTitle;
+
+  /// No description provided for @onboardingReadyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow background location and exempt HearthBit from battery restrictions so SOS positions can stay current.'**
+  String get onboardingReadyBody;
+
+  /// No description provided for @onboardingNext.
+  ///
+  /// In en, this message translates to:
+  /// **'NEXT'**
+  String get onboardingNext;
+
+  /// No description provided for @onboardingBack.
+  ///
+  /// In en, this message translates to:
+  /// **'BACK'**
+  String get onboardingBack;
+
+  /// No description provided for @onboardingAllowMesh.
+  ///
+  /// In en, this message translates to:
+  /// **'ALLOW AND TURN ON MESH'**
+  String get onboardingAllowMesh;
+
+  /// No description provided for @onboardingAllowLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'ALLOW EMERGENCY LOCATION'**
+  String get onboardingAllowLocation;
+
+  /// No description provided for @onboardingFinish.
+  ///
+  /// In en, this message translates to:
+  /// **'FINISH SETUP'**
+  String get onboardingFinish;
+
+  /// No description provided for @appearanceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Display & accessibility'**
+  String get appearanceTitle;
+
+  /// No description provided for @appearanceAmoled.
+  ///
+  /// In en, this message translates to:
+  /// **'AMOLED black theme'**
+  String get appearanceAmoled;
+
+  /// No description provided for @appearanceAmoledBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Uses a true black background to save power on OLED screens.'**
+  String get appearanceAmoledBody;
+
+  /// No description provided for @appearanceHighContrast.
+  ///
+  /// In en, this message translates to:
+  /// **'High contrast and larger controls'**
+  String get appearanceHighContrast;
+
+  /// No description provided for @appearanceHighContrastBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Improves readability and enlarges critical actions.'**
+  String get appearanceHighContrastBody;
+
+  /// No description provided for @tooltipAppearance.
+  ///
+  /// In en, this message translates to:
+  /// **'Display and accessibility'**
+  String get tooltipAppearance;
+
+  /// No description provided for @meshHealthTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Mesh health'**
+  String get meshHealthTitle;
+
+  /// No description provided for @meshHealthDirect.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} direct peers'**
+  String meshHealthDirect(int count);
+
+  /// No description provided for @meshHealthRelays.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} relays'**
+  String meshHealthRelays(int count);
+
+  /// No description provided for @meshHealthAnchors.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} data anchors'**
+  String meshHealthAnchors(int count);
+
+  /// No description provided for @meshHealthSignals.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} other Bluetooth signals'**
+  String meshHealthSignals(int count);
+
+  /// No description provided for @meshHealthAnchorReady.
+  ///
+  /// In en, this message translates to:
+  /// **'A persistent data anchor is nearby.'**
+  String get meshHealthAnchorReady;
+
+  /// No description provided for @meshHealthNoAnchor.
+  ///
+  /// In en, this message translates to:
+  /// **'No persistent data anchor is currently visible.'**
+  String get meshHealthNoAnchor;
+
+  /// No description provided for @adaptivePowerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Adaptive battery mode'**
+  String get adaptivePowerTitle;
+
+  /// No description provided for @adaptivePowerNormal.
+  ///
+  /// In en, this message translates to:
+  /// **'Full mesh performance'**
+  String get adaptivePowerNormal;
+
+  /// No description provided for @adaptivePowerSaving.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery saving: scanning in short bursts'**
+  String get adaptivePowerSaving;
+
+  /// No description provided for @survivalModeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Survival mode'**
+  String get survivalModeTitle;
+
+  /// No description provided for @survivalModeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep only an SOS presence beacon active for maximum battery life. Chat and relay stop.'**
+  String get survivalModeBody;
+
+  /// No description provided for @survivalModeEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'ENABLE SURVIVAL MODE'**
+  String get survivalModeEnable;
+
+  /// No description provided for @survivalModeDisable.
+  ///
+  /// In en, this message translates to:
+  /// **'RETURN TO MESH MODE'**
+  String get survivalModeDisable;
+
+  /// No description provided for @survivalModeSuggestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery is critical. Enable survival mode to remain detectable longer.'**
+  String get survivalModeSuggestion;
+
+  /// No description provided for @gatewayTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency internet gateway'**
+  String get gatewayTitle;
+
+  /// No description provided for @gatewayBody.
+  ///
+  /// In en, this message translates to:
+  /// **'When internet returns, this phone can publish queued SOS and check-ins through a gateway you configure.'**
+  String get gatewayBody;
+
+  /// No description provided for @gatewayOptIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow this phone to offer internet exit'**
+  String get gatewayOptIn;
+
+  /// No description provided for @gatewayAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Internet transport detected'**
+  String get gatewayAvailable;
+
+  /// No description provided for @gatewayUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No internet transport detected'**
+  String get gatewayUnavailable;
+
+  /// No description provided for @gatewayPrivacy.
+  ///
+  /// In en, this message translates to:
+  /// **'Only SOS and check-ins are eligible. Nothing is uploaded until you configure and enable a trusted gateway.'**
+  String get gatewayPrivacy;
+
+  /// No description provided for @gatewayPending.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} emergency items pending'**
+  String gatewayPending(int count);
+
+  /// No description provided for @gatewayConfigure.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure trusted gateway'**
+  String get gatewayConfigure;
+
+  /// No description provided for @gatewayKindMatrix.
+  ///
+  /// In en, this message translates to:
+  /// **'Matrix'**
+  String get gatewayKindMatrix;
+
+  /// No description provided for @gatewayKindMqtt.
+  ///
+  /// In en, this message translates to:
+  /// **'MQTT'**
+  String get gatewayKindMqtt;
+
+  /// No description provided for @gatewayHomeserver.
+  ///
+  /// In en, this message translates to:
+  /// **'Matrix homeserver URL'**
+  String get gatewayHomeserver;
+
+  /// No description provided for @gatewayBroker.
+  ///
+  /// In en, this message translates to:
+  /// **'MQTT broker host'**
+  String get gatewayBroker;
+
+  /// No description provided for @gatewayRoom.
+  ///
+  /// In en, this message translates to:
+  /// **'Matrix room ID'**
+  String get gatewayRoom;
+
+  /// No description provided for @gatewayTopic.
+  ///
+  /// In en, this message translates to:
+  /// **'MQTT topic'**
+  String get gatewayTopic;
+
+  /// No description provided for @gatewayUsername.
+  ///
+  /// In en, this message translates to:
+  /// **'Username'**
+  String get gatewayUsername;
+
+  /// No description provided for @gatewayAccessToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Access token'**
+  String get gatewayAccessToken;
+
+  /// No description provided for @gatewayPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get gatewayPassword;
+
+  /// No description provided for @gatewayPort.
+  ///
+  /// In en, this message translates to:
+  /// **'Port'**
+  String get gatewayPort;
+
+  /// No description provided for @gatewayTls.
+  ///
+  /// In en, this message translates to:
+  /// **'Use encrypted TLS connection'**
+  String get gatewayTls;
+
+  /// No description provided for @voiceRecord.
+  ///
+  /// In en, this message translates to:
+  /// **'Record voice note'**
+  String get voiceRecord;
+
+  /// No description provided for @voiceStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop recording'**
+  String get voiceStop;
+
+  /// No description provided for @voiceTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice notes are limited to 20 seconds.'**
+  String get voiceTooLong;
+
+  /// No description provided for @voiceUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice notes require HearthBit on the recipient\'s device.'**
+  String get voiceUnsupported;
+
+  /// No description provided for @voicePlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Play voice note'**
+  String get voicePlay;
+
+  /// No description provided for @voicePause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause voice note'**
+  String get voicePause;
 }
 
 class _AppLocalizationsDelegate

@@ -759,4 +759,242 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get nodeModeBeaconBody =>
       'Économise l’énergie et annonce votre présence sans discussion ni relais. Sur Android, les liaisons de données sont aussi désactivées.';
+
+  @override
+  String get tabEmergency => 'Urgence';
+
+  @override
+  String get emergencyHeadline => 'Mode urgence';
+
+  @override
+  String get emergencyInstructions =>
+      'Maintenez SOS pendant 2 secondes. HearthBit active le maillage, partage votre position et répète l’alerte.';
+
+  @override
+  String get emergencyHoldSos => 'MAINTENIR POUR SOS';
+
+  @override
+  String get emergencySosActive => 'SOS ACTIF';
+
+  @override
+  String get emergencyStopRescue => 'Arrêter le mode secours';
+
+  @override
+  String get errorEmergencyMeshUnavailable =>
+      'Impossible d’activer le maillage Bluetooth. Vérifiez les autorisations.';
+
+  @override
+  String get checkInTitle => 'Indiquez votre état';
+
+  @override
+  String get checkInBody =>
+      'Un bref état est relayé avec l’heure et la position disponible.';
+
+  @override
+  String get checkInOk => 'Je vais bien';
+
+  @override
+  String get checkInNeedsHelp => 'J’ai besoin d’aide';
+
+  @override
+  String get checkInInjured => 'Je suis blessé';
+
+  @override
+  String get checkInRecentTitle => 'Derniers états';
+
+  @override
+  String get checkInNone => 'Personne n’a encore partagé son état.';
+
+  @override
+  String get onboardingWelcomeTitle => 'Communiquer quand les réseaux tombent';
+
+  @override
+  String get onboardingWelcomeBody =>
+      'HearthBit relaie les messages d’urgence par Bluetooth, sans réseau mobile ni internet.';
+
+  @override
+  String get onboardingMeshTitle => 'Maintenez le maillage d’urgence actif';
+
+  @override
+  String get onboardingMeshBody =>
+      'Les autorisations Bluetooth, appareils proches et notifications permettent la découverte et le relais.';
+
+  @override
+  String get onboardingReadyTitle => 'Préparez-vous avant l’urgence';
+
+  @override
+  String get onboardingReadyBody =>
+      'Autorisez la position en arrière-plan et retirez les restrictions de batterie.';
+
+  @override
+  String get onboardingNext => 'SUIVANT';
+
+  @override
+  String get onboardingBack => 'RETOUR';
+
+  @override
+  String get onboardingAllowMesh => 'AUTORISER ET ACTIVER';
+
+  @override
+  String get onboardingAllowLocation => 'AUTORISER LA POSITION D’URGENCE';
+
+  @override
+  String get onboardingFinish => 'TERMINER';
+
+  @override
+  String get appearanceTitle => 'Affichage et accessibilité';
+
+  @override
+  String get appearanceAmoled => 'Thème noir AMOLED';
+
+  @override
+  String get appearanceAmoledBody =>
+      'Le noir réel économise la batterie des écrans OLED.';
+
+  @override
+  String get appearanceHighContrast => 'Contraste élevé et grands contrôles';
+
+  @override
+  String get appearanceHighContrastBody =>
+      'Améliore la lisibilité et agrandit les actions critiques.';
+
+  @override
+  String get tooltipAppearance => 'Affichage et accessibilité';
+
+  @override
+  String get meshHealthTitle => 'État du maillage';
+
+  @override
+  String meshHealthDirect(int count) {
+    return '$count appareils directs';
+  }
+
+  @override
+  String meshHealthRelays(int count) {
+    return '$count relais';
+  }
+
+  @override
+  String meshHealthAnchors(int count) {
+    return '$count ancres de données';
+  }
+
+  @override
+  String meshHealthSignals(int count) {
+    return '$count autres signaux Bluetooth';
+  }
+
+  @override
+  String get meshHealthAnchorReady =>
+      'Une ancre de données persistante est proche.';
+
+  @override
+  String get meshHealthNoAnchor => 'Aucune ancre persistante visible.';
+
+  @override
+  String get adaptivePowerTitle => 'Batterie adaptative';
+
+  @override
+  String get adaptivePowerNormal => 'Performances complètes';
+
+  @override
+  String get adaptivePowerSaving => 'Économie : balayage par courtes périodes';
+
+  @override
+  String get survivalModeTitle => 'Mode survie';
+
+  @override
+  String get survivalModeBody =>
+      'Seule une balise SOS reste active. Discussion et relais sont arrêtés.';
+
+  @override
+  String get survivalModeEnable => 'ACTIVER LE MODE SURVIE';
+
+  @override
+  String get survivalModeDisable => 'REVENIR AU MAILLAGE';
+
+  @override
+  String get survivalModeSuggestion =>
+      'Batterie critique. Le mode survie prolonge votre détection.';
+
+  @override
+  String get gatewayTitle => 'Passerelle internet d’urgence';
+
+  @override
+  String get gatewayBody =>
+      'Au retour d’internet, ce téléphone peut publier les SOS et états en attente.';
+
+  @override
+  String get gatewayOptIn =>
+      'Autoriser ce téléphone à offrir une sortie internet';
+
+  @override
+  String get gatewayAvailable => 'Connexion internet détectée';
+
+  @override
+  String get gatewayUnavailable => 'Aucune connexion internet détectée';
+
+  @override
+  String get gatewayPrivacy =>
+      'Seuls SOS et états sont éligibles. Rien n’est envoyé sans passerelle de confiance configurée.';
+
+  @override
+  String gatewayPending(int count) {
+    return '$count éléments d’urgence en attente';
+  }
+
+  @override
+  String get gatewayConfigure => 'Configurer une passerelle de confiance';
+
+  @override
+  String get gatewayKindMatrix => 'Matrix';
+
+  @override
+  String get gatewayKindMqtt => 'MQTT';
+
+  @override
+  String get gatewayHomeserver => 'URL du serveur Matrix';
+
+  @override
+  String get gatewayBroker => 'Serveur MQTT';
+
+  @override
+  String get gatewayRoom => 'ID du salon Matrix';
+
+  @override
+  String get gatewayTopic => 'Sujet MQTT';
+
+  @override
+  String get gatewayUsername => 'Utilisateur';
+
+  @override
+  String get gatewayAccessToken => 'Jeton d’accès';
+
+  @override
+  String get gatewayPassword => 'Mot de passe';
+
+  @override
+  String get gatewayPort => 'Port';
+
+  @override
+  String get gatewayTls => 'Utiliser une connexion TLS chiffrée';
+
+  @override
+  String get voiceRecord => 'Enregistrer un message vocal';
+
+  @override
+  String get voiceStop => 'Arrêter l’enregistrement';
+
+  @override
+  String get voiceTooLong => 'Les messages vocaux sont limités à 20 secondes.';
+
+  @override
+  String get voiceUnsupported =>
+      'Les messages vocaux nécessitent HearthBit chez le destinataire.';
+
+  @override
+  String get voicePlay => 'Lire le message vocal';
+
+  @override
+  String get voicePause => 'Mettre en pause';
 }

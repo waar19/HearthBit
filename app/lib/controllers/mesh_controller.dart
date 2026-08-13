@@ -36,6 +36,7 @@ class MeshController extends ChangeNotifier {
 
   // Modo rescate: reenvía el SOS con ubicación actualizada periódicamente.
   bool rescueMode = false;
+  bool activatingEmergency = false;
   DateTime? lastRescuePing;
   Timer? _rescueTimer;
   Timer? _consentTimer;
@@ -47,9 +48,27 @@ class MeshController extends ChangeNotifier {
   bool ignoringBatteryOptimizations = true;
   bool lowPowerMode = false;
   bool backgroundLocationGranted = false;
+  int batteryLevel = 100;
+  bool adaptivePowerSaving = false;
+  bool survivalMode = false;
 
   List<MeshMessage> get messages => List.unmodifiable(_messages);
   List<MeshPeer> get peers => List.unmodifiable(_peers);
+  List<EmergencyCheckIn> get latestCheckIns {
+    final latestByPeer = <String, EmergencyCheckIn>{};
+    for (final message in _messages) {
+      final checkIn = message.checkIn;
+      if (checkIn == null) continue;
+      final existing = latestByPeer[checkIn.peerId];
+      if (existing == null || checkIn.timestamp.isAfter(existing.timestamp)) {
+        latestByPeer[checkIn.peerId] = checkIn;
+      }
+    }
+    final checkIns = latestByPeer.values.toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return List.unmodifiable(checkIns);
+  }
+
   List<GenericBlePresence> get genericPresences {
     final cutoff = DateTime.now().subtract(const Duration(seconds: 45));
     return List.unmodifiable(
@@ -136,6 +155,9 @@ class MeshController extends ChangeNotifier {
         power['ignoringBatteryOptimizations'] as bool? ?? true;
     lowPowerMode = power['lowPowerMode'] as bool? ?? false;
     backgroundLocationGranted = power['backgroundLocation'] as bool? ?? false;
+    batteryLevel = (power['batteryLevel'] as num?)?.toInt() ?? batteryLevel;
+    adaptivePowerSaving =
+        power['adaptivePowerSaving'] as bool? ?? batteryLevel < 20;
     notifyListeners();
   }
 
@@ -251,27 +273,7 @@ class MeshController extends ChangeNotifier {
   }
 
   Future<void> sendSos(String description) async {
-    Position? position;
-    try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (serviceEnabled) {
-        var permission = await Geolocator.checkPermission();
-        if (permission == LocationPermission.denied) {
-          permission = await Geolocator.requestPermission();
-        }
-        if (permission == LocationPermission.always ||
-            permission == LocationPermission.whileInUse) {
-          position = await Geolocator.getCurrentPosition(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.high,
-              timeLimit: Duration(seconds: 10),
-            ),
-          );
-        }
-      }
-    } catch (_) {
-      position = null;
-    }
+    final position = await _currentPosition();
     await _run(
       () => _platform.sendSos(
         content: description.trim().isEmpty
@@ -281,6 +283,71 @@ class MeshController extends ChangeNotifier {
         longitude: position?.longitude,
       ),
     );
+  }
+
+  Future<void> sendCheckIn(CheckInStatus status, String readableMessage) async {
+    final position = await _currentPosition();
+    final content = EmergencyCheckIn.encode(
+      status: status,
+      readableMessage: readableMessage,
+      timestamp: DateTime.now(),
+      latitude: position?.latitude,
+      longitude: position?.longitude,
+    );
+    await _run(() => _platform.sendPublic(content, channel: 'checkin'));
+  }
+
+  Future<void> activateEmergency({String? description}) async {
+    if (activatingEmergency || rescueMode) return;
+    activatingEmergency = true;
+    lastError = null;
+    notifyListeners();
+    try {
+      if (localRole != MeshNodeRole.phoneRelay) {
+        await updateNodeRole(MeshNodeRole.phoneRelay);
+      }
+      if (!canSend) {
+        await start();
+        final deadline = DateTime.now().add(const Duration(seconds: 10));
+        while (!canSend && DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+        }
+      }
+      if (!canSend) {
+        throw StateError(currentL10n.errorEmergencyMeshUnavailable);
+      }
+      await setRescueMode(
+        true,
+        description: description ?? currentL10n.sosDefaultMessage,
+      );
+    } catch (error) {
+      lastError = error.toString();
+    } finally {
+      activatingEmergency = false;
+      notifyListeners();
+    }
+  }
+
+  Future<Position?> _currentPosition() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return null;
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.always ||
+          permission == LocationPermission.whileInUse) {
+        return await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 10),
+          ),
+        );
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
   }
 
   Future<void> updateNickname(String value) async {
@@ -294,6 +361,24 @@ class MeshController extends ChangeNotifier {
   Future<void> updateNodeRole(MeshNodeRole role) async {
     await _platform.setNodeRole(role.wireName);
     localRole = role;
+    notifyListeners();
+  }
+
+  Future<void> setSurvivalMode(bool enabled) async {
+    if (enabled == survivalMode) return;
+    if (enabled) {
+      if (canSend) {
+        await sendSos(currentL10n.sosDefaultMessage);
+        await _platform.setRadarConsent(enabled: true, minutes: 20);
+      }
+      _rescueTimer?.cancel();
+      _rescueTimer = null;
+      rescueMode = false;
+      await updateNodeRole(MeshNodeRole.phoneBeacon);
+    } else {
+      await updateNodeRole(MeshNodeRole.phoneRelay);
+    }
+    survivalMode = enabled;
     notifyListeners();
   }
 
@@ -342,6 +427,11 @@ class MeshController extends ChangeNotifier {
         break;
       case 'status':
         _applyStatus(event);
+        break;
+      case 'power':
+        batteryLevel = (event['batteryLevel'] as num?)?.toInt() ?? batteryLevel;
+        adaptivePowerSaving =
+            event['adaptivePowerSaving'] as bool? ?? adaptivePowerSaving;
         break;
       case 'peers':
         _replacePeers(event['peers']);
@@ -399,6 +489,10 @@ class MeshController extends ChangeNotifier {
     nickname = event['nickname'] as String? ?? nickname;
     peerId = event['peerId'] as String? ?? peerId;
     localRole = MeshNodeRole.fromWire(event['role']);
+    survivalMode = localRole == MeshNodeRole.phoneBeacon;
+    batteryLevel = (event['batteryLevel'] as num?)?.toInt() ?? batteryLevel;
+    adaptivePowerSaving =
+        event['adaptivePowerSaving'] as bool? ?? adaptivePowerSaving;
     _applyRadarConsent(event);
   }
 

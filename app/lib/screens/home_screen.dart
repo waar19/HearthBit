@@ -1,34 +1,46 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../controllers/mesh_controller.dart';
+import '../controllers/emergency_gateway_controller.dart';
 import '../controllers/transfer_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../models/transfer_models.dart';
 import '../services/invite_share_service.dart';
+import '../services/emergency_shortcut_service.dart';
+import '../services/app_preferences.dart';
 import '../services/photo_profile.dart';
 import '../utils/message_chronology.dart';
+import 'emergency_screen.dart';
+import 'mesh_health_card.dart';
 import 'optical_receive_screen.dart';
 import 'optical_send_screen.dart';
 import 'radar_screen.dart';
-import 'rescue_power_cards.dart';
 import 'transfers_tab.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     required this.controller,
     required this.transfers,
+    required this.preferences,
+    required this.gateway,
     super.key,
   });
 
   final MeshController controller;
   final TransferController transfers;
+  final AppPreferences preferences;
+  final EmergencyGatewayController gateway;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -40,6 +52,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _tab = 0;
   int _publicMessageCount = 0;
   bool _scrollScheduled = false;
+  StreamSubscription<void>? _emergencyShortcutSubscription;
 
   @override
   void initState() {
@@ -47,7 +60,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _publicMessageCount = _countPublicMessages();
     widget.controller.addListener(_handleMeshUpdate);
+    _emergencyShortcutSubscription = EmergencyShortcutService.opens.listen(
+      (_) => _openEmergencyTab(),
+    );
+    EmergencyShortcutService.consumeInitialOpen().then((open) {
+      if (open) _openEmergencyTab();
+    });
     _scrollToBottom(animate: false);
+  }
+
+  void _openEmergencyTab() {
+    if (!mounted) return;
+    setState(() => _tab = 0);
   }
 
   @override
@@ -215,6 +239,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     widget.controller.removeListener(_handleMeshUpdate);
+    _emergencyShortcutSubscription?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -223,13 +248,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge([widget.controller, widget.transfers]),
+      animation: Listenable.merge([
+        widget.controller,
+        widget.transfers,
+        widget.gateway,
+      ]),
       builder: (context, _) {
         final controller = widget.controller;
         return Scaffold(
           appBar: AppBar(
             title: Text(context.l10n.appTitle),
             actions: [
+              IconButton(
+                tooltip: context.l10n.tooltipAppearance,
+                onPressed: _showAppearance,
+                icon: const Icon(Icons.contrast),
+              ),
               IconButton(
                 tooltip: context.l10n.tooltipSupport,
                 onPressed: _showAbout,
@@ -275,6 +309,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   child: IndexedStack(
                     index: _tab,
                     children: [
+                      EmergencyScreen(
+                        controller: controller,
+                        preferences: widget.preferences,
+                        gateway: widget.gateway,
+                      ),
                       _buildChat(controller),
                       _buildPeers(controller),
                       TransfersTab(
@@ -282,7 +321,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         onSendOptical: _startOpticalSend,
                         onReceiveOptical: _startOpticalReceive,
                       ),
-                      _buildSos(controller),
                     ],
                   ),
                 ),
@@ -293,9 +331,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             selectedIndex: _tab,
             onDestinationSelected: (value) {
               setState(() => _tab = value);
-              if (value == 0) _scrollToBottom(animate: false);
+              if (value == 1) _scrollToBottom(animate: false);
             },
             destinations: [
+              NavigationDestination(
+                icon: const Icon(Icons.emergency_outlined),
+                selectedIcon: const Icon(Icons.emergency),
+                label: context.l10n.tabEmergency,
+              ),
               NavigationDestination(
                 icon: const Icon(Icons.forum_outlined),
                 selectedIcon: const Icon(Icons.forum),
@@ -315,15 +358,45 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 selectedIcon: const Icon(Icons.folder_shared),
                 label: context.l10n.tabFiles,
               ),
-              NavigationDestination(
-                icon: const Icon(Icons.sos_outlined),
-                selectedIcon: const Icon(Icons.sos),
-                label: context.l10n.tabSos,
-              ),
             ],
           ),
         );
       },
+    );
+  }
+
+  Future<void> _showAppearance() {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AnimatedBuilder(
+        animation: widget.preferences,
+        builder: (context, _) => AlertDialog(
+          title: Text(context.l10n.appearanceTitle),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SwitchListTile(
+                value: widget.preferences.amoledTheme,
+                onChanged: widget.preferences.setAmoledTheme,
+                title: Text(context.l10n.appearanceAmoled),
+                subtitle: Text(context.l10n.appearanceAmoledBody),
+              ),
+              SwitchListTile(
+                value: widget.preferences.highContrast,
+                onChanged: widget.preferences.setHighContrast,
+                title: Text(context.l10n.appearanceHighContrast),
+                subtitle: Text(context.l10n.appearanceHighContrastBody),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(context.l10n.actionClose),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -373,22 +446,34 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (conversations.isEmpty &&
         newNearbyPeers.isEmpty &&
         genericPresences.isEmpty) {
-      return _EmptyState(
-        icon: Icons.portable_wifi_off,
-        title: context.l10n.emptyPeersTitle,
-        description: context.l10n.emptyPeersBody,
-        action: Builder(
-          builder: (buttonContext) => FilledButton.icon(
-            onPressed: () => _shareInvite(buttonContext),
-            icon: const Icon(Icons.ios_share),
-            label: Text(context.l10n.shareInviteButton),
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: MeshHealthCard(controller: controller),
           ),
-        ),
+          Expanded(
+            child: _EmptyState(
+              icon: Icons.portable_wifi_off,
+              title: context.l10n.emptyPeersTitle,
+              description: context.l10n.emptyPeersBody,
+              action: Builder(
+                builder: (buttonContext) => FilledButton.icon(
+                  onPressed: () => _shareInvite(buttonContext),
+                  icon: const Icon(Icons.ios_share),
+                  label: Text(context.l10n.shareInviteButton),
+                ),
+              ),
+            ),
+          ),
+        ],
       );
     }
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
+        MeshHealthCard(controller: controller),
+        const SizedBox(height: 8),
         if (conversations.isNotEmpty) ...[
           _ListSectionTitle(title: context.l10n.recentChatsTitle),
           ...conversations.map((conversation) {
@@ -579,124 +664,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return MaterialLocalizations.of(context).formatShortDate(local);
   }
 
-  Widget _buildSos(MeshController controller) {
-    final sosMessages = controller.messages
-        .where((message) => message.isSos)
-        .toList(growable: false)
-        .reversed
-        .toList(growable: false);
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Card(
-          color: Theme.of(context).colorScheme.errorContainer,
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                Icon(
-                  Icons.sos,
-                  size: 52,
-                  color: Theme.of(context).colorScheme.onErrorContainer,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  context.l10n.sosCardTitle,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(context.l10n.sosCardBody, textAlign: TextAlign.center),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    FilledButton(
-                      onPressed: controller.canSend
-                          ? () => controller.sendSos(context.l10n.sosMedical)
-                          : null,
-                      child: Text(context.l10n.sosMedical.toUpperCase()),
-                    ),
-                    FilledButton.tonal(
-                      onPressed: controller.canSend
-                          ? () => controller.sendSos(context.l10n.sosTrapped)
-                          : null,
-                      child: Text(context.l10n.sosTrapped.toUpperCase()),
-                    ),
-                    FilledButton.tonal(
-                      onPressed: controller.canSend
-                          ? () => controller.sendSos(context.l10n.sosImOk)
-                          : null,
-                      child: Text(context.l10n.sosImOk.toUpperCase()),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        RescueModeCard(controller: controller),
-        const SizedBox(height: 12),
-        PowerSavingCard(controller: controller),
-        const SizedBox(height: 16),
-        Text(
-          context.l10n.sosReceivedTitle,
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        const SizedBox(height: 8),
-        if (sosMessages.isEmpty)
-          Text(context.l10n.sosNoneReceived)
-        else
-          ...sosMessages.map(
-            (message) => Card(
-              child: ListTile(
-                leading: const Icon(Icons.crisis_alert),
-                title: Text(message.sender),
-                subtitle: Text(
-                  '${message.sosLatitude != null ? '${message.sosDescription}\n'
-                            'GPS ${message.sosLatitude!.toStringAsFixed(5)}, '
-                            '${message.sosLongitude!.toStringAsFixed(5)}' : message.sosDescription}'
-                  '\n${_formatMessageDateTime(context, message.timestamp)}',
-                ),
-                isThreeLine: true,
-                trailing: message.isMine
-                    ? null
-                    : FilledButton.tonalIcon(
-                        onPressed:
-                            controller
-                                    .peerById(message.senderPeerId)
-                                    ?.radarAllowed ==
-                                true
-                            ? () {
-                                final peer = controller.peerById(
-                                  message.senderPeerId,
-                                )!;
-                                _openRadar(
-                                  peerId: message.senderPeerId,
-                                  nickname: message.sender,
-                                  consentExpiresAt: peer.radarAllowedUntil!,
-                                  consentSource:
-                                      peer.radarConsentSource ?? 'sos',
-                                  latitude: message.sosLatitude,
-                                  longitude: message.sosLongitude,
-                                );
-                              }
-                            : null,
-                        icon: const Icon(Icons.radar, size: 18),
-                        label: Text(context.l10n.actionTrack),
-                      ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
   Future<void> _openPrivateChat(
     MeshController controller,
     MeshPeer peer,
@@ -706,6 +673,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       isScrollControlled: true,
       builder: (context) => _PrivateChatSheet(
         controller: controller,
+        transfers: widget.transfers,
         peer: peer,
         isOnline: controller.isPeerOnline(peer.id),
       ),
@@ -936,11 +904,13 @@ class _ListSectionTitle extends StatelessWidget {
 class _PrivateChatSheet extends StatefulWidget {
   const _PrivateChatSheet({
     required this.controller,
+    required this.transfers,
     required this.peer,
     required this.isOnline,
   });
 
   final MeshController controller;
+  final TransferController transfers;
   final MeshPeer peer;
   final bool isOnline;
 
@@ -951,8 +921,13 @@ class _PrivateChatSheet extends StatefulWidget {
 class _PrivateChatSheetState extends State<_PrivateChatSheet> {
   late final TextEditingController _textController;
   final ScrollController _scrollController = ScrollController();
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  final AudioPlayer _audioPlayer = AudioPlayer();
   var _privateMessageCount = 0;
   var _scrollScheduled = false;
+  var _recording = false;
+  DateTime? _recordingStarted;
+  Timer? _recordingTimer;
 
   @override
   void initState() {
@@ -960,6 +935,7 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
     _textController = TextEditingController();
     _privateMessageCount = _countPrivateMessages();
     widget.controller.addListener(_handleControllerUpdate);
+    widget.transfers.addListener(_handleTransferUpdate);
     _scrollToBottom(animate: false);
   }
 
@@ -977,6 +953,10 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
   @override
   void dispose() {
     widget.controller.removeListener(_handleControllerUpdate);
+    widget.transfers.removeListener(_handleTransferUpdate);
+    _recordingTimer?.cancel();
+    _audioRecorder.dispose();
+    _audioPlayer.dispose();
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -995,6 +975,68 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
     final hasNewMessage = count > _privateMessageCount;
     setState(() => _privateMessageCount = count);
     if (hasNewMessage) _scrollToBottom();
+  }
+
+  void _handleTransferUpdate() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _toggleVoiceRecording() async {
+    if (_recording) {
+      await _stopVoiceRecording();
+      return;
+    }
+    if (!widget.peer.supportsTransfers) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.voiceUnsupported)));
+      return;
+    }
+    if (!await _audioRecorder.hasPermission()) return;
+    final directory = await getTemporaryDirectory();
+    final path = p.join(
+      directory.path,
+      'hearthbit_voice_${DateTime.now().millisecondsSinceEpoch}.m4a',
+    );
+    await _audioRecorder.start(
+      const RecordConfig(
+        encoder: AudioEncoder.aacLc,
+        bitRate: 12000,
+        sampleRate: 16000,
+        numChannels: 1,
+      ),
+      path: path,
+    );
+    if (!mounted) return;
+    setState(() {
+      _recording = true;
+      _recordingStarted = DateTime.now();
+    });
+    _recordingTimer?.cancel();
+    _recordingTimer = Timer(const Duration(seconds: 20), _stopVoiceRecording);
+  }
+
+  Future<void> _stopVoiceRecording() async {
+    if (!_recording) return;
+    _recordingTimer?.cancel();
+    final duration = DateTime.now()
+        .difference(_recordingStarted ?? DateTime.now())
+        .inSeconds
+        .clamp(1, 20);
+    final path = await _audioRecorder.stop();
+    if (mounted) setState(() => _recording = false);
+    if (path == null || !mounted) return;
+    final transferId = await widget.transfers.sendFile(
+      peer: widget.peer,
+      filePath: path,
+      fileName: p.basename(path),
+      mimeType: 'audio/x-hearthbit-voice',
+    );
+    await widget.controller.sendPrivate(
+      widget.peer,
+      '[HB-VOICE|$transferId|$duration]',
+    );
+    _scrollToBottom();
   }
 
   void _scrollToBottom({bool animate = true}) {
@@ -1073,19 +1115,42 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
                     )
                   : ListView(
                       controller: _scrollController,
-                      children: _messageTimeline(context, privateMessages),
+                      children: _messageTimeline(
+                        context,
+                        privateMessages,
+                        transfers: widget.transfers,
+                        audioPlayer: _audioPlayer,
+                      ),
                     ),
             ),
-            _MessageComposer(
-              controller: _textController,
-              enabled: widget.isOnline && widget.controller.canSend,
-              hint: context.l10n.composerPrivateHint,
-              onSend: () async {
-                final text = _textController.text;
-                _textController.clear();
-                await widget.controller.sendPrivate(widget.peer, text);
-                if (mounted) _scrollToBottom();
-              },
+            Row(
+              children: [
+                IconButton.filledTonal(
+                  tooltip: _recording
+                      ? context.l10n.voiceStop
+                      : context.l10n.voiceRecord,
+                  onPressed:
+                      widget.isOnline &&
+                          widget.controller.canSend &&
+                          widget.peer.supportsTransfers
+                      ? _toggleVoiceRecording
+                      : null,
+                  icon: Icon(_recording ? Icons.stop : Icons.mic),
+                ),
+                Expanded(
+                  child: _MessageComposer(
+                    controller: _textController,
+                    enabled: widget.isOnline && widget.controller.canSend,
+                    hint: context.l10n.composerPrivateHint,
+                    onSend: () async {
+                      final text = _textController.text;
+                      _textController.clear();
+                      await widget.controller.sendPrivate(widget.peer, text);
+                      if (mounted) _scrollToBottom();
+                    },
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -1273,9 +1338,15 @@ class _MessageComposer extends StatelessWidget {
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message});
+  const _MessageBubble({
+    required this.message,
+    this.transfers,
+    this.audioPlayer,
+  });
 
   final MeshMessage message;
+  final TransferController? transfers;
+  final AudioPlayer? audioPlayer;
 
   @override
   Widget build(BuildContext context) {
@@ -1314,7 +1385,14 @@ class _MessageBubble extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 4),
-            Text(message.content.replaceFirst('SOS|', 'SOS: ')),
+            if (message.isVoiceNote)
+              _VoiceNoteContent(
+                message: message,
+                transfers: transfers,
+                audioPlayer: audioPlayer,
+              )
+            else
+              Text(message.content.replaceFirst('SOS|', 'SOS: ')),
             const SizedBox(height: 4),
             Align(
               alignment: Alignment.centerRight,
@@ -1334,8 +1412,10 @@ class _MessageBubble extends StatelessWidget {
 
 List<Widget> _messageTimeline(
   BuildContext context,
-  List<MeshMessage> messages,
-) {
+  List<MeshMessage> messages, {
+  TransferController? transfers,
+  AudioPlayer? audioPlayer,
+}) {
   final widgets = <Widget>[];
   DateTime? previousDay;
   for (final message in messages) {
@@ -1344,9 +1424,64 @@ List<Widget> _messageTimeline(
       widgets.add(_DateSeparator(label: _formatDayLabel(context, day)));
       previousDay = day;
     }
-    widgets.add(_MessageBubble(message: message));
+    widgets.add(
+      _MessageBubble(
+        message: message,
+        transfers: transfers,
+        audioPlayer: audioPlayer,
+      ),
+    );
   }
   return widgets;
+}
+
+class _VoiceNoteContent extends StatelessWidget {
+  const _VoiceNoteContent({
+    required this.message,
+    required this.transfers,
+    required this.audioPlayer,
+  });
+
+  final MeshMessage message;
+  final TransferController? transfers;
+  final AudioPlayer? audioPlayer;
+
+  @override
+  Widget build(BuildContext context) {
+    TransferRecord? record;
+    final transferId = message.voiceTransferId;
+    if (transferId != null && transfers != null) {
+      for (final item in transfers!.transfers) {
+        if (item.id == transferId) {
+          record = item;
+          break;
+        }
+      }
+    }
+    final ready =
+        record?.state == TransferState.completed &&
+        record?.filePath != null &&
+        File(record!.filePath!).existsSync();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton.filledTonal(
+          tooltip: context.l10n.voicePlay,
+          onPressed: ready && audioPlayer != null
+              ? () => audioPlayer!.play(DeviceFileSource(record!.filePath!))
+              : null,
+          icon: ready
+              ? const Icon(Icons.play_arrow)
+              : const SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+        ),
+        const SizedBox(width: 8),
+        Text('${message.voiceDurationSeconds ?? 0} s'),
+      ],
+    );
+  }
 }
 
 String _formatDayLabel(BuildContext context, DateTime day) {
@@ -1357,18 +1492,6 @@ String _formatDayLabel(BuildContext context, DateTime day) {
       context,
     ).formatMediumDate(day),
   };
-}
-
-String _formatMessageDateTime(BuildContext context, DateTime timestamp) {
-  final local = timestamp.toLocal();
-  final date = _formatDayLabel(
-    context,
-    DateTime(local.year, local.month, local.day),
-  );
-  final time = MaterialLocalizations.of(
-    context,
-  ).formatTimeOfDay(TimeOfDay.fromDateTime(local));
-  return '$date · $time';
 }
 
 class _DateSeparator extends StatelessWidget {

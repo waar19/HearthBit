@@ -754,4 +754,241 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get nodeModeBeaconBody =>
       'Save power and advertise your presence without chat or message relay. On Android, data links are also disabled.';
+
+  @override
+  String get tabEmergency => 'Emergency';
+
+  @override
+  String get emergencyHeadline => 'Emergency mode';
+
+  @override
+  String get emergencyInstructions =>
+      'Press and hold SOS for 2 seconds. HearthBit will turn on the mesh, share your location and repeat the alert.';
+
+  @override
+  String get emergencyHoldSos => 'HOLD FOR SOS';
+
+  @override
+  String get emergencySosActive => 'SOS ACTIVE';
+
+  @override
+  String get emergencyStopRescue => 'Stop rescue mode';
+
+  @override
+  String get errorEmergencyMeshUnavailable =>
+      'The Bluetooth mesh could not be activated. Check Bluetooth permissions and try again.';
+
+  @override
+  String get checkInTitle => 'Tell people your status';
+
+  @override
+  String get checkInBody =>
+      'A short update is relayed through the mesh with your time and location when available.';
+
+  @override
+  String get checkInOk => 'I am OK';
+
+  @override
+  String get checkInNeedsHelp => 'I need help';
+
+  @override
+  String get checkInInjured => 'I am injured';
+
+  @override
+  String get checkInRecentTitle => 'Latest check-ins';
+
+  @override
+  String get checkInNone => 'No one has shared a status yet.';
+
+  @override
+  String get onboardingWelcomeTitle => 'Communication when networks fail';
+
+  @override
+  String get onboardingWelcomeBody =>
+      'HearthBit relays emergency messages between nearby phones using Bluetooth, without mobile service or internet.';
+
+  @override
+  String get onboardingMeshTitle => 'Keep the emergency mesh alive';
+
+  @override
+  String get onboardingMeshBody =>
+      'Bluetooth, nearby-device and notification permissions let your phone find people and relay their messages.';
+
+  @override
+  String get onboardingReadyTitle => 'Prepare before an emergency';
+
+  @override
+  String get onboardingReadyBody =>
+      'Allow background location and exempt HearthBit from battery restrictions so SOS positions can stay current.';
+
+  @override
+  String get onboardingNext => 'NEXT';
+
+  @override
+  String get onboardingBack => 'BACK';
+
+  @override
+  String get onboardingAllowMesh => 'ALLOW AND TURN ON MESH';
+
+  @override
+  String get onboardingAllowLocation => 'ALLOW EMERGENCY LOCATION';
+
+  @override
+  String get onboardingFinish => 'FINISH SETUP';
+
+  @override
+  String get appearanceTitle => 'Display & accessibility';
+
+  @override
+  String get appearanceAmoled => 'AMOLED black theme';
+
+  @override
+  String get appearanceAmoledBody =>
+      'Uses a true black background to save power on OLED screens.';
+
+  @override
+  String get appearanceHighContrast => 'High contrast and larger controls';
+
+  @override
+  String get appearanceHighContrastBody =>
+      'Improves readability and enlarges critical actions.';
+
+  @override
+  String get tooltipAppearance => 'Display and accessibility';
+
+  @override
+  String get meshHealthTitle => 'Mesh health';
+
+  @override
+  String meshHealthDirect(int count) {
+    return '$count direct peers';
+  }
+
+  @override
+  String meshHealthRelays(int count) {
+    return '$count relays';
+  }
+
+  @override
+  String meshHealthAnchors(int count) {
+    return '$count data anchors';
+  }
+
+  @override
+  String meshHealthSignals(int count) {
+    return '$count other Bluetooth signals';
+  }
+
+  @override
+  String get meshHealthAnchorReady => 'A persistent data anchor is nearby.';
+
+  @override
+  String get meshHealthNoAnchor =>
+      'No persistent data anchor is currently visible.';
+
+  @override
+  String get adaptivePowerTitle => 'Adaptive battery mode';
+
+  @override
+  String get adaptivePowerNormal => 'Full mesh performance';
+
+  @override
+  String get adaptivePowerSaving => 'Battery saving: scanning in short bursts';
+
+  @override
+  String get survivalModeTitle => 'Survival mode';
+
+  @override
+  String get survivalModeBody =>
+      'Keep only an SOS presence beacon active for maximum battery life. Chat and relay stop.';
+
+  @override
+  String get survivalModeEnable => 'ENABLE SURVIVAL MODE';
+
+  @override
+  String get survivalModeDisable => 'RETURN TO MESH MODE';
+
+  @override
+  String get survivalModeSuggestion =>
+      'Battery is critical. Enable survival mode to remain detectable longer.';
+
+  @override
+  String get gatewayTitle => 'Emergency internet gateway';
+
+  @override
+  String get gatewayBody =>
+      'When internet returns, this phone can publish queued SOS and check-ins through a gateway you configure.';
+
+  @override
+  String get gatewayOptIn => 'Allow this phone to offer internet exit';
+
+  @override
+  String get gatewayAvailable => 'Internet transport detected';
+
+  @override
+  String get gatewayUnavailable => 'No internet transport detected';
+
+  @override
+  String get gatewayPrivacy =>
+      'Only SOS and check-ins are eligible. Nothing is uploaded until you configure and enable a trusted gateway.';
+
+  @override
+  String gatewayPending(int count) {
+    return '$count emergency items pending';
+  }
+
+  @override
+  String get gatewayConfigure => 'Configure trusted gateway';
+
+  @override
+  String get gatewayKindMatrix => 'Matrix';
+
+  @override
+  String get gatewayKindMqtt => 'MQTT';
+
+  @override
+  String get gatewayHomeserver => 'Matrix homeserver URL';
+
+  @override
+  String get gatewayBroker => 'MQTT broker host';
+
+  @override
+  String get gatewayRoom => 'Matrix room ID';
+
+  @override
+  String get gatewayTopic => 'MQTT topic';
+
+  @override
+  String get gatewayUsername => 'Username';
+
+  @override
+  String get gatewayAccessToken => 'Access token';
+
+  @override
+  String get gatewayPassword => 'Password';
+
+  @override
+  String get gatewayPort => 'Port';
+
+  @override
+  String get gatewayTls => 'Use encrypted TLS connection';
+
+  @override
+  String get voiceRecord => 'Record voice note';
+
+  @override
+  String get voiceStop => 'Stop recording';
+
+  @override
+  String get voiceTooLong => 'Voice notes are limited to 20 seconds.';
+
+  @override
+  String get voiceUnsupported =>
+      'Voice notes require HearthBit on the recipient\'s device.';
+
+  @override
+  String get voicePlay => 'Play voice note';
+
+  @override
+  String get voicePause => 'Pause voice note';
 }

@@ -33,4 +33,6 @@
     <string name="error_wifi_aware_datapath">The Wi-Fi Aware data path was not established</string>
     <string name="error_wifi_aware_send_interrupted">Wi-Fi Aware send interrupted: %1$s</string>
     <string name="error_wifi_aware_receive_interrupted">Wi-Fi Aware download interrupted: %1$s</string>
+    <string name="shortcut_sos_short">SOS</string>
+    <string name="shortcut_sos_long">Open HearthBit emergency mode</string>
 </resources>

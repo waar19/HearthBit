@@ -731,4 +731,230 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get nodeModeBeaconBody =>
       'チャットや中継をせず、存在だけを通知して電力を節約します。Android ではデータ接続も無効になります。';
+
+  @override
+  String get tabEmergency => '緊急';
+
+  @override
+  String get emergencyHeadline => '緊急モード';
+
+  @override
+  String get emergencyInstructions =>
+      'SOSを2秒間長押ししてください。メッシュを起動し、位置情報を共有して警報を繰り返します。';
+
+  @override
+  String get emergencyHoldSos => 'SOSを長押し';
+
+  @override
+  String get emergencySosActive => 'SOS発信中';
+
+  @override
+  String get emergencyStopRescue => '救助モードを停止';
+
+  @override
+  String get errorEmergencyMeshUnavailable =>
+      'Bluetoothメッシュを起動できません。権限を確認してください。';
+
+  @override
+  String get checkInTitle => '安否を知らせる';
+
+  @override
+  String get checkInBody => '時刻と利用可能な位置情報を添えて、安否をメッシュで中継します。';
+
+  @override
+  String get checkInOk => '無事です';
+
+  @override
+  String get checkInNeedsHelp => '助けが必要です';
+
+  @override
+  String get checkInInjured => 'けがをしています';
+
+  @override
+  String get checkInRecentTitle => '最新の安否情報';
+
+  @override
+  String get checkInNone => 'まだ安否情報はありません。';
+
+  @override
+  String get onboardingWelcomeTitle => '通信網が止まってもつながる';
+
+  @override
+  String get onboardingWelcomeBody =>
+      'HearthBitは携帯回線やインターネットなしで、Bluetoothにより緊急メッセージを中継します。';
+
+  @override
+  String get onboardingMeshTitle => '緊急メッシュを維持';
+
+  @override
+  String get onboardingMeshBody => 'Bluetooth、付近のデバイス、通知の権限が探索と中継に必要です。';
+
+  @override
+  String get onboardingReadyTitle => '災害前に準備';
+
+  @override
+  String get onboardingReadyBody => 'バックグラウンド位置情報を許可し、バッテリー制限から除外してください。';
+
+  @override
+  String get onboardingNext => '次へ';
+
+  @override
+  String get onboardingBack => '戻る';
+
+  @override
+  String get onboardingAllowMesh => '許可してメッシュを起動';
+
+  @override
+  String get onboardingAllowLocation => '緊急位置情報を許可';
+
+  @override
+  String get onboardingFinish => '設定を完了';
+
+  @override
+  String get appearanceTitle => '表示とアクセシビリティ';
+
+  @override
+  String get appearanceAmoled => 'AMOLED黒テーマ';
+
+  @override
+  String get appearanceAmoledBody => 'OLED画面で完全な黒を使い、電力を節約します。';
+
+  @override
+  String get appearanceHighContrast => '高コントラストと大きな操作';
+
+  @override
+  String get appearanceHighContrastBody => '読みやすさを高め、重要な操作を大きくします。';
+
+  @override
+  String get tooltipAppearance => '表示とアクセシビリティ';
+
+  @override
+  String get meshHealthTitle => 'メッシュの状態';
+
+  @override
+  String meshHealthDirect(int count) {
+    return '直接接続 $count 台';
+  }
+
+  @override
+  String meshHealthRelays(int count) {
+    return '中継 $count 台';
+  }
+
+  @override
+  String meshHealthAnchors(int count) {
+    return 'データアンカー $count 台';
+  }
+
+  @override
+  String meshHealthSignals(int count) {
+    return 'その他のBluetooth信号 $count 件';
+  }
+
+  @override
+  String get meshHealthAnchorReady => '永続データアンカーが近くにあります。';
+
+  @override
+  String get meshHealthNoAnchor => '永続データアンカーは見つかりません。';
+
+  @override
+  String get adaptivePowerTitle => '適応バッテリーモード';
+
+  @override
+  String get adaptivePowerNormal => 'メッシュ性能：最大';
+
+  @override
+  String get adaptivePowerSaving => '省電力：短い間隔でスキャン';
+
+  @override
+  String get survivalModeTitle => 'サバイバルモード';
+
+  @override
+  String get survivalModeBody => 'SOSビーコンのみを維持します。チャットと中継は停止します。';
+
+  @override
+  String get survivalModeEnable => 'サバイバルモードを有効化';
+
+  @override
+  String get survivalModeDisable => 'メッシュモードに戻る';
+
+  @override
+  String get survivalModeSuggestion => 'バッテリー残量が危険です。検出可能時間を延ばしてください。';
+
+  @override
+  String get gatewayTitle => '緊急インターネットゲートウェイ';
+
+  @override
+  String get gatewayBody => 'インターネット復旧時に、保留中のSOSと安否情報を公開できます。';
+
+  @override
+  String get gatewayOptIn => 'この端末からインターネット出口を提供';
+
+  @override
+  String get gatewayAvailable => 'インターネット接続を検出';
+
+  @override
+  String get gatewayUnavailable => 'インターネット接続なし';
+
+  @override
+  String get gatewayPrivacy => '対象はSOSと安否情報のみです。信頼できる設定なしでは送信しません。';
+
+  @override
+  String gatewayPending(int count) {
+    return '保留中の緊急項目 $count 件';
+  }
+
+  @override
+  String get gatewayConfigure => '信頼済みゲートウェイを設定';
+
+  @override
+  String get gatewayKindMatrix => 'Matrix';
+
+  @override
+  String get gatewayKindMqtt => 'MQTT';
+
+  @override
+  String get gatewayHomeserver => 'MatrixサーバーURL';
+
+  @override
+  String get gatewayBroker => 'MQTTブローカー';
+
+  @override
+  String get gatewayRoom => 'MatrixルームID';
+
+  @override
+  String get gatewayTopic => 'MQTTトピック';
+
+  @override
+  String get gatewayUsername => 'ユーザー名';
+
+  @override
+  String get gatewayAccessToken => 'アクセストークン';
+
+  @override
+  String get gatewayPassword => 'パスワード';
+
+  @override
+  String get gatewayPort => 'ポート';
+
+  @override
+  String get gatewayTls => '暗号化TLS接続を使用';
+
+  @override
+  String get voiceRecord => '音声メモを録音';
+
+  @override
+  String get voiceStop => '録音を停止';
+
+  @override
+  String get voiceTooLong => '音声メモは20秒までです。';
+
+  @override
+  String get voiceUnsupported => '受信側にもHearthBitが必要です。';
+
+  @override
+  String get voicePlay => '音声メモを再生';
+
+  @override
+  String get voicePause => '音声メモを一時停止';
 }

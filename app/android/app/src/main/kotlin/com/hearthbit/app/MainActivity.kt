@@ -6,6 +6,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.net.wifi.WifiManager
 import android.net.wifi.aware.WifiAwareManager
+import android.content.IntentFilter
+import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
@@ -26,6 +28,8 @@ class MainActivity : FlutterActivity() {
     private var backgroundLocationResult: MethodChannel.Result? = null
     private var transferEvents: EventChannel.EventSink? = null
     private var lanMulticastLock: WifiManager.MulticastLock? = null
+    private var emergencyShortcutChannel: MethodChannel? = null
+    private var emergencyShortcutPending = false
     private val nearbyTransport by lazy {
         NearbyTransport(applicationContext) { event ->
             runOnUiThread { transferEvents?.success(event) }
@@ -49,6 +53,18 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
+        emergencyShortcutPending = intent?.action == ACTION_OPEN_EMERGENCY
+        emergencyShortcutChannel = MethodChannel(messenger, EMERGENCY_SHORTCUT_CHANNEL).apply {
+            setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "consumeInitialOpen" -> {
+                        result.success(emergencyShortcutPending)
+                        emergencyShortcutPending = false
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        }
         MethodChannel(messenger, METHOD_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getCapabilities" -> result.success(
@@ -182,6 +198,8 @@ class MainActivity : FlutterActivity() {
                                 (power?.isIgnoringBatteryOptimizations(packageName) == true),
                             "lowPowerMode" to (power?.isPowerSaveMode == true),
                             "backgroundLocation" to backgroundLocationGranted(),
+                            "batteryLevel" to batteryLevel(),
+                            "adaptivePowerSaving" to (batteryLevel() < 20),
                         ),
                     )
                 }
@@ -276,6 +294,14 @@ class MainActivity : FlutterActivity() {
         )
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.action != ACTION_OPEN_EMERGENCY) return
+        emergencyShortcutPending = true
+        emergencyShortcutChannel?.invokeMethod("openEmergency", null)
+    }
+
     private fun nearbyAvailable(): Boolean =
         GoogleApiAvailability.getInstance()
             .isGooglePlayServicesAvailable(this) == ConnectionResult.SUCCESS
@@ -339,6 +365,13 @@ class MainActivity : FlutterActivity() {
                 this,
                 Manifest.permission.ACCESS_COARSE_LOCATION,
             ) == PackageManager.PERMISSION_GRANTED
+
+    private fun batteryLevel(): Int {
+        val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val level = battery?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = battery?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+        return if (level >= 0 && scale > 0) level * 100 / scale else 100
+    }
 
     private fun backgroundLocationGranted(): Boolean =
         if (Build.VERSION.SDK_INT < 29) {
@@ -433,6 +466,8 @@ class MainActivity : FlutterActivity() {
         const val EVENT_CHANNEL = "com.hearthbit.mesh/events"
         const val TRANSFER_METHOD_CHANNEL = "com.hearthbit.transfer/methods"
         const val TRANSFER_EVENT_CHANNEL = "com.hearthbit.transfer/events"
+        const val EMERGENCY_SHORTCUT_CHANNEL = "com.hearthbit.emergency/shortcut"
+        const val ACTION_OPEN_EMERGENCY = "com.hearthbit.app.OPEN_EMERGENCY"
         const val PERMISSION_REQUEST = 7402
         const val BACKGROUND_LOCATION_REQUEST = 7403
     }

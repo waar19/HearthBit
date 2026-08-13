@@ -116,6 +116,10 @@ internal class MeshEngine(
     private var advertiseGeneration = 0
     private var advertiseWatchdog: Runnable? = null
     private var genericPresenceEmitRunnable: Runnable? = null
+    private var adaptiveScanStartRunnable: Runnable? = null
+    private var adaptiveScanStopRunnable: Runnable? = null
+    private var batteryLevel = 100
+    private var adaptivePowerSaving = false
 
     /** Peer objetivo del radar de rescate; null cuando el radar está apagado. */
     @Volatile
@@ -143,6 +147,8 @@ internal class MeshEngine(
         "peerId" to peerId,
         "nickname" to nickname,
         "role" to localRole.wireName,
+        "batteryLevel" to batteryLevel,
+        "adaptivePowerSaving" to adaptivePowerSaving,
         "radarConsentUntil" to activeLocalRadarConsentUntil(),
         "links" to activeLinks().map { it.capabilities.toEventMap() },
         "peers" to peersSnapshot(),
@@ -262,6 +268,7 @@ internal class MeshEngine(
         runCatching { adapter.bluetoothLeScanner?.stopScan(genericBeaconScanCallback) }
         genericPresenceEmitRunnable?.let(mainHandler::removeCallbacks)
         genericPresenceEmitRunnable = null
+        cancelAdaptiveScanning()
         genericPresenceTracker.clear()
         clientGatts.values.forEach { runCatching { it.close() } }
         clientGatts.clear()
@@ -295,6 +302,27 @@ internal class MeshEngine(
     fun updateNickname(value: String) {
         identity.nickname = value.trim().ifEmpty { "SOS-${peerId.takeLast(4)}" }
         sendAnnouncement()
+    }
+
+    fun updateBatteryLevel(percent: Int) {
+        val normalized = percent.coerceIn(0, 100)
+        val nextSaving = AdaptivePowerPolicy.shouldSavePower(normalized)
+        val changed = nextSaving != adaptivePowerSaving
+        batteryLevel = normalized
+        adaptivePowerSaving = nextSaving
+        if (changed && running && localRole != MeshNodeRole.PHONE_BEACON && radarPeerId == null) {
+            cancelAdaptiveScanning()
+            startScanning()
+            startGenericBeaconScanning()
+            restartAdvertising()
+        }
+        emit(
+            mapOf(
+                "type" to "power",
+                "batteryLevel" to batteryLevel,
+                "adaptivePowerSaving" to adaptivePowerSaving,
+            ),
+        )
     }
 
     fun updateRole(value: String) {
@@ -1492,8 +1520,20 @@ internal class MeshEngine(
             return
         }
         val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
+            .setAdvertiseMode(
+                if (adaptivePowerSaving) {
+                    AdvertiseSettings.ADVERTISE_MODE_LOW_POWER
+                } else {
+                    AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY
+                },
+            )
+            .setTxPowerLevel(
+                if (adaptivePowerSaving) {
+                    AdvertiseSettings.ADVERTISE_TX_POWER_LOW
+                } else {
+                    AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM
+                },
+            )
             .setConnectable(localRole != MeshNodeRole.PHONE_BEACON)
             .build()
         // El PDU legado de BLE admite 31 bytes. UUID (18B + banderas) viaja en
@@ -1533,9 +1573,22 @@ internal class MeshEngine(
 
     @SuppressLint("MissingPermission")
     private fun startScanning(aggressive: Boolean = false) {
+        if (adaptivePowerSaving && !aggressive) {
+            scheduleAdaptiveScanning()
+            return
+        }
+        if (aggressive) cancelAdaptiveScanning()
+        startMeshScan(
+            scanMode = ScanSettings.SCAN_MODE_LOW_LATENCY,
+            aggressive = aggressive,
+        )
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startMeshScan(scanMode: Int, aggressive: Boolean) {
         val filter = ScanFilter.Builder().setServiceUuid(ParcelUuid(SERVICE_UUID)).build()
         val settingsBuilder = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .setScanMode(scanMode)
             .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
         if (aggressive) {
             settingsBuilder
@@ -1554,6 +1607,15 @@ internal class MeshEngine(
      */
     @SuppressLint("MissingPermission")
     private fun startGenericBeaconScanning() {
+        if (adaptivePowerSaving) {
+            scheduleAdaptiveScanning()
+            return
+        }
+        startGenericBeaconScanNow()
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startGenericBeaconScanNow() {
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
             .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
@@ -1564,6 +1626,56 @@ internal class MeshEngine(
             settings,
             genericBeaconScanCallback,
         )
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun scheduleAdaptiveScanning() {
+        if (
+            !running ||
+            !adaptivePowerSaving ||
+            localRole == MeshNodeRole.PHONE_BEACON ||
+            radarPeerId != null ||
+            adaptiveScanStartRunnable != null ||
+            adaptiveScanStopRunnable != null
+        ) {
+            return
+        }
+        val start = Runnable {
+            adaptiveScanStartRunnable = null
+            if (
+                !running ||
+                !adaptivePowerSaving ||
+                localRole == MeshNodeRole.PHONE_BEACON ||
+                radarPeerId != null
+            ) {
+                return@Runnable
+            }
+            startMeshScan(ScanSettings.SCAN_MODE_LOW_POWER, aggressive = false)
+            startGenericBeaconScanNow()
+            adaptiveScanStopRunnable = Runnable {
+                adaptiveScanStopRunnable = null
+                if (!running || radarPeerId != null) return@Runnable
+                runCatching { adapter.bluetoothLeScanner?.stopScan(scanCallback) }
+                runCatching { adapter.bluetoothLeScanner?.stopScan(genericBeaconScanCallback) }
+                adaptiveScanStartRunnable = Runnable {
+                    adaptiveScanStartRunnable = null
+                    scheduleAdaptiveScanning()
+                }.also {
+                    mainHandler.postDelayed(it, AdaptivePowerPolicy.SCAN_PAUSE_MS)
+                }
+            }.also {
+                mainHandler.postDelayed(it, AdaptivePowerPolicy.SCAN_BURST_MS)
+            }
+        }
+        adaptiveScanStartRunnable = start
+        mainHandler.post(start)
+    }
+
+    private fun cancelAdaptiveScanning() {
+        adaptiveScanStartRunnable?.let(mainHandler::removeCallbacks)
+        adaptiveScanStopRunnable?.let(mainHandler::removeCallbacks)
+        adaptiveScanStartRunnable = null
+        adaptiveScanStopRunnable = null
     }
 
     @SuppressLint("MissingPermission")
