@@ -464,6 +464,14 @@ class _RadarScreenState extends State<RadarScreen>
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white),
             ),
+          ] else if (fusion.gpsReliable) ...[
+            const Icon(Icons.navigation_outlined, color: Color(0xFF60A5FA)),
+            const SizedBox(height: 6),
+            Text(
+              context.l10n.radarDirectionGps,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white),
+            ),
           ] else if (fusion.adjustedBleConfidence >=
               SweepEstimate.minimumDirectionalConfidence) ...[
             Text(
@@ -483,19 +491,21 @@ class _RadarScreenState extends State<RadarScreen>
               style: const TextStyle(color: Colors.white),
             ),
           ],
-          const SizedBox(height: 6),
-          Text(
-            context.l10n.radarSweepConfidence(
-              (fusion.adjustedBleConfidence * 100).round(),
+          if (!fusion.gpsReliable) ...[
+            const SizedBox(height: 6),
+            Text(
+              context.l10n.radarSweepConfidence(
+                (fusion.adjustedBleConfidence * 100).round(),
+              ),
+              style: TextStyle(
+                color:
+                    fusion.adjustedBleConfidence >=
+                        SweepEstimate.minimumDirectionalConfidence
+                    ? green
+                    : dim,
+              ),
             ),
-            style: TextStyle(
-              color:
-                  fusion.adjustedBleConfidence >=
-                      SweepEstimate.minimumDirectionalConfidence
-                  ? green
-                  : dim,
-            ),
-          ),
+          ],
           const SizedBox(height: 4),
           Text(
             context.l10n.radarSweepEstimateWarning,

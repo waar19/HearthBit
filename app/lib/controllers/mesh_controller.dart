@@ -39,7 +39,7 @@ class MeshController extends ChangeNotifier {
   /// espaciado para no agotar batería ni saturar la malla.
   static const Duration rescueInterval = Duration(minutes: 5);
   static const Duration radarLocationInterval = Duration(seconds: 20);
-  static const double radarLocationDistanceMeters = 15;
+  static const int radarLocationDistanceMeters = 15;
 
   final MeshPlatformService _platform;
   final MessageRepository _repository;
@@ -514,7 +514,7 @@ class MeshController extends ChangeNotifier {
           Geolocator.getPositionStream(
             locationSettings: const LocationSettings(
               accuracy: LocationAccuracy.high,
-              distanceFilter: radarLocationDistanceMeters.toInt(),
+          distanceFilter: radarLocationDistanceMeters,
             ),
           ).listen((position) {
             _latestRadarPosition = position;
