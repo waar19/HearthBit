@@ -369,5 +369,15 @@
   "apkUnsupported": "Das Teilen der installierten APK ist nur unter Android verfügbar.",
   "apkShareError": "APK konnte nicht vorbereitet oder geteilt werden: {error}",
   "apkShareMessage": "HearthBit-Installationsdatei für Android. Android verlangt die Freigabe dieser Installationsquelle. Eine anders signierte APK kann eine vorhandene Installation nicht aktualisieren; Quelle und Signatur zuerst prüfen.",
-  "apkOfferSent": "APK wurde {peer} angeboten. Die Übertragung meldet einen Fehler, wenn kein geeigneter schneller Transport verfügbar ist."
+  "apkOfferSent": "APK wurde {peer} angeboten. Die Übertragung meldet einen Fehler, wenn kein geeigneter schneller Transport verfügbar ist.",
+  "firstAidOpen": "OFFLINE-ERSTE-HILFE ÖFFNEN",
+  "firstAidTitle": "Offline-Erste-Hilfe",
+  "firstAidDisclaimer": "Rufe den örtlichen Notruf. Dieser Leitfaden ersetzt keine professionelle Hilfe oder Ausbildung. Örtliche Vorgehensweisen unterscheiden sich: Befolge Leitstelle und Behörden.",
+  "firstAidChooseTopic": "Wähle, was passiert ist",
+  "firstAidEnglishFallback": "Diese Übersetzung konnte nicht geprüft werden. Der validierte englische Leitfaden wird angezeigt.",
+  "firstAidSteps": "Jetzt handeln",
+  "firstAidWarnings": "Vermeiden",
+  "firstAidSources": "Quellen und Prüfhinweise",
+  "firstAidReviewed": "Inhalt geprüft am {date}",
+  "firstAidLoadError": "Der validierte Offline-Leitfaden konnte nicht geladen werden. Verlasse dich nicht auf unvollständige Angaben; rufe den örtlichen Notruf."
 }

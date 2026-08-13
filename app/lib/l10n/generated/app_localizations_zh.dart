@@ -1153,4 +1153,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String apkOfferSent(String peer) {
     return '已向 $peer 提供 APK。如果没有合适的高速传输方式，传输将显示错误。';
   }
+
+  @override
+  String get firstAidOpen => '打开离线急救指南';
+
+  @override
+  String get firstAidTitle => '离线急救';
+
+  @override
+  String get firstAidDisclaimer =>
+      '请拨打当地急救电话。本指南不能替代专业救助或培训。各地做法不同，请听从接线员和当地部门的指示。';
+
+  @override
+  String get firstAidChooseTopic => '选择当前情况';
+
+  @override
+  String get firstAidEnglishFallback => '无法验证此翻译，现显示已验证的英文指南。';
+
+  @override
+  String get firstAidSteps => '立即行动';
+
+  @override
+  String get firstAidWarnings => '请勿这样做';
+
+  @override
+  String get firstAidSources => '来源与审核信息';
+
+  @override
+  String firstAidReviewed(String date) {
+    return '内容审核日期：$date';
+  }
+
+  @override
+  String get firstAidLoadError => '无法加载已验证的离线指南。请勿依赖不完整的信息；请拨打当地急救电话。';
 }

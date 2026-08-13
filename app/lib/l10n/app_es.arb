@@ -369,5 +369,15 @@
   "apkUnsupported": "Compartir el APK instalado solo está disponible en Android.",
   "apkShareError": "No se pudo preparar o compartir el APK: {error}",
   "apkShareMessage": "Instalador de HearthBit para Android. Android exige permitir instalaciones desde esta fuente. Un APK con firma distinta no puede actualizar una instalación existente; verifica primero el origen y la firma.",
-  "apkOfferSent": "APK ofrecido a {peer}. La transferencia mostrará un error si no hay un transporte rápido adecuado."
+  "apkOfferSent": "APK ofrecido a {peer}. La transferencia mostrará un error si no hay un transporte rápido adecuado.",
+  "firstAidOpen": "ABRIR PRIMEROS AUXILIOS OFFLINE",
+  "firstAidTitle": "Primeros auxilios offline",
+  "firstAidDisclaimer": "Llama a emergencias locales. Esta guía no sustituye la ayuda profesional ni la formación. Las prácticas locales varían: sigue al operador y a las autoridades.",
+  "firstAidChooseTopic": "Elige qué está ocurriendo",
+  "firstAidEnglishFallback": "No se pudo verificar esta traducción. Se muestra la guía validada en inglés.",
+  "firstAidSteps": "Actúa ahora",
+  "firstAidWarnings": "Evita",
+  "firstAidSources": "Fuentes e información de revisión",
+  "firstAidReviewed": "Contenido revisado el {date}",
+  "firstAidLoadError": "No se pudo cargar la guía offline validada. No uses información incompleta; llama a emergencias locales."
 }

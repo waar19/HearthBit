@@ -51,9 +51,10 @@ class FirstAidGuide {
       throw const FormatException('reviewedAt must be an ISO-8601 date');
     }
     final disclaimer = _text(json, 'disclaimer');
-    final sources = _objects(json, 'sources')
-        .map(FirstAidSource.fromJson)
-        .toList(growable: false);
+    final sources = _objects(
+      json,
+      'sources',
+    ).map(FirstAidSource.fromJson).toList(growable: false);
     if (sources.isEmpty) {
       throw const FormatException('At least one source is required');
     }
@@ -63,10 +64,7 @@ class FirstAidGuide {
     }
     final topics = _objects(json, 'topics')
         .map(
-          (value) => FirstAidTopic.fromJson(
-            value,
-            allowedSourceIds: sourceIds,
-          ),
+          (value) => FirstAidTopic.fromJson(value, allowedSourceIds: sourceIds),
         )
         .toList(growable: false);
     final topicIds = topics.map((topic) => topic.id).toSet();
@@ -203,20 +201,19 @@ int _integer(Map<String, Object?> json, String key) {
   return value;
 }
 
-List<Map<String, Object?>> _objects(
-  Map<String, Object?> json,
-  String key,
-) {
+List<Map<String, Object?>> _objects(Map<String, Object?> json, String key) {
   final value = json[key];
   if (value is! List || value.length > 20) {
     throw FormatException('"$key" must be a bounded list');
   }
-  return value.map((item) {
-    if (item is! Map<String, Object?>) {
-      throw FormatException('"$key" contains an invalid item');
-    }
-    return item;
-  }).toList(growable: false);
+  return value
+      .map((item) {
+        if (item is! Map<String, Object?>) {
+          throw FormatException('"$key" contains an invalid item');
+        }
+        return item;
+      })
+      .toList(growable: false);
 }
 
 List<String> _strings(Map<String, Object?> json, String key) {
@@ -224,10 +221,12 @@ List<String> _strings(Map<String, Object?> json, String key) {
   if (value is! List || value.length > 20) {
     throw FormatException('"$key" must be a bounded list');
   }
-  return value.map((item) {
-    if (item is! String || item.trim().isEmpty || item.length > 1000) {
-      throw FormatException('"$key" contains invalid text');
-    }
-    return item.trim();
-  }).toList(growable: false);
+  return value
+      .map((item) {
+        if (item is! String || item.trim().isEmpty || item.length > 1000) {
+          throw FormatException('"$key" contains invalid text');
+        }
+        return item.trim();
+      })
+      .toList(growable: false);
 }

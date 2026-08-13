@@ -1175,4 +1175,38 @@ class AppLocalizationsJa extends AppLocalizations {
   String apkOfferSent(String peer) {
     return '$peer にAPKを提案しました。適切な高速転送経路がない場合はエラーが表示されます。';
   }
+
+  @override
+  String get firstAidOpen => 'オフライン応急手当を開く';
+
+  @override
+  String get firstAidTitle => 'オフライン応急手当';
+
+  @override
+  String get firstAidDisclaimer =>
+      '地域の救急へ通報してください。この案内は専門家の救助や講習に代わりません。地域で手順が異なるため、通信指令員と当局に従ってください。';
+
+  @override
+  String get firstAidChooseTopic => '起きていることを選ぶ';
+
+  @override
+  String get firstAidEnglishFallback => 'この翻訳を検証できないため、検証済みの英語版を表示しています。';
+
+  @override
+  String get firstAidSteps => '今すぐ行う';
+
+  @override
+  String get firstAidWarnings => '避けること';
+
+  @override
+  String get firstAidSources => '出典と確認情報';
+
+  @override
+  String firstAidReviewed(String date) {
+    return '内容確認日：$date';
+  }
+
+  @override
+  String get firstAidLoadError =>
+      '検証済みのオフライン案内を読み込めませんでした。不完全な情報に頼らず、地域の救急へ通報してください。';
 }

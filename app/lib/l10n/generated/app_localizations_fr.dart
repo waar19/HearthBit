@@ -1221,4 +1221,39 @@ class AppLocalizationsFr extends AppLocalizations {
   String apkOfferSent(String peer) {
     return 'APK proposée à $peer. Le transfert signalera une erreur si aucun transport rapide adapté n’est disponible.';
   }
+
+  @override
+  String get firstAidOpen => 'OUVRIR LES PREMIERS SECOURS HORS LIGNE';
+
+  @override
+  String get firstAidTitle => 'Premiers secours hors ligne';
+
+  @override
+  String get firstAidDisclaimer =>
+      'Appelez les secours locaux. Ce guide ne remplace ni l’aide professionnelle ni la formation. Les pratiques varient : suivez l’opérateur et les autorités.';
+
+  @override
+  String get firstAidChooseTopic => 'Choisissez ce qui se passe';
+
+  @override
+  String get firstAidEnglishFallback =>
+      'Cette traduction n’a pas pu être vérifiée. Le guide anglais validé est affiché.';
+
+  @override
+  String get firstAidSteps => 'Agir maintenant';
+
+  @override
+  String get firstAidWarnings => 'À éviter';
+
+  @override
+  String get firstAidSources => 'Sources et informations de révision';
+
+  @override
+  String firstAidReviewed(String date) {
+    return 'Contenu révisé le $date';
+  }
+
+  @override
+  String get firstAidLoadError =>
+      'Impossible de charger le guide hors ligne validé. Ne vous fiez pas à des informations incomplètes ; appelez les secours locaux.';
 }

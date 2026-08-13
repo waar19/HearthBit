@@ -411,5 +411,16 @@
   "@apkShareError": {"placeholders": {"error": {"type": "String"}}},
   "apkShareMessage": "HearthBit Android installer. Android requires permission to install from this source. A differently signed APK cannot update an existing installation; verify the source and signature first.",
   "apkOfferSent": "APK offered to {peer}. The transfer will show an error if no suitable high-speed transport is available.",
-  "@apkOfferSent": {"placeholders": {"peer": {"type": "String"}}}
+  "@apkOfferSent": {"placeholders": {"peer": {"type": "String"}}},
+  "firstAidOpen": "OPEN OFFLINE FIRST AID",
+  "firstAidTitle": "Offline first aid",
+  "firstAidDisclaimer": "Call local emergency services. This guide does not replace professional help or training. Local practices vary: follow the operator and local authorities.",
+  "firstAidChooseTopic": "Choose what is happening",
+  "firstAidEnglishFallback": "This translation could not be verified. Showing the validated English guide.",
+  "firstAidSteps": "Act now",
+  "firstAidWarnings": "Avoid",
+  "firstAidSources": "Sources and review information",
+  "firstAidReviewed": "Content reviewed {date}",
+  "@firstAidReviewed": {"placeholders": {"date": {"type": "String"}}},
+  "firstAidLoadError": "The validated offline guide could not be loaded. Do not rely on incomplete information; call local emergency services."
 }

@@ -369,5 +369,15 @@
   "apkUnsupported": "仅 Android 支持分享已安装的 APK。",
   "apkShareError": "无法准备或分享 APK：{error}",
   "apkShareMessage": "HearthBit Android 安装程序。Android 要求允许从此来源安装。签名不同的 APK 无法更新现有安装；请先验证来源和签名。",
-  "apkOfferSent": "已向 {peer} 提供 APK。如果没有合适的高速传输方式，传输将显示错误。"
+  "apkOfferSent": "已向 {peer} 提供 APK。如果没有合适的高速传输方式，传输将显示错误。",
+  "firstAidOpen": "打开离线急救指南",
+  "firstAidTitle": "离线急救",
+  "firstAidDisclaimer": "请拨打当地急救电话。本指南不能替代专业救助或培训。各地做法不同，请听从接线员和当地部门的指示。",
+  "firstAidChooseTopic": "选择当前情况",
+  "firstAidEnglishFallback": "无法验证此翻译，现显示已验证的英文指南。",
+  "firstAidSteps": "立即行动",
+  "firstAidWarnings": "请勿这样做",
+  "firstAidSources": "来源与审核信息",
+  "firstAidReviewed": "内容审核日期：{date}",
+  "firstAidLoadError": "无法加载已验证的离线指南。请勿依赖不完整的信息；请拨打当地急救电话。"
 }
