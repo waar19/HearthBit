@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:hearth_bit/l10n/generated/app_localizations.dart';
@@ -61,6 +60,12 @@ void main() {
   testWidgets('lista y detalle no desbordan con texto al 200 %', (
     tester,
   ) async {
+    final spanish = await rootBundle.loadString(
+      'assets/first_aid/first_aid_es.json',
+    );
+    final service = FirstAidGuideService(
+      bundle: _StringBundle({'assets/first_aid/first_aid_es.json': spanish}),
+    );
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -69,10 +74,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('es'),
-        localizationsDelegates: const [
-          ...AppLocalizations.localizationsDelegates,
-          GlobalMaterialLocalizations.delegate,
-        ],
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(
@@ -80,7 +82,7 @@ void main() {
           ).copyWith(textScaler: const TextScaler.linear(2)),
           child: child!,
         ),
-        home: const FirstAidGuideScreen(),
+        home: FirstAidGuideScreen(service: service),
       ),
     );
     await tester.pumpAndSettle();
