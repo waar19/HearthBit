@@ -117,11 +117,12 @@ internal class BeaconActuator(context: Context) {
                 )
             }
         }
+        val activeVibrator = vibrator
         if (flags and BeaconControlProtocol.FLAG_VIBRATE != 0 &&
-            vibrator?.hasVibrator() == true
+            activeVibrator?.hasVibrator() == true
         ) {
             runCatching {
-                vibrator.vibrate(
+                activeVibrator.vibrate(
                     VibrationEffect.createOneShot(
                         durationMs.coerceAtMost(600),
                         VibrationEffect.DEFAULT_AMPLITUDE,

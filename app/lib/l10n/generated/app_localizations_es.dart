@@ -963,7 +963,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String meshHealthTrunks(int count) {
-    return '$count troncales de largo alcance activos';
+    return '$count troncales de largo alcance activas';
   }
 
   @override

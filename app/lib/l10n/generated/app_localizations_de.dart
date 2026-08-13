@@ -666,13 +666,13 @@ class AppLocalizationsDe extends AppLocalizations {
   String get nearbyPeopleTitle => 'Personen in der Nähe';
 
   @override
-  String get peerRoleInfraRelay => 'Infrastructure relay';
+  String get peerRoleInfraRelay => 'Infrastruktur-Relay';
 
   @override
-  String get peerRoleStorageAnchor => 'Message storage anchor';
+  String get peerRoleStorageAnchor => 'Nachrichten-Speicheranker';
 
   @override
-  String get peerLongRangeTrunkActive => 'Long-range trunk active';
+  String get peerLongRangeTrunkActive => 'Langstrecken-Trunk aktiv';
 
   @override
   String get peerOnline => 'Online';
@@ -963,7 +963,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String meshHealthTrunks(int count) {
-    return '$count active long-range trunks';
+    return '$count aktive Langstrecken-Trunks';
   }
 
   @override

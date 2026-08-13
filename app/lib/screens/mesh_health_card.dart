@@ -78,7 +78,7 @@ class MeshHealthCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(context.l10n.meshHealthDirect(peers.length)),
                   Text(context.l10n.meshHealthRelays(relays)),
-                  Text(context.l10n.meshHealthTrunks(trunks)),
+                  if (trunks > 0) Text(context.l10n.meshHealthTrunks(trunks)),
                   Text(context.l10n.meshHealthSignals(signals)),
                   const SizedBox(height: 6),
                   Text(

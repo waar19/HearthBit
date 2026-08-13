@@ -167,6 +167,76 @@ vez, más de una retransmisión, duplicado o una dirección ausente. Un build
 correcto o un relay visible sin los dos controles negativos no demuestra los
 dos enlaces físicos.
 
+### D1-LORA-01 — troncal entre dos islas BLE
+
+Este es un guion reproducible **pendiente de ejecución física**; no registra
+resultados. Antes de transmitir, valide con la ANE Colombia la frecuencia,
+potencia, antena, ciclo de trabajo y demás condiciones aplicables. Sin esa
+validación normativa, no active los SX1262 y marque la ejecución `BLOCKED`.
+
+**Hardware y topología:** dos XIAO ESP32-S3 + Wio-SX1262 con antena conectada,
+`LR-A` y `LR-B`, y dos teléfonos, `HB-A` y `HB-B`:
+
+```text
+isla A                         isla B
+HB-A ↔ BLE ↔ LR-A ↔ LoRa ↔ LR-B ↔ BLE ↔ HB-B
+```
+
+Separe o apantalle las islas para que `HB-A` no descubra a `HB-B` ni a `LR-B`,
+y viceversa. Desactive Wi-Fi y datos móviles. Use la misma configuración de
+radio autorizada en ambos nodos y no cambie distancia, orientación, potencia u
+obstáculos entre el control y la prueba.
+
+1. Cree marcadores únicos:
+
+   ```powershell
+   $loraOut = "D1-LORA-01-A2B-$run"
+   $loraBack = "D1-LORA-01-B2A-$run"
+   $loraControl = "D1-LORA-01-CONTROL-$run"
+   ```
+
+2. Inicie capturas ADB saneadas con `CaseId D1-LORA-01` en ambos teléfonos y
+   capture por separado las consolas serie de `LR-A` y `LR-B`. Redacte MAC,
+   peer IDs, nombres Bluetooth, coordenadas y números de serie; conserve los
+   marcadores y horas UTC.
+3. **Control negativo inicial:** con uno de los nodos apagado o ambos troncales
+   deshabilitados, espere dos minutos, confirme que las islas no se descubren
+   directamente y envíe `$loraControl` desde `HB-A`. No debe aparecer en
+   `HB-B`; tampoco debe existir un par `trunk TX`/`trunk RX packet`.
+4. Encienda ambos nodos sin moverlos. En cada consola confirme
+   `trunk up: ...`; `no SX1262 radio` no es un troncal operativo. Espere el
+   `ANNOUNCE` y el `NODE_CAPABILITY` autenticados. La UI puede mostrar el rol
+   anunciado, pero solo muestra troncal activa si recibió
+   `LONG_RANGE_TRUNK=0x10`; nunca lo infiere del nickname o de infraestructura.
+5. Envíe `$loraOut` desde `HB-A` y confirme una única copia exacta en `HB-B`.
+   Después envíe `$loraBack` desde `HB-B` y confirme una única copia exacta en
+   `HB-A`.
+6. Correlacione por dirección la entrega visual y ADB con `trunk TX` en el nodo
+   de entrada y `trunk RX packet len=... rssi=... snr=...` en el de salida. No
+   guarde payloads privados ni salida serie completa sin sanear.
+7. **Control negativo final:** apague un nodo sin mover nada, espere dos minutos
+   y repita un marcador con sufijo `-FINAL`. No debe entregarse. Genere el
+   informe únicamente después de revisar las cuatro capturas.
+
+**Evidencia mínima:** `capture.json` e informe con SHA-256 por teléfono; logs
+serie saneados de ambos nodos; configuración de radio autorizada; alias,
+distancias aproximadas, obstáculos y tiempos UTC; presencia del bit `0x10` en
+el evento/snapshot de cada nodo que lo anuncie; marcadores de ida, vuelta y
+ambos controles; recepción visual exacta y conteo de copias.
+
+**PASS:** ambos marcadores se entregan exactamente una vez y en el chat
+correcto; cada dirección tiene TX en la isla de origen y RX en la de destino;
+los dos controles negativos no se entregan; no existe enlace BLE cruzado; y la
+UI declara troncal activa solo para peers cuyo `NODE_CAPABILITY` autenticado
+incluye `0x10`.
+
+**FAIL:** cualquier entrega durante un control negativo, falta de ida o vuelta,
+duplicado, cruce BLE directo, RX sin TX correlacionable, corrupción, o UI que
+infiere LoRa por nombre, rol o infraestructura. Use `BLOCKED`, no `PASS`, si
+falta autorización normativa, hardware, captura de una isla, emisión del flag
+`0x10` o confirmación visual. Compilar firmware y observar `trunk up` no
+demuestran por sí solos el recorrido extremo a extremo.
+
 ### D1-COURIER-01 — Courier cifrado mediante Bitle
 
 **Topología inicial:** `HB-A ↔ BITLE-A`, directa; `HB-B` apagado o fuera de
