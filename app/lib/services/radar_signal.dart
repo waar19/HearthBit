@@ -145,7 +145,7 @@ class SweepEstimate {
   /// Rumbo magnético aproximado (0° norte, 90° este).
   final double headingDegrees;
 
-  /// Contraste relativo entre el sector más fuerte y el promedio, de 0 a 1.
+  /// Contraste relativo entre el sector más fuerte y el fondo, de 0 a 1.
   final double confidence;
 
   /// Por debajo de este umbral, dibujar una flecha sería engañoso.
@@ -162,7 +162,7 @@ class SweepEstimator {
     this.minimumSamplesPerSector = 2,
     this.minimumRotationDegrees = 330,
     this.confidenceScaleDb = 12,
-  }) : assert(sectorCount > 2),
+  }) : assert(sectorCount > 3),
        assert(minimumSamplesPerSector > 0),
        assert(minimumRotationDegrees > 0),
        assert(confidenceScaleDb > 0),
