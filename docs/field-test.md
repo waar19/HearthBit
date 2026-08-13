@@ -334,6 +334,42 @@ hasta que el canal aparece seguro, los intentos de handshake, el ID del mensaje
 pendiente y el número de entregas. El resultado correcto es una sola entrega,
 ningún cierre del chat y recuperación automática del canal Noise.
 
+## Descubrimiento de BitChat iOS en segundo plano
+
+Este caso valida el anuncio especial de iOS («overflow area»), el keepalive y
+la reconexión dirigida. Use un Android HearthBit con una conversación previa y
+BitChat en un iPhone; la relación conocida debe existir antes de comenzar.
+
+1. Con ambas apps en primer plano, abra el chat privado y confirme canal seguro
+   y un mensaje en cada sentido.
+2. Envíe BitChat al segundo plano y bloquee el iPhone. No cierre la app ni
+   desactive Bluetooth. Deje ambos teléfonos inmóviles y sin mensajes durante
+   diez minutos.
+3. Confirme que HearthBit conserva el enlace o que vuelve a detectar al iPhone
+   sin abrir BitChat. El primer enlace válido puede registrar
+   `iOS overflow candidate ... mask=...` y `Learned iOS overflow service bit`;
+   la máscara completa sirve para diagnóstico, pero debe redactarse junto con
+   la dirección antes de guardar evidencia.
+4. Desactive Bluetooth en el iPhone durante 30 segundos y reactívelo sin abrir
+   BitChat. HearthBit debe iniciar un burst de escaneo y mantener una
+   reconexión dirigida al peer conocido durante un máximo de 12 minutos.
+5. Espere a que el canal vuelva a seguro y envíe un mensaje pendiente. Debe
+   entregarse una vez. Repita la espera con HearthBit en segundo plano.
+6. Mantenga la malla activa al menos 25 minutos. El log debe incluir como
+   máximo un ciclado preventivo cercano a los 20 minutos
+   (`Re-arming continuous BLE scans`) y el peer debe seguir recuperable.
+
+**PASS:** el iPhone reaparece sin llevar BitChat a primer plano; el chat vuelve
+a seguro, el mensaje pendiente se entrega una vez y no hay tormenta de
+conexiones. Un candidato Apple que no expone el servicio debe cerrarse y no
+reintentarse por cinco minutos.
+
+**FAIL:** el peer solo aparece al abrir BitChat, el escaneo queda detenido, se
+abren conexiones repetidas a dispositivos Apple ajenos, el chat exige borrar
+la identidad o el mensaje se pierde/duplica. Si iOS termina BitChat o el usuario
+lo cierra desde el selector de apps, registre `BLOCKED`: iOS ya no garantiza
+que continúe anunciando el servicio.
+
 ## Paquetes v2 con ruta
 
 Con un cliente BitChat que emita versión 2:
