@@ -2395,6 +2395,9 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
       peripheral.startAdvertising([
         CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID]
       ])
+      localCharacteristic?.subscribedCentrals?.forEach {
+        sendSubscriptionAnnouncement(to: $0)
+      }
     } else {
       restoredPeripheralService = false
       configurePeripheralMode()
@@ -2467,7 +2470,6 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
     let hasCentralLink = remoteCharacteristics[identifier] != nil &&
       connectedPeripherals[identifier]?.state == .connected
     peripheralNotifyQueues.removeValue(forKey: identifier)
-    lastSubscriptionAnnouncement.removeValue(forKey: identifier)
     handleDirectLinkLost(source: identifier)
     if !hasCentralLink {
       triggerLinkLossScanBurst()
