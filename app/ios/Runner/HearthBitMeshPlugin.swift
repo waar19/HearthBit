@@ -3608,7 +3608,15 @@ enum IOSMeshProtocol {
     originalSize: Int
   ) -> Data? {
     guard !data.isEmpty else { return nil }
-    var stream = compression_stream()
+    let placeholder = UnsafeMutablePointer<UInt8>.allocate(capacity: 1)
+    defer { placeholder.deallocate() }
+    var stream = compression_stream(
+      dst_ptr: placeholder,
+      dst_size: 0,
+      src_ptr: UnsafePointer(placeholder),
+      src_size: 0,
+      state: nil
+    )
     guard compression_stream_init(
       &stream,
       COMPRESSION_STREAM_DECODE,
