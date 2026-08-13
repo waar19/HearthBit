@@ -388,6 +388,18 @@ correo.
 - Pendiente con hardware adicional: Noise DM deliberado en ambos sentidos y
   relay físico de dos saltos.
 
+### 2026-08-13 — Build de reconexión en Galaxy S25
+
+- `flutter analyze`, 76 pruebas Flutter y la suite unitaria Android terminaron
+  correctamente.
+- El APK debug compiló y se instaló por ADB en el Samsung SM-S931B.
+- `dumpsys notification` confirmó la notificación persistente real con ID
+  `7401`, flag de servicio en primer plano y texto
+  `Malla activa · 1 dispositivo cercano`.
+- La reconexión Noise privada con BitChat y HearthBit iOS sigue pendiente de la
+  ejecución física descrita en «Reconexión de chats privados Noise»; estos
+  resultados no se infieren de las pruebas automatizadas.
+
 ## Matriz de transferencia de archivos
 
 Pruebe cada celda con un archivo pequeño (~100 KB) y una foto (~3 MB):
