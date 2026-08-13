@@ -404,5 +404,22 @@
   "familyScanTitle": "家族QRをスキャン",
   "familyQrInvalid": "このQRは無効か、署名を確認できませんでした。",
   "familyScanHint": "家族の端末に表示されたQRをスキャンしてください。",
-  "familyAlertBadge": "確認済みの家族"
+  "familyAlertBadge": "確認済みの家族",
+  "drillSafetyBanner": "訓練 - 救助を要請しません",
+  "drillModeTitle": "訓練モード",
+  "drillModeBody": "明確に訓練と表示されたメッセージだけを送信します。SOS、救助位置、物理ビーコン、インターネットゲートウェイは使用しません。",
+  "drillConfirmTitle": "訓練モードを有効にしますか？",
+  "drillConfirmBody": "救助モードとサバイバルモードは停止します。訓練メッセージは公開されますが、実際の緊急警報にはなりません。",
+  "drillEnableAction": "訓練を有効化",
+  "drillHoldToSend": "長押しして訓練を送信",
+  "drillPracticeMessage": "助けを求める訓練",
+  "drillReceivedTitle": "訓練メッセージ",
+  "drillNoneReceived": "訓練メッセージはありません。",
+  "drillBadge": "訓練 — 緊急事態ではありません",
+  "drillInvalidMessage": "認識できない訓練メッセージは緊急システムから隔離されました。",
+  "drillCheckInTitle": "状況報告を練習",
+  "drillCheckInBody": "この報告は訓練チャンネル内に留まり、救助警報、地図、エクスポートには表示されません。",
+  "drillExitForRealTitle": "本物のSOSを送信しますか？",
+  "drillExitForRealBody": "訓練を終了し、位置共有と繰り返しSOSを伴う実際の救助要請を開始します。",
+  "drillSendRealSos": "訓練を終了してSOSを送信"
 }

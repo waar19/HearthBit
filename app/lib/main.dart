@@ -108,9 +108,9 @@ class _HearthBitAppState extends State<HearthBitApp> {
   void initState() {
     super.initState();
     final platform = MeshPlatformService();
-    _controller = MeshController(platform: platform);
-    _transfers = TransferController(platform);
     _preferences = AppPreferences();
+    _controller = MeshController(platform: platform, preferences: _preferences);
+    _transfers = TransferController(platform);
     _gateway = EmergencyGatewayController(
       mesh: _controller,
       preferences: _preferences,

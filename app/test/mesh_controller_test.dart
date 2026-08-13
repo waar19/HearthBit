@@ -726,6 +726,46 @@ void main() {
     },
   );
 
+  test(
+    'simulacro solo usa sendPublic y no toca subsistemas de emergencia',
+    () async {
+      platform.emit({'type': 'status', 'status': 'active'});
+      await pumpEvents();
+
+      await controller.activateDrill();
+      await controller.sendDrillCheckIn(
+        CheckInStatus.needsHelp,
+        'Solicitud de ayuda de práctica',
+      );
+
+      expect(controller.drillModeEnabled, isTrue);
+      expect(controller.rescueMode, isFalse);
+      expect(controller.survivalMode, isFalse);
+      expect(platform.publicMessages, hasLength(1));
+      expect(platform.publicMessages.single.channel, 'drill');
+      expect(
+        platform.publicMessages.single.content,
+        contains(DrillCheckIn.marker),
+      );
+      expect(platform.publicMessages.single.content, isNot(startsWith('SOS|')));
+      expect(platform.sosCalls, 0);
+      expect(platform.radarConsentCalls, isEmpty);
+      expect(platform.startLocalBeaconCalls, 0);
+      expect(platform.stopLocalBeaconCalls, 0);
+      expect(platform.beaconResponses, isEmpty);
+    },
+  );
+
+  test('simulacro bloquea radar y baliza física', () async {
+    await controller.activateDrill();
+
+    await controller.allowRadarFor15Minutes();
+    await controller.startLocalBeacon();
+
+    expect(platform.radarConsentCalls, isEmpty);
+    expect(platform.startLocalBeaconCalls, 0);
+  });
+
   test('modo supervivencia emite SOS y cambia a baliza', () async {
     platform.emit({'type': 'status', 'status': 'active'});
     await pumpEvents();

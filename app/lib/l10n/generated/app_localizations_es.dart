@@ -1345,4 +1345,60 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get familyAlertBadge => 'FAMILIAR VERIFICADO';
+
+  @override
+  String get drillSafetyBanner => 'SIMULACRO - no solicita rescate';
+
+  @override
+  String get drillModeTitle => 'Modo simulacro';
+
+  @override
+  String get drillModeBody =>
+      'Solo envía mensajes de práctica claramente marcados. Nunca envía SOS, comparte ubicación de rescate, activa una baliza ni usa el gateway de internet.';
+
+  @override
+  String get drillConfirmTitle => '¿Activar el modo simulacro?';
+
+  @override
+  String get drillConfirmBody =>
+      'Se apagarán los modos rescate y supervivencia. Los mensajes de práctica son públicos, pero no pueden convertirse en alertas de emergencia reales.';
+
+  @override
+  String get drillEnableAction => 'ACTIVAR SIMULACRO';
+
+  @override
+  String get drillHoldToSend => 'MANTÉN PARA ENVIAR SIMULACRO';
+
+  @override
+  String get drillPracticeMessage => 'Solicitud de ayuda de práctica';
+
+  @override
+  String get drillReceivedTitle => 'Mensajes de simulacro';
+
+  @override
+  String get drillNoneReceived => 'No se recibieron mensajes de simulacro.';
+
+  @override
+  String get drillBadge => 'SIMULACRO — NO ES UNA EMERGENCIA';
+
+  @override
+  String get drillInvalidMessage =>
+      'Mensaje de simulacro no reconocido; quedó aislado de los sistemas de emergencia.';
+
+  @override
+  String get drillCheckInTitle => 'Practicar una actualización de estado';
+
+  @override
+  String get drillCheckInBody =>
+      'Estas actualizaciones permanecen en el canal de simulacro y no aparecen en alertas, mapas ni exportaciones de rescate.';
+
+  @override
+  String get drillExitForRealTitle => '¿Enviar un SOS real?';
+
+  @override
+  String get drillExitForRealBody =>
+      'Esto finalizará el simulacro y activará una solicitud real de rescate con ubicación y alertas SOS repetidas.';
+
+  @override
+  String get drillSendRealSos => 'FINALIZAR SIMULACRO Y ENVIAR SOS';
 }

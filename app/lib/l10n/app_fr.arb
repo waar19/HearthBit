@@ -404,5 +404,22 @@
   "familyScanTitle": "Scanner le QR familial",
   "familyQrInvalid": "Ce QR est invalide ou sa signature n’a pas pu être vérifiée.",
   "familyScanHint": "Scannez le QR affiché sur le téléphone de votre proche.",
-  "familyAlertBadge": "PROCHE VÉRIFIÉ"
+  "familyAlertBadge": "PROCHE VÉRIFIÉ",
+  "drillSafetyBanner": "EXERCICE - ne demande aucun secours",
+  "drillModeTitle": "Mode exercice",
+  "drillModeBody": "Envoie uniquement des messages d’exercice clairement identifiés. N’envoie jamais de SOS, ne partage pas la position de secours, n’active aucune balise et n’utilise pas la passerelle internet.",
+  "drillConfirmTitle": "Activer le mode exercice ?",
+  "drillConfirmBody": "Les modes secours et survie seront désactivés. Les messages d’exercice sont publics, mais ne peuvent pas devenir de vraies alertes d’urgence.",
+  "drillEnableAction": "ACTIVER L’EXERCICE",
+  "drillHoldToSend": "MAINTENIR POUR L’EXERCICE",
+  "drillPracticeMessage": "Demande d’aide d’exercice",
+  "drillReceivedTitle": "Messages d’exercice",
+  "drillNoneReceived": "Aucun message d’exercice reçu.",
+  "drillBadge": "EXERCICE — PAS UNE URGENCE",
+  "drillInvalidMessage": "Message d’exercice non reconnu ; il a été isolé des systèmes d’urgence.",
+  "drillCheckInTitle": "Simuler une mise à jour d’état",
+  "drillCheckInBody": "Ces mises à jour restent dans le canal d’exercice et sont exclues des alertes, cartes et exports de secours.",
+  "drillExitForRealTitle": "Envoyer un vrai SOS ?",
+  "drillExitForRealBody": "Cela mettra fin à l’exercice et activera une vraie demande de secours avec partage de position et SOS répétés.",
+  "drillSendRealSos": "TERMINER L’EXERCICE ET ENVOYER SOS"
 }

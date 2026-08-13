@@ -2354,6 +2354,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'VERIFIED FAMILY'**
   String get familyAlertBadge;
+
+  /// No description provided for @drillSafetyBanner.
+  ///
+  /// In en, this message translates to:
+  /// **'DRILL - does not request rescue'**
+  String get drillSafetyBanner;
+
+  /// No description provided for @drillModeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Practice drill'**
+  String get drillModeTitle;
+
+  /// No description provided for @drillModeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Sends clearly marked practice messages only. It never sends SOS, shares rescue location, activates a beacon or uses the internet gateway.'**
+  String get drillModeBody;
+
+  /// No description provided for @drillConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on practice drill?'**
+  String get drillConfirmTitle;
+
+  /// No description provided for @drillConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescue and survival modes will be turned off. Practice messages are public, but cannot become real emergency alerts.'**
+  String get drillConfirmBody;
+
+  /// No description provided for @drillEnableAction.
+  ///
+  /// In en, this message translates to:
+  /// **'TURN ON DRILL'**
+  String get drillEnableAction;
+
+  /// No description provided for @drillHoldToSend.
+  ///
+  /// In en, this message translates to:
+  /// **'HOLD TO SEND DRILL'**
+  String get drillHoldToSend;
+
+  /// No description provided for @drillPracticeMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Practice request for help'**
+  String get drillPracticeMessage;
+
+  /// No description provided for @drillReceivedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Practice drill messages'**
+  String get drillReceivedTitle;
+
+  /// No description provided for @drillNoneReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'No practice drill messages received.'**
+  String get drillNoneReceived;
+
+  /// No description provided for @drillBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'DRILL — NOT AN EMERGENCY'**
+  String get drillBadge;
+
+  /// No description provided for @drillInvalidMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Unrecognized drill message; it was isolated from emergency systems.'**
+  String get drillInvalidMessage;
+
+  /// No description provided for @drillCheckInTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Practice a status update'**
+  String get drillCheckInTitle;
+
+  /// No description provided for @drillCheckInBody.
+  ///
+  /// In en, this message translates to:
+  /// **'These updates remain in the drill channel and are excluded from rescue alerts, maps and exports.'**
+  String get drillCheckInBody;
+
+  /// No description provided for @drillExitForRealTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Send a real SOS?'**
+  String get drillExitForRealTitle;
+
+  /// No description provided for @drillExitForRealBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This will end the drill and activate a real rescue request with location sharing and repeated SOS alerts.'**
+  String get drillExitForRealBody;
+
+  /// No description provided for @drillSendRealSos.
+  ///
+  /// In en, this message translates to:
+  /// **'END DRILL AND SEND SOS'**
+  String get drillSendRealSos;
 }
 
 class _AppLocalizationsDelegate

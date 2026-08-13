@@ -85,6 +85,14 @@ void main() {
         timestamp: timestamp,
         isPrivate: true,
       ),
+      _message(
+        id: 'drill',
+        content:
+            'SIMULACRO - no solicita rescate\n'
+            '[HB-DRILL|1|CHECKIN|HELP|1700000000000]',
+        timestamp: timestamp,
+        channel: 'drill',
+      ),
     ];
 
     final csv = RescueCsv.build(RescueIncidentList.fromMessages(messages));
@@ -94,5 +102,7 @@ void main() {
     expect(csv, contains('INJURED'));
     expect(csv, isNot(contains('9.999999')));
     expect(csv, isNot(contains(RadarLocationUpdate.marker)));
+    expect(csv, isNot(contains(DrillCheckIn.marker)));
+    expect(csv, isNot(contains('SIMULACRO')));
   });
 }

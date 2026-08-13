@@ -1344,4 +1344,60 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get familyAlertBadge => 'VERIFIZIERTE FAMILIE';
+
+  @override
+  String get drillSafetyBanner => 'ÜBUNG - fordert keine Rettung an';
+
+  @override
+  String get drillModeTitle => 'Übungsmodus';
+
+  @override
+  String get drillModeBody =>
+      'Sendet nur klar gekennzeichnete Übungsnachrichten. Sendet niemals SOS, teilt keinen Rettungsstandort, aktiviert keine Signalquelle und nutzt kein Internet-Gateway.';
+
+  @override
+  String get drillConfirmTitle => 'Übungsmodus aktivieren?';
+
+  @override
+  String get drillConfirmBody =>
+      'Rettungs- und Überlebensmodus werden beendet. Übungsnachrichten sind öffentlich, können aber keine echten Notfallalarme werden.';
+
+  @override
+  String get drillEnableAction => 'ÜBUNG AKTIVIEREN';
+
+  @override
+  String get drillHoldToSend => 'HALTEN FÜR ÜBUNG';
+
+  @override
+  String get drillPracticeMessage => 'Übungsanfrage um Hilfe';
+
+  @override
+  String get drillReceivedTitle => 'Übungsnachrichten';
+
+  @override
+  String get drillNoneReceived => 'Keine Übungsnachrichten empfangen.';
+
+  @override
+  String get drillBadge => 'ÜBUNG — KEIN NOTFALL';
+
+  @override
+  String get drillInvalidMessage =>
+      'Unbekannte Übungsnachricht; sie wurde von den Notfallsystemen isoliert.';
+
+  @override
+  String get drillCheckInTitle => 'Statusmeldung üben';
+
+  @override
+  String get drillCheckInBody =>
+      'Diese Meldungen bleiben im Übungskanal und erscheinen nicht in Rettungsalarmen, Karten oder Exporten.';
+
+  @override
+  String get drillExitForRealTitle => 'Echtes SOS senden?';
+
+  @override
+  String get drillExitForRealBody =>
+      'Dies beendet die Übung und aktiviert eine echte Rettungsanfrage mit Standortfreigabe und wiederholten SOS-Alarmen.';
+
+  @override
+  String get drillSendRealSos => 'ÜBUNG BEENDEN UND SOS SENDEN';
 }

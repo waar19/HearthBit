@@ -1746,7 +1746,9 @@ class _MessageBubble extends StatelessWidget {
     final alignment = message.isMine
         ? Alignment.centerRight
         : Alignment.centerLeft;
-    final color = message.isSos
+    final color = message.isDrill
+        ? Theme.of(context).colorScheme.tertiaryContainer
+        : message.isSos
         ? Theme.of(context).colorScheme.errorContainer
         : message.isMine
         ? Theme.of(context).colorScheme.primaryContainer
@@ -1788,6 +1790,21 @@ class _MessageBubble extends StatelessWidget {
                 message: message,
                 transfers: transfers,
                 audioPlayer: audioPlayer,
+              )
+            else if (message.isDrill)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    context.l10n.drillBadge,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    message.drill?.readableMessage ??
+                        context.l10n.drillInvalidMessage,
+                  ),
+                ],
               )
             else
               Text(message.content.replaceFirst('SOS|', 'SOS: ')),

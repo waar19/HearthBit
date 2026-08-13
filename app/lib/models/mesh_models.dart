@@ -67,6 +67,64 @@ enum CheckInStatus {
   }
 }
 
+class DrillCheckIn {
+  const DrillCheckIn({
+    required this.version,
+    required this.status,
+    required this.timestamp,
+    required this.readableMessage,
+  });
+
+  static const marker = '[HB-DRILL|';
+  static const currentVersion = 1;
+  static const _kind = 'CHECKIN';
+
+  final int version;
+  final CheckInStatus status;
+  final DateTime timestamp;
+  final String readableMessage;
+
+  static String encode({
+    required CheckInStatus status,
+    required String readableMessage,
+    required String safetyNotice,
+    required DateTime timestamp,
+  }) {
+    final notice = safetyNotice.trim();
+    final message = readableMessage.trim();
+    return '$notice${message.isEmpty ? '' : ': $message'}\n'
+        '$marker$currentVersion|$_kind|${status.wireCode}|'
+        '${timestamp.millisecondsSinceEpoch}]';
+  }
+
+  static DrillCheckIn? tryParse(String content) {
+    final markerStart = content.lastIndexOf(marker);
+    if (markerStart < 0 || !content.endsWith(']')) return null;
+    final fields = content
+        .substring(markerStart + marker.length, content.length - 1)
+        .split('|');
+    if (fields.length != 4) return null;
+    final version = int.tryParse(fields[0]);
+    final status = CheckInStatus.fromWire(fields[2]);
+    final timestampMs = int.tryParse(fields[3]);
+    if (version != currentVersion ||
+        fields[1] != _kind ||
+        status == null ||
+        timestampMs == null ||
+        timestampMs <= 0) {
+      return null;
+    }
+    final readable = content.substring(0, markerStart).trim();
+    if (readable.isEmpty) return null;
+    return DrillCheckIn(
+      version: version!,
+      status: status,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(timestampMs),
+      readableMessage: readable,
+    );
+  }
+}
+
 class EmergencyCheckIn {
   const EmergencyCheckIn({
     required this.status,
@@ -347,12 +405,23 @@ class MeshMessage {
   final String? channel;
   final MeshMessageDeliveryStatus deliveryStatus;
 
-  bool get isSos => channel == 'sos' || content.startsWith('SOS|');
+  bool get isDrill =>
+      channel?.trim().toLowerCase() == 'drill' ||
+      content.contains(DrillCheckIn.marker);
+
+  DrillCheckIn? get drill {
+    if (!isDrill || isPrivate) return null;
+    return DrillCheckIn.tryParse(content);
+  }
+
+  bool get isSos =>
+      !isDrill && (channel == 'sos' || content.startsWith('SOS|'));
 
   bool get isPending => deliveryStatus == MeshMessageDeliveryStatus.pending;
 
   bool get isCheckIn =>
-      channel == 'checkin' || content.contains(EmergencyCheckIn.marker);
+      !isDrill &&
+      (channel == 'checkin' || content.contains(EmergencyCheckIn.marker));
 
   bool get isVoiceNote =>
       isPrivate &&

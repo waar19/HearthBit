@@ -1344,4 +1344,60 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get familyAlertBadge => 'PROCHE VÉRIFIÉ';
+
+  @override
+  String get drillSafetyBanner => 'EXERCICE - ne demande aucun secours';
+
+  @override
+  String get drillModeTitle => 'Mode exercice';
+
+  @override
+  String get drillModeBody =>
+      'Envoie uniquement des messages d’exercice clairement identifiés. N’envoie jamais de SOS, ne partage pas la position de secours, n’active aucune balise et n’utilise pas la passerelle internet.';
+
+  @override
+  String get drillConfirmTitle => 'Activer le mode exercice ?';
+
+  @override
+  String get drillConfirmBody =>
+      'Les modes secours et survie seront désactivés. Les messages d’exercice sont publics, mais ne peuvent pas devenir de vraies alertes d’urgence.';
+
+  @override
+  String get drillEnableAction => 'ACTIVER L’EXERCICE';
+
+  @override
+  String get drillHoldToSend => 'MAINTENIR POUR L’EXERCICE';
+
+  @override
+  String get drillPracticeMessage => 'Demande d’aide d’exercice';
+
+  @override
+  String get drillReceivedTitle => 'Messages d’exercice';
+
+  @override
+  String get drillNoneReceived => 'Aucun message d’exercice reçu.';
+
+  @override
+  String get drillBadge => 'EXERCICE — PAS UNE URGENCE';
+
+  @override
+  String get drillInvalidMessage =>
+      'Message d’exercice non reconnu ; il a été isolé des systèmes d’urgence.';
+
+  @override
+  String get drillCheckInTitle => 'Simuler une mise à jour d’état';
+
+  @override
+  String get drillCheckInBody =>
+      'Ces mises à jour restent dans le canal d’exercice et sont exclues des alertes, cartes et exports de secours.';
+
+  @override
+  String get drillExitForRealTitle => 'Envoyer un vrai SOS ?';
+
+  @override
+  String get drillExitForRealBody =>
+      'Cela mettra fin à l’exercice et activera une vraie demande de secours avec partage de position et SOS répétés.';
+
+  @override
+  String get drillSendRealSos => 'TERMINER L’EXERCICE ET ENVOYER SOS';
 }

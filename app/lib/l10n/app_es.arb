@@ -404,5 +404,22 @@
   "familyScanTitle": "Escanear QR familiar",
   "familyQrInvalid": "Este QR no es válido o no se pudo verificar su firma.",
   "familyScanHint": "Escanea el QR mostrado en el teléfono de tu familiar.",
-  "familyAlertBadge": "FAMILIAR VERIFICADO"
+  "familyAlertBadge": "FAMILIAR VERIFICADO",
+  "drillSafetyBanner": "SIMULACRO - no solicita rescate",
+  "drillModeTitle": "Modo simulacro",
+  "drillModeBody": "Solo envía mensajes de práctica claramente marcados. Nunca envía SOS, comparte ubicación de rescate, activa una baliza ni usa el gateway de internet.",
+  "drillConfirmTitle": "¿Activar el modo simulacro?",
+  "drillConfirmBody": "Se apagarán los modos rescate y supervivencia. Los mensajes de práctica son públicos, pero no pueden convertirse en alertas de emergencia reales.",
+  "drillEnableAction": "ACTIVAR SIMULACRO",
+  "drillHoldToSend": "MANTÉN PARA ENVIAR SIMULACRO",
+  "drillPracticeMessage": "Solicitud de ayuda de práctica",
+  "drillReceivedTitle": "Mensajes de simulacro",
+  "drillNoneReceived": "No se recibieron mensajes de simulacro.",
+  "drillBadge": "SIMULACRO — NO ES UNA EMERGENCIA",
+  "drillInvalidMessage": "Mensaje de simulacro no reconocido; quedó aislado de los sistemas de emergencia.",
+  "drillCheckInTitle": "Practicar una actualización de estado",
+  "drillCheckInBody": "Estas actualizaciones permanecen en el canal de simulacro y no aparecen en alertas, mapas ni exportaciones de rescate.",
+  "drillExitForRealTitle": "¿Enviar un SOS real?",
+  "drillExitForRealBody": "Esto finalizará el simulacro y activará una solicitud real de rescate con ubicación y alertas SOS repetidas.",
+  "drillSendRealSos": "FINALIZAR SIMULACRO Y ENVIAR SOS"
 }

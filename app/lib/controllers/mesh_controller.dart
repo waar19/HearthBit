@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
+import '../services/app_preferences.dart';
 import '../services/beacon_control_protocol.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/message_repository.dart';
@@ -56,10 +57,14 @@ class MeshController extends ChangeNotifier {
     MeshPlatformService? platform,
     MessageRepository? repository,
     PeerLocationTracker? locationTracker,
+    AppPreferences? preferences,
   }) : _platform = platform ?? MeshPlatformService(),
        _repository = repository ?? MessageRepository(),
+       _preferences = preferences,
+       _drillModeEnabled = preferences?.drillModeEnabled ?? false,
        peerLocations = locationTracker ?? PeerLocationTracker() {
     peerLocations.addListener(_notifyLocationChanged);
+    preferences?.addListener(_handlePreferencesChanged);
   }
 
   /// Intervalo entre reenvíos de SOS con GPS fresco en modo rescate: lo
@@ -71,6 +76,7 @@ class MeshController extends ChangeNotifier {
 
   final MeshPlatformService _platform;
   final MessageRepository _repository;
+  final AppPreferences? _preferences;
   final PeerLocationTracker peerLocations;
   final List<MeshMessage> _messages = [];
   final List<MeshPeer> _peers = [];
@@ -120,8 +126,13 @@ class MeshController extends ChangeNotifier {
   MeshPowerProfile powerProfile = MeshPowerProfile.balanced;
   bool adaptivePowerSaving = false;
   bool survivalMode = false;
+  bool _drillModeEnabled;
 
   List<MeshMessage> get messages => List.unmodifiable(_messages);
+  bool get drillModeEnabled => _drillModeEnabled;
+  List<MeshMessage> get drillMessages => List.unmodifiable(
+    _messages.where((message) => message.isDrill).toList().reversed,
+  );
   List<MeshPeer> get peers => List.unmodifiable(_peers);
   List<EmergencyCheckIn> get latestCheckIns {
     final latestByPeer = <String, EmergencyCheckIn>{};
@@ -295,14 +306,18 @@ class MeshController extends ChangeNotifier {
     Duration? interval,
   }) async {
     if (!enabled) {
+      final wasRescueActive = rescueMode;
       _rescueTimer?.cancel();
       _rescueTimer = null;
       rescueMode = false;
       _stopRadarLocationSharing();
-      await revokeRadarConsent();
+      if (wasRescueActive || radarConsentActive) {
+        await revokeRadarConsent();
+      }
       notifyListeners();
       return;
     }
+    if (drillModeEnabled) await deactivateDrill();
     if (description != null && description.trim().isNotEmpty) {
       _rescueDescription = description.trim();
     }
@@ -424,8 +439,45 @@ class MeshController extends ChangeNotifier {
     await _run(() => _platform.sendPublic(content, channel: 'checkin'));
   }
 
+  Future<void> activateDrill() async {
+    await _enforceDrillIsolation();
+    if (_drillModeEnabled) return;
+    _drillModeEnabled = true;
+    await _preferences?.setDrillModeEnabled(true);
+    notifyListeners();
+  }
+
+  Future<void> deactivateDrill() async {
+    if (!_drillModeEnabled && _preferences?.drillModeEnabled != true) return;
+    _drillModeEnabled = false;
+    await _preferences?.setDrillModeEnabled(false);
+    notifyListeners();
+  }
+
+  Future<void> sendDrillCheckIn(
+    CheckInStatus status,
+    String readableMessage,
+  ) async {
+    if (!drillModeEnabled) {
+      throw StateError('Drill mode is not active');
+    }
+    final content = DrillCheckIn.encode(
+      status: status,
+      readableMessage: readableMessage,
+      safetyNotice: currentL10n.drillSafetyBanner,
+      timestamp: DateTime.now(),
+    );
+    await _run(() => _platform.sendPublic(content, channel: 'drill'));
+  }
+
+  Future<void> _enforceDrillIsolation() async {
+    if (rescueMode) await setRescueMode(false);
+    if (survivalMode) await setSurvivalMode(false);
+  }
+
   Future<void> activateEmergency({String? description}) async {
     if (activatingEmergency || rescueMode) return;
+    if (drillModeEnabled) await deactivateDrill();
     activatingEmergency = true;
     lastError = null;
     notifyListeners();
@@ -497,6 +549,7 @@ class MeshController extends ChangeNotifier {
   Future<void> setSurvivalMode(bool enabled) async {
     if (enabled == survivalMode) return;
     if (enabled) {
+      if (drillModeEnabled) await deactivateDrill();
       if (canSend) {
         await sendSos(currentL10n.sosDefaultMessage);
         await _platform.setRadarConsent(enabled: true, minutes: 20);
@@ -513,6 +566,7 @@ class MeshController extends ChangeNotifier {
   }
 
   Future<void> allowRadarFor15Minutes() async {
+    if (drillModeEnabled) return;
     await _platform.setRadarConsent(enabled: true);
     radarConsentUntil = DateTime.now().add(const Duration(minutes: 15));
     await ensureAlwaysLocation();
@@ -531,6 +585,7 @@ class MeshController extends ChangeNotifier {
     int flags = BeaconControlFlags.all,
     Duration duration = BeaconControlProtocol.maximumDuration,
   }) async {
+    if (drillModeEnabled) return;
     await _run<void>(
       () => _platform.startLocalBeacon(flags: flags, duration: duration),
     );
@@ -548,7 +603,7 @@ class MeshController extends ChangeNotifier {
     await _run<void>(
       () => _platform.respondToBeaconRequest(
         requestId: request.requestId,
-        accept: accept,
+        accept: accept && !drillModeEnabled,
       ),
     );
   }
@@ -980,7 +1035,10 @@ class MeshController extends ChangeNotifier {
       _ => signingPublicKey,
     };
     localRole = MeshNodeRole.fromWire(event['role']);
-    survivalMode = localRole == MeshNodeRole.phoneBeacon;
+    survivalMode = localRole == MeshNodeRole.phoneBeacon && !drillModeEnabled;
+    if (drillModeEnabled && localRole == MeshNodeRole.phoneBeacon) {
+      unawaited(updateNodeRole(MeshNodeRole.phoneRelay));
+    }
     if (event.containsKey('localBeaconActive')) {
       localBeaconActive = event['localBeaconActive'] as bool? ?? false;
       final expiresAt = (event['localBeaconExpiresAt'] as num?)?.toInt() ?? 0;
@@ -1124,12 +1182,21 @@ class MeshController extends ChangeNotifier {
 
   void _notifyLocationChanged() => notifyListeners();
 
+  void _handlePreferencesChanged() {
+    final enabled = _preferences?.drillModeEnabled ?? false;
+    if (enabled == _drillModeEnabled) return;
+    _drillModeEnabled = enabled;
+    if (enabled) unawaited(_enforceDrillIsolation());
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _rescueTimer?.cancel();
     _consentTimer?.cancel();
     _stopRadarLocationSharing();
     _subscription?.cancel();
+    _preferences?.removeListener(_handlePreferencesChanged);
     peerLocations.removeListener(_notifyLocationChanged);
     peerLocations.dispose();
     super.dispose();

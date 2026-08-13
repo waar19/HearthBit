@@ -1336,4 +1336,60 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get familyAlertBadge => 'VERIFIED FAMILY';
+
+  @override
+  String get drillSafetyBanner => 'DRILL - does not request rescue';
+
+  @override
+  String get drillModeTitle => 'Practice drill';
+
+  @override
+  String get drillModeBody =>
+      'Sends clearly marked practice messages only. It never sends SOS, shares rescue location, activates a beacon or uses the internet gateway.';
+
+  @override
+  String get drillConfirmTitle => 'Turn on practice drill?';
+
+  @override
+  String get drillConfirmBody =>
+      'Rescue and survival modes will be turned off. Practice messages are public, but cannot become real emergency alerts.';
+
+  @override
+  String get drillEnableAction => 'TURN ON DRILL';
+
+  @override
+  String get drillHoldToSend => 'HOLD TO SEND DRILL';
+
+  @override
+  String get drillPracticeMessage => 'Practice request for help';
+
+  @override
+  String get drillReceivedTitle => 'Practice drill messages';
+
+  @override
+  String get drillNoneReceived => 'No practice drill messages received.';
+
+  @override
+  String get drillBadge => 'DRILL — NOT AN EMERGENCY';
+
+  @override
+  String get drillInvalidMessage =>
+      'Unrecognized drill message; it was isolated from emergency systems.';
+
+  @override
+  String get drillCheckInTitle => 'Practice a status update';
+
+  @override
+  String get drillCheckInBody =>
+      'These updates remain in the drill channel and are excluded from rescue alerts, maps and exports.';
+
+  @override
+  String get drillExitForRealTitle => 'Send a real SOS?';
+
+  @override
+  String get drillExitForRealBody =>
+      'This will end the drill and activate a real rescue request with location sharing and repeated SOS alerts.';
+
+  @override
+  String get drillSendRealSos => 'END DRILL AND SEND SOS';
 }

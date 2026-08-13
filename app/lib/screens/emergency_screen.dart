@@ -27,14 +27,32 @@ class EmergencyScreen extends StatelessWidget {
   final FamilyController family;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: preferences,
+    builder: (context, _) => _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) {
     final sosMessages = controller.messages
         .where((message) => message.isSos)
         .toList(growable: false)
         .reversed;
+    final drillMode = controller.drillModeEnabled;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
+        if (drillMode) ...[_DrillBanner(), const SizedBox(height: 12)],
+        _DrillModeCard(
+          enabled: drillMode,
+          canSend: controller.canSend,
+          onEnable: () => _confirmEnableDrill(context),
+          onDisable: controller.deactivateDrill,
+          onSend: () => controller.sendDrillCheckIn(
+            CheckInStatus.needsHelp,
+            context.l10n.drillPracticeMessage,
+          ),
+        ),
+        const SizedBox(height: 20),
         Text(
           context.l10n.emergencyHeadline,
           style: Theme.of(
@@ -49,7 +67,7 @@ class EmergencyScreen extends StatelessWidget {
           child: _HoldSosButton(
             enabled: !controller.activatingEmergency,
             active: controller.rescueMode,
-            onActivated: () => controller.activateEmergency(),
+            onActivated: () => _activateRealEmergency(context),
           ),
         ),
         const SizedBox(height: 16),
@@ -61,7 +79,9 @@ class EmergencyScreen extends StatelessWidget {
           ),
         const SizedBox(height: 8),
         FilledButton.tonalIcon(
-          onPressed: controller.localBeaconActive
+          onPressed: drillMode
+              ? null
+              : controller.localBeaconActive
               ? controller.stopLocalBeacon
               : controller.startLocalBeacon,
           icon: Icon(
@@ -76,12 +96,14 @@ class EmergencyScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 24),
-        _CheckInPanel(controller: controller),
+        _CheckInPanel(controller: controller, drillMode: drillMode),
         const SizedBox(height: 16),
-        RescueModeCard(controller: controller),
-        const SizedBox(height: 12),
-        PowerSavingCard(controller: controller),
-        const SizedBox(height: 12),
+        if (!drillMode) ...[
+          RescueModeCard(controller: controller),
+          const SizedBox(height: 12),
+          PowerSavingCard(controller: controller),
+          const SizedBox(height: 12),
+        ],
         EmergencyGatewayCard(controller: gateway, preferences: preferences),
         const SizedBox(height: 12),
         FilledButton.icon(
@@ -117,6 +139,18 @@ class EmergencyScreen extends StatelessWidget {
               checkIn: checkIn,
               isFamily: family.verifiedMemberForPeerId(checkIn.peerId) != null,
             ),
+          ),
+        const SizedBox(height: 24),
+        Text(
+          context.l10n.drillReceivedTitle,
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 8),
+        if (controller.drillMessages.isEmpty)
+          Text(context.l10n.drillNoneReceived)
+        else
+          ...controller.drillMessages.map(
+            (message) => _DrillMessageTile(message: message),
           ),
         const SizedBox(height: 24),
         Text(
@@ -163,6 +197,59 @@ class EmergencyScreen extends StatelessWidget {
     );
   }
 
+  Future<void> _confirmEnableDrill(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.science_outlined),
+        title: Text(context.l10n.drillConfirmTitle),
+        content: Text(context.l10n.drillConfirmBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.l10n.actionCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.l10n.drillEnableAction),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await controller.activateDrill();
+  }
+
+  Future<void> _activateRealEmergency(BuildContext context) async {
+    if (controller.drillModeEnabled) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          icon: Icon(
+            Icons.warning_amber_rounded,
+            color: Theme.of(dialogContext).colorScheme.error,
+          ),
+          title: Text(context.l10n.drillExitForRealTitle),
+          content: Text(context.l10n.drillExitForRealBody),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(context.l10n.actionCancel),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(context.l10n.drillSendRealSos),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    await controller.activateEmergency();
+  }
+
   Widget? _radarButton(BuildContext context, MeshMessage message) {
     if (message.isMine) return null;
     final peer = controller.peerById(message.senderPeerId);
@@ -182,6 +269,119 @@ class EmergencyScreen extends StatelessWidget {
         ),
       ),
       icon: const Icon(Icons.radar),
+    );
+  }
+}
+
+class _DrillBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      liveRegion: true,
+      label: context.l10n.drillSafetyBanner,
+      child: Container(
+        key: const Key('drill-safety-banner'),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: scheme.tertiaryContainer,
+          border: Border.all(color: scheme.tertiary, width: 2),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.science_outlined, color: scheme.onTertiaryContainer),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                context.l10n.drillSafetyBanner,
+                style: TextStyle(
+                  color: scheme.onTertiaryContainer,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DrillModeCard extends StatelessWidget {
+  const _DrillModeCard({
+    required this.enabled,
+    required this.canSend,
+    required this.onEnable,
+    required this.onDisable,
+    required this.onSend,
+  });
+
+  final bool enabled;
+  final bool canSend;
+  final Future<void> Function() onEnable;
+  final Future<void> Function() onDisable;
+  final Future<void> Function() onSend;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      color: enabled ? scheme.tertiaryContainer : null,
+      child: Column(
+        children: [
+          SwitchListTile(
+            key: const Key('drill-mode-switch'),
+            secondary: const Icon(Icons.science_outlined),
+            value: enabled,
+            onChanged: (value) => value ? onEnable() : onDisable(),
+            title: Text(
+              context.l10n.drillModeTitle,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(context.l10n.drillModeBody),
+          ),
+          if (enabled)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  key: const Key('drill-hold-button'),
+                  onPressed: null,
+                  onLongPress: canSend ? onSend : null,
+                  icon: const Icon(Icons.science_outlined),
+                  label: Text(context.l10n.drillHoldToSend),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DrillMessageTile extends StatelessWidget {
+  const _DrillMessageTile({required this.message});
+
+  final MeshMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final metadata = message.drill;
+    return Card(
+      key: ValueKey('drill-message-${message.id}'),
+      color: scheme.tertiaryContainer,
+      child: ListTile(
+        leading: Icon(Icons.science_outlined, color: scheme.tertiary),
+        title: Text('${context.l10n.drillBadge} · ${message.sender}'),
+        subtitle: Text(
+          '${metadata?.readableMessage ?? context.l10n.drillInvalidMessage}\n'
+          '${_formatDateTime(context, message.timestamp)}',
+        ),
+        isThreeLine: true,
+      ),
     );
   }
 }
@@ -314,9 +514,14 @@ class _HoldSosButtonState extends State<_HoldSosButton>
 }
 
 class _CheckInPanel extends StatelessWidget {
-  const _CheckInPanel({required this.controller});
+  const _CheckInPanel({required this.controller, required this.drillMode});
 
   final MeshController controller;
+  final bool drillMode;
+
+  Future<void> _send(CheckInStatus status, String message) => drillMode
+      ? controller.sendDrillCheckIn(status, message)
+      : controller.sendCheckIn(status, message);
 
   @override
   Widget build(BuildContext context) {
@@ -327,18 +532,21 @@ class _CheckInPanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              context.l10n.checkInTitle,
+              drillMode
+                  ? context.l10n.drillCheckInTitle
+                  : context.l10n.checkInTitle,
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 4),
-            Text(context.l10n.checkInBody),
+            Text(
+              drillMode
+                  ? context.l10n.drillCheckInBody
+                  : context.l10n.checkInBody,
+            ),
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: controller.canSend
-                  ? () => controller.sendCheckIn(
-                      CheckInStatus.ok,
-                      context.l10n.checkInOk,
-                    )
+                  ? () => _send(CheckInStatus.ok, context.l10n.checkInOk)
                   : null,
               icon: const Icon(Icons.check_circle_outline),
               label: Text(context.l10n.checkInOk),
@@ -346,7 +554,7 @@ class _CheckInPanel extends StatelessWidget {
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: controller.canSend
-                  ? () => controller.sendCheckIn(
+                  ? () => _send(
                       CheckInStatus.needsHelp,
                       context.l10n.checkInNeedsHelp,
                     )
@@ -357,7 +565,7 @@ class _CheckInPanel extends StatelessWidget {
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: controller.canSend
-                  ? () => controller.sendCheckIn(
+                  ? () => _send(
                       CheckInStatus.injured,
                       context.l10n.checkInInjured,
                     )

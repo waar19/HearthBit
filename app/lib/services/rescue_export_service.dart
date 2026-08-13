@@ -59,6 +59,7 @@ class RescueIncidentList {
   }) {
     final incidents = <RescueIncident>[];
     for (final message in messages) {
+      if (message.isDrill) continue;
       final checkIn = message.checkIn;
       RescueIncident? incident;
       if (checkIn != null) {

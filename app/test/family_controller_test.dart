@@ -178,6 +178,24 @@ void main() {
         ],
       });
       await pumpEventQueue();
+      platform.eventsController.add({
+        'type': 'message',
+        'message': {
+          'id': 'family-drill-1',
+          'sender': member.nickname,
+          'content':
+              'SIMULACRO - no solicita rescate\n'
+              '[HB-DRILL|1|CHECKIN|HELP|3000]',
+          'senderPeerId': member.peerId,
+          'private': false,
+          'mine': false,
+          'timestamp': 3000,
+          'channel': 'drill',
+        },
+      });
+      await pumpEventQueue();
+      expect(notifications.messageIds, isEmpty);
+
       final messageEvent = {
         'type': 'message',
         'message': {

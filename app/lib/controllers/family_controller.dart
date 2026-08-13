@@ -198,7 +198,7 @@ class FamilyController extends ChangeNotifier {
   Future<void> _notifyForNewFamilyEmergencies() async {
     for (final message in mesh.messages) {
       if (!_observedMessageIds.add(message.id)) continue;
-      if ((!message.isSos && !message.isCheckIn) ||
+      if (!isFamilyEmergency(message) ||
           verifiedMemberForMessage(message) == null) {
         continue;
       }
@@ -212,6 +212,9 @@ class FamilyController extends ChangeNotifier {
       );
     }
   }
+
+  static bool isFamilyEmergency(MeshMessage message) =>
+      !message.isDrill && (message.isSos || message.isCheckIn);
 
   Future<void> _reload() async {
     _groups = await _repository.listGroups();

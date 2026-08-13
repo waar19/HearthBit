@@ -404,5 +404,22 @@
   "familyScanTitle": "扫描家庭二维码",
   "familyQrInvalid": "此二维码无效或无法验证其签名。",
   "familyScanHint": "扫描家庭成员手机上显示的二维码。",
-  "familyAlertBadge": "已验证家人"
+  "familyAlertBadge": "已验证家人",
+  "drillSafetyBanner": "演练 - 不会请求救援",
+  "drillModeTitle": "演练模式",
+  "drillModeBody": "仅发送明确标记的演练消息。绝不发送 SOS、共享救援位置、启动实体信标或使用互联网网关。",
+  "drillConfirmTitle": "启用演练模式？",
+  "drillConfirmBody": "救援模式和生存模式将关闭。演练消息是公开的，但不会变成真实紧急警报。",
+  "drillEnableAction": "启用演练",
+  "drillHoldToSend": "长按发送演练",
+  "drillPracticeMessage": "模拟求助请求",
+  "drillReceivedTitle": "演练消息",
+  "drillNoneReceived": "尚未收到演练消息。",
+  "drillBadge": "演练 — 并非紧急情况",
+  "drillInvalidMessage": "无法识别的演练消息已与紧急系统隔离。",
+  "drillCheckInTitle": "演练状态更新",
+  "drillCheckInBody": "这些更新仅保留在演练频道，不会出现在救援警报、地图或导出中。",
+  "drillExitForRealTitle": "发送真实 SOS？",
+  "drillExitForRealBody": "这将结束演练，并启动包含位置共享和重复 SOS 警报的真实救援请求。",
+  "drillSendRealSos": "结束演练并发送 SOS"
 }

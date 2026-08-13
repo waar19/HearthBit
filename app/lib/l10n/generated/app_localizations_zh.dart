@@ -1267,4 +1267,55 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get familyAlertBadge => '已验证家人';
+
+  @override
+  String get drillSafetyBanner => '演练 - 不会请求救援';
+
+  @override
+  String get drillModeTitle => '演练模式';
+
+  @override
+  String get drillModeBody => '仅发送明确标记的演练消息。绝不发送 SOS、共享救援位置、启动实体信标或使用互联网网关。';
+
+  @override
+  String get drillConfirmTitle => '启用演练模式？';
+
+  @override
+  String get drillConfirmBody => '救援模式和生存模式将关闭。演练消息是公开的，但不会变成真实紧急警报。';
+
+  @override
+  String get drillEnableAction => '启用演练';
+
+  @override
+  String get drillHoldToSend => '长按发送演练';
+
+  @override
+  String get drillPracticeMessage => '模拟求助请求';
+
+  @override
+  String get drillReceivedTitle => '演练消息';
+
+  @override
+  String get drillNoneReceived => '尚未收到演练消息。';
+
+  @override
+  String get drillBadge => '演练 — 并非紧急情况';
+
+  @override
+  String get drillInvalidMessage => '无法识别的演练消息已与紧急系统隔离。';
+
+  @override
+  String get drillCheckInTitle => '演练状态更新';
+
+  @override
+  String get drillCheckInBody => '这些更新仅保留在演练频道，不会出现在救援警报、地图或导出中。';
+
+  @override
+  String get drillExitForRealTitle => '发送真实 SOS？';
+
+  @override
+  String get drillExitForRealBody => '这将结束演练，并启动包含位置共享和重复 SOS 警报的真实救援请求。';
+
+  @override
+  String get drillSendRealSos => '结束演练并发送 SOS';
 }

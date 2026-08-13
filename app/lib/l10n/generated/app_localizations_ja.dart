@@ -1291,4 +1291,57 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get familyAlertBadge => '確認済みの家族';
+
+  @override
+  String get drillSafetyBanner => '訓練 - 救助を要請しません';
+
+  @override
+  String get drillModeTitle => '訓練モード';
+
+  @override
+  String get drillModeBody =>
+      '明確に訓練と表示されたメッセージだけを送信します。SOS、救助位置、物理ビーコン、インターネットゲートウェイは使用しません。';
+
+  @override
+  String get drillConfirmTitle => '訓練モードを有効にしますか？';
+
+  @override
+  String get drillConfirmBody =>
+      '救助モードとサバイバルモードは停止します。訓練メッセージは公開されますが、実際の緊急警報にはなりません。';
+
+  @override
+  String get drillEnableAction => '訓練を有効化';
+
+  @override
+  String get drillHoldToSend => '長押しして訓練を送信';
+
+  @override
+  String get drillPracticeMessage => '助けを求める訓練';
+
+  @override
+  String get drillReceivedTitle => '訓練メッセージ';
+
+  @override
+  String get drillNoneReceived => '訓練メッセージはありません。';
+
+  @override
+  String get drillBadge => '訓練 — 緊急事態ではありません';
+
+  @override
+  String get drillInvalidMessage => '認識できない訓練メッセージは緊急システムから隔離されました。';
+
+  @override
+  String get drillCheckInTitle => '状況報告を練習';
+
+  @override
+  String get drillCheckInBody => 'この報告は訓練チャンネル内に留まり、救助警報、地図、エクスポートには表示されません。';
+
+  @override
+  String get drillExitForRealTitle => '本物のSOSを送信しますか？';
+
+  @override
+  String get drillExitForRealBody => '訓練を終了し、位置共有と繰り返しSOSを伴う実際の救助要請を開始します。';
+
+  @override
+  String get drillSendRealSos => '訓練を終了してSOSを送信';
 }

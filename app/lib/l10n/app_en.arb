@@ -450,5 +450,22 @@
   "familyScanTitle": "Scan family QR",
   "familyQrInvalid": "This QR is invalid or its signature could not be verified.",
   "familyScanHint": "Scan the QR shown on your family member's phone.",
-  "familyAlertBadge": "VERIFIED FAMILY"
+  "familyAlertBadge": "VERIFIED FAMILY",
+  "drillSafetyBanner": "DRILL - does not request rescue",
+  "drillModeTitle": "Practice drill",
+  "drillModeBody": "Sends clearly marked practice messages only. It never sends SOS, shares rescue location, activates a beacon or uses the internet gateway.",
+  "drillConfirmTitle": "Turn on practice drill?",
+  "drillConfirmBody": "Rescue and survival modes will be turned off. Practice messages are public, but cannot become real emergency alerts.",
+  "drillEnableAction": "TURN ON DRILL",
+  "drillHoldToSend": "HOLD TO SEND DRILL",
+  "drillPracticeMessage": "Practice request for help",
+  "drillReceivedTitle": "Practice drill messages",
+  "drillNoneReceived": "No practice drill messages received.",
+  "drillBadge": "DRILL — NOT AN EMERGENCY",
+  "drillInvalidMessage": "Unrecognized drill message; it was isolated from emergency systems.",
+  "drillCheckInTitle": "Practice a status update",
+  "drillCheckInBody": "These updates remain in the drill channel and are excluded from rescue alerts, maps and exports.",
+  "drillExitForRealTitle": "Send a real SOS?",
+  "drillExitForRealBody": "This will end the drill and activate a real rescue request with location sharing and repeated SOS alerts.",
+  "drillSendRealSos": "END DRILL AND SEND SOS"
 }

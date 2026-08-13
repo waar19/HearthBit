@@ -404,5 +404,22 @@
   "familyScanTitle": "Familien-QR scannen",
   "familyQrInvalid": "Dieser QR-Code ist ungültig oder seine Signatur konnte nicht geprüft werden.",
   "familyScanHint": "Scanne den QR-Code auf dem Telefon deines Familienmitglieds.",
-  "familyAlertBadge": "VERIFIZIERTE FAMILIE"
+  "familyAlertBadge": "VERIFIZIERTE FAMILIE",
+  "drillSafetyBanner": "ÜBUNG - fordert keine Rettung an",
+  "drillModeTitle": "Übungsmodus",
+  "drillModeBody": "Sendet nur klar gekennzeichnete Übungsnachrichten. Sendet niemals SOS, teilt keinen Rettungsstandort, aktiviert keine Signalquelle und nutzt kein Internet-Gateway.",
+  "drillConfirmTitle": "Übungsmodus aktivieren?",
+  "drillConfirmBody": "Rettungs- und Überlebensmodus werden beendet. Übungsnachrichten sind öffentlich, können aber keine echten Notfallalarme werden.",
+  "drillEnableAction": "ÜBUNG AKTIVIEREN",
+  "drillHoldToSend": "HALTEN FÜR ÜBUNG",
+  "drillPracticeMessage": "Übungsanfrage um Hilfe",
+  "drillReceivedTitle": "Übungsnachrichten",
+  "drillNoneReceived": "Keine Übungsnachrichten empfangen.",
+  "drillBadge": "ÜBUNG — KEIN NOTFALL",
+  "drillInvalidMessage": "Unbekannte Übungsnachricht; sie wurde von den Notfallsystemen isoliert.",
+  "drillCheckInTitle": "Statusmeldung üben",
+  "drillCheckInBody": "Diese Meldungen bleiben im Übungskanal und erscheinen nicht in Rettungsalarmen, Karten oder Exporten.",
+  "drillExitForRealTitle": "Echtes SOS senden?",
+  "drillExitForRealBody": "Dies beendet die Übung und aktiviert eine echte Rettungsanfrage mit Standortfreigabe und wiederholten SOS-Alarmen.",
+  "drillSendRealSos": "ÜBUNG BEENDEN UND SOS SENDEN"
 }

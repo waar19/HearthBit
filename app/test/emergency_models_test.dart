@@ -46,6 +46,66 @@ void main() {
     expect(parsed?.longitude, closeTo(-74.123456, 0.000001));
   });
 
+  test('simulacro usa marcador versionado y nunca se clasifica como SOS', () {
+    final timestamp = DateTime.fromMillisecondsSinceEpoch(1_700_000_000_000);
+    final content = DrillCheckIn.encode(
+      status: CheckInStatus.needsHelp,
+      readableMessage: 'Solicitud de ayuda de práctica',
+      safetyNotice: 'SIMULACRO - no solicita rescate',
+      timestamp: timestamp,
+    );
+    final message = MeshMessage(
+      id: 'drill-1',
+      sender: 'Ana',
+      content: content,
+      senderPeerId: 'peer-a',
+      isPrivate: false,
+      isMine: false,
+      timestamp: timestamp,
+      channel: 'drill',
+    );
+
+    expect(content, startsWith('SIMULACRO - no solicita rescate'));
+    expect(content, contains('[HB-DRILL|1|CHECKIN|HELP|'));
+    expect(content, isNot(startsWith('SOS|')));
+    expect(message.isDrill, isTrue);
+    expect(message.drill?.version, 1);
+    expect(message.drill?.status, CheckInStatus.needsHelp);
+    expect(message.isSos, isFalse);
+    expect(message.isCheckIn, isFalse);
+  });
+
+  test('canal o marcador drill aíslan incluso contenido hostil o futuro', () {
+    final timestamp = DateTime.fromMillisecondsSinceEpoch(1_700_000_000_000);
+    final hostile = MeshMessage(
+      id: 'drill-hostile',
+      sender: 'Ana',
+      content: 'SOS|No debe escalar||',
+      senderPeerId: 'peer-a',
+      isPrivate: false,
+      isMine: false,
+      timestamp: timestamp,
+      channel: 'drill',
+    );
+    final future = MeshMessage(
+      id: 'drill-future',
+      sender: 'Ana',
+      content: 'Practice\n[HB-DRILL|99|CHECKIN|HELP|1700000000000]',
+      senderPeerId: 'peer-a',
+      isPrivate: false,
+      isMine: false,
+      timestamp: timestamp,
+      channel: 'sos',
+    );
+
+    expect(hostile.isDrill, isTrue);
+    expect(hostile.isSos, isFalse);
+    expect(hostile.drill, isNull);
+    expect(future.isDrill, isTrue);
+    expect(future.isSos, isFalse);
+    expect(future.drill, isNull);
+  });
+
   test('nota de voz referencia una transferencia HBT sin incrustar audio', () {
     const transferId = '00112233445566778899aabbccddeeff';
     final message = MeshMessage(
@@ -134,5 +194,33 @@ void main() {
 
     expect(valid.isValid, isTrue);
     expect(invalid.isValid, isFalse);
+  });
+
+  test('gateway excluye todo simulacro aunque parezca SOS o check-in', () {
+    final timestamp = DateTime.fromMillisecondsSinceEpoch(1_700_000_000_000);
+    for (final message in [
+      MeshMessage(
+        id: 'drill-channel',
+        sender: 'Ana',
+        content: 'SOS|Práctica||',
+        senderPeerId: 'peer-a',
+        isPrivate: false,
+        isMine: false,
+        timestamp: timestamp,
+        channel: 'drill',
+      ),
+      MeshMessage(
+        id: 'drill-marker',
+        sender: 'Ana',
+        content: 'Practice\n[HB-DRILL|1|CHECKIN|OK|1700000000000]',
+        senderPeerId: 'peer-a',
+        isPrivate: false,
+        isMine: false,
+        timestamp: timestamp,
+        channel: 'checkin',
+      ),
+    ]) {
+      expect(EmergencyGatewayController.isEmergencyEligible(message), isFalse);
+    }
   });
 }

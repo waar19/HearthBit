@@ -169,7 +169,10 @@ class EmergencyGatewayController extends ChangeNotifier {
   }
 
   Iterable<MeshMessage> _eligibleMessages() =>
-      mesh.messages.where((message) => message.isSos || message.isCheckIn);
+      mesh.messages.where(isEmergencyEligible);
+
+  static bool isEmergencyEligible(MeshMessage message) =>
+      !message.isDrill && (message.isSos || message.isCheckIn);
 
   Map<String, Object?> _payload(MeshMessage message) => {
     'schema': 'org.hearthbit.emergency.v1',

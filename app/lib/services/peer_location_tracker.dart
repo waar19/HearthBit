@@ -78,6 +78,7 @@ class PeerLocationTracker extends ChangeNotifier {
   }
 
   bool _addPersisted(MeshMessage message, {required bool notify}) {
+    if (message.isDrill) return false;
     PeerLocation? location;
     final checkIn = message.checkIn;
     if (checkIn?.latitude != null && checkIn?.longitude != null) {
