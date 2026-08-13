@@ -9,7 +9,7 @@ description = "Linux/BlueZ relay for the HearthBit binary mesh"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-dependencies = ["dbus-next>=0.2.3"]
+dependencies = ["cryptography", "dbus-next>=0.2.3"]
 
 [project.optional-dependencies]
 test = ["pytest>=8", "pytest-asyncio>=0.24"]

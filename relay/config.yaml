@@ -17,9 +17,13 @@ apparmor: false
 options:
   adapter: "hci0"
   local_name: "Bitle Relay"
+  nickname: "Bitle Relay"
+  identity_path: "/data/identity.json"
+  node_role: "INFRA_RELAY"
+  announce_interval_seconds: 300
   central_enabled: true
   scan_interval_seconds: 20
-  max_central_links: 2
+  max_central_links: 4
   max_packet_size: 2048
   log_level: "INFO"
   store:
@@ -33,11 +37,13 @@ options:
     message_types:
       - "0x02"
       - "0x04"
-      - "0x24"
-      - "0x25"
 schema:
   adapter: str
   local_name: str
+  nickname: str
+  identity_path: str
+  node_role: list(INFRA_RELAY|INFRA_DATA_ANCHOR)
+  announce_interval_seconds: float
   central_enabled: bool
   scan_interval_seconds: float
   max_central_links: int

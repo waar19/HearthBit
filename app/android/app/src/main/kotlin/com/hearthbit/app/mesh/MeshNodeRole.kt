@@ -36,6 +36,13 @@ internal enum class MeshNodeRole(
     }
 }
 
+internal object MeshStartupRolePolicy {
+    fun resolve(
+        persistedRole: MeshNodeRole,
+        requiredRole: MeshNodeRole?,
+    ): MeshNodeRole = requiredRole ?: persistedRole
+}
+
 internal object NodeCapabilityProtocol {
     const val VERSION: Byte = 0x01
 

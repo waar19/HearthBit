@@ -89,7 +89,10 @@ class MeshForegroundService : Service() {
     }
 
     private fun notification(): Notification {
-        val openIntent = Intent(this, MainActivity::class.java)
+        val openIntent = (
+            packageManager.getLaunchIntentForPackage(packageName)
+                ?: Intent(this, MainActivity::class.java)
+            ).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,

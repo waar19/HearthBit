@@ -69,4 +69,24 @@ class GenericBlePresenceTrackerTest {
         assertTrue(tracker.observe(byteArrayOf(1), -80, 0)!!.isNotEmpty())
         assertTrue(tracker.snapshot(101).isEmpty())
     }
+
+    @Test
+    fun `limita la lista y aplica throttle global en zonas densas`() {
+        val tracker = GenericBlePresenceTracker(
+            sessionSecret = secret,
+            rotationMs = 10_000,
+            staleAfterMs = 10_000,
+            emitIntervalMs = 1_000,
+            maxObservations = 2,
+        )
+
+        assertTrue(tracker.observe(byteArrayOf(1), -51, 0)!!.isNotEmpty())
+        assertNull(tracker.observe(byteArrayOf(2), -52, 100))
+        assertNull(tracker.observe(byteArrayOf(3), -53, 200))
+
+        val bounded = tracker.snapshot(200)
+        assertEquals(2, bounded.size)
+        assertEquals(setOf(-52, -53), bounded.map { it.rssi }.toSet())
+        assertTrue(tracker.observe(byteArrayOf(3), -54, 1_000)!!.isNotEmpty())
+    }
 }

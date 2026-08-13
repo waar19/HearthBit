@@ -5,9 +5,11 @@ import struct
 from dataclasses import dataclass
 
 VERSION = 1
+SUPPORTED_VERSIONS = (1, 2)
 FLAG_RECIPIENT = 0x01
 FLAG_SIGNATURE = 0x02
 FLAG_COMPRESSED = 0x04
+FLAG_ROUTE = 0x08
 FLAG_RSR = 0x10
 
 TYPE_ANNOUNCE = 0x01
@@ -17,10 +19,26 @@ TYPE_NOISE_HANDSHAKE = 0x10
 TYPE_NOISE_ENCRYPTED = 0x11
 TYPE_FRAGMENT = 0x20
 TYPE_REQUEST_SYNC = 0x21
-TYPE_PREKEY_BUNDLE = 0x24
-TYPE_GROUP_MESSAGE = 0x25
+TYPE_HBT_CAPABILITY = 0x24
+TYPE_NODE_CAPABILITY = 0x25
 
-HEADER = struct.Struct(">BBBQB H 8s")
+# Backward-compatible aliases for callers that imported the old, incorrect
+# semantic names. These wire values are ephemeral capability announcements.
+TYPE_PREKEY_BUNDLE = TYPE_HBT_CAPABILITY
+TYPE_GROUP_MESSAGE = TYPE_NODE_CAPABILITY
+
+EPHEMERAL_MESSAGE_TYPES = frozenset(
+    {
+        TYPE_ANNOUNCE,
+        TYPE_HBT_CAPABILITY,
+        TYPE_NODE_CAPABILITY,
+    }
+)
+
+HEADER_V1 = struct.Struct(">BBBQBH8s")
+HEADER_V2 = struct.Struct(">BBBQBI8s")
+# Preserve the public v1 header name for existing integrations.
+HEADER = HEADER_V1
 NORMALIZED_SIZES = (256, 512, 1024, 2048)
 MAX_PACKET_SIZE = NORMALIZED_SIZES[-1]
 
@@ -42,6 +60,7 @@ class Packet:
     signature: bytes | None
     raw: bytes
     wire_length: int
+    route: tuple[bytes, ...] = ()
 
     @property
     def has_signature(self) -> bool:
@@ -62,22 +81,42 @@ class Packet:
 def decode_packet(data: bytes, *, max_size: int = MAX_PACKET_SIZE) -> Packet:
     if not data or len(data) > max_size:
         raise PacketError(f"packet size must be between 1 and {max_size} bytes")
-    if len(data) < HEADER.size:
+    if len(data) < HEADER_V1.size:
+        raise PacketError("truncated packet header")
+
+    version = data[0]
+    if version not in SUPPORTED_VERSIONS:
+        raise PacketError(f"unsupported packet version {version}")
+    header = HEADER_V1 if version == 1 else HEADER_V2
+    if len(data) < header.size:
         raise PacketError("truncated packet header")
 
     version, message_type, ttl, timestamp_ms, flags, payload_len, sender_id = (
-        HEADER.unpack_from(data)
+        header.unpack_from(data)
     )
-    if version != VERSION:
-        raise PacketError(f"unsupported packet version {version}")
 
-    offset = HEADER.size
+    offset = header.size
     recipient_id = None
     if flags & FLAG_RECIPIENT:
         if offset + 8 > len(data):
             raise PacketError("truncated recipient ID")
         recipient_id = data[offset : offset + 8]
         offset += 8
+
+    route: tuple[bytes, ...] = ()
+    if version == 2 and flags & FLAG_ROUTE:
+        if offset >= len(data):
+            raise PacketError("truncated route header")
+        route_count = data[offset]
+        offset += 1
+        route_end = offset + route_count * 8
+        if route_end > len(data):
+            raise PacketError("truncated route")
+        route = tuple(
+            data[hop_offset : hop_offset + 8]
+            for hop_offset in range(offset, route_end, 8)
+        )
+        offset = route_end
 
     payload_end = offset + payload_len
     signature_len = 64 if flags & FLAG_SIGNATURE else 0
@@ -97,6 +136,7 @@ def decode_packet(data: bytes, *, max_size: int = MAX_PACKET_SIZE) -> Packet:
         flags=flags,
         sender_id=sender_id,
         recipient_id=recipient_id,
+        route=route,
         payload=payload,
         signature=signature,
         raw=data,
@@ -111,28 +151,42 @@ def encode_packet(
     timestamp_ms: int,
     sender_id: bytes,
     payload: bytes,
+    version: int = VERSION,
     recipient_id: bytes | None = None,
+    route: tuple[bytes, ...] | list[bytes] = (),
     signature: bytes | None = None,
     extra_flags: int = 0,
     pad: bool = False,
 ) -> bytes:
+    if version not in SUPPORTED_VERSIONS:
+        raise PacketError(f"unsupported packet version {version}")
     if len(sender_id) != 8:
         raise PacketError("sender ID must contain 8 bytes")
     if recipient_id is not None and len(recipient_id) != 8:
         raise PacketError("recipient ID must contain 8 bytes")
     if signature is not None and len(signature) != 64:
         raise PacketError("signature must contain 64 bytes")
-    if len(payload) > 0xFFFF:
+    if version == 1 and len(payload) > 0xFFFF:
         raise PacketError("payload exceeds the v1 uint16 length")
+    if len(payload) > 0xFFFFFFFF:
+        raise PacketError("payload exceeds the v2 uint32 length")
     if not 0 <= ttl <= 0xFF:
         raise PacketError("TTL must fit in one byte")
+    if version == 1 and route:
+        raise PacketError("source routes require packet version 2")
+    if len(route) > 0xFF:
+        raise PacketError("route cannot contain more than 255 hops")
+    if any(len(hop) != 8 for hop in route):
+        raise PacketError("every route hop must contain 8 bytes")
 
-    flags = extra_flags & ~(FLAG_RECIPIENT | FLAG_SIGNATURE)
+    flags = extra_flags & ~(FLAG_RECIPIENT | FLAG_SIGNATURE | FLAG_ROUTE)
     flags |= FLAG_RECIPIENT if recipient_id is not None else 0
     flags |= FLAG_SIGNATURE if signature is not None else 0
+    flags |= FLAG_ROUTE if route else 0
+    header = HEADER_V1 if version == 1 else HEADER_V2
     frame = bytearray(
-        HEADER.pack(
-            VERSION,
+        header.pack(
+            version,
             message_type,
             ttl,
             timestamp_ms,
@@ -143,6 +197,10 @@ def encode_packet(
     )
     if recipient_id is not None:
         frame.extend(recipient_id)
+    if route:
+        frame.append(len(route))
+        for hop in route:
+            frame.extend(hop)
     frame.extend(payload)
     if signature is not None:
         frame.extend(signature)

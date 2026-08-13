@@ -17,14 +17,6 @@ internal class MeshFragmentReassembler {
         var bytes: Int = 0,
     )
 
-    private data class Fragment(
-        val id: ByteArray,
-        val index: Int,
-        val total: Int,
-        val originalType: Byte,
-        val data: ByteArray,
-    )
-
     private val lock = Any()
     private val sets = mutableMapOf<String, FragmentSet>()
     private var bufferedBytes = 0L
@@ -34,10 +26,12 @@ internal class MeshFragmentReassembler {
         now: Long = System.currentTimeMillis(),
     ): MeshProtocol.Packet? {
         if (packet.type != MeshProtocol.TYPE_FRAGMENT) return null
-        val fragment = decode(packet.payload) ?: return null
+        val fragment = MeshProtocol.decodeFragmentPayload(packet.payload) ?: return null
+        if (fragment.total > MAX_FRAGMENTS || fragment.data.isEmpty()) return null
         synchronized(lock) {
             pruneExpired(now)
-            val key = "${MeshProtocol.hex(packet.senderId)}:${MeshProtocol.hex(fragment.id)}"
+            val key =
+                "${MeshProtocol.hex(packet.senderId)}:${MeshProtocol.hex(fragment.fragmentId)}"
             val set = sets[key] ?: run {
                 if (sets.size >= MAX_ACTIVE_SETS) return null
                 FragmentSet(
@@ -103,22 +97,6 @@ internal class MeshFragmentReassembler {
         }
     }
 
-    private fun decode(payload: ByteArray): Fragment? {
-        if (payload.size <= HEADER_SIZE) return null
-        val index = ((payload[8].toInt() and 0xFF) shl 8) or
-            (payload[9].toInt() and 0xFF)
-        val total = ((payload[10].toInt() and 0xFF) shl 8) or
-            (payload[11].toInt() and 0xFF)
-        if (total !in 1..MAX_FRAGMENTS || index !in 0 until total) return null
-        return Fragment(
-            id = payload.copyOfRange(0, 8),
-            index = index,
-            total = total,
-            originalType = payload[12],
-            data = payload.copyOfRange(HEADER_SIZE, payload.size),
-        )
-    }
-
     private fun pruneExpired(now: Long) {
         sets.filterValues { now - it.updatedAt > TIMEOUT_MS }
             .keys
@@ -136,7 +114,6 @@ internal class MeshFragmentReassembler {
             first != null && second != null && first.contentEquals(second)
 
     private companion object {
-        const val HEADER_SIZE = 13
         const val MAX_FRAGMENTS = 256
         const val MAX_SET_BYTES = 1_048_576
         const val MAX_ACTIVE_SETS = 64

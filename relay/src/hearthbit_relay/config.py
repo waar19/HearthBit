@@ -5,11 +5,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .identity import NodeRole
 from .protocol import (
     TYPE_COURIER_ENVELOPE,
-    TYPE_GROUP_MESSAGE,
     TYPE_MESSAGE,
-    TYPE_PREKEY_BUNDLE,
 )
 
 
@@ -27,8 +26,6 @@ class StoreConfig:
             {
                 TYPE_MESSAGE,
                 TYPE_COURIER_ENVELOPE,
-                TYPE_PREKEY_BUNDLE,
-                TYPE_GROUP_MESSAGE,
             }
         )
     )
@@ -40,10 +37,14 @@ class RelayConfig:
     local_name: str = "Bitle Relay"
     central_enabled: bool = True
     scan_interval_seconds: float = 20.0
-    max_central_links: int = 2
+    max_central_links: int = 4
     max_packet_size: int = 2048
     log_level: str = "INFO"
     store: StoreConfig = field(default_factory=StoreConfig)
+    identity_path: str = "/var/lib/hearthbit-relay/identity.json"
+    nickname: str = "Bitle Relay"
+    node_role: NodeRole = NodeRole.INFRA_RELAY
+    announce_interval_seconds: float = 5 * 60
 
     @property
     def adapter_path(self) -> str:
@@ -100,11 +101,25 @@ def load_config(path: str | Path | None) -> RelayConfig:
         max_packet_size=_positive_int(raw, "max_packet_size", _DEFAULT_RELAY.max_packet_size),
         log_level=str(raw.get("log_level", _DEFAULT_RELAY.log_level)).upper(),
         store=store,
+        identity_path=str(raw.get("identity_path", _DEFAULT_RELAY.identity_path)),
+        nickname=str(raw.get("nickname", _DEFAULT_RELAY.nickname)),
+        node_role=NodeRole.parse(
+            str(raw.get("node_role", _DEFAULT_RELAY.node_role.value))
+        ),
+        announce_interval_seconds=_positive_number(
+            raw,
+            "announce_interval_seconds",
+            _DEFAULT_RELAY.announce_interval_seconds,
+        ),
     )
     if "/" in config.adapter or not config.adapter:
         raise ValueError("'adapter' must be a BlueZ adapter name such as hci0")
     if not 1 <= config.max_packet_size <= 65_535:
         raise ValueError("'max_packet_size' must be between 1 and 65535")
+    if not config.identity_path:
+        raise ValueError("'identity_path' cannot be empty")
+    if not config.nickname:
+        raise ValueError("'nickname' cannot be empty")
     return config
 
 

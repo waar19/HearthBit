@@ -9,6 +9,7 @@ import signal
 from .bluez import BlueZTransport
 from .config import load_config
 from .core import RelayCore
+from .identity import RelayIdentity
 from .store import PacketStore
 
 
@@ -19,7 +20,8 @@ async def run(config_path: str | None) -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     store = PacketStore(config.store)
-    core = RelayCore(config, store)
+    identity = RelayIdentity.load_or_create(config.identity_path)
+    core = RelayCore(config, store, identity)
     transport = BlueZTransport(config, core)
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -31,8 +33,10 @@ async def run(config_path: str | None) -> None:
 
     try:
         await transport.start()
+        await core.start()
         await stopped.wait()
     finally:
+        await core.stop()
         await transport.stop()
         store.close()
 

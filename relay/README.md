@@ -1,7 +1,7 @@
 # HearthBit Relay para Linux
 
 Relay BLE para Linux y Raspberry Pi que usa BlueZ por D-Bus y conserva el
-paquete binario HearthBit/BitChat v1. Opera a la vez como periférico GATT
+paquete binario HearthBit/BitChat v1/v2. Opera a la vez como periférico GATT
 (teléfonos y nodos se conectan al relay) y como central (el relay descubre
 otros dispositivos llamados `Bitle Relay`).
 
@@ -10,8 +10,9 @@ otros dispositivos llamados `Bitle Relay`).
 - Servicio y característica compatibles:
   - `F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C`
   - `A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D`
-- Decodificación estricta del paquete v1, enteros big-endian y padding PKCS#7.
+- Decodificación estricta v1/v2, rutas de origen, enteros big-endian y padding.
 - Relay con decremento de TTL sin modificar los bytes firmados.
+- Identidad persistente X25519/Ed25519, ANNOUNCE firmado y rol de infraestructura.
 - Deduplicación persistente mediante BLAKE2s sobre el paquete sin TTL ni
   padding.
 - Store-and-forward acotado en SQLite, con expiración, límite de registros,
@@ -61,8 +62,16 @@ soportan central y periférico simultáneamente.
 importantes son:
 
 - `adapter`: adaptador BlueZ, normalmente `hci0`.
-- `local_name`: mantenga `Bitle Relay` para que el firmware ESP32 lo descubra.
+- `local_name`: nombre BLE visible; el discovery usa el UUID de servicio y no
+  depende de que otros dispositivos tengan un nombre concreto.
+- `nickname`: nombre publicado dentro del ANNOUNCE firmado.
+- `identity_path`: archivo privado persistente de identidad; el relay fuerza
+  permisos `0600` y directorio `0700`.
+- `node_role`: `INFRA_RELAY` o `INFRA_DATA_ANCHOR`.
+- `announce_interval_seconds`: renovación periódica del ANNOUNCE y capacidad.
 - `central_enabled`: además de aceptar teléfonos, busca y conecta otros relays.
+- `max_central_links`: máximo de conexiones centrales (4 por defecto);
+  reduzca el valor si el adaptador o controlador BlueZ tiene menos recursos.
 - `max_packet_size`: límite previo a decodificar; 2048 cubre los tamaños
   normalizados del protocolo.
 - `store.max_bytes` y `store.max_packets`: límites duros de disco.
@@ -70,8 +79,9 @@ importantes son:
 - `store.require_signature`: exige que el flag de firma esté presente antes
   de persistir.
 - `store.message_types`: tipos elegibles para persistencia. Por defecto guarda
-  mensajes públicos, CourierEnvelope, prekeys y mensajes de grupo. El
-  transporte Noise `0x11` no se guarda porque depende de una sesión viva.
+  mensajes públicos y CourierEnvelope. ANNOUNCE y capacidades `0x24/0x25`
+  nunca se persisten. El transporte Noise `0x11` no se guarda porque depende
+  de una sesión viva.
 
 La expiración TLV de un `CourierEnvelope` siempre reduce, nunca amplía, la
 retención configurada.
@@ -132,10 +142,9 @@ de chat. El relay no descifra payloads ni participa en Noise.
 
 ## Limitaciones de esta fase
 
-- No implementa identidad propia, handshake Noise ni validación criptográfica
-  Ed25519. `require_signature` comprueba presencia y formato, no autenticidad.
-  Los límites de disco son por tanto la defensa principal contra depósitos
-  hostiles.
+- Tiene identidad propia y valida criptográficamente ANNOUNCE, pero todavía no
+  participa como endpoint en handshakes Noise. `require_signature` comprueba
+  presencia y formato para los demás paquetes almacenables, no su autenticidad.
 - No calcula los tags HMAC diarios de Courier ni conoce cuándo está presente
   el destinatario. Los sobres siguen cifrados y se difunden a enlaces futuros;
   el receptor deduplica por ciphertext.

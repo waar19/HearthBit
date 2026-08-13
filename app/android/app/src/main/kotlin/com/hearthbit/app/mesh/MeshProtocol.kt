@@ -85,6 +85,46 @@ internal object MeshProtocol {
         val prekeyId: Long?,
     )
 
+    data class FragmentPayload(
+        val fragmentId: ByteArray,
+        val index: Int,
+        val total: Int,
+        val originalType: Byte,
+        val data: ByteArray,
+    )
+
+    fun encodeFragmentPayload(fragment: FragmentPayload): ByteArray {
+        require(fragment.fragmentId.size == FRAGMENT_ID_SIZE)
+        require(fragment.index in 0..0xFFFF)
+        require(fragment.total in 1..0xFFFF)
+        require(fragment.index < fragment.total)
+        return ByteArray(FRAGMENT_HEADER_SIZE + fragment.data.size).also { output ->
+            fragment.fragmentId.copyInto(output)
+            output[8] = (fragment.index ushr 8).toByte()
+            output[9] = fragment.index.toByte()
+            output[10] = (fragment.total ushr 8).toByte()
+            output[11] = fragment.total.toByte()
+            output[12] = fragment.originalType
+            fragment.data.copyInto(output, destinationOffset = FRAGMENT_HEADER_SIZE)
+        }
+    }
+
+    fun decodeFragmentPayload(payload: ByteArray): FragmentPayload? {
+        if (payload.size < FRAGMENT_HEADER_SIZE) return null
+        val index = ((payload[8].toInt() and 0xFF) shl 8) or
+            (payload[9].toInt() and 0xFF)
+        val total = ((payload[10].toInt() and 0xFF) shl 8) or
+            (payload[11].toInt() and 0xFF)
+        if (total == 0 || index >= total) return null
+        return FragmentPayload(
+            fragmentId = payload.copyOfRange(0, FRAGMENT_ID_SIZE),
+            index = index,
+            total = total,
+            originalType = payload[12],
+            data = payload.copyOfRange(FRAGMENT_HEADER_SIZE, payload.size),
+        )
+    }
+
     fun encode(packet: Packet, padded: Boolean = true): ByteArray {
         require(packet.senderId.size == 8)
         require(packet.recipientId == null || packet.recipientId.size == 8)
@@ -160,6 +200,16 @@ internal object MeshProtocol {
         padded = packet.type == TYPE_NOISE_HANDSHAKE ||
             packet.type == TYPE_NOISE_ENCRYPTED,
     )
+
+    fun removeBleTransportPadding(packet: Packet, encoded: ByteArray): ByteArray {
+        if (packet.type != TYPE_NOISE_HANDSHAKE && packet.type != TYPE_NOISE_ENCRYPTED) {
+            return encoded.copyOf()
+        }
+        val rawSize = encode(packet, padded = false).size
+        if (encoded.size <= rawSize) return encoded.copyOf()
+        val unpadded = unpad(encoded)
+        return if (unpadded.size == rawSize) unpadded else encoded.copyOf()
+    }
 
     fun decode(input: ByteArray): Packet? {
         return decodeRaw(input) ?: decodeRaw(unpad(input))
@@ -706,6 +756,8 @@ internal object MeshProtocol {
 
     private const val COMPRESSION_THRESHOLD = 100
     private const val MAX_PAYLOAD_LENGTH = 10_485_760
+    const val FRAGMENT_HEADER_SIZE = 13
+    const val FRAGMENT_ID_SIZE = 8
     private const val HBT_CAPABILITY_TLV = 0xF0
     private const val INFRASTRUCTURE_TLV = 0xB1
     const val SYNC_FLAG_ANNOUNCE = 1L shl 0
