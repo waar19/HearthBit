@@ -106,7 +106,9 @@ class _RadarScreenState extends State<RadarScreen>
     if (_sweepActive && heading != null) {
       _sweepEstimator.addSample(
         headingDegrees: heading,
-        rssi: reading.smoothedRssi,
+        // El suavizado global introduce retraso angular mientras la persona
+        // gira. El estimador aplica su propio filtro robusto por sector.
+        rssi: rssi.toDouble(),
       );
       if (_sweepEstimator.isComplete) {
         _sweepActive = false;
@@ -303,8 +305,14 @@ class _RadarScreenState extends State<RadarScreen>
     const green = Color(0xFF4ADE80);
     const dim = Color(0xFF94A3B8);
     final estimate = _directionEstimate;
+    final showHoldingGuide =
+        !_compassUnavailable && (_sweepActive || estimate == null);
     return _panelCard(
       children: [
+        if (showHoldingGuide) ...[
+          _SweepHoldingGuide(animation: _sweep, active: _sweepActive),
+          const SizedBox(height: 10),
+        ],
         if (_compassUnavailable) ...[
           const Icon(Icons.explore_off_outlined, color: dim),
           const SizedBox(height: 6),
@@ -314,12 +322,6 @@ class _RadarScreenState extends State<RadarScreen>
             style: const TextStyle(color: dim),
           ),
         ] else if (_sweepActive) ...[
-          Text(
-            context.l10n.radarSweepInstruction,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white),
-          ),
-          const SizedBox(height: 8),
           LinearProgressIndicator(
             value: _sweepEstimator.progress,
             color: green,
@@ -333,19 +335,30 @@ class _RadarScreenState extends State<RadarScreen>
             style: const TextStyle(color: dim, fontSize: 12),
           ),
         ] else if (estimate != null) ...[
-          Text(
-            context.l10n.radarSweepResult(estimate.headingDegrees.round()),
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
+          if (estimate.hasUsableDirection) ...[
+            Text(
+              context.l10n.radarSweepResult(estimate.headingDegrees.round()),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
+          ] else ...[
+            const Icon(Icons.explore_off_outlined, color: dim),
+            const SizedBox(height: 6),
+            Text(
+              context.l10n.radarSweepInconclusive,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white),
+            ),
+          ],
+          const SizedBox(height: 6),
           Text(
             context.l10n.radarSweepConfidence(
               (estimate.confidence * 100).round(),
             ),
-            style: const TextStyle(color: green),
+            style: TextStyle(color: estimate.hasUsableDirection ? green : dim),
           ),
           const SizedBox(height: 4),
           Text(
@@ -374,7 +387,9 @@ class _RadarScreenState extends State<RadarScreen>
   double? _estimatedDirectionRadians() {
     final estimate = _directionEstimate;
     final heading = _headingDegrees;
-    if (estimate == null || heading == null) return null;
+    if (estimate == null || !estimate.hasUsableDirection || heading == null) {
+      return null;
+    }
     return (estimate.headingDegrees - heading) * math.pi / 180;
   }
 
@@ -571,6 +586,127 @@ class _RadarScreenState extends State<RadarScreen>
   }
 }
 
+class _SweepHoldingGuide extends StatelessWidget {
+  const _SweepHoldingGuide({required this.animation, required this.active});
+
+  final Animation<double> animation;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    const green = Color(0xFF4ADE80);
+    const dim = Color(0xFF94A3B8);
+    return Row(
+      children: [
+        SizedBox(
+          width: 92,
+          height: 92,
+          child: AnimatedBuilder(
+            animation: animation,
+            builder: (context, _) => CustomPaint(
+              painter: _SweepGuidePainter(
+                rotationProgress: active ? animation.value : 0,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                context.l10n.radarSweepHoldTitle,
+                style: const TextStyle(
+                  color: green,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                context.l10n.radarSweepInstruction,
+                style: const TextStyle(color: dim, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SweepGuidePainter extends CustomPainter {
+  const _SweepGuidePainter({required this.rotationProgress});
+
+  final double rotationProgress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const green = Color(0xFF4ADE80);
+    const amber = Color(0xFFFBBF24);
+    final center = size.center(Offset.zero);
+    final radius = size.shortestSide * 0.4;
+    final arcRect = Rect.fromCircle(center: center, radius: radius);
+    const start = -math.pi * 0.72;
+    const sweep = math.pi * 1.55;
+    final arcPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round
+      ..color = green.withValues(alpha: 0.8);
+    canvas.drawArc(arcRect, start, sweep, false, arcPaint);
+
+    final end = start + sweep;
+    final tip = center + Offset(math.cos(end), math.sin(end)) * radius;
+    final tangent = Offset(-math.sin(end), math.cos(end));
+    final normal = Offset(math.cos(end), math.sin(end));
+    canvas.drawPath(
+      Path()
+        ..moveTo(tip.dx + tangent.dx * 7, tip.dy + tangent.dy * 7)
+        ..lineTo(
+          tip.dx - tangent.dx * 5 + normal.dx * 5,
+          tip.dy - tangent.dy * 5 + normal.dy * 5,
+        )
+        ..lineTo(
+          tip.dx - tangent.dx * 5 - normal.dx * 5,
+          tip.dy - tangent.dy * 5 - normal.dy * 5,
+        )
+        ..close(),
+      Paint()..color = green,
+    );
+
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    canvas.rotate(rotationProgress * 2 * math.pi);
+    final phone = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: Offset.zero, width: 25, height: 46),
+      const Radius.circular(5),
+    );
+    canvas.drawRRect(phone, Paint()..color = const Color(0xFF17241E));
+    canvas.drawRRect(
+      phone,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = Colors.white,
+    );
+    canvas.drawLine(
+      const Offset(-6, -16),
+      const Offset(6, -16),
+      Paint()
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round
+        ..color = amber,
+    );
+    canvas.drawCircle(const Offset(0, 15), 2, Paint()..color = green);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_SweepGuidePainter oldDelegate) =>
+      oldDelegate.rotationProgress != rotationProgress;
+}
+
 /// Pinta el sonar: anillos concéntricos, barrido giratorio y un punto que se
 /// acerca al centro a medida que la señal se hace más fuerte.
 class _RadarPainter extends CustomPainter {
@@ -649,24 +785,32 @@ class _RadarPainter extends CustomPainter {
 
     final direction = estimatedDirectionRadians;
     if (direction != null) {
-      canvas.save();
-      canvas.translate(center.dx, center.dy);
-      canvas.rotate(direction);
-      final arrowPaint = Paint()
-        ..strokeWidth = 5
-        ..strokeCap = StrokeCap.round
-        ..color = const Color(0xFFFBBF24);
-      final tipY = -radius * 0.72;
-      canvas.drawLine(Offset.zero, Offset(0, tipY), arrowPaint);
+      const halfSector = math.pi / 6;
+      final sectorRect = Rect.fromCircle(center: center, radius: radius * 0.74);
+      final sectorPath = Path()
+        ..moveTo(center.dx, center.dy)
+        ..arcTo(
+          sectorRect,
+          direction - math.pi / 2 - halfSector,
+          halfSector * 2,
+          false,
+        )
+        ..close();
       canvas.drawPath(
-        Path()
-          ..moveTo(0, tipY - 10)
-          ..lineTo(-11, tipY + 8)
-          ..lineTo(11, tipY + 8)
-          ..close(),
-        Paint()..color = const Color(0xFFFBBF24),
+        sectorPath,
+        Paint()..color = const Color(0xFFFBBF24).withValues(alpha: 0.22),
       );
-      canvas.restore();
+      canvas.drawArc(
+        sectorRect,
+        direction - math.pi / 2 - halfSector,
+        halfSector * 2,
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 4
+          ..strokeCap = StrokeCap.round
+          ..color = const Color(0xFFFBBF24),
+      );
     }
 
     final currentStrength = strength;

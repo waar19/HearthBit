@@ -137,6 +137,38 @@ void main() {
       expect(estimator.isComplete, isTrue);
       expect(estimator.estimate!.confidence, closeTo(0, 0.001));
     });
+
+    test('la mediana por sector ignora un pico BLE aislado', () {
+      final estimator = SweepEstimator();
+      for (var sector = 0; sector < 12; sector++) {
+        final heading = 15.0 + sector * 30;
+        estimator
+          ..addSample(headingDegrees: heading, rssi: -75)
+          ..addSample(headingDegrees: heading, rssi: -75)
+          ..addSample(headingDegrees: heading, rssi: sector == 4 ? -30 : -75);
+      }
+
+      expect(estimator.isComplete, isTrue);
+      expect(estimator.estimate!.confidence, closeTo(0, 0.001));
+      expect(estimator.estimate!.hasUsableDirection, isFalse);
+    });
+
+    test('solo muestra dirección con contraste suficiente', () {
+      expect(
+        const SweepEstimate(
+          headingDegrees: 30,
+          confidence: 0.59,
+        ).hasUsableDirection,
+        isFalse,
+      );
+      expect(
+        const SweepEstimate(
+          headingDegrees: 30,
+          confidence: 0.6,
+        ).hasUsableDirection,
+        isTrue,
+      );
+    });
   });
 
   group('MeshMessage SOS', () {

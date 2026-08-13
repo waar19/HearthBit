@@ -713,8 +713,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get radarSweepRestart => 'REPETIR BARRIDO';
 
   @override
+  String get radarSweepHoldTitle => 'Cómo sostener el teléfono';
+
+  @override
   String get radarSweepInstruction =>
-      'Sostén el teléfono contra el pecho y gira despacio una vuelta completa.';
+      'Mantenlo plano frente al pecho, con la pantalla hacia arriba y el borde superior apuntando al frente. Gira lentamente todo el cuerpo.';
 
   @override
   String radarSweepProgress(int percent) {
@@ -723,7 +726,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String radarSweepResult(int heading) {
-    return 'Rumbo estimado de la señal: $heading°';
+    return 'Sector probable de la señal: $heading° (±30°)';
   }
 
   @override
@@ -732,8 +735,12 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get radarSweepInconclusive =>
+      'No se encontró un sector confiable. Gira más despacio y aléjate de metales o equipos electrónicos.';
+
+  @override
   String get radarSweepEstimateWarning =>
-      'Es una estimación por RSSI, no una dirección precisa. Verifícala moviéndote y repitiendo el barrido.';
+      'BLE solo permite estimar un sector amplio, no una dirección exacta. Confírmalo moviéndote y repitiendo el barrido.';
 
   @override
   String get radarCompassUnavailable =>

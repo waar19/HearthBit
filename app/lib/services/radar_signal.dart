@@ -140,11 +140,16 @@ class RadarSignalProcessor {
 class SweepEstimate {
   const SweepEstimate({required this.headingDegrees, required this.confidence});
 
+  static const minimumDirectionalConfidence = 0.6;
+
   /// Rumbo magnético aproximado (0° norte, 90° este).
   final double headingDegrees;
 
   /// Contraste relativo entre el sector más fuerte y el promedio, de 0 a 1.
   final double confidence;
+
+  /// Por debajo de este umbral, dibujar una flecha sería engañoso.
+  bool get hasUsableDirection => confidence >= minimumDirectionalConfidence;
 }
 
 /// Estima el rumbo de una señal BLE mientras la persona gira lentamente.
@@ -195,17 +200,30 @@ class SweepEstimator {
 
   SweepEstimate? get estimate {
     if (!isComplete) return null;
-    final averages = _rssiBySector
-        .map((samples) => samples.reduce((a, b) => a + b) / samples.length)
-        .toList(growable: false);
+    // La mediana evita que un único pico BLE elija un sector incorrecto.
+    final medians = _rssiBySector.map(_median).toList(growable: false);
+    // La antena y el cuerpo no producen un haz estrecho. Suavizar sectores
+    // vecinos representa mejor ese lóbulo amplio sin fingir resolución fina.
+    final scores = List<double>.generate(medians.length, (index) {
+      final previous = medians[(index - 1 + medians.length) % medians.length];
+      final current = medians[index];
+      final next = medians[(index + 1) % medians.length];
+      return previous * 0.25 + current * 0.5 + next * 0.25;
+    });
     var strongestSector = 0;
-    for (var index = 1; index < averages.length; index++) {
-      if (averages[index] > averages[strongestSector]) {
+    for (var index = 1; index < scores.length; index++) {
+      if (scores[index] > scores[strongestSector]) {
         strongestSector = index;
       }
     }
-    final average = averages.reduce((a, b) => a + b) / averages.length;
-    final contrastDb = averages[strongestSector] - average;
+    final background = <double>[
+      for (var index = 0; index < scores.length; index++)
+        if (index != strongestSector &&
+            index != (strongestSector - 1 + scores.length) % scores.length &&
+            index != (strongestSector + 1) % scores.length)
+          scores[index],
+    ];
+    final contrastDb = scores[strongestSector] - _median(background);
     return SweepEstimate(
       headingDegrees: (strongestSector + 0.5) * (360 / sectorCount),
       confidence: (contrastDb / confidenceScaleDb).clamp(0.0, 1.0),
@@ -241,5 +259,12 @@ class SweepEstimator {
   static double _normalizeHeading(double heading) {
     final normalized = heading % 360;
     return normalized < 0 ? normalized + 360 : normalized;
+  }
+
+  static double _median(Iterable<double> values) {
+    final sorted = values.toList(growable: false)..sort();
+    final middle = sorted.length ~/ 2;
+    if (sorted.length.isOdd) return sorted[middle];
+    return (sorted[middle - 1] + sorted[middle]) / 2;
   }
 }

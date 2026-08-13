@@ -672,7 +672,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get radarSweepRestart => '重新扫描';
 
   @override
-  String get radarSweepInstruction => '将手机贴在胸前，缓慢转动一整圈。';
+  String get radarSweepHoldTitle => '如何握持手机';
+
+  @override
+  String get radarSweepInstruction => '将手机水平放在胸前，屏幕朝上、顶部朝前。缓慢转动整个身体。';
 
   @override
   String radarSweepProgress(int percent) {
@@ -681,7 +684,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String radarSweepResult(int heading) {
-    return '估计信号方位：$heading°';
+    return '信号可能所在扇区：$heading°（±30°）';
   }
 
   @override
@@ -690,7 +693,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get radarSweepEstimateWarning => '这是 RSSI 估计值，并非精确方向。请移动位置并重新扫描以验证。';
+  String get radarSweepInconclusive => '未找到可靠扇区。请更慢转动，并远离金属或电子设备。';
+
+  @override
+  String get radarSweepEstimateWarning =>
+      'BLE 只能估计较宽的扇区，无法提供精确方向。请移动位置并重新扫描确认。';
 
   @override
   String get radarCompassUnavailable => '此手机没有可用的指南针传感器。距离雷达仍可使用。';

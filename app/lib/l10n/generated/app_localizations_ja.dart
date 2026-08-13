@@ -685,7 +685,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get radarSweepRestart => 'スイープをやり直す';
 
   @override
-  String get radarSweepInstruction => 'スマートフォンを胸に当て、ゆっくり一周してください。';
+  String get radarSweepHoldTitle => 'スマートフォンの持ち方';
+
+  @override
+  String get radarSweepInstruction =>
+      '画面を上にして胸の前で水平に持ち、上端を正面に向けます。体全体をゆっくり回してください。';
 
   @override
   String radarSweepProgress(int percent) {
@@ -694,7 +698,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String radarSweepResult(int heading) {
-    return '推定信号方位：$heading°';
+    return '信号がある可能性の高い範囲：$heading°（±30°）';
   }
 
   @override
@@ -703,8 +707,12 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get radarSweepInconclusive =>
+      '信頼できる範囲を特定できませんでした。よりゆっくり回り、金属や電子機器から離れてください。';
+
+  @override
   String get radarSweepEstimateWarning =>
-      'これは RSSI による推定で、正確な方向ではありません。移動して再度スイープし、確認してください。';
+      'BLE で推定できるのは広い範囲だけで、正確な方向ではありません。移動して再度スイープし、確認してください。';
 
   @override
   String get radarCompassUnavailable =>

@@ -1281,10 +1281,16 @@ abstract class AppLocalizations {
   /// **'REPEAT SWEEP'**
   String get radarSweepRestart;
 
+  /// No description provided for @radarSweepHoldTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'How to hold the phone'**
+  String get radarSweepHoldTitle;
+
   /// No description provided for @radarSweepInstruction.
   ///
   /// In en, this message translates to:
-  /// **'Hold the phone against your chest and turn slowly through one full circle.'**
+  /// **'Keep it flat in front of your chest, screen up and top edge pointing forward. Slowly turn your whole body.'**
   String get radarSweepInstruction;
 
   /// No description provided for @radarSweepProgress.
@@ -1296,7 +1302,7 @@ abstract class AppLocalizations {
   /// No description provided for @radarSweepResult.
   ///
   /// In en, this message translates to:
-  /// **'Estimated signal heading: {heading}°'**
+  /// **'Probable signal sector: {heading}° (±30°)'**
   String radarSweepResult(int heading);
 
   /// No description provided for @radarSweepConfidence.
@@ -1305,10 +1311,16 @@ abstract class AppLocalizations {
   /// **'Confidence: {percent}%'**
   String radarSweepConfidence(int percent);
 
+  /// No description provided for @radarSweepInconclusive.
+  ///
+  /// In en, this message translates to:
+  /// **'No reliable sector was found. Turn more slowly and move away from metal or electronic equipment.'**
+  String get radarSweepInconclusive;
+
   /// No description provided for @radarSweepEstimateWarning.
   ///
   /// In en, this message translates to:
-  /// **'This is an RSSI estimate, not a precise direction. Verify it by moving and repeating the sweep.'**
+  /// **'BLE can only estimate a broad sector, not an exact direction. Confirm it by moving and repeating the sweep.'**
   String get radarSweepEstimateWarning;
 
   /// No description provided for @radarCompassUnavailable.

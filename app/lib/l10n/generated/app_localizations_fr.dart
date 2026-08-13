@@ -711,8 +711,11 @@ class AppLocalizationsFr extends AppLocalizations {
   String get radarSweepRestart => 'REFAIRE LE BALAYAGE';
 
   @override
+  String get radarSweepHoldTitle => 'Comment tenir le téléphone';
+
+  @override
   String get radarSweepInstruction =>
-      'Tenez le téléphone contre votre poitrine et tournez lentement sur un tour complet.';
+      'Gardez-le à plat devant la poitrine, écran vers le haut et bord supérieur vers l’avant. Tournez lentement tout le corps.';
 
   @override
   String radarSweepProgress(int percent) {
@@ -721,7 +724,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String radarSweepResult(int heading) {
-    return 'Cap estimé du signal : $heading°';
+    return 'Secteur probable du signal : $heading° (±30°)';
   }
 
   @override
@@ -730,8 +733,12 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String get radarSweepInconclusive =>
+      'Aucun secteur fiable détecté. Tournez plus lentement et éloignez-vous du métal ou des appareils électroniques.';
+
+  @override
   String get radarSweepEstimateWarning =>
-      'Il s’agit d’une estimation RSSI, pas d’une direction précise. Vérifiez-la en vous déplaçant et en recommençant.';
+      'Le BLE estime seulement un secteur large, pas une direction exacte. Confirmez-le en vous déplaçant et en recommençant.';
 
   @override
   String get radarCompassUnavailable =>

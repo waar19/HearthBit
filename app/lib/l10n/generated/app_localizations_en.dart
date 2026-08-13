@@ -707,8 +707,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get radarSweepRestart => 'REPEAT SWEEP';
 
   @override
+  String get radarSweepHoldTitle => 'How to hold the phone';
+
+  @override
   String get radarSweepInstruction =>
-      'Hold the phone against your chest and turn slowly through one full circle.';
+      'Keep it flat in front of your chest, screen up and top edge pointing forward. Slowly turn your whole body.';
 
   @override
   String radarSweepProgress(int percent) {
@@ -717,7 +720,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String radarSweepResult(int heading) {
-    return 'Estimated signal heading: $heading°';
+    return 'Probable signal sector: $heading° (±30°)';
   }
 
   @override
@@ -726,8 +729,12 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get radarSweepInconclusive =>
+      'No reliable sector was found. Turn more slowly and move away from metal or electronic equipment.';
+
+  @override
   String get radarSweepEstimateWarning =>
-      'This is an RSSI estimate, not a precise direction. Verify it by moving and repeating the sweep.';
+      'BLE can only estimate a broad sector, not an exact direction. Confirm it by moving and repeating the sweep.';
 
   @override
   String get radarCompassUnavailable =>
