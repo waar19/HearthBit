@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth_bit/models/mesh_models.dart';
+import 'package:hearth_bit/services/radar_fusion.dart';
 import 'package:hearth_bit/services/radar_signal.dart';
 
 void main() {
@@ -168,6 +169,79 @@ void main() {
         ).hasUsableDirection,
         isTrue,
       );
+    });
+  });
+
+  group('RadarFusion', () {
+    RadarFusionResult evaluate({
+      RadarProximity proximity = RadarProximity.inRange,
+      SweepEstimate? bleEstimate,
+      double heading = 0,
+      double distance = 100,
+      double localAccuracy = 3,
+      double? targetAccuracy = 5,
+      double targetLatitude = 0.001,
+      double targetLongitude = 0,
+    }) => RadarFusion.evaluate(
+      proximity: proximity,
+      bleEstimate: bleEstimate,
+      headingDegrees: heading,
+      localLatitude: 0,
+      localLongitude: 0,
+      localAccuracyMeters: localAccuracy,
+      targetLatitude: targetLatitude,
+      targetLongitude: targetLongitude,
+      targetAccuracyMeters: targetAccuracy,
+      gpsDistanceMeters: distance,
+    );
+
+    test('calcula rumbo relativo cruzando cero grados', () {
+      expect(RadarFusion.signedAngularDelta(350, 10), 20);
+      expect(RadarFusion.signedAngularDelta(10, 350), -20);
+      expect(RadarFusion.bearingBetween(0, 0, 1, 0), closeTo(0, 0.01));
+      expect(RadarFusion.bearingBetween(0, 0, 0, 1), closeTo(90, 0.01));
+    });
+
+    test('prioriza GPS cuando la precisión es adecuada para la distancia', () {
+      final result = evaluate();
+
+      expect(result.gpsReliable, isTrue);
+      expect(result.source, RadarDirectionSource.gps);
+      expect(result.gpsBearingDegrees, closeTo(0, 0.01));
+    });
+
+    test('oculta el sector BLE cuando la señal indica menos de dos metros', () {
+      final result = evaluate(
+        proximity: RadarProximity.veryClose,
+        bleEstimate: const SweepEstimate(headingDegrees: 180, confidence: 0.9),
+        distance: 5,
+      );
+
+      expect(result.bleSuppressedVeryClose, isTrue);
+      expect(result.showBleSector, isFalse);
+      expect(result.source, RadarDirectionSource.none);
+    });
+
+    test('degrada BLE cuando contradice un rumbo GPS fiable', () {
+      final result = evaluate(
+        bleEstimate: const SweepEstimate(headingDegrees: 180, confidence: 0.9),
+      );
+
+      expect(result.sourcesDisagree, isTrue);
+      expect(result.adjustedBleConfidence, closeTo(0.315, 0.001));
+      expect(result.source, RadarDirectionSource.gps);
+    });
+
+    test('usa BLE si GPS no es fiable a corta distancia', () {
+      final result = evaluate(
+        proximity: RadarProximity.close,
+        bleEstimate: const SweepEstimate(headingDegrees: 60, confidence: 0.8),
+        distance: 8,
+      );
+
+      expect(result.gpsReliable, isFalse);
+      expect(result.source, RadarDirectionSource.ble);
+      expect(result.showBleSector, isTrue);
     });
   });
 

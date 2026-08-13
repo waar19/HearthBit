@@ -703,6 +703,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get radarCompassUnavailable => '此手机没有可用的指南针传感器。距离雷达仍可使用。';
 
   @override
+  String get radarCompassCalibration => '请远离金属或电子设备，并用手机画“8”字以校准指南针。';
+
+  @override
+  String get radarDirectionGps => 'GPS 方位引导 · 跟随蓝色菱形';
+
+  @override
+  String get radarDirectionBle => '通过 BLE 扫描估计的扇区';
+
+  @override
+  String get radarDirectionVeryClose =>
+      '你已非常接近：此时 BLE 扇区不再可靠，因此已隐藏。请转动身体并跟随振动。';
+
+  @override
+  String get radarSourcesDisagree => 'GPS 与 BLE 方向不一致；优先采用 GPS 方位。';
+
+  @override
   String get dateToday => '今天';
 
   @override

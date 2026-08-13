@@ -662,6 +662,31 @@ void main() {
     expect(controller.peers, isEmpty);
   });
 
+  test('consume ubicación privada de radar sin guardarla como chat', () async {
+    final timestamp = DateTime.now();
+    platform.emit({
+      'type': 'message',
+      'message': {
+        'id': 'radar-location-1',
+        'sender': 'Rescate',
+        'content': RadarLocationUpdate.encode(
+          latitude: 4.60971,
+          longitude: -74.08175,
+          accuracyMeters: 3.5,
+          timestamp: timestamp,
+        ),
+        'senderPeerId': 'peer-radar',
+        'private': true,
+        'mine': false,
+        'timestamp': timestamp.millisecondsSinceEpoch,
+      },
+    });
+    await pumpEvents();
+
+    expect(controller.messages, isEmpty);
+    expect(repository.saved, isEmpty);
+  });
+
   test('el borrado de pánico elimina el consentimiento local', () async {
     await controller.allowRadarFor15Minutes();
     await controller.panicWipe();

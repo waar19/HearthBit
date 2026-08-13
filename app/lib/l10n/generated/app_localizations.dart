@@ -1329,6 +1329,36 @@ abstract class AppLocalizations {
   /// **'This phone has no usable compass sensor. Proximity radar remains available.'**
   String get radarCompassUnavailable;
 
+  /// No description provided for @radarCompassCalibration.
+  ///
+  /// In en, this message translates to:
+  /// **'Move the phone away from metal or electronics and trace a figure eight to calibrate the compass.'**
+  String get radarCompassCalibration;
+
+  /// No description provided for @radarDirectionGps.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS-guided bearing · follow the blue diamond'**
+  String get radarDirectionGps;
+
+  /// No description provided for @radarDirectionBle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sector estimated by BLE sweep'**
+  String get radarDirectionBle;
+
+  /// No description provided for @radarDirectionVeryClose.
+  ///
+  /// In en, this message translates to:
+  /// **'You are very close: the BLE sector is hidden because it is no longer reliable. Turn and follow the vibration.'**
+  String get radarDirectionVeryClose;
+
+  /// No description provided for @radarSourcesDisagree.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS and BLE disagree; the GPS bearing takes priority.'**
+  String get radarSourcesDisagree;
+
   /// No description provided for @dateToday.
   ///
   /// In en, this message translates to:

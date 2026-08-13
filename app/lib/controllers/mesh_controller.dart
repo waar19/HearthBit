@@ -38,6 +38,8 @@ class MeshController extends ChangeNotifier {
   /// bastante frecuente para seguir a una persona que se mueve, lo bastante
   /// espaciado para no agotar batería ni saturar la malla.
   static const Duration rescueInterval = Duration(minutes: 5);
+  static const Duration radarLocationInterval = Duration(seconds: 20);
+  static const double radarLocationDistanceMeters = 15;
 
   final MeshPlatformService _platform;
   final MessageRepository _repository;
@@ -49,8 +51,11 @@ class MeshController extends ChangeNotifier {
   final Random _random = Random.secure();
 
   StreamSubscription<Map<Object?, Object?>>? _subscription;
+  StreamSubscription<Position>? _radarPositionSubscription;
   bool _drainingPrivateMessageOutbox = false;
   bool _privateMessageOutboxDrainRequested = false;
+  bool _startingRadarLocationSharing = false;
+  bool _sendingRadarLocation = false;
   Completer<void>? _privateMessageOutboxDrainCompleter;
   MeshConnectionStatus status = MeshConnectionStatus.stopped;
   String nickname = '';
@@ -66,6 +71,10 @@ class MeshController extends ChangeNotifier {
   DateTime? lastRescuePing;
   Timer? _rescueTimer;
   Timer? _consentTimer;
+  Timer? _radarLocationTimer;
+  Position? _latestRadarPosition;
+  Position? _lastSharedRadarPosition;
+  DateTime? _lastRadarLocationShareAt;
 
   /// Vacía significa «usar el texto por defecto localizado» ([sendSos]).
   String _rescueDescription = '';
@@ -182,10 +191,13 @@ class MeshController extends ChangeNotifier {
     final capabilities = await _platform.getCapabilities();
     supportsBackgroundRelay = capabilities['backgroundRelay'] as bool? ?? false;
     await refreshPowerStatus();
-    _consentTimer ??= Timer.periodic(
-      const Duration(seconds: 30),
-      (_) => notifyListeners(),
-    );
+    _consentTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
+      if (radarConsentUntil != null && !radarConsentActive) {
+        radarConsentUntil = null;
+        _syncRadarLocationSharing();
+      }
+      notifyListeners();
+    });
     _requestPrivateMessageOutboxDrain();
     notifyListeners();
   }
@@ -249,6 +261,7 @@ class MeshController extends ChangeNotifier {
       _rescueTimer?.cancel();
       _rescueTimer = null;
       rescueMode = false;
+      _stopRadarLocationSharing();
       await revokeRadarConsent();
       notifyListeners();
       return;
@@ -262,7 +275,6 @@ class MeshController extends ChangeNotifier {
     await ensureAlwaysLocation();
     await _rescuePing();
     _rescueTimer?.cancel();
-    _consentTimer?.cancel();
     _rescueTimer = Timer.periodic(
       interval ?? rescueInterval,
       (_) => unawaited(_rescuePing()),
@@ -298,6 +310,7 @@ class MeshController extends ChangeNotifier {
 
   Future<void> stop() async {
     await setRescueMode(false);
+    _stopRadarLocationSharing();
     await _platform.stop();
     status = MeshConnectionStatus.stopped;
     _presences.clear();
@@ -462,13 +475,144 @@ class MeshController extends ChangeNotifier {
   Future<void> allowRadarFor15Minutes() async {
     await _platform.setRadarConsent(enabled: true);
     radarConsentUntil = DateTime.now().add(const Duration(minutes: 15));
+    await ensureAlwaysLocation();
+    _syncRadarLocationSharing();
     notifyListeners();
   }
 
   Future<void> revokeRadarConsent() async {
     await _platform.setRadarConsent(enabled: false);
     radarConsentUntil = null;
+    _stopRadarLocationSharing();
     notifyListeners();
+  }
+
+  void _syncRadarLocationSharing() {
+    if (radarConsentActive && canSend) {
+      unawaited(_startRadarLocationSharing());
+    } else {
+      _stopRadarLocationSharing();
+    }
+  }
+
+  Future<void> _startRadarLocationSharing() async {
+    if (_startingRadarLocationSharing ||
+        _radarPositionSubscription != null ||
+        !radarConsentActive ||
+        !canSend) {
+      return;
+    }
+    _startingRadarLocationSharing = true;
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return;
+      final permission = await Geolocator.checkPermission();
+      if (permission != LocationPermission.always &&
+          permission != LocationPermission.whileInUse) {
+        return;
+      }
+      _radarPositionSubscription =
+          Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              distanceFilter: radarLocationDistanceMeters.toInt(),
+            ),
+          ).listen((position) {
+            _latestRadarPosition = position;
+            unawaited(_shareRadarLocation(position));
+          }, onError: (_) {});
+      _radarLocationTimer ??= Timer.periodic(
+        radarLocationInterval,
+        (_) => unawaited(_shareLatestRadarLocation()),
+      );
+      final position = await _currentPosition();
+      if (position != null) {
+        _latestRadarPosition = position;
+        await _shareRadarLocation(position, force: true);
+      }
+    } catch (_) {
+      _stopRadarLocationSharing();
+    } finally {
+      _startingRadarLocationSharing = false;
+    }
+  }
+
+  Future<void> _shareLatestRadarLocation() async {
+    if (!radarConsentActive || !canSend) {
+      _stopRadarLocationSharing();
+      return;
+    }
+    final position = _latestRadarPosition ?? await _currentPosition();
+    if (position != null) {
+      _latestRadarPosition = position;
+      await _shareRadarLocation(position);
+    }
+  }
+
+  Future<void> _shareRadarLocation(
+    Position position, {
+    bool force = false,
+  }) async {
+    if (_sendingRadarLocation || !radarConsentActive || !canSend) return;
+    final now = DateTime.now();
+    final previous = _lastSharedRadarPosition;
+    final moved = previous == null
+        ? double.infinity
+        : Geolocator.distanceBetween(
+            previous.latitude,
+            previous.longitude,
+            position.latitude,
+            position.longitude,
+          );
+    final elapsed = now.difference(
+      _lastRadarLocationShareAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+    );
+    if (!force &&
+        moved < radarLocationDistanceMeters &&
+        elapsed < radarLocationInterval) {
+      return;
+    }
+    final recipients = _peers
+        .where(
+          (peer) => peer.secure && peer.role.canChat && peer.supportsTransfers,
+        )
+        .toList(growable: false);
+    if (recipients.isEmpty) return;
+
+    _sendingRadarLocation = true;
+    var delivered = false;
+    final content = RadarLocationUpdate.encode(
+      latitude: position.latitude,
+      longitude: position.longitude,
+      accuracyMeters: position.accuracy,
+      timestamp: now,
+    );
+    try {
+      for (final peer in recipients) {
+        try {
+          await _platform.sendPrivate(peer.id, content);
+          delivered = true;
+        } catch (_) {
+          // La ubicación es efímera: nunca se encola para entrega posterior.
+        }
+      }
+      if (delivered) {
+        _lastSharedRadarPosition = position;
+        _lastRadarLocationShareAt = now;
+      }
+    } finally {
+      _sendingRadarLocation = false;
+    }
+  }
+
+  void _stopRadarLocationSharing() {
+    _radarLocationTimer?.cancel();
+    _radarLocationTimer = null;
+    final subscription = _radarPositionSubscription;
+    _radarPositionSubscription = null;
+    if (subscription != null) unawaited(subscription.cancel());
+    _latestRadarPosition = null;
+    _lastSharedRadarPosition = null;
+    _lastRadarLocationShareAt = null;
   }
 
   Future<void> panicWipe() async {
@@ -483,6 +627,7 @@ class MeshController extends ChangeNotifier {
     nickname = '';
     peerId = '';
     radarConsentUntil = null;
+    _stopRadarLocationSharing();
     notifyListeners();
   }
 
@@ -688,6 +833,7 @@ class MeshController extends ChangeNotifier {
         final rawMessage = event['message'];
         if (rawMessage is Map<Object?, Object?>) {
           final message = MeshMessage.fromMap(rawMessage);
+          if (message.isRadarLocation) break;
           if (_messages.every((existing) => existing.id != message.id)) {
             _messages.add(message);
             _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
@@ -708,6 +854,7 @@ class MeshController extends ChangeNotifier {
         _knownPeers.clear();
         status = MeshConnectionStatus.stopped;
         radarConsentUntil = null;
+        _stopRadarLocationSharing();
         break;
       case 'rssi':
         // Lecturas del radar de rescate: las consume RadarScreen directamente
@@ -740,6 +887,7 @@ class MeshController extends ChangeNotifier {
     if (!couldSend && canSend) {
       _requestPrivateMessageOutboxDrain();
     }
+    _syncRadarLocationSharing();
   }
 
   void _applyRadarConsent(Map<Object?, Object?> event) {
@@ -748,6 +896,7 @@ class MeshController extends ChangeNotifier {
       radarConsentUntil = value.toInt() > 0
           ? DateTime.fromMillisecondsSinceEpoch(value.toInt())
           : null;
+      _syncRadarLocationSharing();
     }
   }
 
@@ -776,6 +925,21 @@ class MeshController extends ChangeNotifier {
     );
     if (hasNewlyEligiblePeer) {
       _requestPrivateMessageOutboxDrain();
+    }
+    final hasRadarRecipient = _peers.any(
+      (peer) =>
+          peer.secure &&
+          peer.role.canChat &&
+          peer.supportsTransfers &&
+          !previouslyEligible.contains(peer.id),
+    );
+    if (hasRadarRecipient && radarConsentActive) {
+      final position = _latestRadarPosition;
+      if (position != null) {
+        unawaited(_shareRadarLocation(position, force: true));
+      } else {
+        _syncRadarLocationSharing();
+      }
     }
     _ensurePendingPrivateChannels();
   }
@@ -820,6 +984,8 @@ class MeshController extends ChangeNotifier {
   @override
   void dispose() {
     _rescueTimer?.cancel();
+    _consentTimer?.cancel();
+    _stopRadarLocationSharing();
     _subscription?.cancel();
     super.dispose();
   }

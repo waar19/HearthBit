@@ -745,6 +745,24 @@ class AppLocalizationsFr extends AppLocalizations {
       'Ce téléphone ne dispose pas d’une boussole utilisable. Le radar de proximité reste disponible.';
 
   @override
+  String get radarCompassCalibration =>
+      'Éloignez le téléphone du métal ou des appareils électroniques et décrivez un huit pour calibrer la boussole.';
+
+  @override
+  String get radarDirectionGps => 'Cap guidé par GPS · suivez le losange bleu';
+
+  @override
+  String get radarDirectionBle => 'Secteur estimé par balayage BLE';
+
+  @override
+  String get radarDirectionVeryClose =>
+      'Vous êtes très proche : le secteur BLE est masqué car il n’est plus fiable. Tournez-vous et suivez les vibrations.';
+
+  @override
+  String get radarSourcesDisagree =>
+      'Le GPS et le BLE divergent ; le cap GPS est prioritaire.';
+
+  @override
   String get dateToday => 'Aujourd’hui';
 
   @override

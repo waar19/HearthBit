@@ -63,6 +63,57 @@ void main() {
     expect(message.voiceDurationSeconds, 14);
   });
 
+  test('ubicación de radar privada conserva GPS, precisión y fecha', () {
+    final timestamp = DateTime.fromMillisecondsSinceEpoch(1_700_000_000_000);
+    final content = RadarLocationUpdate.encode(
+      latitude: 4.609710,
+      longitude: -74.081750,
+      accuracyMeters: 4.2,
+      timestamp: timestamp,
+    );
+    final message = MeshMessage(
+      id: 'location-1',
+      sender: 'Ana',
+      content: content,
+      senderPeerId: 'peer-a',
+      isPrivate: true,
+      isMine: false,
+      timestamp: timestamp,
+    );
+
+    expect(message.isRadarLocation, isTrue);
+    expect(message.radarLocation?.latitude, closeTo(4.609710, 0.000001));
+    expect(message.radarLocation?.longitude, closeTo(-74.081750, 0.000001));
+    expect(message.radarLocation?.accuracyMeters, 4.2);
+    expect(message.radarLocation?.timestamp, timestamp);
+  });
+
+  test('rechaza ubicación de radar pública o fuera de rango', () {
+    final timestamp = DateTime.fromMillisecondsSinceEpoch(1_700_000_000_000);
+    final publicMessage = MeshMessage(
+      id: 'location-2',
+      sender: 'Ana',
+      content: RadarLocationUpdate.encode(
+        latitude: 4,
+        longitude: -74,
+        accuracyMeters: 5,
+        timestamp: timestamp,
+      ),
+      senderPeerId: 'peer-a',
+      isPrivate: false,
+      isMine: false,
+      timestamp: timestamp,
+    );
+
+    expect(publicMessage.radarLocation, isNull);
+    expect(
+      RadarLocationUpdate.tryParse(
+        '[HB-LOC|91.000000|-74.000000|5.0|1700000000000]',
+      ),
+      isNull,
+    );
+  });
+
   test('configuración de gateway exige servidor, destino y puerto', () {
     const valid = EmergencyGatewayConfig(
       kind: EmergencyGatewayKind.matrix,

@@ -7,7 +7,9 @@ import 'package:flutter_compass/flutter_compass.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../l10n/l10n.dart';
+import '../models/mesh_models.dart';
 import '../services/mesh_platform_service.dart';
+import '../services/radar_fusion.dart';
 import '../services/radar_signal.dart';
 
 /// Radar de rescate estilo AirTag: mide la intensidad de la señal BLE del
@@ -66,15 +68,24 @@ class _RadarScreenState extends State<RadarScreen>
   String? _startError;
   double? _gpsDistanceMeters;
   double? _headingDegrees;
+  double? _compassAccuracyDegrees;
+  Position? _localPosition;
+  double? _targetLatitude;
+  double? _targetLongitude;
+  double? _targetAccuracyMeters;
+  DateTime? _targetPositionAt;
   SweepEstimate? _directionEstimate;
   DateTime _lastHaptic = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
     super.initState();
+    _targetLatitude = widget.latitude;
+    _targetLongitude = widget.longitude;
     unawaited(_startRadar());
     _events = _platform.events.listen(_onEvent);
     _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) => _tick());
+    _startCompassTracking();
     _watchGps();
   }
 
@@ -88,6 +99,13 @@ class _RadarScreenState extends State<RadarScreen>
   }
 
   void _onEvent(Map<Object?, Object?> event) {
+    if (event['type'] == 'message') {
+      final rawMessage = event['message'];
+      if (rawMessage is Map<Object?, Object?>) {
+        _handleLocationMessage(MeshMessage.fromMap(rawMessage));
+      }
+      return;
+    }
     if (event['type'] == 'radarExpired' &&
         (event['peerId'] as String?)?.toLowerCase() ==
             widget.peerId.toLowerCase()) {
@@ -125,18 +143,30 @@ class _RadarScreenState extends State<RadarScreen>
   }
 
   void _startDirectionSweep() {
-    final compassStream = FlutterCompass.events;
-    if (compassStream == null) {
+    if (_compassEvents == null) {
       setState(() => _compassUnavailable = true);
       return;
     }
     _sweepEstimator.reset();
-    _compassEvents ??= compassStream.listen(
+    setState(() {
+      _sweepActive = true;
+      _directionEstimate = null;
+    });
+  }
+
+  void _startCompassTracking() {
+    final compassStream = FlutterCompass.events;
+    if (compassStream == null) {
+      _compassUnavailable = true;
+      return;
+    }
+    _compassEvents = compassStream.listen(
       (event) {
         if (!mounted) return;
         final heading = event.heading;
         setState(() {
           _headingDegrees = heading;
+          _compassAccuracyDegrees = event.accuracy;
           _compassUnavailable = heading == null;
         });
       },
@@ -144,11 +174,6 @@ class _RadarScreenState extends State<RadarScreen>
         if (mounted) setState(() => _compassUnavailable = true);
       },
     );
-    setState(() {
-      _sweepActive = true;
-      _compassUnavailable = false;
-      _directionEstimate = null;
-    });
   }
 
   void _tick() {
@@ -194,13 +219,9 @@ class _RadarScreenState extends State<RadarScreen>
     }
   }
 
-  /// Si el SOS traía coordenadas, muestra la distancia en línea recta desde
-  /// la posición actual del rescatista (complementa al radar BLE de corto
-  /// alcance para la aproximación inicial).
+  /// Mantiene la posición del rescatista aun si el radar se abrió sin un SOS:
+  /// una actualización privada HB-LOC puede aportar luego el objetivo.
   Future<void> _watchGps() async {
-    final lat = widget.latitude;
-    final lon = widget.longitude;
-    if (lat == null || lon == null) return;
     try {
       if (!await Geolocator.isLocationServiceEnabled()) return;
       var permission = await Geolocator.checkPermission();
@@ -220,17 +241,97 @@ class _RadarScreenState extends State<RadarScreen>
           ).listen((position) {
             if (!mounted) return;
             setState(() {
-              _gpsDistanceMeters = Geolocator.distanceBetween(
-                position.latitude,
-                position.longitude,
-                lat,
-                lon,
-              );
+              _localPosition = position;
+              _updateGpsDistance();
             });
           });
+      final current = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
+      if (mounted) {
+        setState(() {
+          _localPosition = current;
+          _updateGpsDistance();
+        });
+      }
     } catch (_) {
       // Sin GPS disponible el radar BLE sigue funcionando.
     }
+  }
+
+  void _handleLocationMessage(MeshMessage message) {
+    if (message.senderPeerId.toLowerCase() != widget.peerId.toLowerCase()) {
+      return;
+    }
+    final radarLocation = message.radarLocation;
+    if (radarLocation != null) {
+      final now = DateTime.now();
+      if (radarLocation.timestamp.isAfter(
+        now.add(const Duration(minutes: 2)),
+      )) {
+        return;
+      }
+      _applyTargetLocation(
+        latitude: radarLocation.latitude,
+        longitude: radarLocation.longitude,
+        accuracyMeters: radarLocation.accuracyMeters,
+        timestamp: radarLocation.timestamp,
+      );
+      return;
+    }
+    final checkIn = message.checkIn;
+    if (checkIn?.latitude != null && checkIn?.longitude != null) {
+      _applyTargetLocation(
+        latitude: checkIn!.latitude!,
+        longitude: checkIn.longitude!,
+        timestamp: checkIn.timestamp,
+      );
+      return;
+    }
+    final latitude = message.sosLatitude;
+    final longitude = message.sosLongitude;
+    if (message.isSos && latitude != null && longitude != null) {
+      _applyTargetLocation(
+        latitude: latitude,
+        longitude: longitude,
+        timestamp: message.timestamp,
+      );
+    }
+  }
+
+  void _applyTargetLocation({
+    required double latitude,
+    required double longitude,
+    required DateTime timestamp,
+    double? accuracyMeters,
+  }) {
+    final previous = _targetPositionAt;
+    if (previous != null && timestamp.isBefore(previous)) return;
+    if (!mounted) return;
+    setState(() {
+      _targetLatitude = latitude;
+      _targetLongitude = longitude;
+      _targetAccuracyMeters = accuracyMeters;
+      _targetPositionAt = timestamp;
+      _updateGpsDistance();
+    });
+  }
+
+  void _updateGpsDistance() {
+    final local = _localPosition;
+    final latitude = _targetLatitude;
+    final longitude = _targetLongitude;
+    _gpsDistanceMeters = local == null || latitude == null || longitude == null
+        ? null
+        : Geolocator.distanceBetween(
+            local.latitude,
+            local.longitude,
+            latitude,
+            longitude,
+          );
   }
 
   @override
@@ -250,6 +351,7 @@ class _RadarScreenState extends State<RadarScreen>
     final theme = Theme.of(context);
     final reading = _reading;
     final searching = reading == null;
+    final fusion = _fusionResult();
     return Scaffold(
       backgroundColor: const Color(0xFF07120D),
       appBar: AppBar(
@@ -272,7 +374,8 @@ class _RadarScreenState extends State<RadarScreen>
                         pulseProgress: _pulse.value,
                         strength: _stale ? null : reading?.strength,
                         directionSweepSectors: _sweepEstimator.sectorCoverage,
-                        estimatedDirectionRadians: _estimatedDirectionRadians(),
+                        estimatedDirectionRadians: _bleDirectionRadians(fusion),
+                        gpsDirectionRadians: _gpsDirectionRadians(fusion),
                       ),
                     ),
                   ),
@@ -283,9 +386,9 @@ class _RadarScreenState extends State<RadarScreen>
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
               child: Column(
                 children: [
-                  _buildPanel(theme, reading, searching),
+                  _buildPanel(theme, reading, searching, fusion),
                   const SizedBox(height: 10),
-                  _buildDirectionSweep(),
+                  _buildDirectionSweep(fusion),
                   const SizedBox(height: 10),
                   Text(
                     '${_consentLabel()}\n${context.l10n.radarConsentExpires(_formatExpiry())}\n${context.l10n.radarNotDirection}',
@@ -301,7 +404,7 @@ class _RadarScreenState extends State<RadarScreen>
     );
   }
 
-  Widget _buildDirectionSweep() {
+  Widget _buildDirectionSweep(RadarFusionResult fusion) {
     const green = Color(0xFF4ADE80);
     const dim = Color(0xFF94A3B8);
     final estimate = _directionEstimate;
@@ -312,6 +415,16 @@ class _RadarScreenState extends State<RadarScreen>
         if (showHoldingGuide) ...[
           _SweepHoldingGuide(animation: _sweep, active: _sweepActive),
           const SizedBox(height: 10),
+        ],
+        if (_compassNeedsCalibration) ...[
+          const Icon(Icons.screen_rotation_alt_outlined, color: Colors.amber),
+          const SizedBox(height: 6),
+          Text(
+            context.l10n.radarCompassCalibration,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.amber, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
         ],
         if (_compassUnavailable) ...[
           const Icon(Icons.explore_off_outlined, color: dim),
@@ -335,7 +448,24 @@ class _RadarScreenState extends State<RadarScreen>
             style: const TextStyle(color: dim, fontSize: 12),
           ),
         ] else if (estimate != null) ...[
-          if (estimate.hasUsableDirection) ...[
+          if (fusion.bleSuppressedVeryClose) ...[
+            const Icon(Icons.vibration, color: Colors.amber),
+            const SizedBox(height: 6),
+            Text(
+              context.l10n.radarDirectionVeryClose,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white),
+            ),
+          ] else if (fusion.sourcesDisagree) ...[
+            const Icon(Icons.compare_arrows, color: Colors.amber),
+            const SizedBox(height: 6),
+            Text(
+              context.l10n.radarSourcesDisagree,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white),
+            ),
+          ] else if (fusion.adjustedBleConfidence >=
+              SweepEstimate.minimumDirectionalConfidence) ...[
             Text(
               context.l10n.radarSweepResult(estimate.headingDegrees.round()),
               textAlign: TextAlign.center,
@@ -356,9 +486,15 @@ class _RadarScreenState extends State<RadarScreen>
           const SizedBox(height: 6),
           Text(
             context.l10n.radarSweepConfidence(
-              (estimate.confidence * 100).round(),
+              (fusion.adjustedBleConfidence * 100).round(),
             ),
-            style: TextStyle(color: estimate.hasUsableDirection ? green : dim),
+            style: TextStyle(
+              color:
+                  fusion.adjustedBleConfidence >=
+                      SweepEstimate.minimumDirectionalConfidence
+                  ? green
+                  : dim,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
@@ -384,16 +520,52 @@ class _RadarScreenState extends State<RadarScreen>
     );
   }
 
-  double? _estimatedDirectionRadians() {
-    final estimate = _directionEstimate;
-    final heading = _headingDegrees;
-    if (estimate == null || !estimate.hasUsableDirection || heading == null) {
-      return null;
-    }
-    return (estimate.headingDegrees - heading) * math.pi / 180;
+  RadarFusionResult _fusionResult() {
+    final local = _localPosition;
+    return RadarFusion.evaluate(
+      proximity: _stale ? null : _reading?.proximity,
+      bleEstimate: _stale ? null : _directionEstimate,
+      headingDegrees: _headingDegrees,
+      localLatitude: local?.latitude,
+      localLongitude: local?.longitude,
+      localAccuracyMeters: local?.accuracy,
+      targetLatitude: _targetLatitude,
+      targetLongitude: _targetLongitude,
+      targetAccuracyMeters: _targetAccuracyMeters,
+      gpsDistanceMeters: _gpsDistanceMeters,
+    );
   }
 
-  Widget _buildPanel(ThemeData theme, RadarReading? reading, bool searching) {
+  bool get _compassNeedsCalibration {
+    final accuracy = _compassAccuracyDegrees;
+    return accuracy != null && accuracy > 20;
+  }
+
+  double? _bleDirectionRadians(RadarFusionResult fusion) {
+    final estimate = _directionEstimate;
+    final heading = _headingDegrees;
+    if (!fusion.showBleSector || estimate == null || heading == null) {
+      return null;
+    }
+    return RadarFusion.signedAngularDelta(heading, estimate.headingDegrees) *
+        math.pi /
+        180;
+  }
+
+  double? _gpsDirectionRadians(RadarFusionResult fusion) {
+    final relative = fusion.gpsRelativeDegrees;
+    if (fusion.source != RadarDirectionSource.gps || relative == null) {
+      return null;
+    }
+    return relative * math.pi / 180;
+  }
+
+  Widget _buildPanel(
+    ThemeData theme,
+    RadarReading? reading,
+    bool searching,
+    RadarFusionResult fusion,
+  ) {
     const green = Color(0xFF4ADE80);
     const red = Color(0xFFF87171);
     const dim = Color(0xFF94A3B8);
@@ -431,6 +603,8 @@ class _RadarScreenState extends State<RadarScreen>
             style: const TextStyle(color: dim),
           ),
           if (_gpsDistanceMeters != null) _gpsRow(dim),
+          if (fusion.source != RadarDirectionSource.none)
+            _directionSourceRow(fusion),
         ],
       );
     }
@@ -454,6 +628,8 @@ class _RadarScreenState extends State<RadarScreen>
             style: const TextStyle(color: dim),
           ),
           if (_gpsDistanceMeters != null) _gpsRow(dim),
+          if (fusion.source != RadarDirectionSource.none)
+            _directionSourceRow(fusion),
         ],
       );
     }
@@ -506,6 +682,9 @@ class _RadarScreenState extends State<RadarScreen>
           context.l10n.radarDbm(reading.smoothedRssi.round()),
           style: const TextStyle(color: dim, fontSize: 12),
         ),
+        if (fusion.source != RadarDirectionSource.none ||
+            fusion.bleSuppressedVeryClose)
+          _directionSourceRow(fusion),
         if (_tentativeSignal) ...[
           const SizedBox(height: 4),
           Text(
@@ -566,6 +745,46 @@ class _RadarScreenState extends State<RadarScreen>
           Text(
             context.l10n.radarGpsDistance(label),
             style: TextStyle(color: color, fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _directionSourceRow(RadarFusionResult fusion) {
+    const blue = Color(0xFF60A5FA);
+    const green = Color(0xFF4ADE80);
+    const amber = Color(0xFFFBBF24);
+    final (icon, color, label) = switch (fusion.source) {
+      RadarDirectionSource.gps => (
+        Icons.navigation_outlined,
+        blue,
+        context.l10n.radarDirectionGps,
+      ),
+      RadarDirectionSource.ble => (
+        Icons.bluetooth_searching,
+        green,
+        context.l10n.radarDirectionBle,
+      ),
+      RadarDirectionSource.none => (
+        Icons.vibration,
+        amber,
+        context.l10n.radarDirectionVeryClose,
+      ),
+    };
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: color, fontSize: 12),
+            ),
           ),
         ],
       ),
@@ -716,6 +935,7 @@ class _RadarPainter extends CustomPainter {
     required this.strength,
     required this.directionSweepSectors,
     required this.estimatedDirectionRadians,
+    required this.gpsDirectionRadians,
   });
 
   final double sweepProgress;
@@ -725,6 +945,7 @@ class _RadarPainter extends CustomPainter {
   final double? strength;
   final List<bool> directionSweepSectors;
   final double? estimatedDirectionRadians;
+  final double? gpsDirectionRadians;
 
   static const _green = Color(0xFF4ADE80);
 
@@ -813,6 +1034,36 @@ class _RadarPainter extends CustomPainter {
       );
     }
 
+    final gpsDirection = gpsDirectionRadians;
+    if (gpsDirection != null) {
+      const blue = Color(0xFF60A5FA);
+      final angle = gpsDirection - math.pi / 2;
+      final unit = Offset(math.cos(angle), math.sin(angle));
+      final marker = center + unit * radius * 0.82;
+      canvas.drawLine(
+        center,
+        marker,
+        Paint()
+          ..strokeWidth = 2
+          ..color = blue.withValues(alpha: 0.35),
+      );
+      final tangent = Offset(-unit.dy, unit.dx);
+      final diamond = Path()
+        ..moveTo(marker.dx + unit.dx * 10, marker.dy + unit.dy * 10)
+        ..lineTo(marker.dx + tangent.dx * 7, marker.dy + tangent.dy * 7)
+        ..lineTo(marker.dx - unit.dx * 10, marker.dy - unit.dy * 10)
+        ..lineTo(marker.dx - tangent.dx * 7, marker.dy - tangent.dy * 7)
+        ..close();
+      canvas.drawPath(diamond, Paint()..color = blue);
+      canvas.drawPath(
+        diamond,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = Colors.white,
+      );
+    }
+
     final currentStrength = strength;
     if (currentStrength != null) {
       // El objetivo se dibuja arriba; su distancia al centro refleja la
@@ -843,5 +1094,6 @@ class _RadarPainter extends CustomPainter {
       oldDelegate.pulseProgress != pulseProgress ||
       oldDelegate.strength != strength ||
       oldDelegate.directionSweepSectors != directionSweepSectors ||
-      oldDelegate.estimatedDirectionRadians != estimatedDirectionRadians;
+      oldDelegate.estimatedDirectionRadians != estimatedDirectionRadians ||
+      oldDelegate.gpsDirectionRadians != gpsDirectionRadians;
 }

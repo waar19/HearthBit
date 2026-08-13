@@ -741,6 +741,25 @@ class AppLocalizationsEn extends AppLocalizations {
       'This phone has no usable compass sensor. Proximity radar remains available.';
 
   @override
+  String get radarCompassCalibration =>
+      'Move the phone away from metal or electronics and trace a figure eight to calibrate the compass.';
+
+  @override
+  String get radarDirectionGps =>
+      'GPS-guided bearing · follow the blue diamond';
+
+  @override
+  String get radarDirectionBle => 'Sector estimated by BLE sweep';
+
+  @override
+  String get radarDirectionVeryClose =>
+      'You are very close: the BLE sector is hidden because it is no longer reliable. Turn and follow the vibration.';
+
+  @override
+  String get radarSourcesDisagree =>
+      'GPS and BLE disagree; the GPS bearing takes priority.';
+
+  @override
   String get dateToday => 'Today';
 
   @override

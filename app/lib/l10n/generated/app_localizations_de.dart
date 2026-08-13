@@ -746,6 +746,24 @@ class AppLocalizationsDe extends AppLocalizations {
       'Dieses Telefon hat keinen nutzbaren Kompasssensor. Das Näherungsradar bleibt verfügbar.';
 
   @override
+  String get radarCompassCalibration =>
+      'Entferne das Telefon von Metall oder Elektronik und bewege es zur Kompasskalibrierung in Form einer Acht.';
+
+  @override
+  String get radarDirectionGps => 'GPS-Richtung · folge der blauen Raute';
+
+  @override
+  String get radarDirectionBle => 'Durch BLE-Suche geschätzter Bereich';
+
+  @override
+  String get radarDirectionVeryClose =>
+      'Du bist sehr nah: Der BLE-Bereich wird ausgeblendet, weil er nicht mehr zuverlässig ist. Drehe dich und folge der Vibration.';
+
+  @override
+  String get radarSourcesDisagree =>
+      'GPS und BLE stimmen nicht überein; die GPS-Richtung hat Vorrang.';
+
+  @override
   String get dateToday => 'Heute';
 
   @override

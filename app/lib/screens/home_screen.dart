@@ -200,6 +200,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     double? latitude,
     double? longitude,
   }) {
+    final knownLocation = _latestKnownPeerLocation(peerId);
     return Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => RadarScreen(
@@ -207,11 +208,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           nickname: nickname,
           consentExpiresAt: consentExpiresAt,
           consentSource: consentSource,
-          latitude: latitude,
-          longitude: longitude,
+          latitude: latitude ?? knownLocation?.$1,
+          longitude: longitude ?? knownLocation?.$2,
         ),
       ),
     );
+  }
+
+  (double, double)? _latestKnownPeerLocation(String peerId) {
+    for (final message in widget.controller.messages.reversed) {
+      if (message.senderPeerId.toLowerCase() != peerId.toLowerCase()) continue;
+      final checkIn = message.checkIn;
+      if (checkIn?.latitude != null && checkIn?.longitude != null) {
+        return (checkIn!.latitude!, checkIn.longitude!);
+      }
+      final latitude = message.sosLatitude;
+      final longitude = message.sosLongitude;
+      if (message.isSos && latitude != null && longitude != null) {
+        return (latitude, longitude);
+      }
+    }
+    return null;
   }
 
   Future<bool?> _askCompressPhoto(int size) {

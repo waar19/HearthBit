@@ -719,6 +719,23 @@ class AppLocalizationsJa extends AppLocalizations {
       'このスマートフォンではコンパスを利用できません。近接レーダーは引き続き使用できます。';
 
   @override
+  String get radarCompassCalibration =>
+      '金属や電子機器から離れ、スマートフォンを8の字に動かしてコンパスを調整してください。';
+
+  @override
+  String get radarDirectionGps => 'GPSによる方角 · 青いひし形に従ってください';
+
+  @override
+  String get radarDirectionBle => 'BLEスイープで推定した範囲';
+
+  @override
+  String get radarDirectionVeryClose =>
+      'すぐ近くです。BLEの方向は信頼できないため非表示にしています。向きを変えながら振動を頼りに進んでください。';
+
+  @override
+  String get radarSourcesDisagree => 'GPSとBLEが一致しないため、GPSの方角を優先します。';
+
+  @override
   String get dateToday => '今日';
 
   @override

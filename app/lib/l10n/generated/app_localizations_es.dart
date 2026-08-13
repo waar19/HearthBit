@@ -747,6 +747,24 @@ class AppLocalizationsEs extends AppLocalizations {
       'Este teléfono no tiene una brújula utilizable. El radar de proximidad sigue disponible.';
 
   @override
+  String get radarCompassCalibration =>
+      'Aleja el teléfono de metales o equipos electrónicos y muévelo en forma de 8 para calibrar la brújula.';
+
+  @override
+  String get radarDirectionGps => 'Rumbo guiado por GPS · sigue el rombo azul';
+
+  @override
+  String get radarDirectionBle => 'Sector estimado mediante barrido BLE';
+
+  @override
+  String get radarDirectionVeryClose =>
+      'Estás muy cerca: el sector BLE se oculta porque deja de ser fiable. Gira y sigue la vibración.';
+
+  @override
+  String get radarSourcesDisagree =>
+      'GPS y BLE no coinciden; se prioriza el rumbo GPS.';
+
+  @override
   String get dateToday => 'Hoy';
 
   @override

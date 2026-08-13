@@ -129,6 +129,67 @@ class EmergencyCheckIn {
   }
 }
 
+class RadarLocationUpdate {
+  const RadarLocationUpdate({
+    required this.latitude,
+    required this.longitude,
+    required this.accuracyMeters,
+    required this.timestamp,
+  });
+
+  static const marker = '[HB-LOC|';
+
+  final double latitude;
+  final double longitude;
+  final double accuracyMeters;
+  final DateTime timestamp;
+
+  static String encode({
+    required double latitude,
+    required double longitude,
+    required double accuracyMeters,
+    required DateTime timestamp,
+  }) =>
+      '$marker${latitude.toStringAsFixed(6)}|'
+      '${longitude.toStringAsFixed(6)}|'
+      '${accuracyMeters.toStringAsFixed(1)}|'
+      '${timestamp.millisecondsSinceEpoch}]';
+
+  static RadarLocationUpdate? tryParse(String content) {
+    if (!content.startsWith(marker) || !content.endsWith(']')) return null;
+    final fields = content
+        .substring(marker.length, content.length - 1)
+        .split('|');
+    if (fields.length != 4) return null;
+    final latitude = double.tryParse(fields[0]);
+    final longitude = double.tryParse(fields[1]);
+    final accuracy = double.tryParse(fields[2]);
+    final timestampMs = int.tryParse(fields[3]);
+    if (latitude == null ||
+        longitude == null ||
+        accuracy == null ||
+        timestampMs == null ||
+        !latitude.isFinite ||
+        !longitude.isFinite ||
+        !accuracy.isFinite ||
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180 ||
+        accuracy < 0 ||
+        accuracy > 10000 ||
+        timestampMs <= 0) {
+      return null;
+    }
+    return RadarLocationUpdate(
+      latitude: latitude,
+      longitude: longitude,
+      accuracyMeters: accuracy,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(timestampMs),
+    );
+  }
+}
+
 class MeshPeer {
   const MeshPeer({
     required this.id,
@@ -289,6 +350,11 @@ class MeshMessage {
   int? get voiceDurationSeconds => isVoiceNote
       ? int.tryParse(content.split('|')[2].replaceAll(']', ''))
       : null;
+
+  bool get isRadarLocation => isPrivate && radarLocation != null;
+
+  RadarLocationUpdate? get radarLocation =>
+      isPrivate ? RadarLocationUpdate.tryParse(content) : null;
 
   EmergencyCheckIn? get checkIn {
     if (!isCheckIn) return null;
