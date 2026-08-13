@@ -271,6 +271,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
             messageID: arguments["messageId"] as? String
           )
         )
+      case "ensurePrivateChannel":
+        try ensurePrivateChannel(peerID: arguments["peerId"] as? String ?? "")
+        result(nil)
       case "sendSos":
         let description =
           arguments["content"] as? String ?? HearthBitL10n.string("sos_default")
@@ -778,6 +781,17 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       channel: channel
     )
     return id
+  }
+
+  private func ensurePrivateChannel(peerID: String) throws {
+    guard localRole.canChat else { throw IOSMeshError.roleCannotChat }
+    guard peers[peerID]?.role.canChat == true else {
+      throw IOSMeshError.peerUnavailable
+    }
+    privateChatPeerIDs.insert(peerID)
+    if sessions[peerID]?.established != true {
+      try initiateHandshake(peerID: peerID)
+    }
   }
 
   private func sendPrivate(

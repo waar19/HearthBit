@@ -84,6 +84,17 @@ class MeshPlatformService {
     }))!;
   }
 
+  /// Inicia o recupera Noise sin enviar todavía el mensaje encolado.
+  ///
+  /// Evita el bloqueo circular donde Flutter esperaba `secure=true` antes de
+  /// llamar al nativo, aunque era precisamente el nativo quien debía iniciar
+  /// el handshake.
+  Future<void> ensurePrivateChannel(String peerId) {
+    return _methods.invokeMethod<void>('ensurePrivateChannel', {
+      'peerId': peerId,
+    });
+  }
+
   Future<String> sendSos({
     required String content,
     double? latitude,

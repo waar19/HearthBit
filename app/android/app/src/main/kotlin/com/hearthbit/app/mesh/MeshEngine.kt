@@ -228,6 +228,7 @@ internal class MeshEngine(
 
     fun ensureStarted() {
         if (running) {
+            rearmDataPlaneAfterClientAttach()
             if (advertising || currentStatus == "starting") {
                 emit(stateSnapshot())
             } else {
@@ -238,6 +239,28 @@ internal class MeshEngine(
             return
         }
         start()
+    }
+
+    /**
+     * El proceso y la notificación pueden seguir marcando la malla como activa
+     * aunque Android haya invalidado silenciosamente el escaneo. Cada nueva
+     * solicitud de inicio desde Flutter rearma el plano de datos sin borrar
+     * peers, sesiones Noise ni mensajes pendientes.
+     */
+    @SuppressLint("MissingPermission")
+    private fun rearmDataPlaneAfterClientAttach() {
+        scheduleHandshakeCleanup()
+        scheduleScanWatchdog()
+        rescheduleKeepAlive()
+        if (localRole == MeshNodeRole.PHONE_BEACON) return
+        if (gattServer == null) startGattServer()
+        scanRetryRunnable?.let(mainHandler::removeCallbacks)
+        scanRetryRunnable = null
+        cancelRecoveryScanBurst()
+        cancelAdaptiveScanning()
+        stopBleScans()
+        startScanning(aggressive = radarPeerId != null)
+        startGenericBeaconScanning()
     }
 
     fun configureStartupRole(requiredRole: MeshNodeRole) {
@@ -585,6 +608,17 @@ internal class MeshEngine(
             null,
         )
         return id
+    }
+
+    fun ensurePrivateChannel(peerIdHex: String) {
+        check(localRole.canOriginateChat) {
+            "El rol ${localRole.wireName} no puede originar chat"
+        }
+        val peer = peers[peerIdHex]
+        require(peer != null && peer.role.canOriginateChat) {
+            context.getString(R.string.error_peer_unavailable)
+        }
+        if (!noiseSessions.isEstablished(peerIdHex)) initiateHandshake(peerIdHex)
     }
 
     /**

@@ -318,8 +318,15 @@ class MeshController extends ChangeNotifier {
       return PrivateMessageSendResult.failed(currentL10n.errorUnknown);
     }
     final currentPeer = peerById(peer.id);
-    if (!canSend || currentPeer == null || !currentPeer.secure) {
+    if (!canSend || currentPeer == null) {
       return _enqueuePrivateMessage(peer.id, cleaned);
+    }
+    if (!currentPeer.secure) {
+      final queued = await _enqueuePrivateMessage(currentPeer.id, cleaned);
+      if (queued.disposition == PrivateMessageSendDisposition.queued) {
+        await _run<void>(() => _platform.ensurePrivateChannel(currentPeer.id));
+      }
+      return queued;
     }
 
     final messageId = await _run(
@@ -769,6 +776,22 @@ class MeshController extends ChangeNotifier {
     );
     if (hasNewlyEligiblePeer) {
       _requestPrivateMessageOutboxDrain();
+    }
+    _ensurePendingPrivateChannels();
+  }
+
+  void _ensurePendingPrivateChannels() {
+    if (!canSend || _privateMessageOutbox.isEmpty) return;
+    final pendingRecipients = _privateMessageOutbox
+        .map((message) => message.recipientPeerId)
+        .toSet();
+    for (final peer in _peers) {
+      if (peer.secure ||
+          !peer.role.canChat ||
+          !pendingRecipients.contains(peer.id)) {
+        continue;
+      }
+      unawaited(_run<void>(() => _platform.ensurePrivateChannel(peer.id)));
     }
   }
 

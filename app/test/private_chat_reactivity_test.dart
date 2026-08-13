@@ -43,6 +43,9 @@ class _ReactivePlatform extends MeshPlatformService {
     if (error != null) throw error;
     return messageId ?? 'sent-${privateMessages.length}';
   }
+
+  @override
+  Future<void> ensurePrivateChannel(String peerId) async {}
 }
 
 class _MemoryMessageRepository extends MessageRepository {

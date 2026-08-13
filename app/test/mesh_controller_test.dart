@@ -20,6 +20,7 @@ class _FakePlatform extends MeshPlatformService {
   final List<({String content, String? channel})> publicMessages = [];
   final List<({String peerId, String content, String? messageId})>
   privateMessages = [];
+  final List<String> privateChannelRequests = [];
   bool permissionsGranted = true;
   bool backgroundLocation = true;
   Object? startError;
@@ -73,6 +74,11 @@ class _FakePlatform extends MeshPlatformService {
     final gate = privateMessageGate;
     if (gate != null) return gate.future;
     return messageId ?? 'private-${privateMessages.length}';
+  }
+
+  @override
+  Future<void> ensurePrivateChannel(String peerId) async {
+    privateChannelRequests.add(peerId);
   }
 
   @override
@@ -337,6 +343,32 @@ void main() {
     expect(repository.outbox.single.content, 'Sigo aquí');
     expect(controller.messages.single.isPending, isTrue);
   });
+
+  test(
+    'un peer online sin canal seguro inicia Noise antes de drenar el mensaje',
+    () async {
+      const remoteId = 'peer-handshake';
+      platform.emit(peerSnapshot(peerId: remoteId, secure: false));
+      await pumpEvents();
+
+      final result = await controller.sendPrivate(
+        controller.peerById(remoteId)!,
+        'Iniciar canal',
+      );
+
+      expect(result.disposition, PrivateMessageSendDisposition.queued);
+      expect(platform.privateChannelRequests, [remoteId]);
+      expect(platform.privateMessages, isEmpty);
+      expect(repository.outbox, hasLength(1));
+
+      platform.emit(peerSnapshot(peerId: remoteId, secure: true));
+      await pumpEvents();
+      await controller.retryPendingPrivateMessages();
+
+      expect(platform.privateMessages, hasLength(1));
+      expect(repository.outbox, isEmpty);
+    },
+  );
 
   test(
     'reintenta el outbox cuando el peer vuelve seguro y conectado',

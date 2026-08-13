@@ -128,6 +128,12 @@ class MainActivity : FlutterActivity() {
                         call.argument<String>("messageId"),
                     )
                 }
+                "ensurePrivateChannel" -> runMethod(result) {
+                    MeshRuntime.engine(this).ensurePrivateChannel(
+                        requireNotNull(call.argument<String>("peerId")),
+                    )
+                    null
+                }
                 "sendSos" -> runMethod(result) {
                     MeshRuntime.engine(this).sendSos(
                         call.argument<String>("content").orEmpty(),
