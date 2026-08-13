@@ -14,6 +14,33 @@ void main() {
   runApp(const HearthBitApp());
 }
 
+TextTheme scaleDefinedTextTheme(TextTheme theme, double factor) {
+  TextStyle? scale(TextStyle? style) {
+    final fontSize = style?.fontSize;
+    return fontSize == null
+        ? style
+        : style!.copyWith(fontSize: fontSize * factor);
+  }
+
+  return theme.copyWith(
+    displayLarge: scale(theme.displayLarge),
+    displayMedium: scale(theme.displayMedium),
+    displaySmall: scale(theme.displaySmall),
+    headlineLarge: scale(theme.headlineLarge),
+    headlineMedium: scale(theme.headlineMedium),
+    headlineSmall: scale(theme.headlineSmall),
+    titleLarge: scale(theme.titleLarge),
+    titleMedium: scale(theme.titleMedium),
+    titleSmall: scale(theme.titleSmall),
+    bodyLarge: scale(theme.bodyLarge),
+    bodyMedium: scale(theme.bodyMedium),
+    bodySmall: scale(theme.bodySmall),
+    labelLarge: scale(theme.labelLarge),
+    labelMedium: scale(theme.labelMedium),
+    labelSmall: scale(theme.labelSmall),
+  );
+}
+
 class HearthBitApp extends StatefulWidget {
   const HearthBitApp({super.key});
 
@@ -127,7 +154,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
     }
     if (_preferences.highContrast || _controller.rescueMode) {
       theme = theme.copyWith(
-        textTheme: theme.textTheme.apply(fontSizeFactor: 1.12),
+        textTheme: scaleDefinedTextTheme(theme.textTheme, 1.12),
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
             minimumSize: const Size(56, 52),
