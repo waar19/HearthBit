@@ -39,12 +39,14 @@ class MeshForegroundService : Service() {
                 val charging =
                     status == BatteryManager.BATTERY_STATUS_CHARGING ||
                         status == BatteryManager.BATTERY_STATUS_FULL
-                val screenOn = getSystemService(PowerManager::class.java)?.isInteractive != false
+                val powerManager = getSystemService(PowerManager::class.java)
+                val screenOn = powerManager?.isInteractive != false
                 MeshRuntime.engine(this@MeshForegroundService)
                     .updatePowerState(
                         percent = level * 100 / scale,
                         isCharging = charging,
                         isScreenOn = screenOn,
+                        isSystemPowerSave = powerManager?.isPowerSaveMode == true,
                     )
             }
         }
@@ -58,6 +60,7 @@ class MeshForegroundService : Service() {
                 addAction(Intent.ACTION_BATTERY_CHANGED)
                 addAction(Intent.ACTION_SCREEN_ON)
                 addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
             },
         )
         createChannel()

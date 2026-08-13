@@ -50,10 +50,11 @@ private enum IOSPowerProfile: String {
     survivalMode: Bool
   ) -> IOSPowerProfile {
     let battery = min(max(batteryLevel, 0), 100)
-    if survivalMode || battery < 10 { return .survival }
+    if survivalMode { return .survival }
+    if battery <= 10 { return .critical }
+    if lowPowerMode || !foreground { return .powerSaver }
     if charging { return .performance }
-    if battery < 20 { return .critical }
-    if lowPowerMode || battery <= 40 || !foreground { return .powerSaver }
+    if battery <= 40 { return .powerSaver }
     return .balanced
   }
 }

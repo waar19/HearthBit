@@ -5,7 +5,7 @@ import org.junit.Test
 
 class AdaptivePowerPolicyTest {
     @Test
-    fun `charging uses performance unless survival is forced`() {
+    fun `foreground charging uses performance unless an override is active`() {
         assertEquals(
             PowerProfile.PERFORMANCE,
             profile(battery = 70, charging = true, screenOn = true),
@@ -13,6 +13,15 @@ class AdaptivePowerPolicyTest {
         assertEquals(
             PowerProfile.SURVIVAL,
             profile(battery = 70, charging = true, screenOn = true, survival = true),
+        )
+        assertEquals(
+            PowerProfile.POWER_SAVER,
+            profile(
+                battery = 70,
+                charging = true,
+                screenOn = true,
+                systemPowerSave = true,
+            ),
         )
     }
 
@@ -29,7 +38,7 @@ class AdaptivePowerPolicyTest {
     }
 
     @Test
-    fun `screen off or medium battery uses power saver`() {
+    fun `screen off medium battery or system saver uses power saver`() {
         assertEquals(
             PowerProfile.POWER_SAVER,
             profile(battery = 80, charging = false, screenOn = false),
@@ -42,18 +51,18 @@ class AdaptivePowerPolicyTest {
             PowerProfile.POWER_SAVER,
             profile(battery = 20, charging = false, screenOn = true),
         )
+        assertEquals(
+            PowerProfile.POWER_SAVER,
+            profile(battery = 80, systemPowerSave = true),
+        )
     }
 
     @Test
-    fun `battery from ten through nineteen uses critical profile`() {
+    fun `battery at ten and below uses critical without enabling survival`() {
         assertEquals(PowerProfile.CRITICAL, profile(battery = 10))
-        assertEquals(PowerProfile.CRITICAL, profile(battery = 19))
-    }
-
-    @Test
-    fun `battery below ten uses survival and values are clamped`() {
-        assertEquals(PowerProfile.SURVIVAL, profile(battery = 9))
-        assertEquals(PowerProfile.SURVIVAL, profile(battery = -10))
+        assertEquals(PowerProfile.CRITICAL, profile(battery = 9))
+        assertEquals(PowerProfile.CRITICAL, profile(battery = -10))
+        assertEquals(PowerProfile.POWER_SAVER, profile(battery = 11))
         assertEquals(PowerProfile.BALANCED, profile(battery = 150))
     }
 
@@ -69,11 +78,13 @@ class AdaptivePowerPolicyTest {
         battery: Int,
         charging: Boolean = false,
         screenOn: Boolean = true,
+        systemPowerSave: Boolean = false,
         survival: Boolean = false,
     ): PowerProfile = AdaptivePowerPolicy.profileFor(
         batteryPercent = battery,
         isCharging = charging,
         screenOn = screenOn,
+        systemPowerSave = systemPowerSave,
         survivalMode = survival,
     )
 }

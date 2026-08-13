@@ -121,6 +121,7 @@ internal class MeshEngine(
     private var batteryLevel = 100
     private var charging = false
     private var screenOn = true
+    private var systemPowerSave = false
     private var powerProfile = PowerProfile.BALANCED
     private var adaptivePowerSaving = false
 
@@ -308,15 +309,22 @@ internal class MeshEngine(
         sendAnnouncement()
     }
 
-    fun updatePowerState(percent: Int, isCharging: Boolean, isScreenOn: Boolean) {
+    fun updatePowerState(
+        percent: Int,
+        isCharging: Boolean,
+        isScreenOn: Boolean,
+        isSystemPowerSave: Boolean,
+    ) {
         val normalized = percent.coerceIn(0, 100)
         batteryLevel = normalized
         charging = isCharging
         screenOn = isScreenOn
+        systemPowerSave = isSystemPowerSave
         val nextProfile = AdaptivePowerPolicy.profileFor(
             batteryPercent = batteryLevel,
             isCharging = charging,
             screenOn = screenOn,
+            systemPowerSave = systemPowerSave,
             survivalMode = localRole == MeshNodeRole.PHONE_BEACON,
         )
         val changed = nextProfile != powerProfile
@@ -351,6 +359,7 @@ internal class MeshEngine(
             batteryPercent = batteryLevel,
             isCharging = charging,
             screenOn = screenOn,
+            systemPowerSave = systemPowerSave,
             survivalMode = localRole == MeshNodeRole.PHONE_BEACON,
         )
         adaptivePowerSaving = powerProfile.savesPower
@@ -1695,7 +1704,7 @@ internal class MeshEngine(
 
     private fun hasReachedConnectionLimit(): Boolean {
         val maximum = powerProfile.maximumClientConnections
-        return maximum <= 0 || clientGatts.size + serverMaximumGattValueSizes.size >= maximum
+        return maximum <= 0 || clientGatts.size >= maximum
     }
 
     @SuppressLint("MissingPermission")
@@ -1943,10 +1952,6 @@ internal class MeshEngine(
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
-                if (hasReachedConnectionLimit()) {
-                    runCatching { gattServer?.cancelConnection(device) }
-                    return
-                }
                 serverMaximumGattValueSizes.putIfAbsent(device.address, DEFAULT_GATT_VALUE_SIZE)
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 serverSubscribers.remove(device)

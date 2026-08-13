@@ -200,6 +200,7 @@ class MainActivity : FlutterActivity() {
                             batteryPercent = batteryLevel,
                             isCharging = isCharging(),
                             screenOn = power?.isInteractive != false,
+                            systemPowerSave = power?.isPowerSaveMode == true,
                             survivalMode = false,
                         ).wireName
                     result.success(
