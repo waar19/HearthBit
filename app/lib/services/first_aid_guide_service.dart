@@ -15,8 +15,7 @@ class FirstAidGuideLoadResult {
 }
 
 class FirstAidGuideService {
-  const FirstAidGuideService({AssetBundle? bundle})
-    : _bundle = bundle ?? rootBundle;
+  FirstAidGuideService({AssetBundle? bundle}) : _bundle = bundle ?? rootBundle;
 
   static const supportedLocales = {'en', 'es', 'de', 'fr', 'zh', 'ja'};
 

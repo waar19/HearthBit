@@ -5,20 +5,24 @@ import '../models/first_aid_guide.dart';
 import '../services/first_aid_guide_service.dart';
 
 class FirstAidGuideScreen extends StatefulWidget {
-  const FirstAidGuideScreen({
-    this.service = const FirstAidGuideService(),
-    super.key,
-  });
+  const FirstAidGuideScreen({this.service, super.key});
 
-  final FirstAidGuideService service;
+  final FirstAidGuideService? service;
 
   @override
   State<FirstAidGuideScreen> createState() => _FirstAidGuideScreenState();
 }
 
 class _FirstAidGuideScreenState extends State<FirstAidGuideScreen> {
+  late final FirstAidGuideService _service;
   Future<FirstAidGuideLoadResult>? _guide;
   String? _locale;
+
+  @override
+  void initState() {
+    super.initState();
+    _service = widget.service ?? FirstAidGuideService();
+  }
 
   @override
   void didChangeDependencies() {
@@ -26,7 +30,7 @@ class _FirstAidGuideScreenState extends State<FirstAidGuideScreen> {
     final locale = Localizations.localeOf(context).languageCode;
     if (_locale != locale) {
       _locale = locale;
-      _guide = widget.service.load(locale);
+      _guide = _service.load(locale);
     }
   }
 
@@ -47,7 +51,7 @@ class _FirstAidGuideScreenState extends State<FirstAidGuideScreen> {
                 if (snapshot.hasError || !snapshot.hasData) {
                   return _LoadError(
                     onRetry: () => setState(() {
-                      _guide = widget.service.load(_locale ?? 'en');
+                      _guide = _service.load(_locale ?? 'en');
                     }),
                   );
                 }

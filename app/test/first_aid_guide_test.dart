@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,7 +14,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('carga y valida los seis assets locales', () async {
-    const service = FirstAidGuideService();
+    final service = FirstAidGuideService();
 
     for (final locale in FirstAidGuideService.supportedLocales) {
       final result = await service.load(locale);
