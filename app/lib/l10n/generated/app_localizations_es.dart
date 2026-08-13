@@ -1097,6 +1097,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get mapMyLocation => 'Centrar en mi ubicación';
 
   @override
+  String get mapPassiveCacheInfo =>
+      'Este mapa guarda automáticamente las teselas que ves para reutilizarlas sin conexión. Las descargas regionales requieren un proveedor autorizado o un servidor propio.';
+
+  @override
+  String get mapTilePolicyAction => 'Política OSM';
+
+  @override
   String get mapDownloadVisible => 'Descargar zona visible';
 
   @override

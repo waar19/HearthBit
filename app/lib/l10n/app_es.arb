@@ -329,6 +329,8 @@
   "mapOpenRescue": "ABRIR MAPA DE RESCATE",
   "mapTitle": "Mapa offline de rescate",
   "mapMyLocation": "Centrar en mi ubicación",
+  "mapPassiveCacheInfo": "Este mapa guarda automáticamente las teselas que ves para reutilizarlas sin conexión. Las descargas regionales requieren un proveedor autorizado o un servidor propio.",
+  "mapTilePolicyAction": "Política OSM",
   "mapDownloadVisible": "Descargar zona visible",
   "mapDownloadComplete": "Se guardaron {count} teselas para uso offline.",
   "@mapDownloadComplete": {"placeholders": {"count": {"type": "int"}}},

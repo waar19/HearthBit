@@ -1089,6 +1089,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mapMyLocation => 'Center on my location';
 
   @override
+  String get mapPassiveCacheInfo =>
+      'This map automatically keeps tiles you view for offline reuse. Regional downloads require an authorized provider or your own server.';
+
+  @override
+  String get mapTilePolicyAction => 'OSM policy';
+
+  @override
   String get mapDownloadVisible => 'Download visible area';
 
   @override

@@ -6,6 +6,14 @@
     <string name="notification_text">Relaying BLE mesh messages</string>
     <string name="notification_status_starting">Starting mesh…</string>
     <string name="notification_status_error">Mesh error — tap to open</string>
+    <string name="family_notification_channel_name">Family emergency alerts</string>
+    <string name="family_notification_channel_description">Verified SOS and check-in alerts from family members</string>
+    <string name="family_notification_title">HearthBit family alert</string>
+    <string name="family_notification_status_sos">SOS</string>
+    <string name="family_notification_status_ok">I am safe</string>
+    <string name="family_notification_status_help">Needs help</string>
+    <string name="family_notification_status_injured">Injured</string>
+    <string name="family_notification_status_check_in">Check-in</string>
     <plurals name="notification_status_active">
         <item quantity="one">Mesh active · %1$d nearby device</item>
         <item quantity="other">Mesh active · %1$d nearby devices</item>

@@ -6,6 +6,14 @@
     <string name="notification_text">Relais des messages du maillage BLE</string>
     <string name="notification_status_starting">Démarrage du maillage…</string>
     <string name="notification_status_error">Erreur du maillage — toucher pour ouvrir</string>
+    <string name="family_notification_channel_name">Alertes d\'urgence familiales</string>
+    <string name="family_notification_channel_description">Alertes SOS et états vérifiés des membres de la famille</string>
+    <string name="family_notification_title">Alerte familiale HearthBit</string>
+    <string name="family_notification_status_sos">SOS</string>
+    <string name="family_notification_status_ok">Je vais bien</string>
+    <string name="family_notification_status_help">A besoin d\'aide</string>
+    <string name="family_notification_status_injured">Blessé</string>
+    <string name="family_notification_status_check_in">État familial</string>
     <plurals name="notification_status_active">
         <item quantity="one">Maillage actif · %1$d appareil à proximité</item>
         <item quantity="other">Maillage actif · %1$d appareils à proximité</item>

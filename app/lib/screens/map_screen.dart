@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../controllers/mesh_controller.dart';
 import '../l10n/l10n.dart';
@@ -25,6 +26,7 @@ class _MapScreenState extends State<MapScreen> {
   static const _planner = TileDownloadPlanner();
 
   final MapController _mapController = MapController();
+  final MapTileSource _tileSource = MapTileSource.fromEnvironment();
   OfflineTileCache? _tileCache;
   OfflineTileProvider? _tileProvider;
   Position? _localPosition;
@@ -42,7 +44,7 @@ class _MapScreenState extends State<MapScreen> {
 
   Future<void> _initialize() async {
     try {
-      final cache = await OfflineTileCache.create();
+      final cache = await OfflineTileCache.create(source: _tileSource);
       if (!mounted) {
         cache.dispose();
         return;
@@ -176,6 +178,10 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  Future<void> _openExternalUrl(Uri uri) async {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   void _handleTileError(Object error) {
     if (!mounted || _lastTileError?.runtimeType == error.runtimeType) return;
     setState(() => _lastTileError = error);
@@ -201,11 +207,12 @@ class _MapScreenState extends State<MapScreen> {
               onPressed: () => _refreshLocalPosition(moveMap: true),
               icon: const Icon(Icons.my_location),
             ),
-            IconButton(
-              tooltip: context.l10n.mapDownloadVisible,
-              onPressed: _downloading ? null : _downloadVisibleArea,
-              icon: const Icon(Icons.download_for_offline_outlined),
-            ),
+            if (_tileSource.allowsBulkDownload)
+              IconButton(
+                tooltip: context.l10n.mapDownloadVisible,
+                onPressed: _downloading ? null : _downloadVisibleArea,
+                icon: const Icon(Icons.download_for_offline_outlined),
+              ),
             IconButton(
               tooltip: context.l10n.rescueExportCsv,
               onPressed: _incidents.isEmpty ? null : _shareCsv,
@@ -227,6 +234,30 @@ class _MapScreenState extends State<MapScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Text(
                   context.l10n.mapDownloading(_downloaded, _downloadTotal),
+                ),
+              ),
+            if (_tileSource.isPublicOpenStreetMap)
+              Material(
+                color: Theme.of(context).colorScheme.surfaceContainer,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.offline_pin_outlined, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          context.l10n.mapPassiveCacheInfo,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () =>
+                            _openExternalUrl(Uri.parse(osmTilePolicyUrl)),
+                        child: Text(context.l10n.mapTilePolicyAction),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             Expanded(flex: 2, child: _buildIncidentList(context)),
@@ -311,7 +342,7 @@ class _MapScreenState extends State<MapScreen> {
           ),
           children: [
             TileLayer(
-              urlTemplate: osmTileUrlTemplate,
+              urlTemplate: _tileSource.urlTemplate,
               userAgentPackageName: 'com.hearthbit.app',
               tileProvider: provider,
               maxNativeZoom: _planner.maximumZoom,
@@ -323,8 +354,8 @@ class _MapScreenState extends State<MapScreen> {
             RichAttributionWidget(
               attributions: [
                 TextSourceAttribution(
-                  'OpenStreetMap contributors',
-                  onTap: () {},
+                  _tileSource.attribution,
+                  onTap: () => _openExternalUrl(_tileSource.attributionUri),
                 ),
               ],
             ),

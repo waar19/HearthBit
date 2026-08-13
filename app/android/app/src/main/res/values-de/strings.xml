@@ -6,6 +6,14 @@
     <string name="notification_text">BLE-Mesh-Nachrichten werden weitergeleitet</string>
     <string name="notification_status_starting">Mesh wird gestartet…</string>
     <string name="notification_status_error">Mesh-Fehler — zum Öffnen tippen</string>
+    <string name="family_notification_channel_name">Notfallmeldungen der Familie</string>
+    <string name="family_notification_channel_description">Verifizierte SOS- und Statusmeldungen von Familienmitgliedern</string>
+    <string name="family_notification_title">HearthBit-Familienmeldung</string>
+    <string name="family_notification_status_sos">SOS</string>
+    <string name="family_notification_status_ok">Mir geht es gut</string>
+    <string name="family_notification_status_help">Benötigt Hilfe</string>
+    <string name="family_notification_status_injured">Verletzt</string>
+    <string name="family_notification_status_check_in">Statusmeldung</string>
     <plurals name="notification_status_active">
         <item quantity="one">Mesh aktiv · %1$d Gerät in der Nähe</item>
         <item quantity="other">Mesh aktiv · %1$d Geräte in der Nähe</item>

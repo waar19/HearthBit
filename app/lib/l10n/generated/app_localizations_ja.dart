@@ -1053,6 +1053,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get mapMyLocation => '現在地を中央に表示';
 
   @override
+  String get mapPassiveCacheInfo =>
+      '表示した地図タイルは、オフラインで再利用できるよう自動保存されます。地域のダウンロードには、許可されたプロバイダーまたは独自サーバーが必要です。';
+
+  @override
+  String get mapTilePolicyAction => 'OSMポリシー';
+
+  @override
   String get mapDownloadVisible => '表示範囲をダウンロード';
 
   @override

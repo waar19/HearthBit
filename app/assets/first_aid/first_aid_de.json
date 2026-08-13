@@ -80,7 +80,7 @@
         "Bewege keine schweren Trümmer und betrete beschädigte Gebäude erst nach Freigabe. Kontaktiere wenn möglich den Notruf und befolge örtliche Anweisungen."
       ],
       "warnings": ["Keine Flamme entzünden, wenn Gas austreten könnte.", "Trümmerbewegung kann Einsturz verursachen oder verborgene Verletzungen verschlimmern."],
-      "sourceIds": ["ifrc2025"]
+      "sourceIds": ["ready-earthquake"]
     }
   ],
   "sources": [
@@ -96,6 +96,13 @@
       "title": "Erste-Hilfe-Schritte: Prüfen, Rufen, Helfen",
       "publisher": "Amerikanisches Rotes Kreuz",
       "url": "https://www.redcross.org/take-a-class/first-aid/performing-first-aid/first-aid-steps",
+      "published": "Abgerufen am 2026-08-13"
+    },
+    {
+      "id": "ready-earthquake",
+      "title": "Erdbeben",
+      "publisher": "FEMA / Ready.gov",
+      "url": "https://www.ready.gov/earthquakes",
       "published": "Abgerufen am 2026-08-13"
     }
   ]

@@ -1032,6 +1032,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mapMyLocation => '以我的位置为中心';
 
   @override
+  String get mapPassiveCacheInfo =>
+      '此地图会自动保存你查看过的图块，以便离线时再次使用。下载整个区域需要获授权的提供商或自有服务器。';
+
+  @override
+  String get mapTilePolicyAction => 'OSM 政策';
+
+  @override
   String get mapDownloadVisible => '下载可见区域';
 
   @override

@@ -6,6 +6,14 @@
     <string name="notification_text">正在转发 BLE 网状网络消息</string>
     <string name="notification_status_starting">正在启动网状网络…</string>
     <string name="notification_status_error">网状网络错误 — 点按打开</string>
+    <string name="family_notification_channel_name">家庭紧急警报</string>
+    <string name="family_notification_channel_description">来自家庭成员的已验证 SOS 和状态警报</string>
+    <string name="family_notification_title">HearthBit 家庭警报</string>
+    <string name="family_notification_status_sos">SOS</string>
+    <string name="family_notification_status_ok">我很安全</string>
+    <string name="family_notification_status_help">需要帮助</string>
+    <string name="family_notification_status_injured">受伤</string>
+    <string name="family_notification_status_check_in">家庭状态</string>
     <plurals name="notification_status_active">
         <item quantity="other">网状网络已启用 · %1$d 台附近设备</item>
     </plurals>

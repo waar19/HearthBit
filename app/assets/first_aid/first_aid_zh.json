@@ -80,7 +80,7 @@
         "不要搬动重瓦砾或进入受损建筑，除非部门确认安全。条件允许时联系急救，并遵循当地指示。"
       ],
       "warnings": ["可能有燃气泄漏时不要点火。", "移动瓦砾可能引发坍塌或加重隐藏伤情。"],
-      "sourceIds": ["ifrc2025"]
+      "sourceIds": ["ready-earthquake"]
     }
   ],
   "sources": [
@@ -96,6 +96,13 @@
       "title": "急救步骤：检查、呼叫、照护",
       "publisher": "美国红十字会",
       "url": "https://www.redcross.org/take-a-class/first-aid/performing-first-aid/first-aid-steps",
+      "published": "访问于 2026-08-13"
+    },
+    {
+      "id": "ready-earthquake",
+      "title": "地震",
+      "publisher": "FEMA / Ready.gov",
+      "url": "https://www.ready.gov/earthquakes",
       "published": "访问于 2026-08-13"
     }
   ]

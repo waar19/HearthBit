@@ -80,7 +80,7 @@
         "当局が安全とするまで重いがれきを動かしたり、損傷した建物に入ったりしません。可能なら救急へ連絡し、地域の指示に従います。"
       ],
       "warnings": ["ガス漏れの可能性がある場所で火を使わないでください。", "がれきの移動は崩壊や見えないけがの悪化を招くことがあります。"],
-      "sourceIds": ["ifrc2025"]
+      "sourceIds": ["ready-earthquake"]
     }
   ],
   "sources": [
@@ -96,6 +96,13 @@
       "title": "応急手当の手順：確認・通報・手当",
       "publisher": "アメリカ赤十字社",
       "url": "https://www.redcross.org/take-a-class/first-aid/performing-first-aid/first-aid-steps",
+      "published": "2026-08-13 閲覧"
+    },
+    {
+      "id": "ready-earthquake",
+      "title": "地震",
+      "publisher": "FEMA / Ready.gov",
+      "url": "https://www.ready.gov/earthquakes",
       "published": "2026-08-13 閲覧"
     }
   ]

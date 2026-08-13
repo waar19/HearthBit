@@ -1,7 +1,8 @@
 # Localización / Localization
 
 HearthBit está disponible en seis idiomas: inglés (`en`, plantilla), español
-(`es`), alemán (`de`), francés (`fr`), chino simplificado (`zh`) y japonés
+(`es`), alemán (`de`), francés (`fr`), chino simplificado (`zh` en Flutter y
+Android, `zh-Hans` en el bundle iOS) y japonés
 (`ja`). La app sigue el idioma del sistema y cae a inglés cuando el idioma no
 está soportado.
 
@@ -35,17 +36,37 @@ claves. Android resuelve el idioma automáticamente.
 
 ## 3. iOS nativo (errores del plugin de malla)
 
-- No hay archivos `.lproj`: agregar archivos al proyecto exige editar
-  `project.pbxproj` desde Xcode. En su lugar, `HearthBitL10n` (al final de
-  `app/ios/Runner/HearthBitMeshPlugin.swift`) contiene una tabla en código
-  con los seis idiomas y elige según `Locale.preferredLanguages`.
-- Los textos de permisos de `Info.plist` están en español e inglés en una
-  sola cadena. Para localizarlos por idioma hace falta crear
-  `InfoPlist.strings` por cada `.lproj` **desde Xcode** (pendiente; requiere
-  macOS).
+- `HearthBitL10n` (al final de
+  `app/ios/Runner/HearthBitMeshPlugin.swift`) contiene una tabla en código con
+  los seis idiomas para los errores del plugin y elige según
+  `Locale.preferredLanguages`.
+- Los siete textos de permisos se localizan mediante
+  `Runner/{en,es,de,fr,zh-Hans,ja}.lproj/InfoPlist.strings`. Xcode los muestra
+  como un único variant group `InfoPlist.strings`, incluido en `Runner > Build
+  Phases > Copy Bundle Resources`. `Runner/Info.plist` conserva inglés como
+  fallback.
+- `CFBundleLocalizations` y `knownRegions` usan `zh-Hans`, que es el
+  identificador correcto del bundle para chino simplificado. La tabla Swift
+  usa `zh` porque normaliza `Locale.languageCode` al idioma base.
 
 Para un idioma nuevo: añadir el código a `supported` y una entrada a `table`
-en `HearthBitL10n`.
+en `HearthBitL10n`; crear el `.lproj/InfoPlist.strings`, añadirlo al variant
+group y actualizar `CFBundleLocalizations` y `knownRegions`.
+
+### Validación de permisos en Xcode
+
+1. Abra `app/ios/Runner.xcworkspace`, seleccione el proyecto `Runner` y
+   compruebe que `InfoPlist.strings` tiene las seis localizaciones y pertenece
+   al target `Runner`.
+2. En `Product > Scheme > Edit Scheme > Run > Options`, establezca
+   `Application Language` en cada idioma o en `System Language`. También puede
+   cambiar el idioma del iPhone en `Ajustes > General > Idioma y región`.
+3. Desinstale la app antes de cada variante (o restablezca sus permisos) para
+   que iOS vuelva a mostrar los avisos. Active por separado Bluetooth, cámara,
+   ubicación al usar la app, ubicación siempre, micrófono y red local.
+4. Confirme que cada aviso usa únicamente el idioma elegido. Para un idioma no
+   soportado, confirme el fallback monolingüe en inglés. Esta revisión requiere
+   Xcode/iOS y no se considera ejecutada desde Windows.
 
 ## 4. Cadenas internas (no traducibles)
 
@@ -75,13 +96,14 @@ Chinese and Japanese. Strings live in four layers:
    `currentL10n` (controllers/services).
 2. **Android native**: `strings.xml` per locale, used by the foreground
    service notification and BLE/transport errors.
-3. **iOS native**: in-code `HearthBitL10n` table at the end of
-   `HearthBitMeshPlugin.swift` (adding `.lproj` files requires Xcode).
-   `Info.plist` permission texts are bilingual ES/EN; per-language
-   `InfoPlist.strings` is pending and needs macOS/Xcode.
+3. **iOS native**: the in-code `HearthBitL10n` table localizes plugin errors.
+   Permission prompts use the `InfoPlist.strings` variant group in
+   `en`, `es`, `de`, `fr`, `zh-Hans` and `ja`; `Info.plist` retains the English
+   fallback. Validate each language with the Xcode scheme or the device system
+   language and reset permissions between checks.
 4. **Internal diagnostics** stay in English by design; they only surface as
    detail inside an already-localized error message.
 
 To add a language: copy `app_en.arb`, translate it, run `flutter gen-l10n`,
-add a `values-<code>/strings.xml` on Android, and extend `HearthBitL10n` on
-iOS.
+add a `values-<code>/strings.xml` on Android, and extend `HearthBitL10n`,
+`InfoPlist.strings`, `CFBundleLocalizations` and Xcode `knownRegions` on iOS.

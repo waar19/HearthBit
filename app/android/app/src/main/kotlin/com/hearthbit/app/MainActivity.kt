@@ -556,13 +556,20 @@ class MainActivity : FlutterActivity() {
             manager.createNotificationChannel(
                 NotificationChannel(
                     FAMILY_NOTIFICATION_CHANNEL,
-                    "Family emergency alerts",
+                    getString(R.string.family_notification_channel_name),
                     NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
-                    description = "Verified SOS and check-in alerts from family members"
+                    description = getString(R.string.family_notification_channel_description)
                     lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
                 },
             )
+        }
+        val localizedStatus = when (status) {
+            "SOS" -> getString(R.string.family_notification_status_sos)
+            "OK" -> getString(R.string.family_notification_status_ok)
+            "HELP" -> getString(R.string.family_notification_status_help)
+            "INJURED" -> getString(R.string.family_notification_status_injured)
+            else -> getString(R.string.family_notification_status_check_in)
         }
         val openEmergency = Intent(this, MainActivity::class.java)
             .setAction(ACTION_OPEN_EMERGENCY)
@@ -579,8 +586,8 @@ class MainActivity : FlutterActivity() {
             @Suppress("DEPRECATION")
             android.app.Notification.Builder(this)
         }.setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("HearthBit family alert")
-            .setContentText("${nickname.take(64)} · ${status.take(32)}")
+            .setContentTitle(getString(R.string.family_notification_title))
+            .setContentText("${nickname.take(64)} · $localizedStatus")
             .setCategory(android.app.Notification.CATEGORY_ALARM)
             .setVisibility(android.app.Notification.VISIBILITY_PRIVATE)
             .setAutoCancel(true)

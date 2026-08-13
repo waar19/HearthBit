@@ -1095,6 +1095,13 @@ class AppLocalizationsFr extends AppLocalizations {
   String get mapMyLocation => 'Centrer sur ma position';
 
   @override
+  String get mapPassiveCacheInfo =>
+      'Cette carte conserve automatiquement les tuiles consultées pour les réutiliser hors ligne. Le téléchargement d’une région exige un fournisseur autorisé ou votre propre serveur.';
+
+  @override
+  String get mapTilePolicyAction => 'Politique OSM';
+
+  @override
   String get mapDownloadVisible => 'Télécharger la zone visible';
 
   @override

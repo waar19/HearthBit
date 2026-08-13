@@ -6,6 +6,14 @@
     <string name="notification_text">Retransmitiendo mensajes de la malla BLE</string>
     <string name="notification_status_starting">Iniciando malla…</string>
     <string name="notification_status_error">Error en la malla — toca para abrir</string>
+    <string name="family_notification_channel_name">Alertas de emergencia familiar</string>
+    <string name="family_notification_channel_description">Alertas verificadas de SOS y estado de familiares</string>
+    <string name="family_notification_title">Alerta familiar de HearthBit</string>
+    <string name="family_notification_status_sos">SOS</string>
+    <string name="family_notification_status_ok">Estoy bien</string>
+    <string name="family_notification_status_help">Necesita ayuda</string>
+    <string name="family_notification_status_injured">Herido</string>
+    <string name="family_notification_status_check_in">Estado familiar</string>
     <plurals name="notification_status_active">
         <item quantity="one">Malla activa · %1$d dispositivo cercano</item>
         <item quantity="other">Malla activa · %1$d dispositivos cercanos</item>

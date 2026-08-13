@@ -98,7 +98,7 @@
         "Do not light flames where gas may be leaking.",
         "Moving debris can cause collapse or worsen hidden injuries."
       ],
-      "sourceIds": ["ifrc2025"]
+      "sourceIds": ["ready-earthquake"]
     }
   ],
   "sources": [
@@ -114,6 +114,13 @@
       "title": "First Aid Steps: Check, Call, Care",
       "publisher": "American Red Cross",
       "url": "https://www.redcross.org/take-a-class/first-aid/performing-first-aid/first-aid-steps",
+      "published": "Accessed 2026-08-13"
+    },
+    {
+      "id": "ready-earthquake",
+      "title": "Earthquakes",
+      "publisher": "FEMA / Ready.gov",
+      "url": "https://www.ready.gov/earthquakes",
       "published": "Accessed 2026-08-13"
     }
   ]

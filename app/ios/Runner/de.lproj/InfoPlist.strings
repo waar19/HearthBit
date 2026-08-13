@@ -1,0 +1,7 @@
+"NSBluetoothAlwaysUsageDescription" = "HearthBit verwendet Bluetooth, um Telefone in der Nähe zu finden und Nachrichten weiterzuleiten, wenn kein Internetzugang verfügbar ist.";
+"NSBluetoothPeripheralUsageDescription" = "HearthBit kündigt dieses Telefon als Knoten im Notfallnetz an.";
+"NSCameraUsageDescription" = "HearthBit verwendet die Kamera, um Dateien über QR-Codes zu empfangen, wenn keine Funkverbindung verfügbar ist.";
+"NSLocationWhenInUseUsageDescription" = "Dein Standort wird an SOS-Meldungen angehängt, damit Rettungskräfte dich finden können.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "Der dauerhafte Standortzugriff ermöglicht es dem Rettungsmodus, deine GPS-Position auch bei ausgeschaltetem Bildschirm über das Netz weiterzuleiten.";
+"NSMicrophoneUsageDescription" = "HearthBit verwendet das Mikrofon, um während eines Notfalls kurze Sprachnachrichten zu senden.";
+"NSLocalNetworkUsageDescription" = "HearthBit sucht in deinem lokalen WLAN nach Notfall-Gateways, um das Netz ohne Internetzugang zu erweitern.";

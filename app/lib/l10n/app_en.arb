@@ -369,6 +369,8 @@
   "mapOpenRescue": "OPEN RESCUE MAP",
   "mapTitle": "Offline rescue map",
   "mapMyLocation": "Center on my location",
+  "mapPassiveCacheInfo": "This map automatically keeps tiles you view for offline reuse. Regional downloads require an authorized provider or your own server.",
+  "mapTilePolicyAction": "OSM policy",
   "mapDownloadVisible": "Download visible area",
   "mapDownloadComplete": "{count} map tiles saved for offline use.",
   "@mapDownloadComplete": {"placeholders": {"count": {"type": "int"}}},

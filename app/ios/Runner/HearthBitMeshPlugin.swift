@@ -241,10 +241,17 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       case "showFamilyNotification":
         let messageID = arguments["messageId"] as? String ?? UUID().uuidString
         let nickname = String((arguments["nickname"] as? String ?? "").prefix(64))
-        let status = String((arguments["status"] as? String ?? "").prefix(32))
+        let statusKey: String
+        switch arguments["status"] as? String {
+        case "SOS": statusKey = "family_status_sos"
+        case "OK": statusKey = "family_status_ok"
+        case "HELP": statusKey = "family_status_help"
+        case "INJURED": statusKey = "family_status_injured"
+        default: statusKey = "family_status_check_in"
+        }
         let content = UNMutableNotificationContent()
-        content.title = "HearthBit family alert"
-        content.body = "\(nickname) · \(status)"
+        content.title = HearthBitL10n.string("family_notification_title")
+        content.body = "\(nickname) · \(HearthBitL10n.string(statusKey))"
         content.sound = .default
         content.userInfo = ["openEmergency": true]
         UNUserNotificationCenter.current().add(
@@ -5119,6 +5126,12 @@ enum HearthBitL10n {
       "invalid_payload": "The transfer payload is not valid",
       "radar_consent_required": "This person has not allowed radar location",
       "role_cannot_chat": "Presence-only mode cannot send messages",
+      "family_notification_title": "HearthBit family alert",
+      "family_status_sos": "SOS",
+      "family_status_ok": "I am safe",
+      "family_status_help": "Needs help",
+      "family_status_injured": "Injured",
+      "family_status_check_in": "Check-in",
     ],
     "es": [
       "sos_default": "Necesito ayuda",
@@ -5135,6 +5148,12 @@ enum HearthBitL10n {
       "invalid_payload": "La carga de la transferencia no es válida",
       "radar_consent_required": "Esta persona no ha permitido la ubicación por radar",
       "role_cannot_chat": "El modo de solo presencia no puede enviar mensajes",
+      "family_notification_title": "Alerta familiar de HearthBit",
+      "family_status_sos": "SOS",
+      "family_status_ok": "Estoy bien",
+      "family_status_help": "Necesita ayuda",
+      "family_status_injured": "Herido",
+      "family_status_check_in": "Estado familiar",
     ],
     "de": [
       "sos_default": "Ich brauche Hilfe",
@@ -5151,6 +5170,12 @@ enum HearthBitL10n {
       "invalid_payload": "Die Übertragungsdaten sind ungültig",
       "radar_consent_required": "Diese Person hat die Ortung per Radar nicht erlaubt",
       "role_cannot_chat": "Im reinen Anwesenheitsmodus können keine Nachrichten gesendet werden",
+      "family_notification_title": "HearthBit-Familienmeldung",
+      "family_status_sos": "SOS",
+      "family_status_ok": "Mir geht es gut",
+      "family_status_help": "Benötigt Hilfe",
+      "family_status_injured": "Verletzt",
+      "family_status_check_in": "Statusmeldung",
     ],
     "fr": [
       "sos_default": "J'ai besoin d'aide",
@@ -5167,6 +5192,12 @@ enum HearthBitL10n {
       "invalid_payload": "La charge du transfert n'est pas valide",
       "radar_consent_required": "Cette personne n'a pas autorisé la localisation par radar",
       "role_cannot_chat": "Le mode présence seule ne peut pas envoyer de messages",
+      "family_notification_title": "Alerte familiale HearthBit",
+      "family_status_sos": "SOS",
+      "family_status_ok": "Je vais bien",
+      "family_status_help": "A besoin d'aide",
+      "family_status_injured": "Blessé",
+      "family_status_check_in": "État familial",
     ],
     "zh": [
       "sos_default": "我需要帮助",
@@ -5183,6 +5214,12 @@ enum HearthBitL10n {
       "invalid_payload": "传输数据无效",
       "radar_consent_required": "对方尚未允许通过雷达定位",
       "role_cannot_chat": "仅在线状态模式无法发送消息",
+      "family_notification_title": "HearthBit 家庭警报",
+      "family_status_sos": "SOS",
+      "family_status_ok": "我很安全",
+      "family_status_help": "需要帮助",
+      "family_status_injured": "受伤",
+      "family_status_check_in": "家庭状态",
     ],
     "ja": [
       "sos_default": "助けが必要です",
@@ -5199,6 +5236,12 @@ enum HearthBitL10n {
       "invalid_payload": "転送ペイロードが無効です",
       "radar_consent_required": "相手はレーダーによる位置確認を許可していません",
       "role_cannot_chat": "プレゼンス専用モードではメッセージを送信できません",
+      "family_notification_title": "HearthBit 家族通知",
+      "family_status_sos": "SOS",
+      "family_status_ok": "無事です",
+      "family_status_help": "助けが必要です",
+      "family_status_injured": "負傷しています",
+      "family_status_check_in": "家族の安否情報",
     ],
   ]
 }

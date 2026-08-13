@@ -12,7 +12,7 @@
 		<string>es</string>
 		<string>de</string>
 		<string>fr</string>
-		<string>zh</string>
+		<string>zh-Hans</string>
 		<string>ja</string>
 	</array>
 	<key>CFBundleDisplayName</key>
@@ -36,19 +36,19 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>HearthBit usa Bluetooth para encontrar teléfonos cercanos y retransmitir mensajes cuando no hay internet. / HearthBit uses Bluetooth to find nearby phones and relay messages when there is no internet.</string>
+	<string>HearthBit uses Bluetooth to find nearby phones and relay messages when internet access is unavailable.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>HearthBit usa la cámara para recibir archivos mediante códigos QR cuando no hay ninguna radio disponible. / HearthBit uses the camera to receive files via QR codes when no radio is available.</string>
+	<string>HearthBit uses the camera to receive files through QR codes when no radio connection is available.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>HearthBit anuncia este teléfono como un nodo de la malla de emergencia. / HearthBit advertises this phone as a node of the emergency mesh.</string>
+	<string>HearthBit advertises this phone as a node in the emergency mesh.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>La ubicación se adjunta a tus alertas SOS para que los rescatistas puedan encontrarte. / Your location is attached to your SOS alerts so rescuers can find you.</string>
+	<string>Your location is attached to SOS alerts so rescuers can find you.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Con acceso permanente, el modo rescate reenvía tu posición GPS por la malla aunque la pantalla esté apagada. / With always-on access, rescue mode re-broadcasts your GPS position over the mesh even with the screen off.</string>
+	<string>Always-on location access lets rescue mode relay your GPS position over the mesh even when the screen is off.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>HearthBit usa el micrófono para enviar notas de voz cortas durante una emergencia. / HearthBit uses the microphone to send short voice notes during an emergency.</string>
+	<string>HearthBit uses the microphone to send short voice messages during an emergency.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>HearthBit busca gateways de emergencia en tu Wi-Fi local para extender la malla sin internet. / HearthBit finds emergency gateways on your local Wi-Fi to extend the mesh without internet.</string>
+	<string>HearthBit finds emergency gateways on your local Wi-Fi network to extend the mesh without internet access.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_hearthbit._tcp</string>

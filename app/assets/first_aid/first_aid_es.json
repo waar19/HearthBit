@@ -80,7 +80,7 @@
         "No muevas escombros pesados ni entres en estructuras dañadas hasta que las autoridades lo indiquen. Contacta a emergencias cuando sea posible y sigue instrucciones locales."
       ],
       "warnings": ["No enciendas llamas si puede haber una fuga de gas.", "Mover escombros puede causar derrumbes o agravar lesiones ocultas."],
-      "sourceIds": ["ifrc2025"]
+      "sourceIds": ["ready-earthquake"]
     }
   ],
   "sources": [
@@ -96,6 +96,13 @@
       "title": "Pasos de primeros auxilios: comprobar, llamar y atender",
       "publisher": "Cruz Roja Americana",
       "url": "https://www.redcross.org/take-a-class/first-aid/performing-first-aid/first-aid-steps",
+      "published": "Consultado el 2026-08-13"
+    },
+    {
+      "id": "ready-earthquake",
+      "title": "Terremotos",
+      "publisher": "FEMA / Ready.gov",
+      "url": "https://www.ready.gov/earthquakes",
       "published": "Consultado el 2026-08-13"
     }
   ]

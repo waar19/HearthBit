@@ -1,0 +1,7 @@
+"NSBluetoothAlwaysUsageDescription" = "HearthBit usa Bluetooth para encontrar teléfonos cercanos y retransmitir mensajes cuando no hay acceso a internet.";
+"NSBluetoothPeripheralUsageDescription" = "HearthBit anuncia este teléfono como un nodo de la malla de emergencia.";
+"NSCameraUsageDescription" = "HearthBit usa la cámara para recibir archivos mediante códigos QR cuando no hay conexión de radio disponible.";
+"NSLocationWhenInUseUsageDescription" = "Tu ubicación se adjunta a las alertas SOS para que los equipos de rescate puedan encontrarte.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "El acceso permanente a la ubicación permite que el modo rescate retransmita tu posición GPS por la malla aunque la pantalla esté apagada.";
+"NSMicrophoneUsageDescription" = "HearthBit usa el micrófono para enviar mensajes de voz cortos durante una emergencia.";
+"NSLocalNetworkUsageDescription" = "HearthBit busca gateways de emergencia en tu red Wi-Fi local para extender la malla sin acceso a internet.";

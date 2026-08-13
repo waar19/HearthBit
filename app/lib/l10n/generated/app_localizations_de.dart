@@ -1095,6 +1095,13 @@ class AppLocalizationsDe extends AppLocalizations {
   String get mapMyLocation => 'Auf meinen Standort zentrieren';
 
   @override
+  String get mapPassiveCacheInfo =>
+      'Diese Karte speichert angesehene Kacheln automatisch zur Offline-Wiederverwendung. Regionale Downloads erfordern einen autorisierten Anbieter oder einen eigenen Server.';
+
+  @override
+  String get mapTilePolicyAction => 'OSM-Richtlinie';
+
+  @override
   String get mapDownloadVisible => 'Sichtbaren Bereich herunterladen';
 
   @override

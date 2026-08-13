@@ -1,0 +1,7 @@
+"NSBluetoothAlwaysUsageDescription" = "HearthBit 使用蓝牙发现附近的手机，并在无法连接互联网时转发消息。";
+"NSBluetoothPeripheralUsageDescription" = "HearthBit 会将此手机广播为应急网状网络中的节点。";
+"NSCameraUsageDescription" = "当没有可用的无线连接时，HearthBit 使用相机通过二维码接收文件。";
+"NSLocationWhenInUseUsageDescription" = "您的位置会附加到 SOS 警报中，以便救援人员找到您。";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "始终允许访问位置后，即使屏幕已关闭，救援模式也能通过网状网络转发您的 GPS 位置。";
+"NSMicrophoneUsageDescription" = "HearthBit 使用麦克风在紧急情况下发送简短的语音消息。";
+"NSLocalNetworkUsageDescription" = "HearthBit 会在本地 Wi-Fi 网络中查找应急网关，以便在无法连接互联网时扩展网状网络。";

@@ -329,6 +329,8 @@
   "mapOpenRescue": "RETTUNGSKARTE ÖFFNEN",
   "mapTitle": "Offline-Rettungskarte",
   "mapMyLocation": "Auf meinen Standort zentrieren",
+  "mapPassiveCacheInfo": "Diese Karte speichert angesehene Kacheln automatisch zur Offline-Wiederverwendung. Regionale Downloads erfordern einen autorisierten Anbieter oder einen eigenen Server.",
+  "mapTilePolicyAction": "OSM-Richtlinie",
   "mapDownloadVisible": "Sichtbaren Bereich herunterladen",
   "mapDownloadComplete": "{count} Kartenkacheln wurden offline gespeichert.",
   "@mapDownloadComplete": {"placeholders": {"count": {"type": "int"}}},

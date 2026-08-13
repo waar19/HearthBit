@@ -1,7 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth_bit/services/offline_tile_cache.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
+  const pngBytes = <int>[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+  const tile = OfflineTileCoordinate(1, 2, 3);
   const bogotaBounds = GeographicBounds(
     south: 4.58,
     west: -74.11,
@@ -36,5 +42,148 @@ void main() {
       () => planner.plan(bounds: bogotaBounds, fromZoom: 2, toZoom: 3),
       throwsArgumentError,
     );
+  });
+
+  group('política de fuentes', () {
+    late Directory temporaryDirectory;
+
+    setUp(() async {
+      temporaryDirectory = await Directory.systemTemp.createTemp(
+        'hearthbit_tiles_',
+      );
+    });
+
+    tearDown(() async {
+      await temporaryDirectory.delete(recursive: true);
+    });
+
+    test('bloquea bulk de OSM aunque la configuración lo habilite', () async {
+      final source = MapTileSource.configured(
+        urlTemplate: osmTileUrlTemplate,
+        attribution: 'Incorrect attribution',
+        attributionUrl: 'https://example.org',
+        allowsBulkDownload: true,
+      );
+      var requests = 0;
+      final cache = OfflineTileCache.forTesting(
+        root: temporaryDirectory,
+        source: source,
+        client: MockClient((_) async {
+          requests += 1;
+          return http.Response.bytes(pngBytes, HttpStatus.ok);
+        }),
+      );
+
+      expect(source, same(MapTileSource.openStreetMap));
+      expect(source.allowsBulkDownload, isFalse);
+      await expectLater(
+        cache.download(const [tile]),
+        throwsA(isA<TileBulkDownloadNotAllowedException>()),
+      );
+      expect(requests, 0);
+    });
+
+    test('habilita bulk para una fuente personalizada autorizada', () async {
+      final source = MapTileSource.configured(
+        urlTemplate: 'https://maps.example.org/{z}/{x}/{y}.png',
+        attribution: 'Example Maps',
+        attributionUrl: 'https://maps.example.org/terms',
+        allowsBulkDownload: true,
+      );
+      var requests = 0;
+      final cache = OfflineTileCache.forTesting(
+        root: temporaryDirectory,
+        source: source,
+        client: MockClient((request) async {
+          requests += 1;
+          expect(request.url.host, 'maps.example.org');
+          return http.Response.bytes(pngBytes, HttpStatus.ok);
+        }),
+      );
+
+      expect(source.allowsBulkDownload, isTrue);
+      await cache.download(const [tile]);
+      expect(requests, 1);
+    });
+  });
+
+  group('caducidad de caché pasiva', () {
+    late Directory temporaryDirectory;
+
+    setUp(() async {
+      temporaryDirectory = await Directory.systemTemp.createTemp(
+        'hearthbit_cache_ttl_',
+      );
+    });
+
+    tearDown(() async {
+      await temporaryDirectory.delete(recursive: true);
+    });
+
+    test('no solicita de nuevo una tesela antes del max-age', () async {
+      var now = DateTime.utc(2026, 8, 13, 12);
+      var requests = 0;
+      final seenRequests = <http.Request>[];
+      final cache = OfflineTileCache.forTesting(
+        root: temporaryDirectory,
+        now: () => now,
+        client: MockClient((request) async {
+          requests += 1;
+          seenRequests.add(request);
+          if (requests == 1) {
+            return http.Response.bytes(
+              pngBytes,
+              HttpStatus.ok,
+              headers: const {
+                HttpHeaders.cacheControlHeader: 'max-age=3600',
+                HttpHeaders.etagHeader: '"tile-v1"',
+              },
+            );
+          }
+          return http.Response.bytes(
+            const [],
+            HttpStatus.notModified,
+            headers: const {HttpHeaders.cacheControlHeader: 'max-age=3600'},
+          );
+        }),
+      );
+
+      await cache.load(tile);
+      now = now.add(const Duration(minutes: 30));
+      await cache.load(tile);
+      expect(requests, 1);
+
+      now = now.add(const Duration(hours: 1));
+      await cache.load(tile);
+      expect(requests, 2);
+      expect(
+        seenRequests.last.headers[HttpHeaders.ifNoneMatchHeader],
+        '"tile-v1"',
+      );
+
+      now = now.add(const Duration(minutes: 30));
+      await cache.load(tile);
+      expect(requests, 2);
+    });
+
+    test('usa siete días para entradas existentes sin metadata', () async {
+      final now = DateTime.utc(2026, 8, 13, 12);
+      var requests = 0;
+      final cache = OfflineTileCache.forTesting(
+        root: temporaryDirectory,
+        now: () => now,
+        client: MockClient((_) async {
+          requests += 1;
+          return http.Response.bytes(pngBytes, HttpStatus.ok);
+        }),
+      );
+      final file = cache.fileFor(tile);
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(pngBytes);
+      await file.setLastModified(now.subtract(const Duration(days: 6)));
+
+      expect(await cache.load(tile), pngBytes);
+      expect(requests, 0);
+    });
   });
 }

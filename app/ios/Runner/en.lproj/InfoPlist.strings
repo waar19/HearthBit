@@ -1,0 +1,7 @@
+"NSBluetoothAlwaysUsageDescription" = "HearthBit uses Bluetooth to find nearby phones and relay messages when internet access is unavailable.";
+"NSBluetoothPeripheralUsageDescription" = "HearthBit advertises this phone as a node in the emergency mesh.";
+"NSCameraUsageDescription" = "HearthBit uses the camera to receive files through QR codes when no radio connection is available.";
+"NSLocationWhenInUseUsageDescription" = "Your location is attached to SOS alerts so rescuers can find you.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "Always-on location access lets rescue mode relay your GPS position over the mesh even when the screen is off.";
+"NSMicrophoneUsageDescription" = "HearthBit uses the microphone to send short voice messages during an emergency.";
+"NSLocalNetworkUsageDescription" = "HearthBit finds emergency gateways on your local Wi-Fi network to extend the mesh without internet access.";

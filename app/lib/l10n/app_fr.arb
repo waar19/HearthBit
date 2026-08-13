@@ -329,6 +329,8 @@
   "mapOpenRescue": "OUVRIR LA CARTE DE SECOURS",
   "mapTitle": "Carte de secours hors ligne",
   "mapMyLocation": "Centrer sur ma position",
+  "mapPassiveCacheInfo": "Cette carte conserve automatiquement les tuiles consultées pour les réutiliser hors ligne. Le téléchargement d’une région exige un fournisseur autorisé ou votre propre serveur.",
+  "mapTilePolicyAction": "Politique OSM",
   "mapDownloadVisible": "Télécharger la zone visible",
   "mapDownloadComplete": "{count} tuiles enregistrées pour une utilisation hors ligne.",
   "@mapDownloadComplete": {"placeholders": {"count": {"type": "int"}}},

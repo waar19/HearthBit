@@ -80,7 +80,7 @@
         "Ne déplacez pas de lourds débris et n’entrez pas dans un bâtiment endommagé avant autorisation. Contactez les secours si possible et suivez les consignes locales."
       ],
       "warnings": ["N’allumez aucune flamme en cas de fuite de gaz possible.", "Déplacer des débris peut provoquer un effondrement ou aggraver des blessures cachées."],
-      "sourceIds": ["ifrc2025"]
+      "sourceIds": ["ready-earthquake"]
     }
   ],
   "sources": [
@@ -96,6 +96,13 @@
       "title": "Étapes de premiers secours : vérifier, appeler, secourir",
       "publisher": "Croix-Rouge américaine",
       "url": "https://www.redcross.org/take-a-class/first-aid/performing-first-aid/first-aid-steps",
+      "published": "Consulté le 2026-08-13"
+    },
+    {
+      "id": "ready-earthquake",
+      "title": "Séismes",
+      "publisher": "FEMA / Ready.gov",
+      "url": "https://www.ready.gov/earthquakes",
       "published": "Consulté le 2026-08-13"
     }
   ]

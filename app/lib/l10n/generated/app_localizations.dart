@@ -1947,6 +1947,18 @@ abstract class AppLocalizations {
   /// **'Center on my location'**
   String get mapMyLocation;
 
+  /// No description provided for @mapPassiveCacheInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'This map automatically keeps tiles you view for offline reuse. Regional downloads require an authorized provider or your own server.'**
+  String get mapPassiveCacheInfo;
+
+  /// No description provided for @mapTilePolicyAction.
+  ///
+  /// In en, this message translates to:
+  /// **'OSM policy'**
+  String get mapTilePolicyAction;
+
   /// No description provided for @mapDownloadVisible.
   ///
   /// In en, this message translates to:
