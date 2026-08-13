@@ -427,6 +427,27 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String beaconRequestTitle(String nickname) {
+    return '$nickname が目印の作動を求めています';
+  }
+
+  @override
+  String get beaconRequestBody =>
+      '同意すると、ライト・警報音・振動を最長5分間使用します。同意なしに作動することはありません。';
+
+  @override
+  String get beaconMakeVisible => '自分を見つけやすくする';
+
+  @override
+  String get beaconStopVisible => '物理ビーコンを停止';
+
+  @override
+  String get beaconRequestRemote => 'ビーコンを依頼';
+
+  @override
+  String get beaconStopRemote => 'ビーコンを停止';
+
+  @override
   String get radarSignalLost => '信号ロスト';
 
   @override
@@ -1101,4 +1122,91 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get voicePause => '音声メモを一時停止';
+
+  @override
+  String get shareApkButton => 'インストール済みAPKを共有';
+
+  @override
+  String get sendApkToPeer => 'HearthBit APKを送信';
+
+  @override
+  String get apkSafetyTitle => 'Androidインストーラーを共有しますか？';
+
+  @override
+  String apkSendToPeerWarning(String peer) {
+    return '$peer にHearthBitのAndroidインストーラーを送信します。';
+  }
+
+  @override
+  String get apkInstallWarning =>
+      '受信者はAndroid設定で、受信に使用した提供元からのアプリのインストールを許可する必要があります。HearthBitが自動的にインストールすることはありません。';
+
+  @override
+  String get apkSignatureWarning =>
+      '異なる鍵で署名されたAPKは、インストール済みアプリを更新できません。インストール前に提供元と署名を確認してください。';
+
+  @override
+  String get apkTransportWarning =>
+      'APK転送にBLEは使用しません。ローカルWi-Fi、Nearby、またはWi-Fi Awareが必要です。利用できない場合は転送エラーが表示されます。';
+
+  @override
+  String get apkConfirmShare => '続行';
+
+  @override
+  String get apkPreparing => '安全なAPKコピーを準備しています…';
+
+  @override
+  String get apkSplitUnavailable =>
+      'このインストールは分割APKを使用しています。ベースAPKだけでは不完全なため、HearthBitは共有しません。代わりにGitHubリンクを案内してください。';
+
+  @override
+  String get apkUnsupported => 'インストール済みAPKの共有はAndroidでのみ利用できます。';
+
+  @override
+  String apkShareError(String error) {
+    return 'APKを準備または共有できませんでした：$error';
+  }
+
+  @override
+  String get apkShareMessage =>
+      'HearthBit Androidインストーラーです。Androidでは、この提供元からのインストール許可が必要です。署名が異なるAPKは既存のインストールを更新できないため、先に提供元と署名を確認してください。';
+
+  @override
+  String apkOfferSent(String peer) {
+    return '$peer にAPKを提案しました。適切な高速転送経路がない場合はエラーが表示されます。';
+  }
+
+  @override
+  String get firstAidOpen => 'オフライン応急手当を開く';
+
+  @override
+  String get firstAidTitle => 'オフライン応急手当';
+
+  @override
+  String get firstAidDisclaimer =>
+      '地域の救急へ通報してください。この案内は専門家の救助や講習に代わりません。地域で手順が異なるため、通信指令員と当局に従ってください。';
+
+  @override
+  String get firstAidChooseTopic => '起きていることを選ぶ';
+
+  @override
+  String get firstAidEnglishFallback => 'この翻訳を検証できないため、検証済みの英語版を表示しています。';
+
+  @override
+  String get firstAidSteps => '今すぐ行う';
+
+  @override
+  String get firstAidWarnings => '避けること';
+
+  @override
+  String get firstAidSources => '出典と確認情報';
+
+  @override
+  String firstAidReviewed(String date) {
+    return '内容確認日：$date';
+  }
+
+  @override
+  String get firstAidLoadError =>
+      '検証済みのオフライン案内を読み込めませんでした。不完全な情報に頼らず、地域の救急へ通報してください。';
 }

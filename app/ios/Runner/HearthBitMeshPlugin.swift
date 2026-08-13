@@ -114,6 +114,11 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var syncResponseTimes: [UUID: [Date]] = [:]
   private var lastSyncRequestBySource: [UUID: Date] = [:]
   private var remoteRadarConsents: [String: IOSRemoteRadarConsent] = [:]
+  private var pendingBeaconRequests: [String: IOSPendingBeaconRequest] = [:]
+  private var outgoingBeaconRequests: [String: IOSOutgoingBeaconRequest] = [:]
+  private var seenBeaconActions: [String: Date] = [:]
+  private var activeBeaconRequest: IOSPendingBeaconRequest?
+  private let beaconActuator = IOSBeaconActuator()
   private var centralWriteQueues: [UUID: [PendingCentralWrite]] = [:]
   private var centralWritesInFlight: Set<UUID> = []
   private var peripheralNotifyQueues: [UUID: [Data]] = [:]
@@ -206,6 +211,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   func onCancel(withArguments arguments: Any?) -> FlutterError? {
+    stopLocalBeacon()
     eventSink = nil
     return nil
   }
@@ -221,6 +227,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           "peripheralMode": true,
           "nodeRoles": IOSMeshNodeRole.allCases.map(\.rawValue),
         ])
+      case "getInstalledApkForShare":
+        result(["status": "unsupported"])
       case "requestPermissions":
         result(true)
       case "startMesh":
@@ -338,6 +346,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         result(verified)
       case "panicWipe":
         stop()
+        beaconActuator.stop()
+        activeBeaconRequest = nil
         IOSMeshIdentity.clear()
         identity = IOSMeshIdentity()
         storeForward.clear()
@@ -346,6 +356,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         responderCandidates.removeAll()
         syncPackets.removeAll()
         remoteRadarConsents.removeAll()
+        pendingBeaconRequests.removeAll()
+        outgoingBeaconRequests.removeAll()
+        seenBeaconActions.removeAll()
         result(nil)
         emit(["type": "wiped"])
       case "getPowerStatus":
@@ -386,6 +399,47 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         let minutes = min(max(arguments["minutes"] as? Int ?? 15, 1), 20)
         setRadarConsent(enabled: enabled, duration: TimeInterval(minutes * 60))
         result(nil)
+      case "startLocalBeacon":
+        guard let flags = UInt8(
+          exactly: arguments["flags"] as? Int ?? Int(IOSBeaconControlProtocol.allowedFlags)
+        ) else { throw IOSMeshError.invalidPayload }
+        let seconds = min(max(arguments["durationSeconds"] as? Int ?? 300, 1), 300)
+        try startLocalBeacon(flags: flags, duration: TimeInterval(seconds))
+        result(nil)
+      case "stopLocalBeacon":
+        stopLocalBeacon()
+        result(nil)
+      case "requestRemoteBeacon":
+        guard let peerID = arguments["peerId"] as? String else {
+          throw IOSMeshError.peerUnavailable
+        }
+        guard let flags = UInt8(
+          exactly: arguments["flags"] as? Int ?? Int(IOSBeaconControlProtocol.allowedFlags)
+        ) else { throw IOSMeshError.invalidPayload }
+        let seconds = min(max(arguments["durationSeconds"] as? Int ?? 300, 1), 300)
+        result(
+          try requestRemoteBeacon(
+            peerID: peerID.lowercased(),
+            flags: flags,
+            duration: TimeInterval(seconds)
+          )
+        )
+      case "respondToBeaconRequest":
+        guard let requestID = arguments["requestId"] as? String else {
+          throw IOSMeshError.invalidPayload
+        }
+        try respondToBeaconRequest(
+          requestID: requestID.lowercased(),
+          accept: arguments["accept"] as? Bool ?? false
+        )
+        result(nil)
+      case "stopRemoteBeacon":
+        guard
+          let peerID = arguments["peerId"] as? String,
+          let requestID = arguments["requestId"] as? String
+        else { throw IOSMeshError.invalidPayload }
+        try stopRemoteBeacon(peerID: peerID.lowercased(), requestID: requestID.lowercased())
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -425,7 +479,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           forName: UIApplication.didEnterBackgroundNotification,
           object: nil,
           queue: .main
-        ) { [weak self] _ in self?.refreshPowerState() },
+        ) { [weak self] _ in
+          self?.stopLocalBeacon()
+          self?.refreshPowerState()
+        },
         center.addObserver(
           forName: UIApplication.didBecomeActiveNotification,
           object: nil,
@@ -458,6 +515,11 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func stopInternal(notify: Bool) {
     running = false
     stopRadar()
+    beaconActuator.stop()
+    pendingBeaconRequests.removeAll()
+    outgoingBeaconRequests.removeAll()
+    seenBeaconActions.removeAll()
+    activeBeaconRequest = nil
     adaptiveScanTimer?.invalidate()
     adaptiveScanTimer = nil
     linkLossScanTimer?.invalidate()
@@ -645,6 +707,205 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     UserDefaults.standard.set(expiresAt, forKey: IOSRadarConsentProtocol.localConsentKey)
     broadcastRadarConsent(grant: enabled)
     emitRadarConsent()
+  }
+
+  private func startLocalBeacon(flags: UInt8, duration: TimeInterval) throws {
+    let expiresAt = currentMilliseconds() +
+      UInt64(min(max(duration, 0.001), 300) * 1000)
+    guard startBeaconActuator(flags: flags, expiresAt: expiresAt) else {
+      throw IOSMeshError.invalidPayload
+    }
+  }
+
+  private func stopLocalBeacon() {
+    let active = activeBeaconRequest
+    beaconActuator.stop()
+    activeBeaconRequest = nil
+    if let active {
+      try? sendBeaconControl(
+        peerID: active.peerID,
+        payload: IOSBeaconControlProtocol.stop(nonce: active.control.nonce)
+      )
+    }
+    emitLocalBeaconState(status: "stopped")
+  }
+
+  private func requestRemoteBeacon(
+    peerID: String,
+    flags: UInt8,
+    duration: TimeInterval
+  ) throws -> String {
+    guard peers[peerID] != nil else { throw IOSMeshError.peerUnavailable }
+    guard flags != 0, flags & ~IOSBeaconControlProtocol.allowedFlags == 0 else {
+      throw IOSMeshError.invalidPayload
+    }
+    let expiresAt = currentMilliseconds() +
+      UInt64(min(max(duration, 0.001), 300) * 1000)
+    let now = currentMilliseconds()
+    outgoingBeaconRequests = outgoingBeaconRequests.filter { $0.value.expiresAt > now }
+    let payload = IOSBeaconControlProtocol.request(expiresAt: expiresAt, flags: flags)
+    guard let control = IOSBeaconControlProtocol.decode(payload) else {
+      throw IOSMeshError.invalidPayload
+    }
+    let requestID = control.nonce.hex
+    outgoingBeaconRequests[requestID] = IOSOutgoingBeaconRequest(
+      peerID: peerID,
+      expiresAt: expiresAt,
+      flags: flags
+    )
+    try sendBeaconControl(peerID: peerID, payload: payload)
+    emitRemoteBeaconState(
+      peerID: peerID,
+      requestID: requestID,
+      status: "requested",
+      expiresAt: expiresAt,
+      flags: flags
+    )
+    return requestID
+  }
+
+  private func respondToBeaconRequest(requestID: String, accept: Bool) throws {
+    guard let request = pendingBeaconRequests.removeValue(forKey: requestID) else {
+      throw IOSMeshError.invalidPayload
+    }
+    guard IOSBeaconControlProtocol.isValid(
+      request.control,
+      packetTimestamp: currentMilliseconds()
+    ) else {
+      try? sendBeaconControl(
+        peerID: request.peerID,
+        payload: IOSBeaconControlProtocol.revoke(nonce: request.control.nonce)
+      )
+      throw IOSMeshError.invalidPayload
+    }
+    respondToBeaconRequest(request, accept: accept, autoAccepted: false)
+  }
+
+  private func stopRemoteBeacon(peerID: String, requestID: String) throws {
+    guard
+      let outgoing = outgoingBeaconRequests.removeValue(forKey: requestID),
+      outgoing.peerID == peerID,
+      let nonce = try? Data(hex: requestID),
+      nonce.count == IOSBeaconControlProtocol.nonceSize
+    else { throw IOSMeshError.invalidPayload }
+    try sendBeaconControl(
+      peerID: peerID,
+      payload: IOSBeaconControlProtocol.stop(nonce: nonce)
+    )
+    emitRemoteBeaconState(
+      peerID: peerID,
+      requestID: requestID,
+      status: "stopped",
+      expiresAt: 0,
+      flags: 0
+    )
+  }
+
+  private func sendBeaconControl(peerID: String, payload: Data) throws {
+    guard running else { throw IOSMeshError.notRunning }
+    let packet = identity.sign(
+      IOSMeshPacket(
+        type: IOSMeshProtocol.beaconControl,
+        ttl: 1,
+        timestamp: currentMilliseconds(),
+        senderID: identity.peerID,
+        recipientID: try Data(hex: peerID),
+        payload: payload
+      )
+    )
+    broadcast(packet)
+  }
+
+  private func respondToBeaconRequest(
+    _ request: IOSPendingBeaconRequest,
+    accept: Bool,
+    autoAccepted: Bool
+  ) {
+    let requestID = request.control.nonce.hex
+    guard accept, startBeaconActuator(
+      flags: request.control.flags,
+      expiresAt: request.control.expiresAt
+    ) else {
+      try? sendBeaconControl(
+        peerID: request.peerID,
+        payload: IOSBeaconControlProtocol.revoke(nonce: request.control.nonce)
+      )
+      emit([
+        "type": "beaconRequestResolved",
+        "requestId": requestID,
+        "peerId": request.peerID,
+        "accepted": false,
+        "autoAccepted": autoAccepted,
+      ])
+      return
+    }
+    activeBeaconRequest = request
+    try? sendBeaconControl(
+      peerID: request.peerID,
+      payload: IOSBeaconControlProtocol.grant(
+        expiresAt: request.control.expiresAt,
+        flags: request.control.flags,
+        nonce: request.control.nonce
+      )
+    )
+    emit([
+      "type": "beaconRequestResolved",
+      "requestId": requestID,
+      "peerId": request.peerID,
+      "accepted": true,
+      "autoAccepted": autoAccepted,
+    ])
+  }
+
+  private func startBeaconActuator(flags: UInt8, expiresAt: UInt64) -> Bool {
+    let started = beaconActuator.start(flags: flags, expiresAt: expiresAt) { [weak self] in
+      guard let self else { return }
+      let expired = self.activeBeaconRequest
+      self.activeBeaconRequest = nil
+      if let expired, self.running {
+        try? self.sendBeaconControl(
+          peerID: expired.peerID,
+          payload: IOSBeaconControlProtocol.stop(nonce: expired.control.nonce)
+        )
+      }
+      self.emitLocalBeaconState(status: "expired")
+    }
+    if started {
+      emitLocalBeaconState(status: "active", flags: flags, expiresAt: expiresAt)
+    }
+    return started
+  }
+
+  private func emitLocalBeaconState(
+    status: String,
+    flags: UInt8 = 0,
+    expiresAt: UInt64 = 0
+  ) {
+    emit([
+      "type": "beaconState",
+      "scope": "local",
+      "status": status,
+      "flags": Int(flags),
+      "expiresAt": expiresAt,
+    ])
+  }
+
+  private func emitRemoteBeaconState(
+    peerID: String,
+    requestID: String,
+    status: String,
+    expiresAt: UInt64,
+    flags: UInt8
+  ) {
+    emit([
+      "type": "beaconState",
+      "scope": "remote",
+      "peerId": peerID,
+      "requestId": requestID,
+      "status": status,
+      "expiresAt": expiresAt,
+      "flags": Int(flags),
+    ])
   }
 
   /// Escanea sin filtro para observar presencia genérica. Solo los anuncios
@@ -1194,6 +1455,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     rememberSyncPacket(packet)
     let bytes = IOSMeshProtocol.encodeForBLE(packet)
     if localRole.storesDirectedPackets,
+       packet.type != IOSMeshProtocol.beaconControl,
        let recipient = packet.recipientID,
        recipient != Data(repeating: 0xff, count: 8) {
       storeForward.put(packet)
@@ -1498,7 +1760,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
        packet.type == IOSMeshProtocol.noiseEncrypted ||
        fragmentOriginalType == IOSMeshProtocol.noiseHandshake ||
        fragmentOriginalType == IOSMeshProtocol.noiseEncrypted)
-    if localRole.relaysPackets && packet.ttl > 1 && !controlForUs {
+    if localRole.relaysPackets &&
+       packet.type != IOSMeshProtocol.beaconControl &&
+       packet.ttl > 1 &&
+       !controlForUs {
       var relayed = packet
       relayed.ttl -= 1
       broadcast(relayed, excluding: source)
@@ -1592,8 +1857,13 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       processHbtCapability(packet, senderID: senderID)
     case IOSMeshProtocol.nodeCapability:
       processNodeCapability(packet, senderID: senderID)
+    case IOSMeshProtocol.beaconControl:
+      processBeaconControl(packet, senderID: senderID)
     case IOSMeshProtocol.fragment:
       if let reassembled = fragmentReassembler.accept(packet) {
+        if reassembled.type == IOSMeshProtocol.beaconControl, packet.ttl != 1 {
+          return
+        }
         if
           reassembled.type == IOSMeshProtocol.announce,
           packet.ttl == IOSMeshProtocol.defaultTTL,
@@ -1601,7 +1871,11 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         {
           peripheralPeers[source] = senderID
         }
-        process(reassembled, senderID: senderID, source: source)
+        var accepted = reassembled
+        if accepted.type == IOSMeshProtocol.beaconControl {
+          accepted.ttl = 1
+        }
+        process(accepted, senderID: senderID, source: source)
       }
     default:
       break
@@ -1658,6 +1932,129 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       return
     }
     emit(["type": "peers", "peers": peerMaps()])
+  }
+
+  private func processBeaconControl(_ packet: IOSMeshPacket, senderID: String) {
+    guard
+      packet.ttl == 1,
+      packet.recipientID == identity.peerID,
+      let peer = peers[senderID],
+      IOSMeshIdentity.verify(packet, key: peer.signingPublicKey),
+      let control = IOSBeaconControlProtocol.decode(packet.payload),
+      IOSBeaconControlProtocol.isValid(
+        control,
+        packetTimestamp: packet.timestamp,
+        now: currentMilliseconds()
+      )
+    else { return }
+    let requestID = control.nonce.hex
+    let now = Date()
+    seenBeaconActions = seenBeaconActions.filter { $0.value > now }
+    let replayKey = "\(senderID):\(requestID):\(control.action)"
+    guard seenBeaconActions[replayKey] == nil else { return }
+    seenBeaconActions[replayKey] = now.addingTimeInterval(10 * 60)
+    switch control.action {
+    case IOSBeaconControlProtocol.requestAction:
+      if activeBeaconRequest != nil {
+        try? sendBeaconControl(
+          peerID: senderID,
+          payload: IOSBeaconControlProtocol.revoke(nonce: control.nonce)
+        )
+        return
+      }
+      pendingBeaconRequests = pendingBeaconRequests.filter {
+        $0.value.control.expiresAt > currentMilliseconds()
+      }
+      guard pendingBeaconRequests.isEmpty else {
+        try? sendBeaconControl(
+          peerID: senderID,
+          payload: IOSBeaconControlProtocol.revoke(nonce: control.nonce)
+        )
+        return
+      }
+      let request = IOSPendingBeaconRequest(
+        peerID: senderID,
+        nickname: peer.nickname,
+        control: control
+      )
+      pendingBeaconRequests[requestID] = request
+      if IOSBeaconControlProtocol.shouldAutoAccept(
+        localRadarConsentUntil: activeLocalRadarConsentUntil(),
+        now: currentMilliseconds()
+      ) {
+        pendingBeaconRequests.removeValue(forKey: requestID)
+        emit([
+          "type": "beaconRequest",
+          "requestId": requestID,
+          "peerId": senderID,
+          "nickname": peer.nickname,
+          "expiresAt": control.expiresAt,
+          "flags": Int(control.flags),
+          "autoAccepted": true,
+        ])
+        respondToBeaconRequest(request, accept: true, autoAccepted: true)
+      } else {
+        emit([
+          "type": "beaconRequest",
+          "requestId": requestID,
+          "peerId": senderID,
+          "nickname": peer.nickname,
+          "expiresAt": control.expiresAt,
+          "flags": Int(control.flags),
+          "autoAccepted": false,
+        ])
+      }
+    case IOSBeaconControlProtocol.grantAction:
+      guard
+        let outgoing = outgoingBeaconRequests[requestID],
+        outgoing.peerID == senderID,
+        outgoing.flags == control.flags,
+        control.expiresAt <= outgoing.expiresAt
+      else { return }
+      emitRemoteBeaconState(
+        peerID: senderID,
+        requestID: requestID,
+        status: "active",
+        expiresAt: control.expiresAt,
+        flags: control.flags
+      )
+    case IOSBeaconControlProtocol.revokeAction:
+      guard
+        let outgoing = outgoingBeaconRequests.removeValue(forKey: requestID),
+        outgoing.peerID == senderID
+      else { return }
+      emitRemoteBeaconState(
+        peerID: senderID,
+        requestID: requestID,
+        status: "rejected",
+        expiresAt: 0,
+        flags: 0
+      )
+    case IOSBeaconControlProtocol.stopAction:
+      if
+        let active = activeBeaconRequest,
+        active.peerID == senderID,
+        active.control.nonce == control.nonce
+      {
+        beaconActuator.stop()
+        activeBeaconRequest = nil
+        emitLocalBeaconState(status: "stopped")
+      }
+      if
+        let outgoing = outgoingBeaconRequests.removeValue(forKey: requestID),
+        outgoing.peerID == senderID
+      {
+        emitRemoteBeaconState(
+          peerID: senderID,
+          requestID: requestID,
+          status: "stopped",
+          expiresAt: 0,
+          flags: 0
+        )
+      }
+    default:
+      break
+    }
   }
 
   private func processHandshake(_ packet: IOSMeshPacket, senderID: String) {
@@ -2000,6 +2397,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       "adaptivePowerSaving": adaptivePowerSaving,
       "powerProfile": powerProfile.rawValue,
       "radarConsentUntil": activeLocalRadarConsentUntil(),
+      "localBeaconActive": beaconActuator.isActive,
+      "localBeaconExpiresAt": beaconActuator.expiresAt,
     ])
   }
 
@@ -2879,6 +3278,131 @@ private struct IOSRemoteRadarConsent {
   let source: String
 }
 
+private struct IOSPendingBeaconRequest {
+  let peerID: String
+  let nickname: String
+  let control: IOSBeaconControlProtocol.Control
+}
+
+private struct IOSOutgoingBeaconRequest {
+  let peerID: String
+  let expiresAt: UInt64
+  let flags: UInt8
+}
+
+enum IOSBeaconControlProtocol {
+  static let version: UInt8 = 1
+  static let requestAction: UInt8 = 1
+  static let grantAction: UInt8 = 2
+  static let revokeAction: UInt8 = 3
+  static let stopAction: UInt8 = 4
+  static let flashFlag: UInt8 = 0x01
+  static let soundFlag: UInt8 = 0x02
+  static let vibrateFlag: UInt8 = 0x04
+  static let allowedFlags = flashFlag | soundFlag | vibrateFlag
+  static let nonceSize = 16
+  static let payloadSize = 27
+  static let maximumDurationMilliseconds: UInt64 = 5 * 60 * 1000
+  static let clockSkewMilliseconds: UInt64 = 2 * 60 * 1000
+
+  struct Control {
+    let action: UInt8
+    let expiresAt: UInt64
+    let nonce: Data
+    let flags: UInt8
+  }
+
+  static func request(expiresAt: UInt64, flags: UInt8, nonce: Data? = nil) -> Data {
+    encode(action: requestAction, expiresAt: expiresAt, nonce: nonce ?? randomNonce(), flags: flags)
+  }
+
+  static func grant(expiresAt: UInt64, flags: UInt8, nonce: Data) -> Data {
+    encode(action: grantAction, expiresAt: expiresAt, nonce: nonce, flags: flags)
+  }
+
+  static func revoke(nonce: Data) -> Data {
+    encode(action: revokeAction, expiresAt: 0, nonce: nonce, flags: 0)
+  }
+
+  static func stop(nonce: Data) -> Data {
+    encode(action: stopAction, expiresAt: 0, nonce: nonce, flags: 0)
+  }
+
+  static func decode(_ payload: Data) -> Control? {
+    guard payload.count == payloadSize else { return nil }
+    var reader = DataReader(payload)
+    guard
+      reader.byte() == version,
+      let action = reader.byte(),
+      [requestAction, grantAction, revokeAction, stopAction].contains(action),
+      let expiresAt: UInt64 = reader.integer(),
+      let nonce = reader.data(count: nonceSize),
+      let flags = reader.byte(),
+      reader.remaining.isEmpty,
+      flags & ~allowedFlags == 0
+    else { return nil }
+    let terminal = action == revokeAction || action == stopAction
+    guard (terminal
+      ? expiresAt == 0 && flags == 0
+      : expiresAt > 0 && flags != 0)
+    else { return nil }
+    return Control(action: action, expiresAt: expiresAt, nonce: nonce, flags: flags)
+  }
+
+  static func isValid(
+    _ control: Control,
+    packetTimestamp: UInt64,
+    now: UInt64 = UInt64(Date().timeIntervalSince1970 * 1000)
+  ) -> Bool {
+    guard hasValidTimestamp(packetTimestamp, now: now) else { return false }
+    switch control.action {
+    case requestAction, grantAction:
+      return control.expiresAt > now &&
+        control.expiresAt <= now + maximumDurationMilliseconds
+    case revokeAction, stopAction:
+      return control.expiresAt == 0 && control.flags == 0
+    default:
+      return false
+    }
+  }
+
+  static func hasValidTimestamp(_ timestamp: UInt64, now: UInt64) -> Bool {
+    let earliest = now > clockSkewMilliseconds ? now - clockSkewMilliseconds : 0
+    return timestamp >= earliest && timestamp <= now + clockSkewMilliseconds
+  }
+
+  static func shouldAutoAccept(localRadarConsentUntil: UInt64, now: UInt64) -> Bool {
+    localRadarConsentUntil > now
+  }
+
+  private static func encode(
+    action: UInt8,
+    expiresAt: UInt64,
+    nonce: Data,
+    flags: UInt8
+  ) -> Data {
+    precondition(nonce.count == nonceSize)
+    precondition(flags & ~allowedFlags == 0)
+    var output = Data([version, action])
+    output.appendInteger(expiresAt)
+    output.append(nonce)
+    output.append(flags)
+    return output
+  }
+
+  private static func randomNonce() -> Data {
+    var nonce = Data(count: nonceSize)
+    let status = nonce.withUnsafeMutableBytes { buffer in
+      guard let address = buffer.baseAddress else { return errSecParam }
+      return SecRandomCopyBytes(kSecRandomDefault, nonceSize, address)
+    }
+    if status != errSecSuccess {
+      return Data(SHA256.hash(data: Data(UUID().uuidString.utf8))).prefix(nonceSize)
+    }
+    return nonce
+  }
+}
+
 enum IOSRadarConsentProtocol {
   static let localConsentKey = "hearthbit.radar_consent_until"
   static let version: UInt8 = 1
@@ -2982,6 +3506,7 @@ enum IOSMeshProtocol {
   static let radarControl: UInt8 = 0x23
   static let hbtCapability: UInt8 = 0x24
   static let nodeCapability: UInt8 = 0x25
+  static let beaconControl: UInt8 = 0x26
   static let hbtVersion: UInt8 = 0x01
   static let noisePrivate: UInt8 = 0x01
   /// Trama HBT (HearthBit Transfer) encapsulada dentro de la sesión Noise.
@@ -3956,7 +4481,8 @@ enum IOSNoiseReplayPolicy {
 
   static func isStoreForwardSafe(_ packet: IOSMeshPacket) -> Bool {
     packet.type != IOSMeshProtocol.noiseHandshake &&
-      packet.type != IOSMeshProtocol.noiseEncrypted
+      packet.type != IOSMeshProtocol.noiseEncrypted &&
+      packet.type != IOSMeshProtocol.beaconControl
   }
 }
 

@@ -17,6 +17,7 @@ import '../controllers/transfer_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../models/transfer_models.dart';
+import '../services/apk_share_service.dart';
 import '../services/invite_share_service.dart';
 import '../services/emergency_shortcut_service.dart';
 import '../services/app_preferences.dart';
@@ -31,6 +32,8 @@ import 'radar_screen.dart';
 import 'transfers_tab.dart';
 
 enum _AppMenuAction { changeNickname, support, about, panicWipe }
+
+enum _PeerTransferAction { file, apk }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -53,6 +56,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
+  final _apkShare = ApkShareService();
   int _tab = 0;
   int _publicMessageCount = 0;
   bool _scrollScheduled = false;
@@ -603,15 +607,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         : null,
                     icon: const Icon(Icons.radar),
                   ),
-                  IconButton(
-                    tooltip: peer.supportsTransfers
-                        ? context.l10n.tooltipSendFile
-                        : context.l10n.peerDoesNotSupportTransfers,
-                    onPressed: canOfferFileToPeer(peer, isOnline: true)
-                        ? () => _sendFileTo(peer)
-                        : null,
-                    icon: const Icon(Icons.attach_file),
-                  ),
+                  _peerTransferButton(peer, online: true),
                   Icon(
                     peer.role.canChat
                         ? (peer.secure ? Icons.lock : Icons.lock_open)
@@ -686,17 +682,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 : null,
             icon: const Icon(Icons.radar),
           ),
-          IconButton(
-            tooltip: !online
-                ? context.l10n.peerOffline
-                : peer.supportsTransfers
-                ? context.l10n.tooltipSendFile
-                : context.l10n.peerDoesNotSupportTransfers,
-            onPressed: canOfferFileToPeer(peer, isOnline: online)
-                ? () => _sendFileTo(peer)
-                : null,
-            icon: const Icon(Icons.attach_file),
-          ),
+          _peerTransferButton(peer, online: online),
           Tooltip(
             message: peer.secure
                 ? context.l10n.peerSecure
@@ -708,6 +694,53 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _peerTransferButton(MeshPeer peer, {required bool online}) {
+    final enabled = canOfferFileToPeer(peer, isOnline: online);
+    final tooltip = !online
+        ? context.l10n.peerOffline
+        : peer.supportsTransfers
+        ? context.l10n.tooltipSendFile
+        : context.l10n.peerDoesNotSupportTransfers;
+    if (!ApkShareService.isSupportedPlatform) {
+      return IconButton(
+        tooltip: tooltip,
+        onPressed: enabled ? () => _sendFileTo(peer) : null,
+        icon: const Icon(Icons.attach_file),
+      );
+    }
+    return PopupMenuButton<_PeerTransferAction>(
+      tooltip: tooltip,
+      enabled: enabled,
+      icon: const Icon(Icons.attach_file),
+      onSelected: (action) {
+        switch (action) {
+          case _PeerTransferAction.file:
+            _sendFileTo(peer);
+          case _PeerTransferAction.apk:
+            _sendApkTo(peer);
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: _PeerTransferAction.file,
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.description_outlined),
+            title: Text(context.l10n.tooltipSendFile),
+          ),
+        ),
+        PopupMenuItem(
+          value: _PeerTransferAction.apk,
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.android),
+            title: Text(context.l10n.sendApkToPeer),
+          ),
+        ),
+      ],
     );
   }
 
@@ -872,6 +905,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               label: Text(context.l10n.shareInviteButton),
             ),
           ),
+          if (ApkShareService.isSupportedPlatform)
+            Builder(
+              builder: (buttonContext) => TextButton.icon(
+                onPressed: () => _shareInstalledApk(buttonContext),
+                icon: const Icon(Icons.android),
+                label: Text(context.l10n.shareApkButton),
+              ),
+            ),
           FilledButton.icon(
             onPressed: () => _openExternal(InviteShareService.donationUri),
             icon: const Icon(Icons.local_cafe_outlined),
@@ -880,6 +921,143 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ],
       ),
     );
+  }
+
+  Future<bool> _confirmApkSafety({String? peerName}) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(context.l10n.apkSafetyTitle),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (peerName != null) ...[
+                    Text(context.l10n.apkSendToPeerWarning(peerName)),
+                    const SizedBox(height: 12),
+                  ],
+                  Text(context.l10n.apkInstallWarning),
+                  const SizedBox(height: 12),
+                  Text(context.l10n.apkSignatureWarning),
+                  if (peerName != null) ...[
+                    const SizedBox(height: 12),
+                    Text(context.l10n.apkTransportWarning),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(context.l10n.actionCancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(context.l10n.apkConfirmShare),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<ApkSharePreparation?> _prepareInstalledApk({String? peerName}) async {
+    if (!await _confirmApkSafety(peerName: peerName) || !mounted) return null;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(context.l10n.apkPreparing)));
+    final preparation = await _apkShare.prepareInstalledApk();
+    if (!mounted) return null;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    switch (preparation.status) {
+      case ApkPreparationStatus.ready:
+        return preparation;
+      case ApkPreparationStatus.splitInstallation:
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(context.l10n.shareApkButton),
+            content: Text(context.l10n.apkSplitUnavailable),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(context.l10n.actionClose),
+              ),
+              Builder(
+                builder: (buttonContext) => FilledButton.icon(
+                  onPressed: () async {
+                    await _shareInvite(buttonContext);
+                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  },
+                  icon: const Icon(Icons.ios_share),
+                  label: Text(context.l10n.shareInviteButton),
+                ),
+              ),
+            ],
+          ),
+        );
+        return null;
+      case ApkPreparationStatus.unsupported:
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.l10n.apkUnsupported)));
+        return null;
+      case ApkPreparationStatus.failed:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              context.l10n.apkShareError(
+                preparation.message ?? context.l10n.errorUnknown,
+              ),
+            ),
+          ),
+        );
+        return null;
+    }
+  }
+
+  Future<void> _shareInstalledApk(BuildContext anchorContext) async {
+    final anchor = anchorContext.findRenderObject() as RenderBox?;
+    final preparation = await _prepareInstalledApk();
+    if (preparation == null || !mounted) return;
+    try {
+      await _apkShare.sharePreparedApk(
+        preparation: preparation,
+        anchor: anchor,
+        subject: context.l10n.appTitle,
+        message: context.l10n.apkShareMessage,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.apkShareError('$error'))),
+      );
+    }
+  }
+
+  Future<void> _sendApkTo(MeshPeer peer) async {
+    final preparation = await _prepareInstalledApk(peerName: peer.nickname);
+    if (preparation == null || !mounted) return;
+    try {
+      await widget.transfers.sendFile(
+        peer: peer,
+        filePath: preparation.path!,
+        fileName: preparation.fileName!,
+        mimeType: ApkShareService.androidPackageMimeType,
+      );
+      if (!mounted) return;
+      setState(() => _tab = 3);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.apkOfferSent(peer.nickname))),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final detail = error is StateError ? error.message : '$error';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.offerFileError(detail))),
+      );
+    }
   }
 
   Future<void> _shareInvite(BuildContext anchorContext) async {

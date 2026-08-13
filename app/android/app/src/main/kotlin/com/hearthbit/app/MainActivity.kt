@@ -81,6 +81,7 @@ class MainActivity : FlutterActivity() {
                         ),
                     ),
                 )
+                "getInstalledApkForShare" -> prepareInstalledApk(result)
                 "requestPermissions" -> requestMeshPermissions(result)
                 "startMesh" -> {
                     ContextCompat.startForegroundService(
@@ -195,6 +196,40 @@ class MainActivity : FlutterActivity() {
                     MeshRuntime.engine(this).setRadarConsent(
                         enabled = call.argument<Boolean>("enabled") == true,
                         durationMs = minutes.coerceIn(1L, 20L) * 60_000L,
+                    )
+                    null
+                }
+                "startLocalBeacon" -> runMethod(result) {
+                    MeshRuntime.engine(this).startLocalBeacon(
+                        flags = call.argument<Number>("flags")?.toInt() ?: 0x07,
+                        durationMs = (call.argument<Number>("durationSeconds")?.toLong() ?: 300L)
+                            .coerceIn(1L, 300L) * 1_000L,
+                    )
+                    null
+                }
+                "stopLocalBeacon" -> runMethod(result) {
+                    MeshRuntime.engine(this).stopLocalBeacon()
+                    null
+                }
+                "requestRemoteBeacon" -> runMethod(result) {
+                    MeshRuntime.engine(this).requestRemoteBeacon(
+                        peerIdHex = requireNotNull(call.argument<String>("peerId")),
+                        flags = call.argument<Number>("flags")?.toInt() ?: 0x07,
+                        durationMs = (call.argument<Number>("durationSeconds")?.toLong() ?: 300L)
+                            .coerceIn(1L, 300L) * 1_000L,
+                    )
+                }
+                "respondToBeaconRequest" -> runMethod(result) {
+                    MeshRuntime.engine(this).respondToBeaconRequest(
+                        requestId = requireNotNull(call.argument<String>("requestId")),
+                        accept = call.argument<Boolean>("accept") == true,
+                    )
+                    null
+                }
+                "stopRemoteBeacon" -> runMethod(result) {
+                    MeshRuntime.engine(this).stopRemoteBeacon(
+                        peerIdHex = requireNotNull(call.argument<String>("peerId")),
+                        requestId = requireNotNull(call.argument<String>("requestId")),
                     )
                     null
                 }
@@ -350,6 +385,24 @@ class MainActivity : FlutterActivity() {
         if (!packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_AWARE)) return false
         val manager = getSystemService(WifiAwareManager::class.java)
         return manager?.isAvailable == true
+    }
+
+    private fun prepareInstalledApk(result: MethodChannel.Result) {
+        Thread {
+            runCatching {
+                InstalledApkSharePreparer(applicationContext).prepare()
+            }.onSuccess { prepared ->
+                runOnUiThread { result.success(prepared) }
+            }.onFailure { error ->
+                runOnUiThread {
+                    result.error(
+                        "apk_share_error",
+                        error.message ?: "Could not prepare the installed APK",
+                        null,
+                    )
+                }
+            }
+        }.start()
     }
 
     /**

@@ -442,6 +442,27 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String beaconRequestTitle(String nickname) {
+    return '$nickname bittet dich, sichtbar zu werden';
+  }
+
+  @override
+  String get beaconRequestBody =>
+      'Bei Zustimmung werden Taschenlampe, Alarm und Vibration höchstens 5 Minuten verwendet. Ohne deine Zustimmung wird nichts aktiviert.';
+
+  @override
+  String get beaconMakeVisible => 'MICH SICHTBAR MACHEN';
+
+  @override
+  String get beaconStopVisible => 'PHYSISCHE BAKE STOPPEN';
+
+  @override
+  String get beaconRequestRemote => 'BAKE ANFORDERN';
+
+  @override
+  String get beaconStopRemote => 'BAKE STOPPEN';
+
+  @override
   String get radarSignalLost => 'SIGNAL VERLOREN';
 
   @override
@@ -1146,4 +1167,93 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get voicePause => 'Sprachnachricht pausieren';
+
+  @override
+  String get shareApkButton => 'Installierte APK teilen';
+
+  @override
+  String get sendApkToPeer => 'HearthBit-APK senden';
+
+  @override
+  String get apkSafetyTitle => 'Android-Installationsdatei teilen?';
+
+  @override
+  String apkSendToPeerWarning(String peer) {
+    return '$peer erhält die Android-Installationsdatei von HearthBit.';
+  }
+
+  @override
+  String get apkInstallWarning =>
+      'Der Empfänger muss in den Android-Einstellungen die Installation aus der empfangenden Quelle erlauben. HearthBit installiert nichts automatisch.';
+
+  @override
+  String get apkSignatureWarning =>
+      'Eine mit einem anderen Schlüssel signierte APK kann die installierte App nicht aktualisieren. Quelle und Signatur vor der Installation prüfen.';
+
+  @override
+  String get apkTransportWarning =>
+      'Die APK wird nicht über BLE übertragen. Sie benötigt lokales WLAN, Nearby oder Wi-Fi Aware; falls nichts davon verfügbar ist, meldet die Übertragung einen Fehler.';
+
+  @override
+  String get apkConfirmShare => 'WEITER';
+
+  @override
+  String get apkPreparing => 'Sichere APK-Kopie wird vorbereitet…';
+
+  @override
+  String get apkSplitUnavailable =>
+      'Diese Installation verwendet geteilte APKs. Nur die Basis-APK wäre unvollständig und wird daher nicht geteilt. Biete stattdessen den GitHub-Link an.';
+
+  @override
+  String get apkUnsupported =>
+      'Das Teilen der installierten APK ist nur unter Android verfügbar.';
+
+  @override
+  String apkShareError(String error) {
+    return 'APK konnte nicht vorbereitet oder geteilt werden: $error';
+  }
+
+  @override
+  String get apkShareMessage =>
+      'HearthBit-Installationsdatei für Android. Android verlangt die Freigabe dieser Installationsquelle. Eine anders signierte APK kann eine vorhandene Installation nicht aktualisieren; Quelle und Signatur zuerst prüfen.';
+
+  @override
+  String apkOfferSent(String peer) {
+    return 'APK wurde $peer angeboten. Die Übertragung meldet einen Fehler, wenn kein geeigneter schneller Transport verfügbar ist.';
+  }
+
+  @override
+  String get firstAidOpen => 'OFFLINE-ERSTE-HILFE ÖFFNEN';
+
+  @override
+  String get firstAidTitle => 'Offline-Erste-Hilfe';
+
+  @override
+  String get firstAidDisclaimer =>
+      'Rufe den örtlichen Notruf. Dieser Leitfaden ersetzt keine professionelle Hilfe oder Ausbildung. Örtliche Vorgehensweisen unterscheiden sich: Befolge Leitstelle und Behörden.';
+
+  @override
+  String get firstAidChooseTopic => 'Wähle, was passiert ist';
+
+  @override
+  String get firstAidEnglishFallback =>
+      'Diese Übersetzung konnte nicht geprüft werden. Der validierte englische Leitfaden wird angezeigt.';
+
+  @override
+  String get firstAidSteps => 'Jetzt handeln';
+
+  @override
+  String get firstAidWarnings => 'Vermeiden';
+
+  @override
+  String get firstAidSources => 'Quellen und Prüfhinweise';
+
+  @override
+  String firstAidReviewed(String date) {
+    return 'Inhalt geprüft am $date';
+  }
+
+  @override
+  String get firstAidLoadError =>
+      'Der validierte Offline-Leitfaden konnte nicht geladen werden. Verlasse dich nicht auf unvollständige Angaben; rufe den örtlichen Notruf.';
 }

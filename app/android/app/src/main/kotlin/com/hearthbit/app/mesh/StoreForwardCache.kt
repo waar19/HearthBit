@@ -67,7 +67,8 @@ internal class StoreForwardCache(context: Context) {
 
     private fun isReplaySafe(packet: MeshProtocol.Packet): Boolean =
         packet.type != MeshProtocol.TYPE_NOISE_HANDSHAKE &&
-            packet.type != MeshProtocol.TYPE_NOISE_ENCRYPTED
+            packet.type != MeshProtocol.TYPE_NOISE_ENCRYPTED &&
+            packet.type != MeshProtocol.TYPE_BEACON_CONTROL
 
     private companion object {
         const val KEY_ENTRIES = "packets"

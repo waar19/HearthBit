@@ -282,6 +282,63 @@ class RunnerTests: XCTestCase {
     XCTAssertTrue(IOSMeshNodeRole.phoneRelay.relaysPackets)
     XCTAssertTrue(IOSMeshNodeRole.phoneRelay.canChat)
   }
+
+  func testBeaconControlUsesDirectedSignedType26WithStrictFiveMinutePayload() throws {
+    let now: UInt64 = 1_000_000
+    let nonce = Data((0..<IOSBeaconControlProtocol.nonceSize).map { UInt8($0) })
+    let flags = IOSBeaconControlProtocol.flashFlag | IOSBeaconControlProtocol.vibrateFlag
+    let payload = IOSBeaconControlProtocol.request(
+      expiresAt: now + IOSBeaconControlProtocol.maximumDurationMilliseconds,
+      flags: flags,
+      nonce: nonce
+    )
+    let control = try XCTUnwrap(IOSBeaconControlProtocol.decode(payload))
+    XCTAssertEqual(payload.count, 27)
+    XCTAssertEqual(control.action, IOSBeaconControlProtocol.requestAction)
+    XCTAssertEqual(control.nonce, nonce)
+    XCTAssertTrue(
+      IOSBeaconControlProtocol.isValid(control, packetTimestamp: now, now: now)
+    )
+    XCTAssertFalse(
+      IOSBeaconControlProtocol.isValid(
+        IOSBeaconControlProtocol.Control(
+          action: control.action,
+          expiresAt: now + IOSBeaconControlProtocol.maximumDurationMilliseconds + 1,
+          nonce: nonce,
+          flags: flags
+        ),
+        packetTimestamp: now,
+        now: now
+      )
+    )
+    var malformed = payload
+    malformed[malformed.count - 1] = 0x08
+    XCTAssertNil(IOSBeaconControlProtocol.decode(malformed))
+
+    let packet = IOSMeshPacket(
+      type: IOSMeshProtocol.beaconControl,
+      ttl: 1,
+      timestamp: now,
+      senderID: sender,
+      recipientID: Data(repeating: 2, count: 8),
+      payload: payload,
+      signature: Data(repeating: 3, count: 64)
+    )
+    let decoded = try XCTUnwrap(
+      IOSMeshProtocol.decode(IOSMeshProtocol.encode(packet, padded: false))
+    )
+    XCTAssertEqual(decoded.type, 0x26)
+    XCTAssertEqual(decoded.ttl, 1)
+    XCTAssertNotNil(decoded.recipientID)
+    XCTAssertNotNil(decoded.signature)
+    XCTAssertFalse(IOSNoiseReplayPolicy.isStoreForwardSafe(decoded))
+    XCTAssertFalse(
+      IOSBeaconControlProtocol.shouldAutoAccept(localRadarConsentUntil: now, now: now)
+    )
+    XCTAssertTrue(
+      IOSBeaconControlProtocol.shouldAutoAccept(localRadarConsentUntil: now + 1, now: now)
+    )
+  }
 }
 
 final class ConformanceFixtureTests: XCTestCase {

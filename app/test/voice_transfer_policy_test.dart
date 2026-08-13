@@ -30,4 +30,28 @@ void main() {
       isFalse,
     );
   });
+
+  test('nunca ofrece un APK por BLE', () {
+    expect(
+      TransferController.allowsBleTransfer(
+        mimeType: TransferController.androidPackageMimeType,
+        bytes: 1024,
+      ),
+      isFalse,
+    );
+    expect(
+      TransferController.allowsBleTransfer(
+        mimeType: 'application/octet-stream',
+        bytes: TransferController.bleMaxInlineBytes,
+      ),
+      isTrue,
+    );
+    expect(
+      TransferController.allowsBleTransfer(
+        mimeType: 'application/octet-stream',
+        bytes: TransferController.bleMaxInlineBytes + 1,
+      ),
+      isFalse,
+    );
+  });
 }

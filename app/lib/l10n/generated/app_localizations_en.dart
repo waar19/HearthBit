@@ -441,6 +441,27 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String beaconRequestTitle(String nickname) {
+    return '$nickname asks you to become visible';
+  }
+
+  @override
+  String get beaconRequestBody =>
+      'Accept to use the flashlight, alarm and vibration for up to 5 minutes. Nothing turns on without your consent.';
+
+  @override
+  String get beaconMakeVisible => 'MAKE ME VISIBLE';
+
+  @override
+  String get beaconStopVisible => 'STOP PHYSICAL BEACON';
+
+  @override
+  String get beaconRequestRemote => 'REQUEST BEACON';
+
+  @override
+  String get beaconStopRemote => 'STOP BEACON';
+
+  @override
   String get radarSignalLost => 'SIGNAL LOST';
 
   @override
@@ -1139,4 +1160,93 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get voicePause => 'Pause voice note';
+
+  @override
+  String get shareApkButton => 'Share installed APK';
+
+  @override
+  String get sendApkToPeer => 'Send HearthBit APK';
+
+  @override
+  String get apkSafetyTitle => 'Share the Android installer?';
+
+  @override
+  String apkSendToPeerWarning(String peer) {
+    return '$peer will receive the HearthBit Android installer.';
+  }
+
+  @override
+  String get apkInstallWarning =>
+      'The recipient must allow app installation from the receiving source in Android settings. HearthBit will not install anything automatically.';
+
+  @override
+  String get apkSignatureWarning =>
+      'An APK signed with a different key cannot update the installed app. Verify the source and signature before installing.';
+
+  @override
+  String get apkTransportWarning =>
+      'APK transfer does not use BLE. It requires local Wi-Fi, Nearby or Wi-Fi Aware; the transfer will report an error if none is available.';
+
+  @override
+  String get apkConfirmShare => 'CONTINUE';
+
+  @override
+  String get apkPreparing => 'Preparing a safe APK copy…';
+
+  @override
+  String get apkSplitUnavailable =>
+      'This installation uses split APKs. Sharing only the base APK would create an incomplete installer, so HearthBit will not share it. Offer the GitHub link instead.';
+
+  @override
+  String get apkUnsupported =>
+      'Sharing an installed APK is only available on Android.';
+
+  @override
+  String apkShareError(String error) {
+    return 'Could not prepare or share the APK: $error';
+  }
+
+  @override
+  String get apkShareMessage =>
+      'HearthBit Android installer. Android requires permission to install from this source. A differently signed APK cannot update an existing installation; verify the source and signature first.';
+
+  @override
+  String apkOfferSent(String peer) {
+    return 'APK offered to $peer. The transfer will show an error if no suitable high-speed transport is available.';
+  }
+
+  @override
+  String get firstAidOpen => 'OPEN OFFLINE FIRST AID';
+
+  @override
+  String get firstAidTitle => 'Offline first aid';
+
+  @override
+  String get firstAidDisclaimer =>
+      'Call local emergency services. This guide does not replace professional help or training. Local practices vary: follow the operator and local authorities.';
+
+  @override
+  String get firstAidChooseTopic => 'Choose what is happening';
+
+  @override
+  String get firstAidEnglishFallback =>
+      'This translation could not be verified. Showing the validated English guide.';
+
+  @override
+  String get firstAidSteps => 'Act now';
+
+  @override
+  String get firstAidWarnings => 'Avoid';
+
+  @override
+  String get firstAidSources => 'Sources and review information';
+
+  @override
+  String firstAidReviewed(String date) {
+    return 'Content reviewed $date';
+  }
+
+  @override
+  String get firstAidLoadError =>
+      'The validated offline guide could not be loaded. Do not rely on incomplete information; call local emergency services.';
 }

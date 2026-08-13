@@ -6,6 +6,7 @@ import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../services/app_preferences.dart';
 import 'emergency_gateway_card.dart';
+import 'first_aid_guide_screen.dart';
 import 'map_screen.dart';
 import 'radar_screen.dart';
 import 'rescue_power_cards.dart';
@@ -55,6 +56,22 @@ class EmergencyScreen extends StatelessWidget {
             icon: const Icon(Icons.stop_circle_outlined),
             label: Text(context.l10n.emergencyStopRescue),
           ),
+        const SizedBox(height: 8),
+        FilledButton.tonalIcon(
+          onPressed: controller.localBeaconActive
+              ? controller.stopLocalBeacon
+              : controller.startLocalBeacon,
+          icon: Icon(
+            controller.localBeaconActive
+                ? Icons.visibility_off_outlined
+                : Icons.visibility_outlined,
+          ),
+          label: Text(
+            controller.localBeaconActive
+                ? context.l10n.beaconStopVisible
+                : context.l10n.beaconMakeVisible,
+          ),
+        ),
         const SizedBox(height: 24),
         _CheckInPanel(controller: controller),
         const SizedBox(height: 16),
@@ -63,6 +80,16 @@ class EmergencyScreen extends StatelessWidget {
         PowerSavingCard(controller: controller),
         const SizedBox(height: 12),
         EmergencyGatewayCard(controller: gateway, preferences: preferences),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const FirstAidGuideScreen(),
+            ),
+          ),
+          icon: const Icon(Icons.health_and_safety_outlined),
+          label: Text(context.l10n.firstAidOpen),
+        ),
         const SizedBox(height: 12),
         FilledButton.tonalIcon(
           onPressed: () => Navigator.of(context).push(

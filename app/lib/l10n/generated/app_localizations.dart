@@ -837,6 +837,42 @@ abstract class AppLocalizations {
   /// **'Radar · {nickname}'**
   String radarTitle(String nickname);
 
+  /// No description provided for @beaconRequestTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{nickname} asks you to become visible'**
+  String beaconRequestTitle(String nickname);
+
+  /// No description provided for @beaconRequestBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept to use the flashlight, alarm and vibration for up to 5 minutes. Nothing turns on without your consent.'**
+  String get beaconRequestBody;
+
+  /// No description provided for @beaconMakeVisible.
+  ///
+  /// In en, this message translates to:
+  /// **'MAKE ME VISIBLE'**
+  String get beaconMakeVisible;
+
+  /// No description provided for @beaconStopVisible.
+  ///
+  /// In en, this message translates to:
+  /// **'STOP PHYSICAL BEACON'**
+  String get beaconStopVisible;
+
+  /// No description provided for @beaconRequestRemote.
+  ///
+  /// In en, this message translates to:
+  /// **'REQUEST BEACON'**
+  String get beaconRequestRemote;
+
+  /// No description provided for @beaconStopRemote.
+  ///
+  /// In en, this message translates to:
+  /// **'STOP BEACON'**
+  String get beaconStopRemote;
+
   /// No description provided for @radarSignalLost.
   ///
   /// In en, this message translates to:
@@ -2024,6 +2060,150 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pause voice note'**
   String get voicePause;
+
+  /// No description provided for @shareApkButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Share installed APK'**
+  String get shareApkButton;
+
+  /// No description provided for @sendApkToPeer.
+  ///
+  /// In en, this message translates to:
+  /// **'Send HearthBit APK'**
+  String get sendApkToPeer;
+
+  /// No description provided for @apkSafetyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Share the Android installer?'**
+  String get apkSafetyTitle;
+
+  /// No description provided for @apkSendToPeerWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'{peer} will receive the HearthBit Android installer.'**
+  String apkSendToPeerWarning(String peer);
+
+  /// No description provided for @apkInstallWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'The recipient must allow app installation from the receiving source in Android settings. HearthBit will not install anything automatically.'**
+  String get apkInstallWarning;
+
+  /// No description provided for @apkSignatureWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'An APK signed with a different key cannot update the installed app. Verify the source and signature before installing.'**
+  String get apkSignatureWarning;
+
+  /// No description provided for @apkTransportWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'APK transfer does not use BLE. It requires local Wi-Fi, Nearby or Wi-Fi Aware; the transfer will report an error if none is available.'**
+  String get apkTransportWarning;
+
+  /// No description provided for @apkConfirmShare.
+  ///
+  /// In en, this message translates to:
+  /// **'CONTINUE'**
+  String get apkConfirmShare;
+
+  /// No description provided for @apkPreparing.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing a safe APK copy…'**
+  String get apkPreparing;
+
+  /// No description provided for @apkSplitUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This installation uses split APKs. Sharing only the base APK would create an incomplete installer, so HearthBit will not share it. Offer the GitHub link instead.'**
+  String get apkSplitUnavailable;
+
+  /// No description provided for @apkUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Sharing an installed APK is only available on Android.'**
+  String get apkUnsupported;
+
+  /// No description provided for @apkShareError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not prepare or share the APK: {error}'**
+  String apkShareError(String error);
+
+  /// No description provided for @apkShareMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'HearthBit Android installer. Android requires permission to install from this source. A differently signed APK cannot update an existing installation; verify the source and signature first.'**
+  String get apkShareMessage;
+
+  /// No description provided for @apkOfferSent.
+  ///
+  /// In en, this message translates to:
+  /// **'APK offered to {peer}. The transfer will show an error if no suitable high-speed transport is available.'**
+  String apkOfferSent(String peer);
+
+  /// No description provided for @firstAidOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'OPEN OFFLINE FIRST AID'**
+  String get firstAidOpen;
+
+  /// No description provided for @firstAidTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline first aid'**
+  String get firstAidTitle;
+
+  /// No description provided for @firstAidDisclaimer.
+  ///
+  /// In en, this message translates to:
+  /// **'Call local emergency services. This guide does not replace professional help or training. Local practices vary: follow the operator and local authorities.'**
+  String get firstAidDisclaimer;
+
+  /// No description provided for @firstAidChooseTopic.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose what is happening'**
+  String get firstAidChooseTopic;
+
+  /// No description provided for @firstAidEnglishFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'This translation could not be verified. Showing the validated English guide.'**
+  String get firstAidEnglishFallback;
+
+  /// No description provided for @firstAidSteps.
+  ///
+  /// In en, this message translates to:
+  /// **'Act now'**
+  String get firstAidSteps;
+
+  /// No description provided for @firstAidWarnings.
+  ///
+  /// In en, this message translates to:
+  /// **'Avoid'**
+  String get firstAidWarnings;
+
+  /// No description provided for @firstAidSources.
+  ///
+  /// In en, this message translates to:
+  /// **'Sources and review information'**
+  String get firstAidSources;
+
+  /// No description provided for @firstAidReviewed.
+  ///
+  /// In en, this message translates to:
+  /// **'Content reviewed {date}'**
+  String firstAidReviewed(String date);
+
+  /// No description provided for @firstAidLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'The validated offline guide could not be loaded. Do not rely on incomplete information; call local emergency services.'**
+  String get firstAidLoadError;
 }
 
 class _AppLocalizationsDelegate

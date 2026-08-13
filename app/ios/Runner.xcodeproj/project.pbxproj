@@ -19,6 +19,7 @@
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		ECC000012026081200000001 /* HearthBitMeshPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECC000022026081200000001 /* HearthBitMeshPlugin.swift */; };
 		ECC000032026081200000002 /* HearthBitTransferProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECC000042026081200000002 /* HearthBitTransferProtocol.swift */; };
+		ECC000052026081300000003 /* IOSBeaconActuator.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECC000062026081300000003 /* IOSBeaconActuator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -69,6 +70,7 @@
 		CCC7B198B2412F9FF902A838 /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		ECC000022026081200000001 /* HearthBitMeshPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HearthBitMeshPlugin.swift; sourceTree = "<group>"; };
 		ECC000042026081200000002 /* HearthBitTransferProtocol.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HearthBitTransferProtocol.swift; sourceTree = "<group>"; };
+		ECC000062026081300000003 /* IOSBeaconActuator.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IOSBeaconActuator.swift; sourceTree = "<group>"; };
 		F7852D0AD044AF9BE2B21EE8 /* Pods-RunnerTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.debug.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.debug.xcconfig"; sourceTree = "<group>"; };
 		FC3B612CD13A3B328CE68A3B /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -158,6 +160,7 @@
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				ECC000022026081200000001 /* HearthBitMeshPlugin.swift */,
 				ECC000042026081200000002 /* HearthBitTransferProtocol.swift */,
+				ECC000062026081300000003 /* IOSBeaconActuator.swift */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
@@ -388,6 +391,7 @@
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				ECC000012026081200000001 /* HearthBitMeshPlugin.swift in Sources */,
 				ECC000032026081200000002 /* HearthBitTransferProtocol.swift in Sources */,
+				ECC000052026081300000003 /* IOSBeaconActuator.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 			);

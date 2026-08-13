@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
+import '../services/beacon_control_protocol.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/radar_fusion.dart';
 import '../services/radar_signal.dart';
@@ -76,6 +77,11 @@ class _RadarScreenState extends State<RadarScreen>
   DateTime? _targetPositionAt;
   SweepEstimate? _directionEstimate;
   DateTime _lastHaptic = DateTime.fromMillisecondsSinceEpoch(0);
+  String? _beaconRequestId;
+  String? _beaconStatus;
+  String? _beaconError;
+  DateTime? _beaconRequestExpiresAt;
+  bool _requestingBeacon = false;
 
   @override
   void initState() {
@@ -99,6 +105,23 @@ class _RadarScreenState extends State<RadarScreen>
   }
 
   void _onEvent(Map<Object?, Object?> event) {
+    if (event['type'] == 'beaconState' &&
+        event['scope'] == 'remote' &&
+        (event['peerId'] as String?)?.toLowerCase() ==
+            widget.peerId.toLowerCase()) {
+      if (!mounted) return;
+      setState(() {
+        _beaconRequestId = event['requestId'] as String? ?? _beaconRequestId;
+        _beaconStatus = event['status'] as String?;
+        final expiresAt = (event['expiresAt'] as num?)?.toInt() ?? 0;
+        _beaconRequestExpiresAt = expiresAt > 0
+            ? DateTime.fromMillisecondsSinceEpoch(expiresAt)
+            : null;
+        _beaconError = null;
+        _requestingBeacon = false;
+      });
+      return;
+    }
     if (event['type'] == 'message') {
       final rawMessage = event['message'];
       if (rawMessage is Map<Object?, Object?>) {
@@ -154,6 +177,43 @@ class _RadarScreenState extends State<RadarScreen>
     });
   }
 
+  bool get _canRequestBeacon {
+    final proximity = _reading?.proximity;
+    return !_permissionExpired &&
+        widget.consentExpiresAt.isAfter(DateTime.now()) &&
+        !_stale &&
+        (proximity == RadarProximity.close ||
+            proximity == RadarProximity.veryClose);
+  }
+
+  Future<void> _toggleRemoteBeacon() async {
+    if (_requestingBeacon) return;
+    setState(() => _requestingBeacon = true);
+    try {
+      if (_beaconStatus == 'active' && _beaconRequestId != null) {
+        await _platform.stopRemoteBeacon(
+          peerId: widget.peerId,
+          requestId: _beaconRequestId!,
+        );
+      } else {
+        final requestId = await _platform.requestRemoteBeacon(widget.peerId);
+        if (mounted) {
+          setState(() {
+            _beaconRequestId = requestId;
+            _beaconStatus = 'requested';
+            _beaconRequestExpiresAt = DateTime.now().add(
+              BeaconControlProtocol.maximumDuration,
+            );
+          });
+        }
+      }
+    } on PlatformException catch (error) {
+      if (mounted) setState(() => _beaconError = error.message ?? error.code);
+    } finally {
+      if (mounted) setState(() => _requestingBeacon = false);
+    }
+  }
+
   void _startCompassTracking() {
     final compassStream = FlutterCompass.events;
     if (compassStream == null) {
@@ -186,6 +246,13 @@ class _RadarScreenState extends State<RadarScreen>
       return;
     }
     final stale = _processor.isStale(DateTime.now());
+    if (_beaconStatus == 'requested' &&
+        _beaconRequestExpiresAt?.isAfter(DateTime.now()) == false) {
+      _beaconStatus = null;
+      _beaconRequestId = null;
+      _beaconRequestExpiresAt = null;
+      setState(() {});
+    }
     if (stale != _stale) setState(() => _stale = stale);
     _maybeVibrate();
   }
@@ -387,6 +454,31 @@ class _RadarScreenState extends State<RadarScreen>
               child: Column(
                 children: [
                   _buildPanel(theme, reading, searching, fusion),
+                  if (_canRequestBeacon || _beaconStatus == 'active') ...[
+                    const SizedBox(height: 10),
+                    FilledButton.icon(
+                      onPressed:
+                          _requestingBeacon || _beaconStatus == 'requested'
+                          ? null
+                          : _toggleRemoteBeacon,
+                      icon: Icon(
+                        _beaconStatus == 'active'
+                            ? Icons.flashlight_off_outlined
+                            : Icons.flashlight_on_outlined,
+                      ),
+                      label: Text(
+                        _beaconStatus == 'active'
+                            ? context.l10n.beaconStopRemote
+                            : context.l10n.beaconRequestRemote,
+                      ),
+                    ),
+                    if (_beaconError != null)
+                      Text(
+                        _beaconError!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.amber),
+                      ),
+                  ],
                   const SizedBox(height: 10),
                   _buildDirectionSweep(fusion),
                   const SizedBox(height: 10),
