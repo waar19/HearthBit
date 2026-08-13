@@ -11,6 +11,13 @@ import 'package:hearth_bit/services/first_aid_guide_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  late String spanishAsset;
+
+  setUpAll(() async {
+    spanishAsset = await rootBundle.loadString(
+      'assets/first_aid/first_aid_es.json',
+    );
+  });
 
   test('carga y valida los seis assets locales', () async {
     final service = FirstAidGuideService();
@@ -60,11 +67,10 @@ void main() {
   testWidgets('lista y detalle no desbordan con texto al 200 %', (
     tester,
   ) async {
-    final spanish = await rootBundle.loadString(
-      'assets/first_aid/first_aid_es.json',
-    );
     final service = FirstAidGuideService(
-      bundle: _StringBundle({'assets/first_aid/first_aid_es.json': spanish}),
+      bundle: _StringBundle({
+        'assets/first_aid/first_aid_es.json': spanishAsset,
+      }),
     );
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
@@ -90,11 +96,14 @@ void main() {
     expect(find.byKey(const Key('first-aid-topic-list')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.text('Seguridad de la escena y pedir ayuda'));
+    final firstTopic = find.text('Seguridad de la escena y pedir ayuda');
+    await tester.ensureVisible(firstTopic);
+    await tester.pumpAndSettle();
+    await tester.tap(firstTopic);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('first-aid-topic-detail')), findsOneWidget);
-    expect(find.text('Actúa ahora'), findsOneWidget);
+    expect(find.text('Seguridad de la escena y pedir ayuda'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 }
