@@ -84,6 +84,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get privateChatIntro => '第一条消息将发起 Noise XX 握手。';
 
   @override
+  String get secureChatUnavailableHint => '正在等待加密通道可用。';
+
+  @override
+  String get privateMessagePending => '待发送';
+
+  @override
+  String privateMessageSendError(String error) {
+    return '无法发送消息：$error';
+  }
+
+  @override
   String get emptyPeersTitle => '附近没有设备';
 
   @override

@@ -85,6 +85,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String get privateChatIntro => '最初のメッセージで Noise XX ハンドシェイクが始まります。';
 
   @override
+  String get secureChatUnavailableHint => '暗号化チャネルが利用可能になるのを待っています。';
+
+  @override
+  String get privateMessagePending => '送信待ち';
+
+  @override
+  String privateMessageSendError(String error) {
+    return 'メッセージを送信できませんでした：$error';
+  }
+
+  @override
   String get emptyPeersTitle => '近くに端末がありません';
 
   @override

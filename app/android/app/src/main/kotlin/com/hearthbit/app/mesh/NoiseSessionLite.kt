@@ -7,6 +7,7 @@ internal class NoiseSessionLite(
     private val claimedPeerId: ByteArray,
     internal val initiator: Boolean,
     private val localPrivateKey: ByteArray,
+    private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
     private var handshake: HandshakeState? = null
     private var sendCipher: CipherState? = null
@@ -15,11 +16,17 @@ internal class NoiseSessionLite(
     private var sendNonce = 0L
     private val receivedNonces = LinkedHashSet<Long>()
 
+    var lastActivityAt: Long = nowMillis()
+        private set
+
     var established: Boolean = false
         private set
 
     val handshaking: Boolean
         get() = handshake != null && !established
+
+    fun isStale(now: Long, timeoutMs: Long): Boolean =
+        handshaking && now - lastActivityAt >= timeoutMs
 
     fun start(): ByteArray {
         if (!initiator || handshake != null || established) {
@@ -27,7 +34,7 @@ internal class NoiseSessionLite(
         }
         initialize(HandshakeState.INITIATOR)
         return try {
-            writeHandshake()
+            writeHandshake().also { touch() }
         } catch (error: NoiseHandshakeFailure) {
             throw error
         } catch (error: Exception) {
@@ -50,6 +57,7 @@ internal class NoiseSessionLite(
             val payload = ByteArray(256)
             state.readMessage(message, 0, message.size, payload, 0)
             patternCount++
+            touch()
             when (state.action) {
                 HandshakeState.WRITE_MESSAGE -> writeHandshake().also { completeIfReady() }
                 HandshakeState.SPLIT -> {
@@ -83,6 +91,7 @@ internal class NoiseSessionLite(
             plaintext.size,
         )
         val nonce = sendNonce++
+        touch()
         return ByteArray(4 + length).also { output ->
             output[0] = (nonce ushr 24).toByte()
             output[1] = (nonce ushr 16).toByte()
@@ -117,6 +126,7 @@ internal class NoiseSessionLite(
         while (receivedNonces.size > 1024) {
             receivedNonces.remove(receivedNonces.first())
         }
+        touch()
         return plaintext.copyOf(length)
     }
 
@@ -128,6 +138,7 @@ internal class NoiseSessionLite(
         sendCipher = null
         receiveCipher = null
         established = false
+        receivedNonces.clear()
     }
 
     private fun initialize(role: Int) {
@@ -163,6 +174,11 @@ internal class NoiseSessionLite(
         state.destroy()
         handshake = null
         established = true
+        touch()
+    }
+
+    private fun touch() {
+        lastActivityAt = nowMillis()
     }
 
     private companion object {

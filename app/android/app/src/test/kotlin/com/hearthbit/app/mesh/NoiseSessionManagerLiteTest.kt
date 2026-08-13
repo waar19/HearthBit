@@ -204,6 +204,23 @@ class NoiseSessionManagerLiteTest {
         assertTrue(bobManager.isEstablished(alice.peerId))
     }
 
+    @Test
+    fun `handshake incompleto stale se limpia y permite reintento`() {
+        val alice = identity()
+        val bob = identity()
+        var now = 1_000L
+        val aliceManager = manager(alice, nowMillis = { now })
+
+        assertNotNull(aliceManager.initiate(bob.peerId))
+        assertNull(aliceManager.initiate(bob.peerId))
+        assertTrue(aliceManager.hasSession(bob.peerId))
+
+        now += 20_001L
+        assertTrue(aliceManager.cleanupStaleHandshakes().contains(bob.peerId))
+        assertFalse(aliceManager.hasSession(bob.peerId))
+        assertNotNull(aliceManager.initiate(bob.peerId))
+    }
+
     private fun completeHandshake(
         initiator: NoiseSessionManagerLite,
         initiatorIdentity: TestIdentity,
@@ -230,8 +247,15 @@ class NoiseSessionManagerLiteTest {
         )
     }
 
-    private fun manager(identity: TestIdentity): NoiseSessionManagerLite =
-        NoiseSessionManagerLite(identity.peerId, identity.privateKey).also(managers::add)
+    private fun manager(
+        identity: TestIdentity,
+        nowMillis: () -> Long = System::currentTimeMillis,
+    ): NoiseSessionManagerLite =
+        NoiseSessionManagerLite(
+            identity.peerId,
+            identity.privateKey,
+            nowMillis,
+        ).also(managers::add)
 
     private fun identity(): TestIdentity {
         val dh = Noise.createDH("25519")

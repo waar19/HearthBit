@@ -27,6 +27,9 @@
   "composerPublicHint": "Mensaje para todos los cercanos",
   "composerPrivateHint": "Mensaje cifrado",
   "privateChatIntro": "El primer mensaje iniciará un handshake Noise XX.",
+  "secureChatUnavailableHint": "Esperando a que el canal cifrado esté disponible.",
+  "privateMessagePending": "Pendiente",
+  "privateMessageSendError": "No se pudo enviar el mensaje: {error}",
 
   "emptyPeersTitle": "No hay dispositivos cercanos",
   "emptyPeersBody": "Mantén Bluetooth activo y acerca otro teléfono con HearthBit o BitChat.",

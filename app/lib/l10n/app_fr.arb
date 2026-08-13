@@ -27,6 +27,9 @@
   "composerPublicHint": "Message pour tous à proximité",
   "composerPrivateHint": "Message chiffré",
   "privateChatIntro": "Le premier message lancera une poignée de main Noise XX.",
+  "secureChatUnavailableHint": "En attente du canal chiffré.",
+  "privateMessagePending": "En attente",
+  "privateMessageSendError": "Impossible d’envoyer le message : {error}",
 
   "emptyPeersTitle": "Aucun appareil à proximité",
   "emptyPeersBody": "Gardez le Bluetooth activé et approchez un autre téléphone avec HearthBit ou BitChat.",

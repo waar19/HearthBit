@@ -30,6 +30,10 @@
   "composerPublicHint": "Message for everyone nearby",
   "composerPrivateHint": "Encrypted message",
   "privateChatIntro": "The first message will start a Noise XX handshake.",
+  "secureChatUnavailableHint": "Waiting for the encrypted channel to become available.",
+  "privateMessagePending": "Pending",
+  "privateMessageSendError": "Could not send the message: {error}",
+  "@privateMessageSendError": {"placeholders": {"error": {"type": "String"}}},
 
   "emptyPeersTitle": "No nearby devices",
   "emptyPeersBody": "Keep Bluetooth on and bring another phone with HearthBit or BitChat nearby.",

@@ -11,6 +11,7 @@ internal class StoreForwardCache(context: Context) {
 
     @Synchronized
     fun put(packet: MeshProtocol.Packet) {
+        if (!isReplaySafe(packet)) return
         val recipient = packet.recipientId ?: return
         if (recipient.contentEquals(MeshProtocol.broadcastRecipient)) return
         val now = System.currentTimeMillis()
@@ -34,7 +35,9 @@ internal class StoreForwardCache(context: Context) {
             runCatching { Base64.decode(it.encoded, Base64.NO_WRAP) }
                 .getOrNull()
                 ?.let(MeshProtocol::decode)
-        }.filter { it.recipientId?.contentEquals(recipient) == true }
+        }.filter {
+            isReplaySafe(it) && it.recipientId?.contentEquals(recipient) == true
+        }
     }
 
     fun clear() {
@@ -61,6 +64,10 @@ internal class StoreForwardCache(context: Context) {
     }
 
     private data class Entry(val expiry: Long, val encoded: String)
+
+    private fun isReplaySafe(packet: MeshProtocol.Packet): Boolean =
+        packet.type != MeshProtocol.TYPE_NOISE_HANDSHAKE &&
+            packet.type != MeshProtocol.TYPE_NOISE_ENCRYPTED
 
     private companion object {
         const val KEY_ENTRIES = "packets"

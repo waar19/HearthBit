@@ -14,14 +14,24 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.hearthbit.app.MainActivity
 import com.hearthbit.app.R
 
 class MeshForegroundService : Service() {
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val notificationObserver: (MeshNotificationState) -> Unit = ::scheduleNotification
+    private var displayedNotificationState: MeshNotificationState? = null
+    private var pendingNotificationState: MeshNotificationState? = null
+    private var notificationUpdateRunnable: Runnable? = null
+    private var lastNotificationUpdateAt = 0L
+
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val battery = if (intent?.action == Intent.ACTION_BATTERY_CHANGED) {
@@ -64,11 +74,22 @@ class MeshForegroundService : Service() {
             },
         )
         createChannel()
+        MeshRuntime.notificationListener = notificationObserver
+        val startingState = MeshNotificationState(
+            status = "starting",
+            nearbyPeerCount = 0,
+        )
         if (Build.VERSION.SDK_INT >= 29) {
-            startForeground(NOTIFICATION_ID, notification(), foregroundServiceTypes())
+            startForeground(
+                NOTIFICATION_ID,
+                notification(startingState),
+                foregroundServiceTypes(),
+            )
         } else {
-            startForeground(NOTIFICATION_ID, notification())
+            startForeground(NOTIFICATION_ID, notification(startingState))
         }
+        displayedNotificationState = startingState
+        lastNotificationUpdateAt = SystemClock.elapsedRealtime()
     }
 
     /**
@@ -100,14 +121,22 @@ class MeshForegroundService : Service() {
             return START_NOT_STICKY
         }
         runCatching { MeshRuntime.engine(this).ensureStarted() }.onFailure {
+            val message = it.message ?: getString(R.string.error_ble_start)
             MeshRuntime.eventListener?.invoke(
                 mapOf(
                     "type" to "error",
-                    "message" to (it.message ?: getString(R.string.error_ble_start)),
+                    "message" to message,
                 ),
             )
             MeshRuntime.eventListener?.invoke(
                 mapOf("type" to "status", "status" to "error"),
+            )
+            scheduleNotification(
+                MeshNotificationState(
+                    status = "error",
+                    nearbyPeerCount = 0,
+                    errorMessage = message,
+                ),
             )
             stopSelf()
         }
@@ -116,6 +145,11 @@ class MeshForegroundService : Service() {
 
     override fun onDestroy() {
         runCatching { unregisterReceiver(batteryReceiver) }
+        if (MeshRuntime.notificationListener === notificationObserver) {
+            MeshRuntime.notificationListener = null
+        }
+        notificationUpdateRunnable?.let(mainHandler::removeCallbacks)
+        notificationUpdateRunnable = null
         MeshRuntime.destroy()
         super.onDestroy()
     }
@@ -133,21 +167,51 @@ class MeshForegroundService : Service() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
-    private fun notification(): Notification {
-        val openIntent = (
-            packageManager.getLaunchIntentForPackage(packageName)
-                ?: Intent(this, MainActivity::class.java)
-            ).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    private fun scheduleNotification(state: MeshNotificationState) {
+        mainHandler.post {
+            if (state == displayedNotificationState || state == pendingNotificationState) return@post
+            pendingNotificationState = state
+            if (notificationUpdateRunnable != null) return@post
+            val elapsed = SystemClock.elapsedRealtime() - lastNotificationUpdateAt
+            val delay = (MIN_NOTIFICATION_UPDATE_INTERVAL_MS - elapsed).coerceAtLeast(0L)
+            notificationUpdateRunnable = Runnable {
+                notificationUpdateRunnable = null
+                val next = pendingNotificationState ?: return@Runnable
+                pendingNotificationState = null
+                if (next == displayedNotificationState) return@Runnable
+                getSystemService(NotificationManager::class.java)
+                    .notify(NOTIFICATION_ID, notification(next))
+                displayedNotificationState = next
+                lastNotificationUpdateAt = SystemClock.elapsedRealtime()
+            }.also { mainHandler.postDelayed(it, delay) }
+        }
+    }
+
+    private fun notification(state: MeshNotificationState): Notification {
+        val openIntent = Intent(this, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
             openIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+        val contentText = when (MeshNotificationStateReducer.contentFor(state)) {
+            MeshNotificationContent.STARTING -> getString(R.string.notification_status_starting)
+            MeshNotificationContent.ACTIVE -> resources.getQuantityString(
+                R.plurals.notification_status_active,
+                state.nearbyPeerCount,
+                state.nearbyPeerCount,
+            )
+            MeshNotificationContent.ERROR -> getString(
+                R.string.notification_status_error,
+                state.errorMessage ?: getString(R.string.error_mesh_generic),
+            )
+        }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(getString(R.string.notification_title))
-            .setContentText(getString(R.string.notification_text))
+            .setContentText(contentText)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
@@ -158,5 +222,6 @@ class MeshForegroundService : Service() {
         const val ACTION_STOP = "com.hearthbit.app.STOP_MESH"
         private const val CHANNEL_ID = "emergency_mesh"
         private const val NOTIFICATION_ID = 7401
+        private const val MIN_NOTIFICATION_UPDATE_INTERVAL_MS = 2_000L
     }
 }

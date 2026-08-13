@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -726,7 +727,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         controller: controller,
         transfers: widget.transfers,
         peer: peer,
-        isOnline: controller.isPeerOnline(peer.id),
+        onOpenRadar: (currentPeer) => _openRadar(
+          peerId: currentPeer.id,
+          nickname: currentPeer.nickname,
+          consentExpiresAt: currentPeer.radarAllowedUntil!,
+          consentSource: currentPeer.radarConsentSource ?? 'temporary',
+        ),
       ),
     );
   }
@@ -977,13 +983,13 @@ class _PrivateChatSheet extends StatefulWidget {
     required this.controller,
     required this.transfers,
     required this.peer,
-    required this.isOnline,
+    required this.onOpenRadar,
   });
 
   final MeshController controller;
   final TransferController transfers;
   final MeshPeer peer;
-  final bool isOnline;
+  final Future<void> Function(MeshPeer peer) onOpenRadar;
 
   @override
   State<_PrivateChatSheet> createState() => _PrivateChatSheetState();
@@ -997,6 +1003,8 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
   var _privateMessageCount = 0;
   var _scrollScheduled = false;
   var _recording = false;
+  var _sending = false;
+  String? _sendError;
   DateTime? _recordingStarted;
   Timer? _recordingTimer;
 
@@ -1042,7 +1050,7 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
 
   void _handleControllerUpdate() {
     final count = _countPrivateMessages();
-    if (count == _privateMessageCount || !mounted) return;
+    if (!mounted) return;
     final hasNewMessage = count > _privateMessageCount;
     setState(() => _privateMessageCount = count);
     if (hasNewMessage) _scrollToBottom();
@@ -1052,12 +1060,12 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _toggleVoiceRecording() async {
+  Future<void> _toggleVoiceRecording(MeshPeer peer) async {
     if (_recording) {
       await _stopVoiceRecording();
       return;
     }
-    if (!widget.peer.supportsTransfers) {
+    if (!peer.supportsTransfers) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(context.l10n.voiceUnsupported)));
@@ -1097,17 +1105,42 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
     final path = await _audioRecorder.stop();
     if (mounted) setState(() => _recording = false);
     if (path == null || !mounted) return;
+    final peer =
+        widget.controller.peerById(widget.peer.id) ??
+        widget.controller.knownPeerById(widget.peer.id) ??
+        widget.peer;
     final transferId = await widget.transfers.sendFile(
-      peer: widget.peer,
+      peer: peer,
       filePath: path,
       fileName: p.basename(path),
       mimeType: 'audio/x-hearthbit-voice',
     );
     await widget.controller.sendPrivate(
-      widget.peer,
+      peer,
       '[HB-VOICE|$transferId|$duration]',
     );
     _scrollToBottom();
+  }
+
+  Future<void> _sendMessage(MeshPeer peer) async {
+    if (_sending) return;
+    final text = _textController.text;
+    if (text.trim().isEmpty) return;
+    setState(() {
+      _sending = true;
+      _sendError = null;
+    });
+    final result = await widget.controller.sendPrivate(peer, text);
+    if (!mounted) return;
+    setState(() {
+      _sending = false;
+      if (result.accepted) {
+        _textController.clear();
+      } else {
+        _sendError = result.error ?? context.l10n.errorUnknown;
+      }
+    });
+    if (result.accepted) _scrollToBottom();
   }
 
   void _scrollToBottom({bool animate = true}) {
@@ -1131,48 +1164,82 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final peer =
+        widget.controller.peerById(widget.peer.id) ??
+        widget.controller.knownPeerById(widget.peer.id) ??
+        widget.peer;
+    final isOnline = widget.controller.isPeerOnline(peer.id);
+    final secure = isOnline && peer.secure;
+    final canCompose =
+        isOnline && secure && widget.controller.canSend && !_sending;
     final privateMessages = widget.controller.messages
         .where(
           (message) =>
               message.isPrivate && message.senderPeerId == widget.peer.id,
         )
         .toList(growable: false);
+    final mediaQuery = MediaQuery.of(context);
+    final availableHeight =
+        mediaQuery.size.height - mediaQuery.viewInsets.bottom - 32;
+    final sheetHeight = math.min(
+      mediaQuery.size.height * .65,
+      math.max(160, availableHeight),
+    );
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
         right: 16,
         top: 16,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
+        bottom: mediaQuery.viewInsets.bottom + 16,
       ),
       child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * .65,
+        height: sheetHeight.toDouble(),
         child: Column(
           children: [
             Row(
               children: [
-                const Icon(Icons.lock),
+                Icon(secure ? Icons.lock : Icons.lock_open),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    widget.peer.nickname,
+                    peer.nickname,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
+                ),
+                IconButton(
+                  tooltip: peer.radarAllowed
+                      ? context.l10n.tooltipRadar
+                      : context.l10n.radarConsentRequired,
+                  onPressed: isOnline && peer.radarAllowed
+                      ? () => widget.onOpenRadar(peer)
+                      : null,
+                  icon: const Icon(Icons.radar),
                 ),
               ],
             ),
             const Divider(),
-            if (!widget.isOnline)
+            if (!isOnline || !secure)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
                   children: [
                     Icon(
-                      Icons.cloud_off_outlined,
+                      isOnline
+                          ? Icons.lock_clock_outlined
+                          : Icons.cloud_off_outlined,
                       size: 18,
                       color: Theme.of(context).colorScheme.outline,
                     ),
                     const SizedBox(width: 8),
-                    Expanded(child: Text(context.l10n.offlineChatHint)),
+                    Expanded(
+                      child: Text(
+                        isOnline
+                            ? context.l10n.secureChatUnavailableHint
+                            : context.l10n.offlineChatHint,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1194,31 +1261,44 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
                       ),
                     ),
             ),
+            if (_sendError case final error?)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        context.l10n.privateMessageSendError(error),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Row(
               children: [
                 IconButton.filledTonal(
                   tooltip: _recording
                       ? context.l10n.voiceStop
                       : context.l10n.voiceRecord,
-                  onPressed:
-                      widget.isOnline &&
-                          widget.controller.canSend &&
-                          widget.peer.supportsTransfers
-                      ? _toggleVoiceRecording
+                  onPressed: canCompose && peer.supportsTransfers
+                      ? () => _toggleVoiceRecording(peer)
                       : null,
                   icon: Icon(_recording ? Icons.stop : Icons.mic),
                 ),
                 Expanded(
                   child: _MessageComposer(
                     controller: _textController,
-                    enabled: widget.isOnline && widget.controller.canSend,
+                    enabled: canCompose,
                     hint: context.l10n.composerPrivateHint,
-                    onSend: () async {
-                      final text = _textController.text;
-                      _textController.clear();
-                      await widget.controller.sendPrivate(widget.peer, text);
-                      if (mounted) _scrollToBottom();
-                    },
+                    onSend: () => _sendMessage(peer),
                   ),
                 ),
               ],
@@ -1477,11 +1557,25 @@ class _MessageBubble extends StatelessWidget {
             const SizedBox(height: 4),
             Align(
               alignment: Alignment.centerRight,
-              child: Text(
-                MaterialLocalizations.of(context).formatTimeOfDay(
-                  TimeOfDay.fromDateTime(message.timestamp.toLocal()),
-                ),
-                style: Theme.of(context).textTheme.labelSmall,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (message.isPending) ...[
+                    const Icon(Icons.schedule, size: 13),
+                    const SizedBox(width: 3),
+                    Text(
+                      context.l10n.privateMessagePending,
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  Text(
+                    MaterialLocalizations.of(context).formatTimeOfDay(
+                      TimeOfDay.fromDateTime(message.timestamp.toLocal()),
+                    ),
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                ],
               ),
             ),
           ],

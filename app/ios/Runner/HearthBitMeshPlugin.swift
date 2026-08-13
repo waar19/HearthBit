@@ -69,6 +69,15 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private static let serviceUUID = CBUUID(string: "F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C")
   private static let characteristicUUID = CBUUID(string: "A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D")
   private static let maximumPendingBLEFrames = 256
+  private static let reconnectDelays: [TimeInterval] = [1, 2, 4, 8, 16, 30]
+  private static let reconnectCooldown: TimeInterval = 120
+  private static let linkLossScanBurst: TimeInterval = 15
+  private static let subscriptionAnnouncementCooldown: TimeInterval = 10
+  private static let autoHandshakeCooldown: TimeInterval = 60
+  private static let handshakeTimeout: TimeInterval = 20
+  private static let maximumHandshakeRestarts = 3
+  private static let peerReachabilityWindow: TimeInterval = 180
+  private static let maximumDecryptFailures = 3
 
   private var identity = IOSMeshIdentity()
   private var localRole = IOSMeshNodeRole.load()
@@ -78,9 +87,24 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var localCharacteristic: CBMutableCharacteristic?
   private var connectedPeripherals: [UUID: CBPeripheral] = [:]
   private var remoteCharacteristics: [UUID: CBCharacteristic] = [:]
+  private var knownMeshPeripherals: [UUID: CBPeripheral] = [:]
+  private var preferredPeripheralIDs: Set<UUID> = []
+  private var establishedPeripheralIDs: Set<UUID> = []
+  private var reconnectAttempts: [UUID: Int] = [:]
+  private var reconnectTokens: [UUID: UUID] = [:]
+  private var reconnectExhaustedUntil: [UUID: Date] = [:]
   private var peers: [String: IOSMeshPeer] = [:]
   private var sessions: [String: IOSNoiseSession] = [:]
   private var responderCandidates: [String: IOSNoiseSession] = [:]
+  private var securePeerIDs: Set<String> = []
+  private var privateChatPeerIDs: Set<String> = []
+  private var decryptFailures: [String: Int] = [:]
+  private var lastAutoHandshake: [String: Date] = [:]
+  private var lastNoisePeerActivity: [String: Date] = [:]
+  private var handshakeRestartAttempts: [String: Int] = [:]
+  private var autoHandshakeTokens: [String: UUID] = [:]
+  private var activeHandshakeTimeoutTokens: [String: UUID] = [:]
+  private var candidateHandshakeTimeoutTokens: [String: UUID] = [:]
   private var pendingPrivate: [String: [(String, String)]] = [:]
   private var pendingFrames: [String: [Data]] = [:]
   private var pendingCourier: [String: [IOSMeshPacket]] = [:]
@@ -98,6 +122,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var genericPresenceEmitWorkItem: DispatchWorkItem?
   private var genericPresenceExpiryWorkItem: DispatchWorkItem?
   private var restoredPeripheralService = false
+  private var lastSubscriptionAnnouncement: [UUID: Date] = [:]
   private var lifecycleObservers: [NSObjectProtocol] = []
   private var eventSink: FlutterEventSink?
   private var running = false
@@ -105,6 +130,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var powerProfile = IOSPowerProfile.balanced
   private var adaptivePowerSaving = false
   private var adaptiveScanTimer: Timer?
+  private var linkLossScanTimer: Timer?
   private var lanBridgeGatewayID: String?
   private var lanBridgeMaximumFrameSize = 2048
   private var suppressLanBridge = false
@@ -429,10 +455,18 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     stopRadar()
     adaptiveScanTimer?.invalidate()
     adaptiveScanTimer = nil
+    linkLossScanTimer?.invalidate()
+    linkLossScanTimer = nil
     central?.stopScan()
     connectedPeripherals.values.forEach { central?.cancelPeripheralConnection($0) }
     connectedPeripherals.removeAll()
     remoteCharacteristics.removeAll()
+    knownMeshPeripherals.removeAll()
+    preferredPeripheralIDs.removeAll()
+    establishedPeripheralIDs.removeAll()
+    reconnectAttempts.removeAll()
+    reconnectTokens.removeAll()
+    reconnectExhaustedUntil.removeAll()
     centralWriteQueues.removeAll()
     centralWritesInFlight.removeAll()
     peripheralNotifyQueues.removeAll()
@@ -443,7 +477,19 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     restoredPeripheralService = false
     sessions.removeAll()
     responderCandidates.removeAll()
+    securePeerIDs.removeAll()
+    privateChatPeerIDs.removeAll()
+    decryptFailures.removeAll()
+    lastAutoHandshake.removeAll()
+    lastNoisePeerActivity.removeAll()
+    handshakeRestartAttempts.removeAll()
+    autoHandshakeTokens.removeAll()
+    activeHandshakeTimeoutTokens.removeAll()
+    candidateHandshakeTimeoutTokens.removeAll()
+    pendingPrivate.removeAll()
+    pendingFrames.removeAll()
     pendingCourier.removeAll()
+    lastSubscriptionAnnouncement.removeAll()
     syncResponseTimes.removeAll()
     lastSyncRequestBySource.removeAll()
     remoteRadarConsents.removeAll()
@@ -503,16 +549,37 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     radarPeerID = nil
     radarTimer?.invalidate()
     radarTimer = nil
+    linkLossScanTimer?.invalidate()
+    linkLossScanTimer = nil
     central?.stopScan()
     connectedPeripherals.values.forEach { central?.cancelPeripheralConnection($0) }
     connectedPeripherals.removeAll()
     remoteCharacteristics.removeAll()
+    knownMeshPeripherals.removeAll()
+    preferredPeripheralIDs.removeAll()
+    establishedPeripheralIDs.removeAll()
+    reconnectAttempts.removeAll()
+    reconnectTokens.removeAll()
+    reconnectExhaustedUntil.removeAll()
     centralWriteQueues.removeAll()
     centralWritesInFlight.removeAll()
     peripheralNotifyQueues.removeAll()
     peripheralPeers.removeAll()
     sessions.removeAll()
     responderCandidates.removeAll()
+    securePeerIDs.removeAll()
+    privateChatPeerIDs.removeAll()
+    decryptFailures.removeAll()
+    lastAutoHandshake.removeAll()
+    lastNoisePeerActivity.removeAll()
+    handshakeRestartAttempts.removeAll()
+    autoHandshakeTokens.removeAll()
+    activeHandshakeTimeoutTokens.removeAll()
+    candidateHandshakeTimeoutTokens.removeAll()
+    pendingPrivate.removeAll()
+    pendingFrames.removeAll()
+    pendingCourier.removeAll()
+    lastSubscriptionAnnouncement.removeAll()
     fragmentReassembler.clear()
     lastSyncRequestBySource.removeAll()
     syncResponseTimes.removeAll()
@@ -713,6 +780,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func sendPrivate(peerID: String, content: String) throws -> String {
     guard localRole.canChat else { throw IOSMeshError.roleCannotChat }
     guard peers[peerID] != nil else { throw IOSMeshError.peerUnavailable }
+    privateChatPeerIDs.insert(peerID)
     let id = UUID().uuidString.uppercased()
     if let session = sessions[peerID], session.established {
       try sendEncryptedPrivate(peerID: peerID, id: id, content: content)
@@ -747,6 +815,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func initiateHandshake(peerID: String) throws {
+    guard running, localRole.allowsDataPlane else { return }
     guard sessions[peerID] == nil, responderCandidates[peerID] == nil else { return }
     let claimed = try Data(hex: peerID)
     let session = IOSNoiseSession(
@@ -755,6 +824,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       localStatic: identity.noisePrivateKey
     )
     sessions[peerID] = session
+    touchActiveHandshake(peerID: peerID)
     do {
       sendNoise(
         type: IOSMeshProtocol.noiseHandshake,
@@ -763,7 +833,140 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       )
     } catch {
       sessions.removeValue(forKey: peerID)
+      activeHandshakeTimeoutTokens.removeValue(forKey: peerID)
       throw error
+    }
+  }
+
+  private func shouldAutoHandshake(peerID: String) -> Bool {
+    securePeerIDs.contains(peerID) ||
+      privateChatPeerIDs.contains(peerID) ||
+      !(pendingPrivate[peerID] ?? []).isEmpty ||
+      !(pendingFrames[peerID] ?? []).isEmpty ||
+      !(pendingCourier[peerID] ?? []).isEmpty
+  }
+
+  private func isPeerReachable(_ peerID: String) -> Bool {
+    if peripheralPeers.values.contains(peerID) { return true }
+    if let activity = lastNoisePeerActivity[peerID],
+       Date().timeIntervalSince(activity) <= Self.peerReachabilityWindow {
+      return true
+    }
+    guard let peer = peers[peerID] else { return false }
+    return Date().timeIntervalSince(peer.lastSeen) <= Self.peerReachabilityWindow
+  }
+
+  private func scheduleAutoHandshake(
+    peerID: String,
+    force: Bool = false,
+    delay: TimeInterval = 1.5
+  ) {
+    guard
+      running,
+      localRole.allowsDataPlane,
+      peerID != identity.peerIDHex,
+      sessions[peerID]?.established != true,
+      autoHandshakeTokens[peerID] == nil
+    else { return }
+    if !force {
+      guard shouldAutoHandshake(peerID: peerID) else { return }
+      if let previous = lastAutoHandshake[peerID],
+         Date().timeIntervalSince(previous) < Self.autoHandshakeCooldown {
+        return
+      }
+    }
+    let token = UUID()
+    autoHandshakeTokens[peerID] = token
+    lastAutoHandshake[peerID] = Date()
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+      guard
+        let self,
+        self.autoHandshakeTokens[peerID] == token
+      else { return }
+      self.autoHandshakeTokens.removeValue(forKey: peerID)
+      guard
+        self.running,
+        self.localRole.allowsDataPlane,
+        self.isPeerReachable(peerID),
+        self.sessions[peerID] == nil,
+        self.responderCandidates[peerID] == nil
+      else { return }
+      try? self.initiateHandshake(peerID: peerID)
+    }
+  }
+
+  private func touchActiveHandshake(peerID: String) {
+    guard sessions[peerID]?.handshaking == true else {
+      activeHandshakeTimeoutTokens.removeValue(forKey: peerID)
+      return
+    }
+    let token = UUID()
+    activeHandshakeTimeoutTokens[peerID] = token
+    DispatchQueue.main.asyncAfter(deadline: .now() + Self.handshakeTimeout) { [weak self] in
+      guard
+        let self,
+        self.activeHandshakeTimeoutTokens[peerID] == token,
+        self.sessions[peerID]?.handshaking == true
+      else { return }
+      self.activeHandshakeTimeoutTokens.removeValue(forKey: peerID)
+      self.sessions.removeValue(forKey: peerID)
+      self.decryptFailures.removeValue(forKey: peerID)
+      self.emit(["type": "peers", "peers": self.peerMaps()])
+      let restarts = (self.handshakeRestartAttempts[peerID] ?? 0) + 1
+      self.handshakeRestartAttempts[peerID] = restarts
+      if restarts <= Self.maximumHandshakeRestarts, self.isPeerReachable(peerID) {
+        self.scheduleAutoHandshake(peerID: peerID, force: true, delay: 0.5)
+      }
+    }
+  }
+
+  private func touchCandidateHandshake(peerID: String) {
+    guard responderCandidates[peerID]?.handshaking == true else {
+      candidateHandshakeTimeoutTokens.removeValue(forKey: peerID)
+      return
+    }
+    let token = UUID()
+    candidateHandshakeTimeoutTokens[peerID] = token
+    DispatchQueue.main.asyncAfter(deadline: .now() + Self.handshakeTimeout) { [weak self] in
+      guard
+        let self,
+        self.candidateHandshakeTimeoutTokens[peerID] == token,
+        self.responderCandidates[peerID]?.handshaking == true
+      else { return }
+      self.candidateHandshakeTimeoutTokens.removeValue(forKey: peerID)
+      self.responderCandidates.removeValue(forKey: peerID)
+    }
+  }
+
+  private func invalidateNoiseState(peerID: String) {
+    if sessions[peerID]?.established == true {
+      securePeerIDs.insert(peerID)
+    }
+    sessions.removeValue(forKey: peerID)
+    responderCandidates.removeValue(forKey: peerID)
+    decryptFailures.removeValue(forKey: peerID)
+    autoHandshakeTokens.removeValue(forKey: peerID)
+    activeHandshakeTimeoutTokens.removeValue(forKey: peerID)
+    candidateHandshakeTimeoutTokens.removeValue(forKey: peerID)
+    handshakeRestartAttempts.removeValue(forKey: peerID)
+  }
+
+  private func registerDecryptFailure(peerID: String) {
+    guard sessions[peerID]?.established == true else { return }
+    let failures = (decryptFailures[peerID] ?? 0) + 1
+    guard failures >= Self.maximumDecryptFailures else {
+      decryptFailures[peerID] = failures
+      return
+    }
+    NSLog(
+      "HearthBitMesh: Noise session with %@ stale after %d decrypt failures",
+      String(peerID.prefix(8)),
+      failures
+    )
+    invalidateNoiseState(peerID: peerID)
+    emit(["type": "peers", "peers": peerMaps()])
+    if isPeerReachable(peerID) {
+      scheduleAutoHandshake(peerID: peerID, force: true, delay: 0.5)
     }
   }
 
@@ -1079,6 +1282,75 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     }
   }
 
+  private func sendSubscriptionAnnouncement(to central: CBCentral) {
+    guard
+      running,
+      localRole.allowsDataPlane,
+      let manager = peripheralManager,
+      let characteristic = localCharacteristic,
+      characteristic.subscribedCentrals?.contains(where: {
+        $0.identifier == central.identifier
+      }) == true
+    else { return }
+    let now = Date()
+    if let previous = lastSubscriptionAnnouncement[central.identifier],
+       now.timeIntervalSince(previous) < Self.subscriptionAnnouncementCooldown {
+      return
+    }
+    lastSubscriptionAnnouncement[central.identifier] = now
+
+    let packets = [
+      identity.sign(
+        IOSMeshPacket(
+          type: IOSMeshProtocol.announce,
+          ttl: IOSMeshProtocol.defaultTTL,
+          timestamp: currentMilliseconds(),
+          senderID: identity.peerID,
+          payload: IOSMeshProtocol.announcement(
+            nickname: identity.nickname,
+            noisePublicKey: identity.noisePrivateKey.publicKey.rawRepresentation,
+            signingPublicKey: identity.signingPrivateKey.publicKey.rawRepresentation
+          )
+        )
+      ),
+      identity.sign(
+        IOSMeshPacket(
+          type: IOSMeshProtocol.hbtCapability,
+          ttl: IOSMeshProtocol.defaultTTL,
+          timestamp: currentMilliseconds(),
+          senderID: identity.peerID,
+          payload: Data([IOSMeshProtocol.hbtVersion])
+        )
+      ),
+      identity.sign(
+        IOSMeshPacket(
+          type: IOSMeshProtocol.nodeCapability,
+          ttl: IOSMeshProtocol.defaultTTL,
+          timestamp: currentMilliseconds(),
+          senderID: identity.peerID,
+          payload: localRole.capabilityPayload
+        )
+      ),
+    ]
+    for packet in packets {
+      rememberSyncPacket(packet)
+      let encoded = IOSMeshProtocol.encodeForBLE(packet)
+      guard
+        let frames = packetFragmenter.prepare(
+          packet: packet,
+          encoded: encoded,
+          maximumValueLength: central.maximumUpdateValueLength
+        )
+      else { continue }
+      enqueuePeripheralUpdates(
+        frames,
+        central: central,
+        manager: manager,
+        characteristic: characteristic
+      )
+    }
+  }
+
   private func enqueueCentralWrites(
     _ frames: [Data],
     peripheral: CBPeripheral,
@@ -1225,7 +1497,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       )
       rememberSyncPacket(packet)
       emit(["type": "peers", "peers": peerMaps()])
-      if let source { requestMissingMessages(peerID: senderID, source: source) }
+      if let source {
+        preferredPeripheralIDs.insert(source)
+        requestMissingMessages(peerID: senderID, source: source)
+      }
       for stored in storeForward.packets(for: packet.senderID) {
         broadcast(stored)
       }
@@ -1234,6 +1509,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
          !(pendingCourier[senderID] ?? []).isEmpty {
         try? initiateHandshake(peerID: senderID)
       }
+      scheduleAutoHandshake(peerID: senderID)
     case IOSMeshProtocol.message:
       guard
         let peer = peers[senderID],
@@ -1351,6 +1627,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func processHandshake(_ packet: IOSMeshPacket, senderID: String) {
+    lastNoisePeerActivity[senderID] = Date()
+    handshakeRestartAttempts.removeValue(forKey: senderID)
     let isMessageOne = packet.payload.count == 32
     var session: IOSNoiseSession
     var isCandidate = false
@@ -1406,6 +1684,11 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       sessions[senderID] = session
     }
 
+    if isCandidate {
+      touchCandidateHandshake(peerID: senderID)
+    } else {
+      touchActiveHandshake(peerID: senderID)
+    }
     do {
       if let response = try session.process(packet.payload) {
         sendNoise(
@@ -1415,6 +1698,12 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         )
       }
       if session.established {
+        securePeerIDs.insert(senderID)
+        decryptFailures.removeValue(forKey: senderID)
+        handshakeRestartAttempts.removeValue(forKey: senderID)
+        autoHandshakeTokens.removeValue(forKey: senderID)
+        activeHandshakeTimeoutTokens.removeValue(forKey: senderID)
+        candidateHandshakeTimeoutTokens.removeValue(forKey: senderID)
         if isCandidate {
           responderCandidates.removeValue(forKey: senderID)
           sessions[senderID] = session
@@ -1437,9 +1726,11 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       if isCandidate {
         if let candidate = responderCandidates[senderID], candidate === session {
           responderCandidates.removeValue(forKey: senderID)
+          candidateHandshakeTimeoutTokens.removeValue(forKey: senderID)
         }
       } else if let active = sessions[senderID], active === session {
         sessions.removeValue(forKey: senderID)
+        activeHandshakeTimeoutTokens.removeValue(forKey: senderID)
       }
       if let meshError = error as? IOSMeshError, case .identityMismatch = meshError {
         emitError(HearthBitL10n.string("identity_rejected"))
@@ -1449,14 +1740,24 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           String(senderID.prefix(8)),
           error.localizedDescription
         )
+        if sessions[senderID]?.established != true, isPeerReachable(senderID) {
+          scheduleAutoHandshake(peerID: senderID, force: true, delay: 1)
+        }
       }
     }
   }
 
   private func processEncrypted(_ packet: IOSMeshPacket, senderID: String) {
-    guard let session = sessions[senderID], session.established else { return }
+    lastNoisePeerActivity[senderID] = Date()
+    guard let session = sessions[senderID], session.established else {
+      securePeerIDs.insert(senderID)
+      scheduleAutoHandshake(peerID: senderID, force: true, delay: 0.5)
+      return
+    }
     do {
       let plaintext = try session.decrypt(packet.payload)
+      securePeerIDs.insert(senderID)
+      decryptFailures.removeValue(forKey: senderID)
       if plaintext.first == IOSMeshProtocol.noiseTransferFrame {
         emit([
           "type": "transferFrame",
@@ -1469,6 +1770,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         plaintext.first == IOSMeshProtocol.noisePrivate,
         let message = IOSMeshProtocol.decodePrivateMessage(plaintext.dropFirst())
       else { return }
+      privateChatPeerIDs.insert(senderID)
       emitMessage(
         id: message.id,
         sender: peers[senderID]?.nickname ?? String(senderID.prefix(8)),
@@ -1480,6 +1782,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         channel: nil
       )
     } catch {
+      registerDecryptFailure(peerID: senderID)
       return
     }
   }
@@ -1685,6 +1988,129 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     emit(["type": "error", "message": message])
   }
 
+  private func clearCentralTransportState(_ identifier: UUID) {
+    connectedPeripherals.removeValue(forKey: identifier)
+    remoteCharacteristics.removeValue(forKey: identifier)
+    centralWriteQueues.removeValue(forKey: identifier)
+    centralWritesInFlight.remove(identifier)
+    lastSyncRequestBySource.removeValue(forKey: identifier)
+    syncResponseTimes.removeValue(forKey: identifier)
+  }
+
+  private func rememberMeshPeripheral(_ peripheral: CBPeripheral) {
+    knownMeshPeripherals[peripheral.identifier] = peripheral
+    peripheral.delegate = self
+  }
+
+  private func connectKnownPeripheral(_ peripheral: CBPeripheral, using central: CBCentralManager) {
+    guard running, localRole.allowsDataPlane, central.state == .poweredOn else { return }
+    let identifier = peripheral.identifier
+    guard
+      connectedPeripherals[identifier] == nil,
+      reconnectTokens[identifier] == nil
+    else { return }
+    if let exhaustedUntil = reconnectExhaustedUntil[identifier] {
+      guard exhaustedUntil <= Date() else { return }
+      reconnectExhaustedUntil.removeValue(forKey: identifier)
+      reconnectAttempts.removeValue(forKey: identifier)
+    }
+
+    let maximum = powerProfile.maximumOutgoingConnections
+    guard maximum > 0 else { return }
+    guard connectedPeripherals.count < maximum else { return }
+    if powerProfile == .critical,
+       !preferredPeripheralIDs.contains(identifier),
+       connectedPeripherals.count >= maximum - 1 {
+      // Conserva el último slot para un enlace ya conocido que reaparezca.
+      return
+    }
+
+    rememberMeshPeripheral(peripheral)
+    switch peripheral.state {
+    case .connected:
+      connectedPeripherals[identifier] = peripheral
+      establishedPeripheralIDs.insert(identifier)
+      preferredPeripheralIDs.insert(identifier)
+      peripheral.discoverServices([Self.serviceUUID])
+    case .connecting:
+      connectedPeripherals[identifier] = peripheral
+    case .disconnected:
+      connectedPeripherals[identifier] = peripheral
+      central.connect(peripheral)
+    case .disconnecting:
+      scheduleReconnect(peripheral)
+    @unknown default:
+      scheduleReconnect(peripheral)
+    }
+  }
+
+  private func scheduleReconnect(_ peripheral: CBPeripheral) {
+    let identifier = peripheral.identifier
+    rememberMeshPeripheral(peripheral)
+    guard
+      running,
+      localRole.allowsDataPlane,
+      reconnectTokens[identifier] == nil
+    else { return }
+    let attempt = (reconnectAttempts[identifier] ?? 0) + 1
+    guard attempt <= Self.reconnectDelays.count else {
+      reconnectAttempts.removeValue(forKey: identifier)
+      reconnectExhaustedUntil[identifier] = Date().addingTimeInterval(
+        Self.reconnectCooldown
+      )
+      return
+    }
+    reconnectAttempts[identifier] = attempt
+    let token = UUID()
+    reconnectTokens[identifier] = token
+    let delay = Self.reconnectDelays[attempt - 1]
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+      guard
+        let self,
+        self.reconnectTokens[identifier] == token
+      else { return }
+      self.reconnectTokens.removeValue(forKey: identifier)
+      guard let central = self.central else { return }
+      self.connectKnownPeripheral(peripheral, using: central)
+    }
+  }
+
+  private func reconnectKnownPeripherals() {
+    guard running, localRole.allowsDataPlane, let central else { return }
+    for peripheral in knownMeshPeripherals.values
+    where connectedPeripherals[peripheral.identifier] == nil {
+      connectKnownPeripheral(peripheral, using: central)
+    }
+  }
+
+  private func triggerLinkLossScanBurst() {
+    guard
+      running,
+      localRole.allowsDataPlane,
+      powerProfile != .survival,
+      radarPeerID == nil,
+      let central,
+      central.state == .poweredOn
+    else { return }
+    adaptiveScanTimer?.invalidate()
+    adaptiveScanTimer = nil
+    linkLossScanTimer?.invalidate()
+    central.stopScan()
+    central.scanForPeripherals(
+      withServices: [Self.serviceUUID],
+      options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+    )
+    linkLossScanTimer = Timer.scheduledTimer(
+      withTimeInterval: Self.linkLossScanBurst,
+      repeats: false
+    ) { [weak self] _ in
+      guard let self else { return }
+      self.linkLossScanTimer = nil
+      guard self.running, self.localRole.allowsDataPlane else { return }
+      self.restartScan()
+    }
+  }
+
   private func handleDirectLinkLost(source: UUID) {
     let hasCentralLink = remoteCharacteristics[source] != nil &&
       connectedPeripherals[source]?.state == .connected
@@ -1694,8 +2120,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     guard !hasCentralLink, !hasPeripheralLink else { return }
     guard let disconnectedPeer = peripheralPeers.removeValue(forKey: source) else { return }
     guard !peripheralPeers.values.contains(disconnectedPeer) else { return }
-    sessions.removeValue(forKey: disconnectedPeer)
-    responderCandidates.removeValue(forKey: disconnectedPeer)
+    invalidateNoiseState(peerID: disconnectedPeer)
     emit(["type": "peers", "peers": peerMaps()])
   }
 
@@ -1763,6 +2188,7 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
   func centralManagerDidUpdateState(_ central: CBCentralManager) {
     guard running, central.state == .poweredOn else { return }
     restartScan()
+    reconnectKnownPeripherals()
   }
 
   func centralManager(
@@ -1771,17 +2197,27 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
     advertisementData: [String: Any],
     rssi RSSI: NSNumber
   ) {
-    guard localRole.allowsDataPlane else { return }
+    guard running, localRole.allowsDataPlane else { return }
     guard isMeshAdvertisement(advertisementData) else {
       if RSSI.intValue != 127 {
         recordGenericPresence(advertisementData: advertisementData, rssi: RSSI.intValue)
       }
       return
     }
+    rememberMeshPeripheral(peripheral)
     if let serviceData = advertisementData[CBAdvertisementDataServiceDataKey] as? [CBUUID: Data],
        let advertisedPeer = serviceData[Self.serviceUUID],
        advertisedPeer.count >= 8 {
-      peripheralPeers[peripheral.identifier] = advertisedPeer.prefix(8).hex
+      let peerID = advertisedPeer.prefix(8).hex
+      if peers[peerID] != nil ||
+         securePeerIDs.contains(peerID) ||
+         privateChatPeerIDs.contains(peerID) ||
+         !(pendingPrivate[peerID] ?? []).isEmpty ||
+         !(pendingFrames[peerID] ?? []).isEmpty ||
+         !(pendingCourier[peerID] ?? []).isEmpty {
+        preferredPeripheralIDs.insert(peripheral.identifier)
+      }
+      peripheralPeers[peripheral.identifier] = peerID
     }
     // 127 significa «RSSI no disponible» según CoreBluetooth.
     if let target = radarPeerID,
@@ -1790,18 +2226,35 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
       emitRssi(peerID: target, rssi: RSSI.intValue)
     }
     guard connectedPeripherals[peripheral.identifier] == nil else { return }
-    guard connectedPeripherals.count < powerProfile.maximumOutgoingConnections else { return }
-    connectedPeripherals[peripheral.identifier] = peripheral
-    peripheral.delegate = self
-    central.connect(peripheral)
+    connectKnownPeripheral(peripheral, using: central)
   }
 
   func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-    guard localRole.allowsDataPlane else {
+    guard running, localRole.allowsDataPlane else {
       central.cancelPeripheralConnection(peripheral)
       return
     }
+    let identifier = peripheral.identifier
+    rememberMeshPeripheral(peripheral)
+    connectedPeripherals[identifier] = peripheral
+    establishedPeripheralIDs.insert(identifier)
+    preferredPeripheralIDs.insert(identifier)
+    reconnectAttempts.removeValue(forKey: identifier)
+    reconnectTokens.removeValue(forKey: identifier)
+    reconnectExhaustedUntil.removeValue(forKey: identifier)
     peripheral.discoverServices([Self.serviceUUID])
+  }
+
+  func centralManager(
+    _ central: CBCentralManager,
+    didFailToConnect peripheral: CBPeripheral,
+    error: Error?
+  ) {
+    let identifier = peripheral.identifier
+    establishedPeripheralIDs.remove(identifier)
+    clearCentralTransportState(identifier)
+    guard running, localRole.allowsDataPlane else { return }
+    scheduleReconnect(peripheral)
   }
 
   func centralManager(
@@ -1809,24 +2262,43 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
     didDisconnectPeripheral peripheral: CBPeripheral,
     error: Error?
   ) {
-    connectedPeripherals.removeValue(forKey: peripheral.identifier)
-    remoteCharacteristics.removeValue(forKey: peripheral.identifier)
-    centralWriteQueues.removeValue(forKey: peripheral.identifier)
-    centralWritesInFlight.remove(peripheral.identifier)
-    lastSyncRequestBySource.removeValue(forKey: peripheral.identifier)
-    syncResponseTimes.removeValue(forKey: peripheral.identifier)
-    handleDirectLinkLost(source: peripheral.identifier)
+    let identifier = peripheral.identifier
+    let wasEstablished = establishedPeripheralIDs.remove(identifier) != nil
+    clearCentralTransportState(identifier)
+    handleDirectLinkLost(source: identifier)
+    guard running, localRole.allowsDataPlane else { return }
+    if wasEstablished { triggerLinkLossScanBurst() }
+    scheduleReconnect(peripheral)
+    reconnectKnownPeripherals()
   }
 
   func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
     let restored = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] ?? []
-    guard localRole.allowsDataPlane else {
+    guard running, localRole.allowsDataPlane else {
       restored.forEach { central.cancelPeripheralConnection($0) }
       return
     }
     for peripheral in restored {
-      connectedPeripherals[peripheral.identifier] = peripheral
-      peripheral.delegate = self
+      let identifier = peripheral.identifier
+      rememberMeshPeripheral(peripheral)
+      preferredPeripheralIDs.insert(identifier)
+      switch peripheral.state {
+      case .connected:
+        connectedPeripherals[identifier] = peripheral
+        establishedPeripheralIDs.insert(identifier)
+        reconnectAttempts.removeValue(forKey: identifier)
+        reconnectTokens.removeValue(forKey: identifier)
+        reconnectExhaustedUntil.removeValue(forKey: identifier)
+        peripheral.discoverServices([Self.serviceUUID])
+      case .connecting:
+        connectedPeripherals[identifier] = peripheral
+      case .disconnected, .disconnecting:
+        if central.state == .poweredOn {
+          connectKnownPeripheral(peripheral, using: central)
+        }
+      @unknown default:
+        break
+      }
     }
   }
 
@@ -1980,10 +2452,27 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
   func peripheralManager(
     _ peripheral: CBPeripheralManager,
     central: CBCentral,
+    didSubscribeTo characteristic: CBCharacteristic
+  ) {
+    guard characteristic.uuid == Self.characteristicUUID else { return }
+    sendSubscriptionAnnouncement(to: central)
+  }
+
+  func peripheralManager(
+    _ peripheral: CBPeripheralManager,
+    central: CBCentral,
     didUnsubscribeFrom characteristic: CBCharacteristic
   ) {
-    peripheralNotifyQueues.removeValue(forKey: central.identifier)
-    handleDirectLinkLost(source: central.identifier)
+    let identifier = central.identifier
+    let hasCentralLink = remoteCharacteristics[identifier] != nil &&
+      connectedPeripherals[identifier]?.state == .connected
+    peripheralNotifyQueues.removeValue(forKey: identifier)
+    lastSubscriptionAnnouncement.removeValue(forKey: identifier)
+    handleDirectLinkLost(source: identifier)
+    if !hasCentralLink {
+      triggerLinkLossScanBurst()
+      reconnectKnownPeripherals()
+    }
   }
 
   func peripheralManager(_ peripheral: CBPeripheralManager, willRestoreState dict: [String: Any]) {

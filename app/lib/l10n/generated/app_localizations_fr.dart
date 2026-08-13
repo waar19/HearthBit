@@ -86,6 +86,17 @@ class AppLocalizationsFr extends AppLocalizations {
       'Le premier message lancera une poignée de main Noise XX.';
 
   @override
+  String get secureChatUnavailableHint => 'En attente du canal chiffré.';
+
+  @override
+  String get privateMessagePending => 'En attente';
+
+  @override
+  String privateMessageSendError(String error) {
+    return 'Impossible d’envoyer le message : $error';
+  }
+
+  @override
   String get emptyPeersTitle => 'Aucun appareil à proximité';
 
   @override

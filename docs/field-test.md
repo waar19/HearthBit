@@ -305,6 +305,35 @@ Registre el número de mensajes antes y después. El resultado correcto es
 convergencia exacta, sin duplicados y sin propagar `REQUEST_SYNC` más allá del
 vecino directo.
 
+## Reconexión de chats privados Noise
+
+Esta prueba es independiente de `REQUEST_SYNC`: los mensajes privados no forman
+parte del filtro GCS y deben recuperar su propia sesión Noise.
+
+1. Abra un chat privado HearthBit ↔ HearthBit, envíe un mensaje en cada sentido
+   y confirme que ambos peers muestran el canal seguro.
+2. Repita con HearthBit ↔ BitChat y conserve abiertas ambas conversaciones.
+3. En cada pareja, apague Bluetooth en un extremo durante 30 segundos. Mientras
+   está desconectado, escriba un mensaje desde HearthBit; debe quedar marcado
+   como pendiente y conservarse aunque se reinicie la app.
+4. Reactive Bluetooth sin cerrar el chat. El peer debe pasar de desconectado a
+   reconectando y luego a seguro sin obligar a cerrar y volver a abrir la vista.
+   El mensaje pendiente debe enviarse una sola vez.
+5. Envíe un mensaje desde el extremo que conservó una sesión Noise anterior.
+   HearthBit debe detectar el transporte obsoleto, renegociar Noise y aceptar un
+   envío posterior sin mostrar un error de identidad.
+6. Repita cerrando y abriendo HearthBit, y después con el perfil de energía
+   crítico. La reconexión de un chat conocido debe tener prioridad sobre enlaces
+   nuevos y no esperar el ciclo completo de escaneo de ahorro.
+7. Mantenga la malla en segundo plano durante cada desconexión. La notificación
+   persistente debe cambiar entre «Iniciando malla», «Malla activa · N cercanos»
+   y «Error en la malla» según el estado real.
+
+Registre por dirección el tiempo desde que Bluetooth vuelve a estar disponible
+hasta que el canal aparece seguro, los intentos de handshake, el ID del mensaje
+pendiente y el número de entregas. El resultado correcto es una sola entrega,
+ningún cierre del chat y recuperación automática del canal Noise.
+
 ## Paquetes v2 con ruta
 
 Con un cliente BitChat que emita versión 2:

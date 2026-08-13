@@ -2,8 +2,14 @@
 <resources>
     <string name="notification_channel_name">Notfall-Mesh</string>
     <string name="notification_channel_description">Hält die Bluetooth-Verbindung während eines Notfalls aktiv</string>
-    <string name="notification_title">HearthBit ist verbunden</string>
+    <string name="notification_title">HearthBit-Notfall-Mesh</string>
     <string name="notification_text">BLE-Mesh-Nachrichten werden weitergeleitet</string>
+    <string name="notification_status_starting">Notfall-Mesh wird gestartet…</string>
+    <string name="notification_status_error">Mesh-Fehler: %1$s</string>
+    <plurals name="notification_status_active">
+        <item quantity="one">%1$d Gerät in der Nähe</item>
+        <item quantity="other">%1$d Geräte in der Nähe</item>
+    </plurals>
     <string name="error_ble_start">BLE konnte nicht gestartet werden</string>
     <string name="error_bluetooth_off">Bluetooth ist ausgeschaltet</string>
     <string name="error_no_advertising">Dieses Gerät unterstützt kein BLE-Advertising; Nur-Empfangsmodus</string>

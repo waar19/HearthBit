@@ -222,6 +222,8 @@ class GenericBlePresence {
 bool canOfferFileToPeer(MeshPeer peer, {required bool isOnline}) =>
     isOnline && peer.supportsTransfers;
 
+enum MeshMessageDeliveryStatus { sent, pending }
+
 class MeshMessage {
   const MeshMessage({
     required this.id,
@@ -232,6 +234,7 @@ class MeshMessage {
     required this.isMine,
     required this.timestamp,
     this.channel,
+    this.deliveryStatus = MeshMessageDeliveryStatus.sent,
   });
 
   factory MeshMessage.fromMap(Map<Object?, Object?> map) {
@@ -268,8 +271,11 @@ class MeshMessage {
   final bool isMine;
   final DateTime timestamp;
   final String? channel;
+  final MeshMessageDeliveryStatus deliveryStatus;
 
   bool get isSos => channel == 'sos' || content.startsWith('SOS|');
+
+  bool get isPending => deliveryStatus == MeshMessageDeliveryStatus.pending;
 
   bool get isCheckIn =>
       channel == 'checkin' || content.contains(EmergencyCheckIn.marker);

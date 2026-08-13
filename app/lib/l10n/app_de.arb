@@ -27,6 +27,9 @@
   "composerPublicHint": "Nachricht an alle in der Nähe",
   "composerPrivateHint": "Verschlüsselte Nachricht",
   "privateChatIntro": "Die erste Nachricht startet einen Noise-XX-Handshake.",
+  "secureChatUnavailableHint": "Warten auf den verschlüsselten Kanal.",
+  "privateMessagePending": "Ausstehend",
+  "privateMessageSendError": "Die Nachricht konnte nicht gesendet werden: {error}",
 
   "emptyPeersTitle": "Keine Geräte in der Nähe",
   "emptyPeersBody": "Lass Bluetooth aktiviert und bringe ein anderes Telefon mit HearthBit oder BitChat in die Nähe.",

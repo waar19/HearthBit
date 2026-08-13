@@ -2,8 +2,14 @@
 <resources>
     <string name="notification_channel_name">Emergency mesh</string>
     <string name="notification_channel_description">Keeps the Bluetooth connection alive during an emergency</string>
-    <string name="notification_title">HearthBit is connected</string>
+    <string name="notification_title">HearthBit emergency mesh</string>
     <string name="notification_text">Relaying BLE mesh messages</string>
+    <string name="notification_status_starting">Starting the emergency mesh…</string>
+    <string name="notification_status_error">Mesh error: %1$s</string>
+    <plurals name="notification_status_active">
+        <item quantity="one">%1$d nearby device</item>
+        <item quantity="other">%1$d nearby devices</item>
+    </plurals>
     <string name="error_ble_start">Could not start BLE</string>
     <string name="error_bluetooth_off">Bluetooth is off</string>
     <string name="error_no_advertising">This device does not support BLE advertising; receive-only mode</string>

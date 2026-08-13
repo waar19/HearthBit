@@ -2,8 +2,14 @@
 <resources>
     <string name="notification_channel_name">Malla de emergencia</string>
     <string name="notification_channel_description">Mantiene la conexión Bluetooth activa durante una emergencia</string>
-    <string name="notification_title">HearthBit está conectado</string>
+    <string name="notification_title">Malla de emergencia HearthBit</string>
     <string name="notification_text">Retransmitiendo mensajes de la malla BLE</string>
+    <string name="notification_status_starting">Iniciando la malla de emergencia…</string>
+    <string name="notification_status_error">Error de malla: %1$s</string>
+    <plurals name="notification_status_active">
+        <item quantity="one">%1$d dispositivo cercano</item>
+        <item quantity="other">%1$d dispositivos cercanos</item>
+    </plurals>
     <string name="error_ble_start">No se pudo iniciar BLE</string>
     <string name="error_bluetooth_off">Bluetooth está apagado</string>
     <string name="error_no_advertising">El dispositivo no soporta anuncios BLE; modo solo recepción</string>

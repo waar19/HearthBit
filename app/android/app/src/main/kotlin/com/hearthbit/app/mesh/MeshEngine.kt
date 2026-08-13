@@ -36,6 +36,7 @@ internal class MeshEngine(
     private val context: Context,
     requiredRole: MeshNodeRole? = null,
     private val emit: (Map<String, Any?>) -> Unit,
+    private val observeNotification: (MeshNotificationState) -> Unit,
 ) {
     private val bluetoothManager = context.getSystemService(BluetoothManager::class.java)
     private val adapter get() = bluetoothManager.adapter
@@ -46,6 +47,9 @@ internal class MeshEngine(
         }
     }
     private val noiseSessions = NoiseSessionManagerLite(identity.peerIdHex, identity.noisePrivateKey)
+    private val noiseFailureTracker = NoiseFailureRecoveryTracker()
+    private val peersWithSessionHistory = ConcurrentHashMap.newKeySet<String>()
+    private val lastHandshakeAttemptByPeer = ConcurrentHashMap<String, Long>()
     private val seen = Collections.synchronizedMap(
         object : LinkedHashMap<String, Long>(512, 0.75f, true) {
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean =
@@ -118,12 +122,17 @@ internal class MeshEngine(
     private var genericPresenceEmitRunnable: Runnable? = null
     private var adaptiveScanStartRunnable: Runnable? = null
     private var adaptiveScanStopRunnable: Runnable? = null
+    private var recoveryScanStopRunnable: Runnable? = null
+    private var handshakeCleanupRunnable: Runnable? = null
     private var batteryLevel = 100
     private var charging = false
     private var screenOn = true
     private var systemPowerSave = false
     private var powerProfile = PowerProfile.BALANCED
     private var adaptivePowerSaving = false
+
+    @Volatile
+    private var notificationError: String? = null
 
     /** Peer objetivo del radar de rescate; null cuando el radar está apagado. */
     @Volatile
@@ -161,6 +170,12 @@ internal class MeshEngine(
             .map(GenericBlePresenceTracker.Presence::toEventMap),
     )
 
+    fun notificationSnapshot(): MeshNotificationState = MeshNotificationState(
+        status = currentStatus,
+        nearbyPeerCount = nearbyPeerCount(),
+        errorMessage = notificationError,
+    )
+
     @SuppressLint("MissingPermission")
     fun start() {
         check(adapter != null && adapter.isEnabled) {
@@ -176,6 +191,7 @@ internal class MeshEngine(
             startScanning()
             startGenericBeaconScanning()
         }
+        scheduleHandshakeCleanup()
         startAdvertising()
     }
 
@@ -274,6 +290,9 @@ internal class MeshEngine(
         genericPresenceEmitRunnable?.let(mainHandler::removeCallbacks)
         genericPresenceEmitRunnable = null
         cancelAdaptiveScanning()
+        cancelRecoveryScanBurst()
+        handshakeCleanupRunnable?.let(mainHandler::removeCallbacks)
+        handshakeCleanupRunnable = null
         genericPresenceTracker.clear()
         clientGatts.values.forEach { runCatching { it.close() } }
         clientGatts.clear()
@@ -294,6 +313,8 @@ internal class MeshEngine(
         gattServer = null
         serverCharacteristic = null
         noiseSessions.close()
+        noiseFailureTracker.clear()
+        lastHandshakeAttemptByPeer.clear()
         fragmentReassembler.clear()
         lastSyncRequestByAddress.clear()
         syncResponseTimes.clear()
@@ -332,6 +353,7 @@ internal class MeshEngine(
         adaptivePowerSaving = powerProfile.savesPower
         if (changed && running && localRole != MeshNodeRole.PHONE_BEACON && radarPeerId == null) {
             cancelAdaptiveScanning()
+            cancelRecoveryScanBurst()
             stopBleScans()
             startScanning()
             startGenericBeaconScanning()
@@ -384,6 +406,7 @@ internal class MeshEngine(
         genericPresenceEmitRunnable?.let(mainHandler::removeCallbacks)
         genericPresenceEmitRunnable = null
         genericPresenceTracker.clear()
+        cancelRecoveryScanBurst()
         clientGatts.values.forEach { runCatching { it.close() } }
         clientGatts.clear()
         clientCharacteristics.clear()
@@ -403,6 +426,8 @@ internal class MeshEngine(
         gattServer = null
         serverCharacteristic = null
         noiseSessions.close()
+        noiseFailureTracker.clear()
+        lastHandshakeAttemptByPeer.clear()
         restartAdvertising()
     }
 
@@ -585,6 +610,7 @@ internal class MeshEngine(
         }
         radarPeerId = normalized
         mainHandler.removeCallbacks(radarReadTask)
+        cancelRecoveryScanBurst()
         startScanning(aggressive = true)
         sendAnnouncement()
         mainHandler.post(radarReadTask)
@@ -771,14 +797,32 @@ internal class MeshEngine(
         sendBytesToAddress(MeshProtocol.encodeForBle(packet), sourceAddress)
     }
 
-    private fun initiateHandshake(peerIdHex: String) {
+    private fun initiateHandshake(peerIdHex: String, now: Long = System.currentTimeMillis()) {
+        val previousAttempt = lastHandshakeAttemptByPeer[peerIdHex]
+        if (previousAttempt != null && now - previousAttempt < HANDSHAKE_RETRY_THROTTLE_MS) return
         val peerBytes = peerIdHex.hexToBytes()
         val first = runCatching { noiseSessions.initiate(peerIdHex) }.getOrElse {
             emitError(context.getString(R.string.error_private_channel, it.message))
             return
         } ?: return
+        lastHandshakeAttemptByPeer[peerIdHex] = now
         sendNoisePacket(MeshProtocol.TYPE_NOISE_HANDSHAKE, peerBytes, first)
     }
+
+    private fun recoverNoiseSession(peerIdHex: String) {
+        noiseSessions.invalidate(peerIdHex)
+        lastHandshakeAttemptByPeer.remove(peerIdHex)
+        initiateHandshake(peerIdHex)
+    }
+
+    private fun hasPendingRelationship(peerIdHex: String): Boolean =
+        pendingPrivate[peerIdHex]?.isNotEmpty() == true ||
+            pendingFrames[peerIdHex]?.isNotEmpty() == true ||
+            pendingCourier[peerIdHex]?.isNotEmpty() == true
+
+    private fun isKnownRelationship(peerIdHex: String): Boolean =
+        peersWithSessionHistory.contains(peerIdHex) ||
+            hasPendingRelationship(peerIdHex)
 
     private fun sendEncryptedPrivate(peerIdHex: String, id: String, content: String) {
         val privateData = MeshProtocol.encodePrivateMessage(id, content)
@@ -1230,6 +1274,7 @@ internal class MeshEngine(
         if (packet.ttl == MeshProtocol.TTL) {
             addressToPeer[sourceAddress] = senderHex
         }
+        val wasKnownPeer = peers.containsKey(senderHex) || isKnownRelationship(senderHex)
         val previouslySupported = peers[senderHex]?.supportsTransfers == true
         val previousRole = peers[senderHex]?.role ?: if (announcement.isInfrastructure) {
             MeshNodeRole.INFRA_DATA_ANCHOR
@@ -1246,11 +1291,11 @@ internal class MeshEngine(
         )
         rememberSyncPacket(packet)
         emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
+        notifyNotificationObserver()
         requestMissingMessages(senderHex, sourceAddress)
         storeForward.forRecipient(packet.senderId).forEach(::broadcast)
-        if (pendingPrivate[senderHex]?.isNotEmpty() == true ||
-            pendingFrames[senderHex]?.isNotEmpty() == true ||
-            pendingCourier[senderHex]?.isNotEmpty() == true
+        if ((wasKnownPeer || hasPendingRelationship(senderHex)) &&
+            !noiseSessions.isEstablished(senderHex)
         ) {
             initiateHandshake(senderHex)
         }
@@ -1348,6 +1393,9 @@ internal class MeshEngine(
             sendNoisePacket(MeshProtocol.TYPE_NOISE_HANDSHAKE, packet.senderId, result.response)
         }
         if (result.establishedNow) {
+            peersWithSessionHistory += senderHex
+            noiseFailureTracker.recordSuccess(senderHex)
+            lastHandshakeAttemptByPeer.remove(senderHex)
             emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
             pendingPrivate.remove(senderHex)?.forEach {
                 sendEncryptedPrivate(senderHex, it.id, it.content)
@@ -1362,9 +1410,31 @@ internal class MeshEngine(
     }
 
     private fun processEncrypted(packet: MeshProtocol.Packet, senderHex: String) {
-        if (!noiseSessions.isEstablished(senderHex)) return
+        val hadEstablishedSession = noiseSessions.isEstablished(senderHex)
+        if (!hadEstablishedSession) {
+            noiseSessions.cleanupStaleHandshakes()
+            if (!noiseSessions.hasSession(senderHex) &&
+                noiseFailureTracker.recordFailure(
+                    senderHex,
+                    hadEstablishedSession = false,
+                ) == NoiseRecoveryAction.RENEGOTIATE
+            ) {
+                initiateHandshake(senderHex)
+            }
+            return
+        }
         val plaintext = runCatching { noiseSessions.decrypt(senderHex, packet.payload) }
-            .getOrElse { return }
+            .getOrElse {
+                if (noiseFailureTracker.recordFailure(
+                        senderHex,
+                        hadEstablishedSession = true,
+                    ) == NoiseRecoveryAction.RENEGOTIATE
+                ) {
+                    recoverNoiseSession(senderHex)
+                }
+                return
+            }
+        noiseFailureTracker.recordSuccess(senderHex)
         if (plaintext.isEmpty()) return
         if (plaintext[0] == MeshProtocol.NOISE_TRANSFER_FRAME) {
             emit(
@@ -1702,9 +1772,53 @@ internal class MeshEngine(
         adaptiveScanStopRunnable = null
     }
 
-    private fun hasReachedConnectionLimit(): Boolean {
-        val maximum = powerProfile.maximumClientConnections
-        return maximum <= 0 || clientGatts.size >= maximum
+    @SuppressLint("MissingPermission")
+    private fun triggerRecoveryScanBurst() {
+        if (!running ||
+            localRole == MeshNodeRole.PHONE_BEACON ||
+            powerProfile.scanMode == null ||
+            radarPeerId != null
+        ) {
+            return
+        }
+        recoveryScanStopRunnable?.let(mainHandler::removeCallbacks)
+        cancelAdaptiveScanning()
+        startMeshScan(ScanSettings.SCAN_MODE_LOW_LATENCY, aggressive = true)
+        recoveryScanStopRunnable = Runnable {
+            recoveryScanStopRunnable = null
+            if (!running || radarPeerId != null || localRole == MeshNodeRole.PHONE_BEACON) {
+                return@Runnable
+            }
+            runCatching { adapter.bluetoothLeScanner?.stopScan(scanCallback) }
+            startScanning()
+        }.also { mainHandler.postDelayed(it, RECOVERY_SCAN_BURST_MS) }
+    }
+
+    private fun cancelRecoveryScanBurst() {
+        recoveryScanStopRunnable?.let(mainHandler::removeCallbacks)
+        recoveryScanStopRunnable = null
+    }
+
+    private fun scheduleHandshakeCleanup() {
+        if (!running || handshakeCleanupRunnable != null) return
+        handshakeCleanupRunnable = Runnable {
+            handshakeCleanupRunnable = null
+            if (!running) return@Runnable
+            noiseSessions.cleanupStaleHandshakes().forEach { peerId ->
+                if (isKnownRelationship(peerId) && peers.containsKey(peerId)) {
+                    initiateHandshake(peerId)
+                }
+            }
+            scheduleHandshakeCleanup()
+        }.also { mainHandler.postDelayed(it, HANDSHAKE_CLEANUP_INTERVAL_MS) }
+    }
+
+    private fun hasReachedConnectionLimit(knownPeer: Boolean): Boolean {
+        return !ConnectionPriorityPolicy.canOpenClientConnection(
+            maximumConnections = powerProfile.maximumClientConnections,
+            activeConnections = clientGatts.size,
+            knownPeer = knownPeer,
+        )
     }
 
     @SuppressLint("MissingPermission")
@@ -1769,15 +1883,19 @@ internal class MeshEngine(
             ?.copyOfRange(0, 8)
         if (advertisedPeer?.contentEquals(identity.peerId) == true) return
         val address = result.device.address
+        val advertisedPeerId = advertisedPeer?.let(MeshProtocol::hex)
         if (advertisedPeer != null) {
-            addressToPeer[address] = MeshProtocol.hex(advertisedPeer)
+            addressToPeer[address] = checkNotNull(advertisedPeerId)
         }
         val radarTarget = radarPeerId
         if (radarTarget != null && addressToPeer[address] == radarTarget) {
             emitRssi(radarTarget, result.rssi)
         }
         if (clientGatts.containsKey(address)) return
-        if (hasReachedConnectionLimit()) return
+        val knownPeer = advertisedPeerId?.let { peerId ->
+            peers.containsKey(peerId) || isKnownRelationship(peerId)
+        } == true
+        if (hasReachedConnectionLimit(knownPeer)) return
         clientGatts[address] = result.device.connectGatt(
             context,
             false,
@@ -1803,8 +1921,15 @@ internal class MeshEngine(
         if (hasClientLink || hasServerLink) return
         val disconnectedPeer = addressToPeer.remove(address) ?: return
         if (addressToPeer.values.none { it == disconnectedPeer }) {
+            if (noiseSessions.isEstablished(disconnectedPeer)) {
+                peersWithSessionHistory += disconnectedPeer
+            }
             noiseSessions.invalidate(disconnectedPeer)
+            noiseFailureTracker.clear(disconnectedPeer)
+            lastHandshakeAttemptByPeer.remove(disconnectedPeer)
             emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
+            notifyNotificationObserver()
+            triggerRecoveryScanBurst()
         }
     }
 
@@ -2060,6 +2185,9 @@ internal class MeshEngine(
 
     private fun emitStatus(status: String) {
         currentStatus = status
+        if (status == "starting" || status == "active" || status == "stopped") {
+            notificationError = null
+        }
         emit(
             mapOf(
                 "type" to "status",
@@ -2069,10 +2197,25 @@ internal class MeshEngine(
                 "role" to localRole.wireName,
             ),
         )
+        notifyNotificationObserver()
     }
 
     private fun emitError(message: String) {
+        notificationError = message
         emit(mapOf("type" to "error", "message" to message))
+        notifyNotificationObserver()
+    }
+
+    private fun nearbyPeerCount(): Int {
+        val knownPeers = peers.keys
+        return addressToPeer.values.asSequence()
+            .filter(knownPeers::contains)
+            .toSet()
+            .size
+    }
+
+    private fun notifyNotificationObserver() {
+        observeNotification(notificationSnapshot())
     }
 
     private fun String.hexToBytes(): ByteArray {
@@ -2162,6 +2305,9 @@ internal class MeshEngine(
         const val SYNC_FUTURE_SKEW_MS = 15 * 60 * 1_000L
         const val ROLE_TRANSITION_DELAY_MS = 750L
         const val GENERIC_PRESENCE_EMIT_INTERVAL_MS = 1_000L
+        const val HANDSHAKE_RETRY_THROTTLE_MS = 5_000L
+        const val HANDSHAKE_CLEANUP_INTERVAL_MS = 10_000L
+        const val RECOVERY_SCAN_BURST_MS = 15_000L
 
         const val LOG_TAG = "HearthBitMesh"
 

@@ -27,6 +27,9 @@
   "composerPublicHint": "发给附近所有人的消息",
   "composerPrivateHint": "加密消息",
   "privateChatIntro": "第一条消息将发起 Noise XX 握手。",
+  "secureChatUnavailableHint": "正在等待加密通道可用。",
+  "privateMessagePending": "待发送",
+  "privateMessageSendError": "无法发送消息：{error}",
 
   "emptyPeersTitle": "附近没有设备",
   "emptyPeersBody": "保持蓝牙开启，并让另一台装有 HearthBit 或 BitChat 的手机靠近。",

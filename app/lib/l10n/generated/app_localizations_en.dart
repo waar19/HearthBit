@@ -86,6 +86,18 @@ class AppLocalizationsEn extends AppLocalizations {
       'The first message will start a Noise XX handshake.';
 
   @override
+  String get secureChatUnavailableHint =>
+      'Waiting for the encrypted channel to become available.';
+
+  @override
+  String get privateMessagePending => 'Pending';
+
+  @override
+  String privateMessageSendError(String error) {
+    return 'Could not send the message: $error';
+  }
+
+  @override
   String get emptyPeersTitle => 'No nearby devices';
 
   @override

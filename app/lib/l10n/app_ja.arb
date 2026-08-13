@@ -27,6 +27,9 @@
   "composerPublicHint": "近くの全員へのメッセージ",
   "composerPrivateHint": "暗号化メッセージ",
   "privateChatIntro": "最初のメッセージで Noise XX ハンドシェイクが始まります。",
+  "secureChatUnavailableHint": "暗号化チャネルが利用可能になるのを待っています。",
+  "privateMessagePending": "送信待ち",
+  "privateMessageSendError": "メッセージを送信できませんでした：{error}",
 
   "emptyPeersTitle": "近くに端末がありません",
   "emptyPeersBody": "Bluetooth をオンにしたまま、HearthBit か BitChat の入った別のスマホを近づけてください。",

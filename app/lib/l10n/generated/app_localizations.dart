@@ -244,6 +244,24 @@ abstract class AppLocalizations {
   /// **'The first message will start a Noise XX handshake.'**
   String get privateChatIntro;
 
+  /// No description provided for @secureChatUnavailableHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for the encrypted channel to become available.'**
+  String get secureChatUnavailableHint;
+
+  /// No description provided for @privateMessagePending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get privateMessagePending;
+
+  /// No description provided for @privateMessageSendError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not send the message: {error}'**
+  String privateMessageSendError(String error);
+
   /// No description provided for @emptyPeersTitle.
   ///
   /// In en, this message translates to:

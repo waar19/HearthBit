@@ -5,17 +5,28 @@ internal data class NoiseHandshakeResult(
     val establishedNow: Boolean,
 )
 
+internal data class NoiseSessionInfo(
+    val peerId: String,
+    val initiator: Boolean,
+    val established: Boolean,
+    val responderCandidate: Boolean,
+    val lastActivityAt: Long,
+)
+
 internal class NoiseSessionManagerLite(
     private val localPeerId: String,
     private val localPrivateKey: ByteArray,
+    private val nowMillis: () -> Long = System::currentTimeMillis,
+    private val staleHandshakeMs: Long = DEFAULT_STALE_HANDSHAKE_MS,
 ) {
     private val sessions = mutableMapOf<String, NoiseSessionLite>()
     private val responderCandidates = mutableMapOf<String, NoiseSessionLite>()
 
     @Synchronized
     fun initiate(peerId: String): ByteArray? {
+        cleanupStaleHandshakes()
         if (sessions[peerId] != null || responderCandidates[peerId] != null) return null
-        val session = NoiseSessionLite(peerId.hexToPeerId(), true, localPrivateKey)
+        val session = NoiseSessionLite(peerId.hexToPeerId(), true, localPrivateKey, nowMillis)
         sessions[peerId] = session
         return try {
             session.start()
@@ -32,6 +43,7 @@ internal class NoiseSessionManagerLite(
         claimedPeerId: ByteArray,
         message: ByteArray,
     ): NoiseHandshakeResult {
+        cleanupStaleHandshakes()
         val isMessageOne = message.size == HANDSHAKE_MESSAGE_ONE_SIZE
         var session = responderCandidates[peerId]
         var candidate = session != null
@@ -98,6 +110,45 @@ internal class NoiseSessionManagerLite(
     fun isEstablished(peerId: String): Boolean = sessions[peerId]?.established == true
 
     @Synchronized
+    fun hasSession(peerId: String): Boolean =
+        sessions.containsKey(peerId) || responderCandidates.containsKey(peerId)
+
+    @Synchronized
+    fun snapshot(): List<NoiseSessionInfo> =
+        sessions.map { (peerId, session) ->
+            session.toInfo(peerId, responderCandidate = false)
+        } + responderCandidates.map { (peerId, session) ->
+            session.toInfo(peerId, responderCandidate = true)
+        }
+
+    /**
+     * Elimina únicamente negociaciones incompletas sin actividad. Las sesiones
+     * establecidas permanecen activas y un candidato nunca sustituye al
+     * transporte actual hasta completar XX y validar la identidad.
+     */
+    @Synchronized
+    fun cleanupStaleHandshakes(now: Long = nowMillis()): Set<String> {
+        val removedPeers = linkedSetOf<String>()
+        sessions.entries.removeIf { (peerId, session) ->
+            session.isStale(now, staleHandshakeMs).also { stale ->
+                if (stale) {
+                    removedPeers += peerId
+                    session.close()
+                }
+            }
+        }
+        responderCandidates.entries.removeIf { (peerId, session) ->
+            session.isStale(now, staleHandshakeMs).also { stale ->
+                if (stale) {
+                    removedPeers += peerId
+                    session.close()
+                }
+            }
+        }
+        return removedPeers
+    }
+
+    @Synchronized
     fun encrypt(peerId: String, plaintext: ByteArray): ByteArray {
         val session = sessions[peerId]?.takeIf(NoiseSessionLite::established)
             ?: throw NoiseHandshakeFailure.State("Noise session is not established")
@@ -126,7 +177,18 @@ internal class NoiseSessionManagerLite(
     }
 
     private fun newResponder(claimedPeerId: ByteArray) =
-        NoiseSessionLite(claimedPeerId, false, localPrivateKey)
+        NoiseSessionLite(claimedPeerId, false, localPrivateKey, nowMillis)
+
+    private fun NoiseSessionLite.toInfo(
+        peerId: String,
+        responderCandidate: Boolean,
+    ) = NoiseSessionInfo(
+        peerId = peerId,
+        initiator = initiator,
+        established = established,
+        responderCandidate = responderCandidate,
+        lastActivityAt = lastActivityAt,
+    )
 
     private fun String.hexToPeerId(): ByteArray {
         if (length != 16) throw NoiseHandshakeFailure.State("Invalid peer ID")
@@ -138,6 +200,7 @@ internal class NoiseSessionManagerLite(
 
     private companion object {
         const val HANDSHAKE_MESSAGE_ONE_SIZE = 32
+        const val DEFAULT_STALE_HANDSHAKE_MS = 20_000L
     }
 }
 

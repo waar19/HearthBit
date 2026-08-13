@@ -2,8 +2,14 @@
 <resources>
     <string name="notification_channel_name">Maillage d\'urgence</string>
     <string name="notification_channel_description">Maintient la connexion Bluetooth active pendant une urgence</string>
-    <string name="notification_title">HearthBit est connecté</string>
+    <string name="notification_title">Maillage d\'urgence HearthBit</string>
     <string name="notification_text">Relais des messages du maillage BLE</string>
+    <string name="notification_status_starting">Démarrage du maillage d\'urgence…</string>
+    <string name="notification_status_error">Erreur de maillage : %1$s</string>
+    <plurals name="notification_status_active">
+        <item quantity="one">%1$d appareil à proximité</item>
+        <item quantity="other">%1$d appareils à proximité</item>
+    </plurals>
     <string name="error_ble_start">Impossible de démarrer le BLE</string>
     <string name="error_bluetooth_off">Le Bluetooth est désactivé</string>
     <string name="error_no_advertising">Cet appareil ne prend pas en charge l\'annonce BLE ; mode réception seule</string>
