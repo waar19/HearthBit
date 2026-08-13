@@ -984,13 +984,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 onPressed: () => Navigator.pop(dialogContext),
                 child: Text(context.l10n.actionClose),
               ),
-              FilledButton.icon(
-                onPressed: () {
-                  Navigator.pop(dialogContext);
-                  _openExternal(InviteShareService.repositoryUri);
-                },
-                icon: const Icon(Icons.open_in_new),
-                label: Text(context.l10n.aboutSourceCode),
+              Builder(
+                builder: (buttonContext) => FilledButton.icon(
+                  onPressed: () async {
+                    await _shareInvite(buttonContext);
+                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  },
+                  icon: const Icon(Icons.ios_share),
+                  label: Text(context.l10n.shareInviteButton),
+                ),
               ),
             ],
           ),
