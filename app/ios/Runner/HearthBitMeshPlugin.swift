@@ -6,6 +6,7 @@ import Flutter
 import Foundation
 import Security
 import UIKit
+import UserNotifications
 
 private enum IOSPowerProfile: String {
   case performance
@@ -231,6 +232,25 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         result(["status": "unsupported"])
       case "requestPermissions":
         result(true)
+      case "requestFamilyNotificationPermission":
+        UNUserNotificationCenter.current().requestAuthorization(
+          options: [.alert, .sound, .badge]
+        ) { granted, _ in
+          DispatchQueue.main.async { result(granted) }
+        }
+      case "showFamilyNotification":
+        let messageID = arguments["messageId"] as? String ?? UUID().uuidString
+        let nickname = String((arguments["nickname"] as? String ?? "").prefix(64))
+        let status = String((arguments["status"] as? String ?? "").prefix(32))
+        let content = UNMutableNotificationContent()
+        content.title = "HearthBit family alert"
+        content.body = "\(nickname) · \(status)"
+        content.sound = .default
+        content.userInfo = ["openEmergency": true]
+        UNUserNotificationCenter.current().add(
+          UNNotificationRequest(identifier: messageID, content: content, trigger: nil)
+        ) { _ in }
+        result(nil)
       case "startMesh":
         start()
         result(nil)
@@ -2378,6 +2398,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         "nickname": $0.nickname,
         "lastSeen": Int($0.lastSeen.timeIntervalSince1970 * 1000),
         "secure": sessions[$0.id]?.established ?? false,
+        "signingPublicKey": FlutterStandardTypedData(bytes: $0.signingPublicKey),
         "supportsTransfers": $0.supportsTransfers,
         "role": $0.role.rawValue,
         "radarAllowedUntil": consent?.expiresAt ?? 0,
@@ -2392,6 +2413,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       "status": status,
       "peerId": identity.peerIDHex,
       "nickname": identity.nickname,
+      "signingPublicKey": FlutterStandardTypedData(
+        bytes: identity.signingPrivateKey.publicKey.rawRepresentation
+      ),
       "role": localRole.rawValue,
       "batteryLevel": batteryLevel,
       "adaptivePowerSaving": adaptivePowerSaving,

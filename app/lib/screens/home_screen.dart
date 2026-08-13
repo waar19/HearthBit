@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../controllers/mesh_controller.dart';
 import '../controllers/emergency_gateway_controller.dart';
+import '../controllers/family_controller.dart';
 import '../controllers/transfer_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
@@ -24,6 +25,7 @@ import '../services/app_preferences.dart';
 import '../services/photo_profile.dart';
 import '../utils/message_chronology.dart';
 import 'emergency_screen.dart';
+import 'family_screen.dart';
 import 'mesh_health_card.dart';
 import 'map_screen.dart';
 import 'optical_receive_screen.dart';
@@ -31,7 +33,7 @@ import 'optical_send_screen.dart';
 import 'radar_screen.dart';
 import 'transfers_tab.dart';
 
-enum _AppMenuAction { changeNickname, support, about, panicWipe }
+enum _AppMenuAction { family, changeNickname, support, about, panicWipe }
 
 enum _PeerTransferAction { file, apk }
 
@@ -41,6 +43,7 @@ class HomeScreen extends StatefulWidget {
     required this.transfers,
     required this.preferences,
     required this.gateway,
+    required this.family,
     super.key,
   });
 
@@ -48,6 +51,7 @@ class HomeScreen extends StatefulWidget {
   final TransferController transfers;
   final AppPreferences preferences;
   final EmergencyGatewayController gateway;
+  final FamilyController family;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -296,6 +300,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 onSelected: (action) => _handleAppMenu(action, controller),
                 itemBuilder: (context) => [
                   PopupMenuItem(
+                    value: _AppMenuAction.family,
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.family_restroom),
+                      title: Text(context.l10n.familyTitle),
+                    ),
+                  ),
+                  PopupMenuItem(
                     value: _AppMenuAction.changeNickname,
                     child: ListTile(
                       contentPadding: EdgeInsets.zero,
@@ -357,6 +369,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         controller: controller,
                         preferences: widget.preferences,
                         gateway: widget.gateway,
+                        family: widget.family,
                       ),
                       _buildChat(controller),
                       _buildPeers(controller),
@@ -795,6 +808,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     MeshController controller,
   ) async {
     switch (action) {
+      case _AppMenuAction.family:
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => FamilyScreen(controller: widget.family),
+          ),
+        );
+        return;
       case _AppMenuAction.changeNickname:
         await _changeNickname(controller);
         return;

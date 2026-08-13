@@ -1186,4 +1186,85 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get firstAidLoadError => '无法加载已验证的离线指南。请勿依赖不完整的信息；请拨打当地急救电话。';
+
+  @override
+  String get familyTitle => '家庭群组';
+
+  @override
+  String get familySecurityBody => '成员须当面使用签名二维码验证。绝不只信任昵称或旧设备标识。';
+
+  @override
+  String get familyCreateGroup => '创建群组';
+
+  @override
+  String get familyRenameGroup => '重命名群组';
+
+  @override
+  String get familyGroupHint => '例如：我的家人';
+
+  @override
+  String get familyGroupLabel => '群组';
+
+  @override
+  String get familyConfirmTitle => '确认家庭成员';
+
+  @override
+  String familyFingerprint(String fingerprint) {
+    return '安全码：$fingerprint';
+  }
+
+  @override
+  String get familyConfirmBody => '保存前请在两部手机上核对该安全码。';
+
+  @override
+  String get familyAddMember => '添加成员';
+
+  @override
+  String get familyRemoveTitle => '移除家庭成员？';
+
+  @override
+  String familyRemoveBody(String nickname) {
+    return '$nickname 将不再获得家庭高亮和提醒。';
+  }
+
+  @override
+  String get familyRemoveAction => '移除';
+
+  @override
+  String familySaveError(String error) {
+    return '无法保存家庭群组：$error';
+  }
+
+  @override
+  String get familyMembersTitle => '已验证成员';
+
+  @override
+  String get familyScanAction => '扫描成员二维码';
+
+  @override
+  String get familyCreateFirst => '添加成员前请先创建群组。';
+
+  @override
+  String get familyNoMembers => '暂无已验证成员。';
+
+  @override
+  String get familyMyQr => '我的验证二维码';
+
+  @override
+  String get familyMyQrBody => '请当面展示此二维码。它只包含公开签名密钥，绝不包含私钥。';
+
+  @override
+  String get familyQrUnavailable => '请启用网状网络以生成签名验证二维码。';
+
+  @override
+  String get familyScanTitle => '扫描家庭二维码';
+
+  @override
+  String get familyQrInvalid => '此二维码无效或无法验证其签名。';
+
+  @override
+  String get familyScanHint => '扫描家庭成员手机上显示的二维码。';
+
+  @override
+  String get familyAlertBadge => '已验证家人';
 }

@@ -1256,4 +1256,92 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get firstAidLoadError =>
       'Impossible de charger le guide hors ligne validé. Ne vous fiez pas à des informations incomplètes ; appelez les secours locaux.';
+
+  @override
+  String get familyTitle => 'Groupe familial';
+
+  @override
+  String get familySecurityBody =>
+      'Les membres sont vérifiés en personne avec un QR signé. Les noms et anciens identifiants seuls ne sont jamais fiables.';
+
+  @override
+  String get familyCreateGroup => 'CRÉER UN GROUPE';
+
+  @override
+  String get familyRenameGroup => 'RENOMMER LE GROUPE';
+
+  @override
+  String get familyGroupHint => 'Ex. Ma famille';
+
+  @override
+  String get familyGroupLabel => 'Groupe';
+
+  @override
+  String get familyConfirmTitle => 'Confirmer le proche';
+
+  @override
+  String familyFingerprint(String fingerprint) {
+    return 'Code de sécurité : $fingerprint';
+  }
+
+  @override
+  String get familyConfirmBody =>
+      'Comparez ce code de sécurité sur les deux téléphones avant d’enregistrer.';
+
+  @override
+  String get familyAddMember => 'AJOUTER';
+
+  @override
+  String get familyRemoveTitle => 'Retirer ce proche ?';
+
+  @override
+  String familyRemoveBody(String nickname) {
+    return '$nickname n’aura plus les alertes ni le marquage familial.';
+  }
+
+  @override
+  String get familyRemoveAction => 'RETIRER';
+
+  @override
+  String familySaveError(String error) {
+    return 'Impossible d’enregistrer le groupe familial : $error';
+  }
+
+  @override
+  String get familyMembersTitle => 'Membres vérifiés';
+
+  @override
+  String get familyScanAction => 'Scanner le QR du proche';
+
+  @override
+  String get familyCreateFirst =>
+      'Créez un groupe avant d’ajouter des membres.';
+
+  @override
+  String get familyNoMembers => 'Aucun membre vérifié.';
+
+  @override
+  String get familyMyQr => 'Mon QR de vérification';
+
+  @override
+  String get familyMyQrBody =>
+      'Montrez ce QR en personne. Il contient votre clé publique de signature, jamais votre clé privée.';
+
+  @override
+  String get familyQrUnavailable =>
+      'Activez le maillage pour rendre disponible votre QR signé.';
+
+  @override
+  String get familyScanTitle => 'Scanner le QR familial';
+
+  @override
+  String get familyQrInvalid =>
+      'Ce QR est invalide ou sa signature n’a pas pu être vérifiée.';
+
+  @override
+  String get familyScanHint =>
+      'Scannez le QR affiché sur le téléphone de votre proche.';
+
+  @override
+  String get familyAlertBadge => 'PROCHE VÉRIFIÉ';
 }

@@ -89,6 +89,7 @@ class MeshController extends ChangeNotifier {
   MeshConnectionStatus status = MeshConnectionStatus.stopped;
   String nickname = '';
   String peerId = '';
+  Uint8List? signingPublicKey;
   MeshNodeRole localRole = MeshNodeRole.phoneRelay;
   String? lastError;
   bool supportsBackgroundRelay = false;
@@ -484,6 +485,9 @@ class MeshController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<Uint8List> signPayload(Uint8List payload) =>
+      _platform.signPayload(payload);
+
   Future<void> updateNodeRole(MeshNodeRole role) async {
     await _platform.setNodeRole(role.wireName);
     localRole = role;
@@ -689,6 +693,7 @@ class MeshController extends ChangeNotifier {
     status = MeshConnectionStatus.stopped;
     nickname = '';
     peerId = '';
+    signingPublicKey = null;
     radarConsentUntil = null;
     pendingBeaconRequest = null;
     localBeaconActive = false;
@@ -937,6 +942,9 @@ class MeshController extends ChangeNotifier {
         _presences.clear();
         _knownPeers.clear();
         status = MeshConnectionStatus.stopped;
+        nickname = '';
+        peerId = '';
+        signingPublicKey = null;
         radarConsentUntil = null;
         pendingBeaconRequest = null;
         localBeaconActive = false;
@@ -964,6 +972,13 @@ class MeshController extends ChangeNotifier {
     };
     nickname = event['nickname'] as String? ?? nickname;
     peerId = event['peerId'] as String? ?? peerId;
+    signingPublicKey = switch (event['signingPublicKey']) {
+      final Uint8List value when value.length == 32 => value,
+      final List<int> value when value.length == 32 => Uint8List.fromList(
+        value,
+      ),
+      _ => signingPublicKey,
+    };
     localRole = MeshNodeRole.fromWire(event['role']);
     survivalMode = localRole == MeshNodeRole.phoneBeacon;
     if (event.containsKey('localBeaconActive')) {

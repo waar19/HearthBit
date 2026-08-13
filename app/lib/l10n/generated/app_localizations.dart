@@ -2204,6 +2204,156 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The validated offline guide could not be loaded. Do not rely on incomplete information; call local emergency services.'**
   String get firstAidLoadError;
+
+  /// No description provided for @familyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Family group'**
+  String get familyTitle;
+
+  /// No description provided for @familySecurityBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Members are verified in person with a signed QR. Names and old device IDs alone are never trusted.'**
+  String get familySecurityBody;
+
+  /// No description provided for @familyCreateGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'CREATE GROUP'**
+  String get familyCreateGroup;
+
+  /// No description provided for @familyRenameGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'RENAME GROUP'**
+  String get familyRenameGroup;
+
+  /// No description provided for @familyGroupHint.
+  ///
+  /// In en, this message translates to:
+  /// **'E.g. My family'**
+  String get familyGroupHint;
+
+  /// No description provided for @familyGroupLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Group'**
+  String get familyGroupLabel;
+
+  /// No description provided for @familyConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm family member'**
+  String get familyConfirmTitle;
+
+  /// No description provided for @familyFingerprint.
+  ///
+  /// In en, this message translates to:
+  /// **'Security code: {fingerprint}'**
+  String familyFingerprint(String fingerprint);
+
+  /// No description provided for @familyConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare this security code on both phones before saving.'**
+  String get familyConfirmBody;
+
+  /// No description provided for @familyAddMember.
+  ///
+  /// In en, this message translates to:
+  /// **'ADD MEMBER'**
+  String get familyAddMember;
+
+  /// No description provided for @familyRemoveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove family member?'**
+  String get familyRemoveTitle;
+
+  /// No description provided for @familyRemoveBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{nickname} will no longer receive family highlighting or alerts.'**
+  String familyRemoveBody(String nickname);
+
+  /// No description provided for @familyRemoveAction.
+  ///
+  /// In en, this message translates to:
+  /// **'REMOVE'**
+  String get familyRemoveAction;
+
+  /// No description provided for @familySaveError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the family group: {error}'**
+  String familySaveError(String error);
+
+  /// No description provided for @familyMembersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified members'**
+  String get familyMembersTitle;
+
+  /// No description provided for @familyScanAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan member QR'**
+  String get familyScanAction;
+
+  /// No description provided for @familyCreateFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a group before adding members.'**
+  String get familyCreateFirst;
+
+  /// No description provided for @familyNoMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'No verified members yet.'**
+  String get familyNoMembers;
+
+  /// No description provided for @familyMyQr.
+  ///
+  /// In en, this message translates to:
+  /// **'My verification QR'**
+  String get familyMyQr;
+
+  /// No description provided for @familyMyQrBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Show this QR in person. It contains your public signing key, never your private key.'**
+  String get familyMyQrBody;
+
+  /// No description provided for @familyQrUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on the mesh to make your signed verification QR available.'**
+  String get familyQrUnavailable;
+
+  /// No description provided for @familyScanTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan family QR'**
+  String get familyScanTitle;
+
+  /// No description provided for @familyQrInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'This QR is invalid or its signature could not be verified.'**
+  String get familyQrInvalid;
+
+  /// No description provided for @familyScanHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan the QR shown on your family member\'s phone.'**
+  String get familyScanHint;
+
+  /// No description provided for @familyAlertBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'VERIFIED FAMILY'**
+  String get familyAlertBadge;
 }
 
 class _AppLocalizationsDelegate

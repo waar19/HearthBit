@@ -1249,4 +1249,91 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get firstAidLoadError =>
       'The validated offline guide could not be loaded. Do not rely on incomplete information; call local emergency services.';
+
+  @override
+  String get familyTitle => 'Family group';
+
+  @override
+  String get familySecurityBody =>
+      'Members are verified in person with a signed QR. Names and old device IDs alone are never trusted.';
+
+  @override
+  String get familyCreateGroup => 'CREATE GROUP';
+
+  @override
+  String get familyRenameGroup => 'RENAME GROUP';
+
+  @override
+  String get familyGroupHint => 'E.g. My family';
+
+  @override
+  String get familyGroupLabel => 'Group';
+
+  @override
+  String get familyConfirmTitle => 'Confirm family member';
+
+  @override
+  String familyFingerprint(String fingerprint) {
+    return 'Security code: $fingerprint';
+  }
+
+  @override
+  String get familyConfirmBody =>
+      'Compare this security code on both phones before saving.';
+
+  @override
+  String get familyAddMember => 'ADD MEMBER';
+
+  @override
+  String get familyRemoveTitle => 'Remove family member?';
+
+  @override
+  String familyRemoveBody(String nickname) {
+    return '$nickname will no longer receive family highlighting or alerts.';
+  }
+
+  @override
+  String get familyRemoveAction => 'REMOVE';
+
+  @override
+  String familySaveError(String error) {
+    return 'Could not save the family group: $error';
+  }
+
+  @override
+  String get familyMembersTitle => 'Verified members';
+
+  @override
+  String get familyScanAction => 'Scan member QR';
+
+  @override
+  String get familyCreateFirst => 'Create a group before adding members.';
+
+  @override
+  String get familyNoMembers => 'No verified members yet.';
+
+  @override
+  String get familyMyQr => 'My verification QR';
+
+  @override
+  String get familyMyQrBody =>
+      'Show this QR in person. It contains your public signing key, never your private key.';
+
+  @override
+  String get familyQrUnavailable =>
+      'Turn on the mesh to make your signed verification QR available.';
+
+  @override
+  String get familyScanTitle => 'Scan family QR';
+
+  @override
+  String get familyQrInvalid =>
+      'This QR is invalid or its signature could not be verified.';
+
+  @override
+  String get familyScanHint =>
+      'Scan the QR shown on your family member\'s phone.';
+
+  @override
+  String get familyAlertBadge => 'VERIFIED FAMILY';
 }

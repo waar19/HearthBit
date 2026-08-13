@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'controllers/mesh_controller.dart';
 import 'controllers/emergency_gateway_controller.dart';
+import 'controllers/family_controller.dart';
 import 'controllers/transfer_controller.dart';
 import 'l10n/l10n.dart';
 import 'screens/home_screen.dart';
@@ -100,6 +101,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
   late final TransferController _transfers;
   late final AppPreferences _preferences;
   late final EmergencyGatewayController _gateway;
+  late final FamilyController _family;
   late final Future<void> _initialization;
 
   @override
@@ -113,17 +115,19 @@ class _HearthBitAppState extends State<HearthBitApp> {
       mesh: _controller,
       preferences: _preferences,
     );
+    _family = FamilyController(mesh: _controller);
     _initialization = Future.wait([
       _controller.initialize(),
       _transfers.initialize(),
       _preferences.initialize(),
       _gateway.initialize(),
-    ]);
+    ]).then((_) => _family.initialize());
   }
 
   @override
   void dispose() {
     _gateway.dispose();
+    _family.dispose();
     _transfers.dispose();
     _controller.dispose();
     _preferences.dispose();
@@ -188,6 +192,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
               transfers: _transfers,
               preferences: _preferences,
               gateway: _gateway,
+              family: _family,
             );
           },
         ),

@@ -1256,4 +1256,92 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get firstAidLoadError =>
       'Der validierte Offline-Leitfaden konnte nicht geladen werden. Verlasse dich nicht auf unvollständige Angaben; rufe den örtlichen Notruf.';
+
+  @override
+  String get familyTitle => 'Familiengruppe';
+
+  @override
+  String get familySecurityBody =>
+      'Mitglieder werden persönlich über einen signierten QR-Code geprüft. Namen und alte Geräte-IDs allein gelten nie als vertrauenswürdig.';
+
+  @override
+  String get familyCreateGroup => 'GRUPPE ERSTELLEN';
+
+  @override
+  String get familyRenameGroup => 'GRUPPE UMBENENNEN';
+
+  @override
+  String get familyGroupHint => 'Z. B. Meine Familie';
+
+  @override
+  String get familyGroupLabel => 'Gruppe';
+
+  @override
+  String get familyConfirmTitle => 'Familienmitglied bestätigen';
+
+  @override
+  String familyFingerprint(String fingerprint) {
+    return 'Sicherheitscode: $fingerprint';
+  }
+
+  @override
+  String get familyConfirmBody =>
+      'Vergleiche diesen Sicherheitscode vor dem Speichern auf beiden Telefonen.';
+
+  @override
+  String get familyAddMember => 'MITGLIED HINZUFÜGEN';
+
+  @override
+  String get familyRemoveTitle => 'Familienmitglied entfernen?';
+
+  @override
+  String familyRemoveBody(String nickname) {
+    return '$nickname erhält keine Familienmarkierung und -warnungen mehr.';
+  }
+
+  @override
+  String get familyRemoveAction => 'ENTFERNEN';
+
+  @override
+  String familySaveError(String error) {
+    return 'Familiengruppe konnte nicht gespeichert werden: $error';
+  }
+
+  @override
+  String get familyMembersTitle => 'Verifizierte Mitglieder';
+
+  @override
+  String get familyScanAction => 'QR-Code des Mitglieds scannen';
+
+  @override
+  String get familyCreateFirst =>
+      'Erstelle eine Gruppe, bevor du Mitglieder hinzufügst.';
+
+  @override
+  String get familyNoMembers => 'Noch keine verifizierten Mitglieder.';
+
+  @override
+  String get familyMyQr => 'Mein Verifizierungs-QR';
+
+  @override
+  String get familyMyQrBody =>
+      'Zeige diesen QR-Code persönlich. Er enthält deinen öffentlichen Signaturschlüssel, nie deinen privaten Schlüssel.';
+
+  @override
+  String get familyQrUnavailable =>
+      'Aktiviere das Mesh, damit dein signierter Verifizierungs-QR verfügbar ist.';
+
+  @override
+  String get familyScanTitle => 'Familien-QR scannen';
+
+  @override
+  String get familyQrInvalid =>
+      'Dieser QR-Code ist ungültig oder seine Signatur konnte nicht geprüft werden.';
+
+  @override
+  String get familyScanHint =>
+      'Scanne den QR-Code auf dem Telefon deines Familienmitglieds.';
+
+  @override
+  String get familyAlertBadge => 'VERIFIZIERTE FAMILIE';
 }

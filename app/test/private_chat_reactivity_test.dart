@@ -6,6 +6,7 @@ import 'package:shared_preferences_platform_interface/in_memory_shared_preferenc
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 import 'package:hearth_bit/controllers/emergency_gateway_controller.dart';
+import 'package:hearth_bit/controllers/family_controller.dart';
 import 'package:hearth_bit/controllers/mesh_controller.dart';
 import 'package:hearth_bit/controllers/transfer_controller.dart';
 import 'package:hearth_bit/l10n/l10n.dart';
@@ -74,6 +75,7 @@ void main() {
   late TransferController transfers;
   late AppPreferences preferences;
   late EmergencyGatewayController gateway;
+  late FamilyController family;
 
   setUp(() async {
     SharedPreferencesAsyncPlatform.instance =
@@ -87,10 +89,12 @@ void main() {
     transfers = TransferController(platform);
     preferences = AppPreferences();
     gateway = EmergencyGatewayController(mesh: mesh, preferences: preferences);
+    family = FamilyController(mesh: mesh);
   });
 
   tearDown(() {
     gateway.dispose();
+    family.dispose();
     transfers.dispose();
     mesh.dispose();
     preferences.dispose();
@@ -107,6 +111,7 @@ void main() {
           transfers: transfers,
           preferences: preferences,
           gateway: gateway,
+          family: family,
         ),
       ),
     );

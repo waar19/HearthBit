@@ -1,6 +1,9 @@
 package com.hearthbit.app
 
 import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -27,6 +30,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private var permissionResult: MethodChannel.Result? = null
     private var backgroundLocationResult: MethodChannel.Result? = null
+    private var familyNotificationPermissionResult: MethodChannel.Result? = null
     private var transferEvents: EventChannel.EventSink? = null
     private var lanMulticastLock: WifiManager.MulticastLock? = null
     private var emergencyShortcutChannel: MethodChannel? = null
@@ -83,6 +87,16 @@ class MainActivity : FlutterActivity() {
                 )
                 "getInstalledApkForShare" -> prepareInstalledApk(result)
                 "requestPermissions" -> requestMeshPermissions(result)
+                "requestFamilyNotificationPermission" ->
+                    requestFamilyNotificationPermission(result)
+                "showFamilyNotification" -> runMethod(result) {
+                    showFamilyNotification(
+                        messageId = requireNotNull(call.argument<String>("messageId")),
+                        nickname = requireNotNull(call.argument<String>("nickname")),
+                        status = requireNotNull(call.argument<String>("status")),
+                    )
+                    null
+                }
                 "startMesh" -> {
                     ContextCompat.startForegroundService(
                         this,
@@ -503,6 +517,76 @@ class MainActivity : FlutterActivity() {
             backgroundLocationResult?.success(backgroundLocationGranted())
             backgroundLocationResult = null
         }
+        if (requestCode == FAMILY_NOTIFICATION_PERMISSION_REQUEST) {
+            familyNotificationPermissionResult?.success(
+                grantResults.singleOrNull() == PackageManager.PERMISSION_GRANTED,
+            )
+            familyNotificationPermissionResult = null
+        }
+    }
+
+    private fun requestFamilyNotificationPermission(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < 33 ||
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            result.success(true)
+            return
+        }
+        familyNotificationPermissionResult = result
+        requestPermissions(
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            FAMILY_NOTIFICATION_PERMISSION_REQUEST,
+        )
+    }
+
+    private fun showFamilyNotification(messageId: String, nickname: String, status: String) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        val manager = getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= 26) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    FAMILY_NOTIFICATION_CHANNEL,
+                    "Family emergency alerts",
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    description = "Verified SOS and check-in alerts from family members"
+                    lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
+                },
+            )
+        }
+        val openEmergency = Intent(this, MainActivity::class.java)
+            .setAction(ACTION_OPEN_EMERGENCY)
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            messageId.hashCode(),
+            openEmergency,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notification = if (Build.VERSION.SDK_INT >= 26) {
+            android.app.Notification.Builder(this, FAMILY_NOTIFICATION_CHANNEL)
+        } else {
+            @Suppress("DEPRECATION")
+            android.app.Notification.Builder(this)
+        }.setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("HearthBit family alert")
+            .setContentText("${nickname.take(64)} · ${status.take(32)}")
+            .setCategory(android.app.Notification.CATEGORY_ALARM)
+            .setVisibility(android.app.Notification.VISIBILITY_PRIVATE)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+        manager.notify(messageId.hashCode(), notification)
     }
 
     private fun requestMeshPermissions(result: MethodChannel.Result) {
@@ -554,5 +638,7 @@ class MainActivity : FlutterActivity() {
         const val ACTION_OPEN_EMERGENCY = "com.hearthbit.app.OPEN_EMERGENCY"
         const val PERMISSION_REQUEST = 7402
         const val BACKGROUND_LOCATION_REQUEST = 7403
+        const val FAMILY_NOTIFICATION_PERMISSION_REQUEST = 7404
+        const val FAMILY_NOTIFICATION_CHANNEL = "family_emergency"
     }
 }

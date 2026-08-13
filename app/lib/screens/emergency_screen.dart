@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../controllers/mesh_controller.dart';
 import '../controllers/emergency_gateway_controller.dart';
+import '../controllers/family_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../services/app_preferences.dart';
@@ -16,12 +17,14 @@ class EmergencyScreen extends StatelessWidget {
     required this.controller,
     required this.preferences,
     required this.gateway,
+    required this.family,
     super.key,
   });
 
   final MeshController controller;
   final AppPreferences preferences;
   final EmergencyGatewayController gateway;
+  final FamilyController family;
 
   @override
   Widget build(BuildContext context) {
@@ -110,7 +113,10 @@ class EmergencyScreen extends StatelessWidget {
           Text(context.l10n.checkInNone)
         else
           ...controller.latestCheckIns.map(
-            (checkIn) => _CheckInTile(checkIn: checkIn),
+            (checkIn) => _CheckInTile(
+              checkIn: checkIn,
+              isFamily: family.verifiedMemberForPeerId(checkIn.peerId) != null,
+            ),
           ),
         const SizedBox(height: 24),
         Text(
@@ -123,12 +129,27 @@ class EmergencyScreen extends StatelessWidget {
         else
           ...sosMessages.map(
             (message) => Card(
+              color: family.isVerifiedFamilyMessage(message)
+                  ? Theme.of(context).colorScheme.errorContainer
+                  : null,
               child: ListTile(
                 leading: Icon(
                   Icons.crisis_alert,
                   color: Theme.of(context).colorScheme.error,
                 ),
-                title: Text(message.sender),
+                title: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(message.sender),
+                    if (family.isVerifiedFamilyMessage(message))
+                      Text(
+                        context.l10n.familyAlertBadge,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                  ],
+                ),
                 subtitle: Text(
                   '${message.sosDescription}\n'
                   '${_formatDateTime(context, message.timestamp)}',
@@ -352,9 +373,10 @@ class _CheckInPanel extends StatelessWidget {
 }
 
 class _CheckInTile extends StatelessWidget {
-  const _CheckInTile({required this.checkIn});
+  const _CheckInTile({required this.checkIn, required this.isFamily});
 
   final EmergencyCheckIn checkIn;
+  final bool isFamily;
 
   @override
   Widget build(BuildContext context) {
@@ -371,9 +393,22 @@ class _CheckInTile extends StatelessWidget {
               '${checkIn.longitude!.toStringAsFixed(5)}'
         : '';
     return Card(
+      color: isFamily ? Theme.of(context).colorScheme.primaryContainer : null,
       child: ListTile(
         leading: Icon(icon, color: color),
-        title: Text(checkIn.sender),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(checkIn.sender),
+            if (isFamily)
+              Text(
+                context.l10n.familyAlertBadge,
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+          ],
+        ),
         subtitle: Text(
           '${checkIn.message}$coordinates\n'
           '${_formatDateTime(context, checkIn.timestamp)}',

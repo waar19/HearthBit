@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 enum MeshNodeRole {
   phoneRelay('PHONE_RELAY'),
   phoneBeacon('PHONE_BEACON'),
@@ -200,6 +202,7 @@ class MeshPeer {
     this.role = MeshNodeRole.phoneRelay,
     this.radarAllowedUntil,
     this.radarConsentSource,
+    this.signingPublicKey,
   });
 
   factory MeshPeer.fromMap(Map<Object?, Object?> map) {
@@ -217,6 +220,13 @@ class MeshPeer {
         _ => null,
       },
       radarConsentSource: map['radarConsentSource'] as String?,
+      signingPublicKey: switch (map['signingPublicKey']) {
+        final Uint8List value when value.length == 32 => value,
+        final List<int> value when value.length == 32 => Uint8List.fromList(
+          value,
+        ),
+        _ => null,
+      },
     );
   }
 
@@ -228,6 +238,9 @@ class MeshPeer {
   final MeshNodeRole role;
   final DateTime? radarAllowedUntil;
   final String? radarConsentSource;
+
+  /// Clave Ed25519 autenticada por el ANNOUNCE. Nunca contiene material privado.
+  final Uint8List? signingPublicKey;
 
   bool get radarAllowed => radarAllowedUntil?.isAfter(DateTime.now()) ?? false;
 

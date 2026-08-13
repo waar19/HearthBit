@@ -1209,4 +1209,86 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get firstAidLoadError =>
       '検証済みのオフライン案内を読み込めませんでした。不完全な情報に頼らず、地域の救急へ通報してください。';
+
+  @override
+  String get familyTitle => '家族グループ';
+
+  @override
+  String get familySecurityBody =>
+      '署名付きQRを対面で確認してメンバーを登録します。名前や古い端末IDだけを信頼することはありません。';
+
+  @override
+  String get familyCreateGroup => 'グループを作成';
+
+  @override
+  String get familyRenameGroup => 'グループ名を変更';
+
+  @override
+  String get familyGroupHint => '例：家族';
+
+  @override
+  String get familyGroupLabel => 'グループ';
+
+  @override
+  String get familyConfirmTitle => '家族を確認';
+
+  @override
+  String familyFingerprint(String fingerprint) {
+    return 'セキュリティコード：$fingerprint';
+  }
+
+  @override
+  String get familyConfirmBody => '保存前に両方の端末でこのセキュリティコードを比較してください。';
+
+  @override
+  String get familyAddMember => 'メンバーを追加';
+
+  @override
+  String get familyRemoveTitle => '家族を削除しますか？';
+
+  @override
+  String familyRemoveBody(String nickname) {
+    return '$nickname の家族表示と通知が無効になります。';
+  }
+
+  @override
+  String get familyRemoveAction => '削除';
+
+  @override
+  String familySaveError(String error) {
+    return '家族グループを保存できませんでした：$error';
+  }
+
+  @override
+  String get familyMembersTitle => '確認済みメンバー';
+
+  @override
+  String get familyScanAction => '家族のQRをスキャン';
+
+  @override
+  String get familyCreateFirst => 'メンバーを追加する前にグループを作成してください。';
+
+  @override
+  String get familyNoMembers => '確認済みメンバーはいません。';
+
+  @override
+  String get familyMyQr => '自分の確認用QR';
+
+  @override
+  String get familyMyQrBody => 'このQRを対面で見せてください。公開署名鍵のみを含み、秘密鍵は含みません。';
+
+  @override
+  String get familyQrUnavailable => '署名付き確認QRを表示するにはメッシュを有効にしてください。';
+
+  @override
+  String get familyScanTitle => '家族QRをスキャン';
+
+  @override
+  String get familyQrInvalid => 'このQRは無効か、署名を確認できませんでした。';
+
+  @override
+  String get familyScanHint => '家族の端末に表示されたQRをスキャンしてください。';
+
+  @override
+  String get familyAlertBadge => '確認済みの家族';
 }

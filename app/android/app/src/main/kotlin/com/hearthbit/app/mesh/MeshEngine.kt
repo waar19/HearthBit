@@ -204,6 +204,7 @@ internal class MeshEngine(
         "status" to currentStatus,
         "peerId" to peerId,
         "nickname" to nickname,
+        "signingPublicKey" to identity.signingPublicKey,
         "role" to localRole.wireName,
         "batteryLevel" to batteryLevel,
         "adaptivePowerSaving" to adaptivePowerSaving,
@@ -780,6 +781,7 @@ internal class MeshEngine(
                 "nickname" to it.nickname,
                 "lastSeen" to it.lastSeen,
                 "secure" to noiseSessions.isEstablished(it.id),
+                "signingPublicKey" to it.signingPublicKey,
                 "supportsTransfers" to it.supportsTransfers,
                 "role" to it.role.wireName,
                 "radarAllowedUntil" to (consent?.expiresAt ?: 0L),
@@ -2992,6 +2994,7 @@ internal class MeshEngine(
                 "status" to status,
                 "peerId" to peerId,
                 "nickname" to nickname,
+                "signingPublicKey" to identity.signingPublicKey,
                 "role" to localRole.wireName,
             ),
         )
