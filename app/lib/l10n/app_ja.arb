@@ -135,6 +135,13 @@
   "opticalReceiveStats": "{fileName} · {decoded} / {total} チャンク · {symbols} シンボル",
 
   "radarTitle": "レーダー · {nickname}",
+  "beaconRequestTitle": "{nickname} が目印の作動を求めています",
+  "@beaconRequestTitle": {"placeholders": {"nickname": {"type": "String"}}},
+  "beaconRequestBody": "同意すると、ライト・警報音・振動を最長5分間使用します。同意なしに作動することはありません。",
+  "beaconMakeVisible": "自分を見つけやすくする",
+  "beaconStopVisible": "物理ビーコンを停止",
+  "beaconRequestRemote": "ビーコンを依頼",
+  "beaconStopRemote": "ビーコンを停止",
   "radarSignalLost": "信号ロスト",
   "radarSignalLostHint": "信号が戻るまで、来た道をゆっくり引き返してください。",
   "radarSearching": "信号を探しています…",

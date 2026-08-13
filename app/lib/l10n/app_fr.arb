@@ -135,6 +135,13 @@
   "opticalReceiveStats": "{fileName} · {decoded} sur {total} fragments · {symbols} symboles",
 
   "radarTitle": "Radar · {nickname}",
+  "beaconRequestTitle": "{nickname} vous demande de vous rendre visible",
+  "@beaconRequestTitle": {"placeholders": {"nickname": {"type": "String"}}},
+  "beaconRequestBody": "Acceptez pour utiliser la lampe, l’alarme et les vibrations pendant 5 minutes maximum. Rien ne s’active sans votre accord.",
+  "beaconMakeVisible": "ME RENDRE VISIBLE",
+  "beaconStopVisible": "ARRÊTER LA BALISE PHYSIQUE",
+  "beaconRequestRemote": "DEMANDER LA BALISE",
+  "beaconStopRemote": "ARRÊTER LA BALISE",
   "radarSignalLost": "SIGNAL PERDU",
   "radarSignalLostHint": "Revenez lentement sur vos pas jusqu'à retrouver le signal.",
   "radarSearching": "Recherche du signal…",

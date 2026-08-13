@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
+import '../services/beacon_control_protocol.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/message_repository.dart';
 import '../services/peer_location_tracker.dart';
@@ -28,6 +29,26 @@ class PrivateMessageSendResult {
   final String? error;
 
   bool get accepted => disposition != PrivateMessageSendDisposition.failed;
+}
+
+class PendingBeaconRequest {
+  const PendingBeaconRequest({
+    required this.requestId,
+    required this.peerId,
+    required this.nickname,
+    required this.expiresAt,
+    required this.flags,
+  });
+
+  final String requestId;
+  final String peerId;
+  final String nickname;
+  final DateTime expiresAt;
+  final int flags;
+
+  bool get wantsFlash => flags & BeaconControlFlags.flash != 0;
+  bool get wantsSound => flags & BeaconControlFlags.sound != 0;
+  bool get wantsVibration => flags & BeaconControlFlags.vibrate != 0;
 }
 
 class MeshController extends ChangeNotifier {
@@ -72,6 +93,9 @@ class MeshController extends ChangeNotifier {
   String? lastError;
   bool supportsBackgroundRelay = false;
   DateTime? radarConsentUntil;
+  PendingBeaconRequest? pendingBeaconRequest;
+  bool localBeaconActive = false;
+  DateTime? localBeaconExpiresAt;
 
   // Modo rescate: reenvía el SOS con ubicación actualizada periódicamente.
   bool rescueMode = false;
@@ -204,6 +228,9 @@ class MeshController extends ChangeNotifier {
       if (radarConsentUntil != null && !radarConsentActive) {
         radarConsentUntil = null;
         _syncRadarLocationSharing();
+      }
+      if (pendingBeaconRequest?.expiresAt.isAfter(DateTime.now()) == false) {
+        pendingBeaconRequest = null;
       }
       notifyListeners();
     });
@@ -496,6 +523,32 @@ class MeshController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> startLocalBeacon({
+    int flags = BeaconControlFlags.all,
+    Duration duration = BeaconControlProtocol.maximumDuration,
+  }) async {
+    await _run<void>(
+      () => _platform.startLocalBeacon(flags: flags, duration: duration),
+    );
+  }
+
+  Future<void> stopLocalBeacon() async {
+    await _run<void>(_platform.stopLocalBeacon);
+  }
+
+  Future<void> respondToBeaconRequest(bool accept) async {
+    final request = pendingBeaconRequest;
+    if (request == null) return;
+    pendingBeaconRequest = null;
+    notifyListeners();
+    await _run<void>(
+      () => _platform.respondToBeaconRequest(
+        requestId: request.requestId,
+        accept: accept,
+      ),
+    );
+  }
+
   void _syncRadarLocationSharing() {
     if (radarConsentActive && canSend) {
       unawaited(_startRadarLocationSharing());
@@ -637,6 +690,9 @@ class MeshController extends ChangeNotifier {
     nickname = '';
     peerId = '';
     radarConsentUntil = null;
+    pendingBeaconRequest = null;
+    localBeaconActive = false;
+    localBeaconExpiresAt = null;
     _stopRadarLocationSharing();
     notifyListeners();
   }
@@ -839,6 +895,19 @@ class MeshController extends ChangeNotifier {
         _applyRadarConsent(event);
         _replacePeers(event['peers']);
         break;
+      case 'beaconRequest':
+        _applyBeaconRequest(event);
+        break;
+      case 'beaconRequestResolved':
+        if (pendingBeaconRequest?.requestId == event['requestId']) {
+          pendingBeaconRequest = null;
+        }
+        break;
+      case 'beaconState':
+        if (event['scope'] == 'local') {
+          _applyLocalBeaconState(event);
+        }
+        break;
       case 'message':
         final rawMessage = event['message'];
         if (rawMessage is Map<Object?, Object?>) {
@@ -869,6 +938,9 @@ class MeshController extends ChangeNotifier {
         _knownPeers.clear();
         status = MeshConnectionStatus.stopped;
         radarConsentUntil = null;
+        pendingBeaconRequest = null;
+        localBeaconActive = false;
+        localBeaconExpiresAt = null;
         _stopRadarLocationSharing();
         break;
       case 'rssi':
@@ -894,6 +966,13 @@ class MeshController extends ChangeNotifier {
     peerId = event['peerId'] as String? ?? peerId;
     localRole = MeshNodeRole.fromWire(event['role']);
     survivalMode = localRole == MeshNodeRole.phoneBeacon;
+    if (event.containsKey('localBeaconActive')) {
+      localBeaconActive = event['localBeaconActive'] as bool? ?? false;
+      final expiresAt = (event['localBeaconExpiresAt'] as num?)?.toInt() ?? 0;
+      localBeaconExpiresAt = localBeaconActive && expiresAt > 0
+          ? DateTime.fromMillisecondsSinceEpoch(expiresAt)
+          : null;
+    }
     batteryLevel = (event['batteryLevel'] as num?)?.toInt() ?? batteryLevel;
     powerProfile = MeshPowerProfile.fromWire(event['powerProfile']);
     adaptivePowerSaving =
@@ -913,6 +992,38 @@ class MeshController extends ChangeNotifier {
           : null;
       _syncRadarLocationSharing();
     }
+  }
+
+  void _applyBeaconRequest(Map<Object?, Object?> event) {
+    if (event['autoAccepted'] == true) return;
+    final requestId = event['requestId'] as String?;
+    final peerId = event['peerId'] as String?;
+    final expiresAt = (event['expiresAt'] as num?)?.toInt();
+    final flags = (event['flags'] as num?)?.toInt();
+    if (requestId == null ||
+        peerId == null ||
+        expiresAt == null ||
+        flags == null ||
+        expiresAt <= DateTime.now().millisecondsSinceEpoch) {
+      return;
+    }
+    pendingBeaconRequest = PendingBeaconRequest(
+      requestId: requestId,
+      peerId: peerId,
+      nickname:
+          event['nickname'] as String? ??
+          (peerId.length > 8 ? peerId.substring(0, 8) : peerId),
+      expiresAt: DateTime.fromMillisecondsSinceEpoch(expiresAt),
+      flags: flags,
+    );
+  }
+
+  void _applyLocalBeaconState(Map<Object?, Object?> event) {
+    localBeaconActive = event['status'] == 'active';
+    final expiresAt = (event['expiresAt'] as num?)?.toInt() ?? 0;
+    localBeaconExpiresAt = localBeaconActive && expiresAt > 0
+        ? DateTime.fromMillisecondsSinceEpoch(expiresAt)
+        : null;
   }
 
   void _replacePeers(Object? value) {

@@ -427,6 +427,27 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String beaconRequestTitle(String nickname) {
+    return '$nickname が目印の作動を求めています';
+  }
+
+  @override
+  String get beaconRequestBody =>
+      '同意すると、ライト・警報音・振動を最長5分間使用します。同意なしに作動することはありません。';
+
+  @override
+  String get beaconMakeVisible => '自分を見つけやすくする';
+
+  @override
+  String get beaconStopVisible => '物理ビーコンを停止';
+
+  @override
+  String get beaconRequestRemote => 'ビーコンを依頼';
+
+  @override
+  String get beaconStopRemote => 'ビーコンを停止';
+
+  @override
   String get radarSignalLost => '信号ロスト';
 
   @override

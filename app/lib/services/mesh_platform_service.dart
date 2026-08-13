@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 
+import 'beacon_control_protocol.dart';
+
 class MeshPlatformService {
   static const _methods = MethodChannel('com.hearthbit.mesh/methods');
   static const _events = EventChannel('com.hearthbit.mesh/events');
@@ -177,6 +179,52 @@ class MeshPlatformService {
     return _methods.invokeMethod<void>('setRadarConsent', {
       'enabled': enabled,
       'minutes': minutes,
+    });
+  }
+
+  Future<void> startLocalBeacon({
+    int flags = BeaconControlFlags.all,
+    Duration duration = BeaconControlProtocol.maximumDuration,
+  }) {
+    return _methods.invokeMethod<void>('startLocalBeacon', {
+      'flags': flags,
+      'durationSeconds': duration.inSeconds,
+    });
+  }
+
+  Future<void> stopLocalBeacon() {
+    return _methods.invokeMethod<void>('stopLocalBeacon');
+  }
+
+  Future<String> requestRemoteBeacon(
+    String peerId, {
+    int flags = BeaconControlFlags.all,
+    Duration duration = BeaconControlProtocol.maximumDuration,
+  }) async {
+    return (await _methods.invokeMethod<String>('requestRemoteBeacon', {
+      'peerId': peerId,
+      'flags': flags,
+      'durationSeconds': duration.inSeconds,
+    }))!;
+  }
+
+  Future<void> respondToBeaconRequest({
+    required String requestId,
+    required bool accept,
+  }) {
+    return _methods.invokeMethod<void>('respondToBeaconRequest', {
+      'requestId': requestId,
+      'accept': accept,
+    });
+  }
+
+  Future<void> stopRemoteBeacon({
+    required String peerId,
+    required String requestId,
+  }) {
+    return _methods.invokeMethod<void>('stopRemoteBeacon', {
+      'peerId': peerId,
+      'requestId': requestId,
     });
   }
 

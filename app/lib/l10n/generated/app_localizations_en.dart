@@ -441,6 +441,27 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String beaconRequestTitle(String nickname) {
+    return '$nickname asks you to become visible';
+  }
+
+  @override
+  String get beaconRequestBody =>
+      'Accept to use the flashlight, alarm and vibration for up to 5 minutes. Nothing turns on without your consent.';
+
+  @override
+  String get beaconMakeVisible => 'MAKE ME VISIBLE';
+
+  @override
+  String get beaconStopVisible => 'STOP PHYSICAL BEACON';
+
+  @override
+  String get beaconRequestRemote => 'REQUEST BEACON';
+
+  @override
+  String get beaconStopRemote => 'STOP BEACON';
+
+  @override
   String get radarSignalLost => 'SIGNAL LOST';
 
   @override

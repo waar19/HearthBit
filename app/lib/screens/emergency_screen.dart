@@ -55,6 +55,22 @@ class EmergencyScreen extends StatelessWidget {
             icon: const Icon(Icons.stop_circle_outlined),
             label: Text(context.l10n.emergencyStopRescue),
           ),
+        const SizedBox(height: 8),
+        FilledButton.tonalIcon(
+          onPressed: controller.localBeaconActive
+              ? controller.stopLocalBeacon
+              : controller.startLocalBeacon,
+          icon: Icon(
+            controller.localBeaconActive
+                ? Icons.visibility_off_outlined
+                : Icons.visibility_outlined,
+          ),
+          label: Text(
+            controller.localBeaconActive
+                ? context.l10n.beaconStopVisible
+                : context.l10n.beaconMakeVisible,
+          ),
+        ),
         const SizedBox(height: 24),
         _CheckInPanel(controller: controller),
         const SizedBox(height: 16),

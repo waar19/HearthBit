@@ -837,6 +837,42 @@ abstract class AppLocalizations {
   /// **'Radar · {nickname}'**
   String radarTitle(String nickname);
 
+  /// No description provided for @beaconRequestTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{nickname} asks you to become visible'**
+  String beaconRequestTitle(String nickname);
+
+  /// No description provided for @beaconRequestBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept to use the flashlight, alarm and vibration for up to 5 minutes. Nothing turns on without your consent.'**
+  String get beaconRequestBody;
+
+  /// No description provided for @beaconMakeVisible.
+  ///
+  /// In en, this message translates to:
+  /// **'MAKE ME VISIBLE'**
+  String get beaconMakeVisible;
+
+  /// No description provided for @beaconStopVisible.
+  ///
+  /// In en, this message translates to:
+  /// **'STOP PHYSICAL BEACON'**
+  String get beaconStopVisible;
+
+  /// No description provided for @beaconRequestRemote.
+  ///
+  /// In en, this message translates to:
+  /// **'REQUEST BEACON'**
+  String get beaconRequestRemote;
+
+  /// No description provided for @beaconStopRemote.
+  ///
+  /// In en, this message translates to:
+  /// **'STOP BEACON'**
+  String get beaconStopRemote;
+
   /// No description provided for @radarSignalLost.
   ///
   /// In en, this message translates to:

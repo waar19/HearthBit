@@ -417,6 +417,26 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String beaconRequestTitle(String nickname) {
+    return '$nickname 请求你发出可见信号';
+  }
+
+  @override
+  String get beaconRequestBody => '接受后，闪光灯、警报声和振动最多运行5分钟。未经你的同意不会启动。';
+
+  @override
+  String get beaconMakeVisible => '让我更容易被发现';
+
+  @override
+  String get beaconStopVisible => '停止实体信标';
+
+  @override
+  String get beaconRequestRemote => '请求信标';
+
+  @override
+  String get beaconStopRemote => '停止信标';
+
+  @override
   String get radarSignalLost => '信号丢失';
 
   @override

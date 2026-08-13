@@ -198,6 +198,40 @@ class MainActivity : FlutterActivity() {
                     )
                     null
                 }
+                "startLocalBeacon" -> runMethod(result) {
+                    MeshRuntime.engine(this).startLocalBeacon(
+                        flags = call.argument<Number>("flags")?.toInt() ?: 0x07,
+                        durationMs = (call.argument<Number>("durationSeconds")?.toLong() ?: 300L)
+                            .coerceIn(1L, 300L) * 1_000L,
+                    )
+                    null
+                }
+                "stopLocalBeacon" -> runMethod(result) {
+                    MeshRuntime.engine(this).stopLocalBeacon()
+                    null
+                }
+                "requestRemoteBeacon" -> runMethod(result) {
+                    MeshRuntime.engine(this).requestRemoteBeacon(
+                        peerIdHex = requireNotNull(call.argument<String>("peerId")),
+                        flags = call.argument<Number>("flags")?.toInt() ?: 0x07,
+                        durationMs = (call.argument<Number>("durationSeconds")?.toLong() ?: 300L)
+                            .coerceIn(1L, 300L) * 1_000L,
+                    )
+                }
+                "respondToBeaconRequest" -> runMethod(result) {
+                    MeshRuntime.engine(this).respondToBeaconRequest(
+                        requestId = requireNotNull(call.argument<String>("requestId")),
+                        accept = call.argument<Boolean>("accept") == true,
+                    )
+                    null
+                }
+                "stopRemoteBeacon" -> runMethod(result) {
+                    MeshRuntime.engine(this).stopRemoteBeacon(
+                        peerIdHex = requireNotNull(call.argument<String>("peerId")),
+                        requestId = requireNotNull(call.argument<String>("requestId")),
+                    )
+                    null
+                }
                 "getPowerStatus" -> {
                     val power = getSystemService(PowerManager::class.java)
                     val batteryLevel = batteryLevel()

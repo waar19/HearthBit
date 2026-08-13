@@ -139,6 +139,12 @@ class _HearthBitAppState extends State<HearthBitApp> {
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         debugShowCheckedModeBanner: false,
+        builder: (context, child) => Stack(
+          children: [
+            child ?? const SizedBox.shrink(),
+            _BeaconConsentOverlay(controller: _controller),
+          ],
+        ),
         theme: buildAppTheme(
           Brightness.light,
           amoled: _preferences.amoledTheme,
@@ -184,6 +190,60 @@ class _HearthBitAppState extends State<HearthBitApp> {
               gateway: _gateway,
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+class _BeaconConsentOverlay extends StatelessWidget {
+  const _BeaconConsentOverlay({required this.controller});
+
+  final MeshController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final request = controller.pendingBeaconRequest;
+    if (request == null || !request.expiresAt.isAfter(DateTime.now())) {
+      return const SizedBox.shrink();
+    }
+    return Positioned(
+      left: 12,
+      right: 12,
+      top: MediaQuery.paddingOf(context).top + 8,
+      child: Material(
+        elevation: 12,
+        borderRadius: BorderRadius.circular(16),
+        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                context.l10n.beaconRequestTitle(request.nickname),
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 6),
+              Text(context.l10n.beaconRequestBody),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => controller.respondToBeaconRequest(false),
+                    child: Text(context.l10n.actionReject),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: () => controller.respondToBeaconRequest(true),
+                    child: Text(context.l10n.actionAccept),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

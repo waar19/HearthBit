@@ -135,6 +135,13 @@
   "opticalReceiveStats": "{fileName} · {decoded} von {total} Chunks · {symbols} Symbole",
 
   "radarTitle": "Radar · {nickname}",
+  "beaconRequestTitle": "{nickname} bittet dich, sichtbar zu werden",
+  "@beaconRequestTitle": {"placeholders": {"nickname": {"type": "String"}}},
+  "beaconRequestBody": "Bei Zustimmung werden Taschenlampe, Alarm und Vibration höchstens 5 Minuten verwendet. Ohne deine Zustimmung wird nichts aktiviert.",
+  "beaconMakeVisible": "MICH SICHTBAR MACHEN",
+  "beaconStopVisible": "PHYSISCHE BAKE STOPPEN",
+  "beaconRequestRemote": "BAKE ANFORDERN",
+  "beaconStopRemote": "BAKE STOPPEN",
   "radarSignalLost": "SIGNAL VERLOREN",
   "radarSignalLostHint": "Gehe langsam deinen Weg zurück, bis das Signal wiederkommt.",
   "radarSearching": "Signal wird gesucht…",

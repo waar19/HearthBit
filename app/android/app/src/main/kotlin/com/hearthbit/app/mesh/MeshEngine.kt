@@ -109,6 +109,10 @@ internal class MeshEngine(
         },
     )
     private val remoteRadarConsents = ConcurrentHashMap<String, RemoteRadarConsent>()
+    private val pendingBeaconRequests = ConcurrentHashMap<String, PendingBeaconRequest>()
+    private val outgoingBeaconRequests = ConcurrentHashMap<String, OutgoingBeaconRequest>()
+    private val seenBeaconActions = ConcurrentHashMap<String, Long>()
+    private val beaconActuator = BeaconActuator(context)
     private val tentativeRadarReads = ConcurrentHashMap<String, String>()
     private val genericPresenceTracker = GenericBlePresenceTracker()
     @Volatile
@@ -180,6 +184,17 @@ internal class MeshEngine(
 
     private data class PendingPrivate(val id: String, val content: String)
     private data class RemoteRadarConsent(val expiresAt: Long, val source: String)
+    private data class PendingBeaconRequest(
+        val peerId: String,
+        val nickname: String,
+        val control: BeaconControlProtocol.Control,
+    )
+    private data class OutgoingBeaconRequest(
+        val peerId: String,
+        val expiresAt: Long,
+        val flags: Int,
+    )
+    private var activeBeaconRequest: PendingBeaconRequest? = null
 
     val peerId: String get() = identity.peerIdHex
     val nickname: String get() = identity.nickname
@@ -194,6 +209,8 @@ internal class MeshEngine(
         "adaptivePowerSaving" to adaptivePowerSaving,
         "powerProfile" to powerProfile.wireName,
         "radarConsentUntil" to activeLocalRadarConsentUntil(),
+        "localBeaconActive" to beaconActuator.isActive(),
+        "localBeaconExpiresAt" to beaconActuator.activeUntil(),
         "links" to activeLinks().map { it.capabilities.toEventMap() },
         "peers" to peersSnapshot(),
         "presences" to genericPresenceTracker.snapshot(System.currentTimeMillis())
@@ -339,6 +356,11 @@ internal class MeshEngine(
         advertiseCallback = null
         advertiseAttempt = 0
         stopRadar()
+        beaconActuator.stop()
+        pendingBeaconRequests.clear()
+        outgoingBeaconRequests.clear()
+        seenBeaconActions.clear()
+        activeBeaconRequest = null
         addressToPeer.clear()
         runCatching { adapter.bluetoothLeScanner?.stopScan(scanCallback) }
         runCatching { adapter.bluetoothLeScanner?.stopScan(genericBeaconScanCallback) }
@@ -580,6 +602,87 @@ internal class MeshEngine(
         emitRadarConsent()
     }
 
+    fun startLocalBeacon(
+        flags: Int,
+        durationMs: Long = BeaconControlProtocol.MAX_DURATION_MS,
+    ) {
+        val expiresAt = System.currentTimeMillis() +
+            durationMs.coerceIn(1L, BeaconControlProtocol.MAX_DURATION_MS)
+        check(startBeaconActuator(flags, expiresAt)) {
+            "No hay hardware disponible para las señales solicitadas"
+        }
+    }
+
+    fun stopLocalBeacon() {
+        val activeRequest = activeBeaconRequest
+        beaconActuator.stop()
+        activeBeaconRequest = null
+        if (activeRequest != null) {
+            sendBeaconControl(
+                activeRequest.peerId,
+                BeaconControlProtocol.stop(activeRequest.control.nonce),
+            )
+        }
+        emitLocalBeaconState("stopped")
+    }
+
+    fun requestRemoteBeacon(
+        peerIdHex: String,
+        flags: Int,
+        durationMs: Long = BeaconControlProtocol.MAX_DURATION_MS,
+    ): String {
+        val normalized = peerIdHex.lowercase()
+        require(peers.containsKey(normalized)) {
+            context.getString(R.string.error_peer_unavailable)
+        }
+        require(flags != 0 && flags and BeaconControlProtocol.ALLOWED_FLAGS.inv() == 0)
+        val expiresAt = System.currentTimeMillis() +
+            durationMs.coerceIn(1L, BeaconControlProtocol.MAX_DURATION_MS)
+        outgoingBeaconRequests.entries.removeIf {
+            it.value.expiresAt <= System.currentTimeMillis()
+        }
+        val payload = BeaconControlProtocol.request(expiresAt, flags)
+        val control = requireNotNull(BeaconControlProtocol.decode(payload))
+        val requestId = BeaconControlProtocol.nonceHex(control.nonce)
+        outgoingBeaconRequests[requestId] = OutgoingBeaconRequest(
+            peerId = normalized,
+            expiresAt = expiresAt,
+            flags = flags,
+        )
+        sendBeaconControl(normalized, payload)
+        emitRemoteBeaconState(normalized, requestId, "requested", expiresAt, flags)
+        return requestId
+    }
+
+    fun respondToBeaconRequest(requestId: String, accept: Boolean) {
+        val normalized = requestId.lowercase()
+        val request = pendingBeaconRequests.remove(normalized)
+            ?: throw IllegalArgumentException("La solicitud de baliza ya no está disponible")
+        if (!BeaconControlProtocol.isValid(request.control, System.currentTimeMillis())) {
+            sendBeaconControl(
+                request.peerId,
+                BeaconControlProtocol.revoke(request.control.nonce),
+            )
+            throw IllegalArgumentException("La solicitud de baliza expiró")
+        }
+        respondToBeaconRequest(request, accept, autoAccepted = false)
+    }
+
+    fun stopRemoteBeacon(peerIdHex: String, requestId: String) {
+        val normalizedRequest = requestId.lowercase()
+        val outgoing = outgoingBeaconRequests.remove(normalizedRequest)
+            ?: throw IllegalArgumentException("La solicitud de baliza ya no está disponible")
+        require(outgoing.peerId == peerIdHex.lowercase())
+        sendBeaconControl(outgoing.peerId, BeaconControlProtocol.stop(normalizedRequest.hexToBytes()))
+        emitRemoteBeaconState(
+            outgoing.peerId,
+            normalizedRequest,
+            "stopped",
+            0,
+            0,
+        )
+    }
+
     fun sendPrivate(peerIdHex: String, content: String, messageId: String? = null): String {
         check(localRole.canOriginateChat) {
             "El rol ${localRole.wireName} no puede originar chat"
@@ -687,6 +790,11 @@ internal class MeshEngine(
 
     fun panicWipe() {
         stop()
+        beaconActuator.stop()
+        pendingBeaconRequests.clear()
+        outgoingBeaconRequests.clear()
+        seenBeaconActions.clear()
+        activeBeaconRequest = null
         storeForward.clear()
         relationshipPreferences.edit().clear().apply()
         peersWithSessionHistory.clear()
@@ -849,6 +957,120 @@ internal class MeshEngine(
             ),
         )
         broadcast(packet)
+    }
+
+    private fun sendBeaconControl(peerIdHex: String, payload: ByteArray) {
+        check(running) { "La malla no está activa" }
+        val recipient = peerIdHex.hexToBytes()
+        require(recipient.size == 8)
+        broadcast(
+            identity.sign(
+                MeshProtocol.Packet(
+                    type = MeshProtocol.TYPE_BEACON_CONTROL,
+                    ttl = 1,
+                    timestamp = System.currentTimeMillis(),
+                    senderId = identity.peerId,
+                    recipientId = recipient,
+                    payload = payload,
+                ),
+            ),
+        )
+    }
+
+    private fun respondToBeaconRequest(
+        request: PendingBeaconRequest,
+        accept: Boolean,
+        autoAccepted: Boolean,
+    ) {
+        val requestId = BeaconControlProtocol.nonceHex(request.control.nonce)
+        if (!accept || !startBeaconActuator(request.control.flags, request.control.expiresAt)) {
+            sendBeaconControl(
+                request.peerId,
+                BeaconControlProtocol.revoke(request.control.nonce),
+            )
+            emit(
+                mapOf(
+                    "type" to "beaconRequestResolved",
+                    "requestId" to requestId,
+                    "peerId" to request.peerId,
+                    "accepted" to false,
+                    "autoAccepted" to autoAccepted,
+                ),
+            )
+            return
+        }
+        activeBeaconRequest = request
+        sendBeaconControl(
+            request.peerId,
+            BeaconControlProtocol.grant(
+                request.control.expiresAt,
+                request.control.flags,
+                request.control.nonce,
+            ),
+        )
+        emit(
+            mapOf(
+                "type" to "beaconRequestResolved",
+                "requestId" to requestId,
+                "peerId" to request.peerId,
+                "accepted" to true,
+                "autoAccepted" to autoAccepted,
+            ),
+        )
+    }
+
+    private fun startBeaconActuator(flags: Int, expiresAt: Long): Boolean {
+        val started = beaconActuator.start(flags, expiresAt) {
+            val expired = activeBeaconRequest
+            activeBeaconRequest = null
+            if (expired != null && running) {
+                runCatching {
+                    sendBeaconControl(
+                        expired.peerId,
+                        BeaconControlProtocol.stop(expired.control.nonce),
+                    )
+                }
+            }
+            emitLocalBeaconState("expired")
+        }
+        if (started) emitLocalBeaconState("active", flags, expiresAt)
+        return started
+    }
+
+    private fun emitLocalBeaconState(
+        status: String,
+        flags: Int = 0,
+        expiresAt: Long = 0,
+    ) {
+        emit(
+            mapOf(
+                "type" to "beaconState",
+                "scope" to "local",
+                "status" to status,
+                "flags" to flags,
+                "expiresAt" to expiresAt,
+            ),
+        )
+    }
+
+    private fun emitRemoteBeaconState(
+        peerIdHex: String,
+        requestId: String,
+        status: String,
+        expiresAt: Long,
+        flags: Int,
+    ) {
+        emit(
+            mapOf(
+                "type" to "beaconState",
+                "scope" to "remote",
+                "peerId" to peerIdHex,
+                "requestId" to requestId,
+                "status" to status,
+                "expiresAt" to expiresAt,
+                "flags" to flags,
+            ),
+        )
     }
 
     private fun activeLocalRadarConsentUntil(): Long {
@@ -1029,6 +1251,7 @@ internal class MeshEngine(
         broadcastBytes(bytes, excludeAddress)
         if (localRole.storesDirectedPackets &&
             packet.type != MeshProtocol.TYPE_REQUEST_SYNC &&
+            packet.type != MeshProtocol.TYPE_BEACON_CONTROL &&
             packet.recipientId != null &&
             !packet.recipientId.contentEquals(MeshProtocol.broadcastRecipient)
         ) {
@@ -1356,15 +1579,29 @@ internal class MeshEngine(
             MeshProtocol.TYPE_RADAR_CONTROL -> processRadarControl(packet, senderHex)
             MeshProtocol.TYPE_HBT_CAPABILITY -> processHbtCapability(packet, senderHex)
             MeshProtocol.TYPE_NODE_CAPABILITY -> processNodeCapability(packet, senderHex)
+            MeshProtocol.TYPE_BEACON_CONTROL -> processBeaconControl(packet, senderHex)
             MeshProtocol.TYPE_FRAGMENT -> {
                 val reassembled = fragmentReassembler.accept(packet)
                 if (reassembled != null) {
+                    if (reassembled.type == MeshProtocol.TYPE_BEACON_CONTROL &&
+                        packet.ttl != 1.toByte()
+                    ) {
+                        return
+                    }
                     Log.i(
                         LOG_TAG,
                         "FRAGMENT reassembled: type=${reassembled.type.toUByte()} " +
                             "sender=${senderHex.take(8)} bytes=${reassembled.payload.size}",
                     )
-                    process(reassembled, senderHex, sourceAddress)
+                    process(
+                        if (reassembled.type == MeshProtocol.TYPE_BEACON_CONTROL) {
+                            reassembled.copy(ttl = 1)
+                        } else {
+                            reassembled
+                        },
+                        senderHex,
+                        sourceAddress,
+                    )
                 }
             }
         }
@@ -1507,6 +1744,110 @@ internal class MeshEngine(
             return
         }
         emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
+    }
+
+    private fun processBeaconControl(packet: MeshProtocol.Packet, senderHex: String) {
+        if (packet.ttl != 1.toByte() ||
+            packet.recipientId?.contentEquals(identity.peerId) != true
+        ) {
+            return
+        }
+        val peer = peers[senderHex] ?: return
+        if (!identity.verify(packet, peer.signingPublicKey)) return
+        val control = BeaconControlProtocol.decode(packet.payload) ?: return
+        if (!BeaconControlProtocol.isValid(control, packet.timestamp)) return
+        val requestId = BeaconControlProtocol.nonceHex(control.nonce)
+        val now = System.currentTimeMillis()
+        seenBeaconActions.entries.removeIf { it.value <= now }
+        val replayKey = "$senderHex:$requestId:${control.action}"
+        if (seenBeaconActions.putIfAbsent(replayKey, now + BEACON_REPLAY_WINDOW_MS) != null) {
+            return
+        }
+        when (control.action) {
+            BeaconControlProtocol.ACTION_REQUEST -> {
+                if (activeBeaconRequest != null) {
+                    sendBeaconControl(
+                        senderHex,
+                        BeaconControlProtocol.revoke(control.nonce),
+                    )
+                    return
+                }
+                pendingBeaconRequests.entries.removeIf {
+                    it.value.control.expiresAt <= now
+                }
+                if (pendingBeaconRequests.size >= MAX_PENDING_BEACON_REQUESTS) {
+                    sendBeaconControl(
+                        senderHex,
+                        BeaconControlProtocol.revoke(control.nonce),
+                    )
+                    return
+                }
+                val request = PendingBeaconRequest(senderHex, peer.nickname, control)
+                pendingBeaconRequests[requestId] = request
+                if (BeaconControlProtocol.shouldAutoAccept(activeLocalRadarConsentUntil())) {
+                    pendingBeaconRequests.remove(requestId)
+                    emit(
+                        mapOf(
+                            "type" to "beaconRequest",
+                            "requestId" to requestId,
+                            "peerId" to senderHex,
+                            "nickname" to peer.nickname,
+                            "expiresAt" to control.expiresAt,
+                            "flags" to control.flags,
+                            "autoAccepted" to true,
+                        ),
+                    )
+                    respondToBeaconRequest(request, accept = true, autoAccepted = true)
+                } else {
+                    emit(
+                        mapOf(
+                            "type" to "beaconRequest",
+                            "requestId" to requestId,
+                            "peerId" to senderHex,
+                            "nickname" to peer.nickname,
+                            "expiresAt" to control.expiresAt,
+                            "flags" to control.flags,
+                            "autoAccepted" to false,
+                        ),
+                    )
+                }
+            }
+            BeaconControlProtocol.ACTION_GRANT -> {
+                val outgoing = outgoingBeaconRequests[requestId] ?: return
+                if (outgoing.peerId != senderHex ||
+                    outgoing.flags != control.flags ||
+                    control.expiresAt > outgoing.expiresAt
+                ) {
+                    return
+                }
+                emitRemoteBeaconState(
+                    senderHex,
+                    requestId,
+                    "active",
+                    control.expiresAt,
+                    control.flags,
+                )
+            }
+            BeaconControlProtocol.ACTION_REVOKE -> {
+                val outgoing = outgoingBeaconRequests.remove(requestId) ?: return
+                if (outgoing.peerId != senderHex) return
+                emitRemoteBeaconState(senderHex, requestId, "rejected", 0, 0)
+            }
+            BeaconControlProtocol.ACTION_STOP -> {
+                val active = activeBeaconRequest
+                if (active?.peerId == senderHex &&
+                    active.control.nonce.contentEquals(control.nonce)
+                ) {
+                    beaconActuator.stop()
+                    activeBeaconRequest = null
+                    emitLocalBeaconState("stopped")
+                }
+                val outgoing = outgoingBeaconRequests.remove(requestId)
+                if (outgoing?.peerId == senderHex) {
+                    emitRemoteBeaconState(senderHex, requestId, "stopped", 0, 0)
+                }
+            }
+        }
     }
 
     private fun processHandshake(packet: MeshProtocol.Packet, senderHex: String) {
@@ -2745,6 +3086,8 @@ internal class MeshEngine(
 
         /** Cadencia de lectura RSSI sobre GATT conectado en modo radar. */
         const val RADAR_READ_INTERVAL_MS = 500L
+        const val BEACON_REPLAY_WINDOW_MS = 10 * 60_000L
+        const val MAX_PENDING_BEACON_REQUESTS = 1
 
         const val ADVERTISE_TIMEOUT_MS = 10_000L
         const val MAX_ADVERTISE_RETRIES = 1

@@ -135,6 +135,13 @@
   "opticalReceiveStats": "{fileName} · {decoded} de {total} chunks · {symbols} símbolos",
 
   "radarTitle": "Radar · {nickname}",
+  "beaconRequestTitle": "{nickname} pide que te hagas visible",
+  "@beaconRequestTitle": {"placeholders": {"nickname": {"type": "String"}}},
+  "beaconRequestBody": "Acepta para usar la linterna, la alarma y la vibración durante un máximo de 5 minutos. Nada se activa sin tu consentimiento.",
+  "beaconMakeVisible": "HACERME VISIBLE",
+  "beaconStopVisible": "DETENER BALIZA FÍSICA",
+  "beaconRequestRemote": "PEDIR BALIZA",
+  "beaconStopRemote": "DETENER BALIZA",
   "radarSignalLost": "SEÑAL PERDIDA",
   "radarSignalLostHint": "Vuelve despacio sobre tus pasos hasta recuperar la señal.",
   "radarSearching": "Buscando señal…",

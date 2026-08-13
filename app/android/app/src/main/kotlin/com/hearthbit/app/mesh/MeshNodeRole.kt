@@ -70,6 +70,7 @@ internal object MeshRelayPolicy {
     ): Boolean {
         if (!role.relaysPackets || ttl <= 1) return false
         return when (packetType) {
+            MeshProtocol.TYPE_BEACON_CONTROL -> false
             MeshProtocol.TYPE_NOISE_HANDSHAKE,
             MeshProtocol.TYPE_NOISE_ENCRYPTED,
             -> !addressedToLocalNode

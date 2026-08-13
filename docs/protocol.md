@@ -40,6 +40,7 @@ Tipos implementados:
 - `0x23`: consentimiento temporal del radar
 - `0x24`: capacidad HBT
 - `0x25`: capacidad y rol de nodo HearthBit
+- `0x26`: control dirigido de baliza física
 
 Los tamaños se normalizan a 256, 512, 1024 o 2048 bytes mediante padding
 PKCS#7 cuando la diferencia cabe en un byte.
@@ -124,6 +125,21 @@ HearthBit mantiene el `ANNOUNCE` en el perfil conocido (`0x01`, `0x02`,
 `0x03` y el `0x05` estándar sin capacidades HearthBit) y usa paquetes
 dedicados `0x24`/`0x25`. Esto reduce el fallo de un cliente antiguo a ignorar
 una capacidad opcional, en vez de perder el anuncio de identidad completo.
+
+## Baliza física dirigida (`0x26`)
+
+`0x25` sigue siendo `NODE_CAPABILITY`. `BEACON_CONTROL` usa `0x26`, siempre con
+`recipientId`, firma Ed25519 y TTL 1. El payload v1 fijo contiene acción
+`REQUEST`, `GRANT`, `REVOKE` o `STOP`, expiración Unix ms, nonce aleatorio de
+16 bytes y flags de flash, sonido y vibración. Una solicitud o concesión no
+puede durar más de 5 minutos.
+
+El receptor valida longitud exacta, versión, acción, flags, timestamp,
+expiración y firma contra el peer previamente anunciado. La trama nunca entra
+en store-forward, sincronización ni relay. `REQUEST` no enciende hardware:
+requiere aceptación explícita, salvo que el teléfono ya estuviera en modo
+rescate o con consentimiento de radar activo. En iOS la actuación se detiene
+al pasar la app a segundo plano; no se declara audio de fondo.
 
 ## Privacidad de balizas BLE genéricas en Android
 

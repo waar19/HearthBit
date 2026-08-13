@@ -8,7 +8,7 @@ Este registro gobierna extensiones de HearthBit sobre el perfil de
 
 La fuente BitChat fijada es
 `vendor/bitchat-android@5156f7de89ec9f6a3429630d90f709b68f6fd7fd`.
-Ese commit no registra Courier `0x04`, los tipos exteriores `0x23`–`0x25` ni el
+Ese commit no registra Courier `0x04`, los tipos exteriores `0x23`–`0x26` ni el
 tipo Noise interior `0x30`. Todas las entradas de este documento pertenecen a
 HearthBit/Bitle. Su existencia **MUST NOT** presentarse como compatibilidad
 upstream.
@@ -59,6 +59,7 @@ conservar su encoding directo. No significa heredado de BitChat upstream.
 | exterior | `0x23` | `RADAR_CONTROL` | HearthBit | sí | nunca |
 | exterior | `0x24` | `HBT_CAPABILITY` | HearthBit | no | nunca |
 | exterior | `0x25` | `NODE_CAPABILITY` | HearthBit/Bitle | sí al aplicarla | nunca |
+| exterior | `0x26` | `BEACON_CONTROL` | HearthBit | sí | nunca |
 | Noise interior | `0x30` | `HBT_TRANSFER_FRAME` | HearthBit | no para la sesión | nunca |
 
 “Crítica” significa que interpretar mal la entrada puede modificar
@@ -220,7 +221,42 @@ store-forward, pero opcional para mantener una sesión de chat. **MUST NOT**
 guardarse en store-forward ni GCS. Un emisor **SHOULD** enviarlo inmediatamente
 después de cada `ANNOUNCE`.
 
-## 8. `HBT_TRANSFER_FRAME` Noise interior `0x30`
+## 8. `BEACON_CONTROL` exterior `0x26`
+
+`0x25` continúa reservado para `NODE_CAPABILITY`; la baliza física usa
+exclusivamente `0x26`. El payload **MUST** usar versión 1. El paquete **MUST**
+estar firmado Ed25519 con la clave vinculada por el `ANNOUNCE` previo y
+dirigido mediante `recipientId` al peer
+anunciado y emitido con TTL 1. **MUST NOT** retransmitirse, guardarse en
+store-forward ni incorporarse a sincronización. La fragmentación
+de enlace BitChat puede transportar sus bytes de forma opaca, pero cada
+fragmento conserva TTL 1 y el paquete reensamblado no vuelve a retransmitirse.
+
+El payload fijo mide 27 octetos:
+
+```text
+version:   UInt8 = 0x01
+action:    UInt8 = 0x01 REQUEST | 0x02 GRANT | 0x03 REVOKE | 0x04 STOP
+expiresAt: UInt64 big-endian, Unix ms
+nonce:     16 octetos aleatorios
+flags:     UInt8, bit 0 flash | bit 1 sound | bit 2 vibrate
+```
+
+Los bits de flags desconocidos invalidan el payload. `REQUEST` y `GRANT`
+**MUST** llevar al menos un actuador y una expiración futura no superior a
+5 minutos desde el reloj receptor. `REVOKE` y `STOP` **MUST** llevar
+`expiresAt = 0` y `flags = 0`. El timestamp exterior **MUST** estar dentro de
+±2 minutos. Longitud, versión, acción, destinatario, TTL, timestamp, expiración
+y firma se validan antes de cualquier cambio de estado.
+
+`REQUEST` nunca activa hardware por sí solo. El receptor **MAY** responder
+automáticamente con `GRANT` únicamente si ya tenía activo el modo rescate o un
+consentimiento de radar local; en cualquier otro estado requiere aceptación
+explícita. Rechazar produce `REVOKE`. `STOP` detiene una concesión con el mismo
+nonce. La actuación termina al expirar, al pasar iOS a segundo plano, al
+desconectar el plugin o al detenerse localmente.
+
+## 9. `HBT_TRANSFER_FRAME` Noise interior `0x30`
 
 El plaintext de transporte es:
 
@@ -246,12 +282,13 @@ diferida de un mensaje privado usa Courier, que conserva como ciphertext el
 paquete Noise completo y aplica sus propias restricciones. Los blobs de
 archivo HBT **MUST NOT** entrar en Courier ni en el store-forward de mensajes.
 
-## 9. ExtensionEnvelope futuro
+## 10. ExtensionEnvelope futuro
 
-### 9.1 Objetivo y estado
+### 10.1 Objetivo y estado
 
-Las asignaciones `0x23`–`0x25` son heredadas y **MUST** conservarse. Las nuevas
-extensiones **SHOULD** usar un `ExtensionEnvelope` común para evitar consumir
+Las asignaciones `0x23`–`0x25` son heredadas y **MUST** conservarse; `0x26`
+queda asignado por este registro a la baliza física. Las extensiones posteriores
+**SHOULD** usar un `ExtensionEnvelope` común para evitar consumir
 más tipos exteriores y para expresar propiedad, versión, criticidad y política
 de almacenamiento.
 
@@ -261,7 +298,7 @@ carrier y su negociación, una implementación **MUST NOT** emitir
 `ExtensionEnvelope` en la red ni reutilizar un tipo upstream. Esta restricción
 evita inventar compatibilidad.
 
-### 9.2 Encoding
+### 10.2 Encoding
 
 El encabezado mide 12 octetos:
 
@@ -295,7 +332,7 @@ consultar además la entrada del registro, autenticación, destinatario, cuota y
 expiración. El flag nunca puede volver almacenable un subtipo registrado como
 “nunca”.
 
-### 9.3 Negociación y tipos desconocidos
+### 10.3 Negociación y tipos desconocidos
 
 Un emisor **MUST NOT** enviar un `ExtensionEnvelope` hasta haber recibido un
 `ANNOUNCE` autenticado y una capacidad autenticada que declare soporte para el
@@ -313,7 +350,7 @@ Para un envelope desconocido:
 - **MUST NOT** almacenarlo salvo que el registro y la negociación autoricen
   explícitamente store-forward.
 
-## 10. Proceso de asignación
+## 11. Proceso de asignación
 
 Toda nueva entrada **MUST** documentar:
 

@@ -153,6 +153,13 @@
 
   "radarTitle": "Radar · {nickname}",
   "@radarTitle": {"placeholders": {"nickname": {"type": "String"}}},
+  "beaconRequestTitle": "{nickname} asks you to become visible",
+  "@beaconRequestTitle": {"placeholders": {"nickname": {"type": "String"}}},
+  "beaconRequestBody": "Accept to use the flashlight, alarm and vibration for up to 5 minutes. Nothing turns on without your consent.",
+  "beaconMakeVisible": "MAKE ME VISIBLE",
+  "beaconStopVisible": "STOP PHYSICAL BEACON",
+  "beaconRequestRemote": "REQUEST BEACON",
+  "beaconStopRemote": "STOP BEACON",
   "radarSignalLost": "SIGNAL LOST",
   "radarSignalLostHint": "Walk back slowly along your path until the signal returns.",
   "radarSearching": "Searching for signal…",

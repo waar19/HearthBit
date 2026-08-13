@@ -15,6 +15,9 @@ class _FakePlatform extends MeshPlatformService {
   int stopCalls = 0;
   int sosCalls = 0;
   final List<({bool enabled, int minutes})> radarConsentCalls = [];
+  int startLocalBeaconCalls = 0;
+  int stopLocalBeaconCalls = 0;
+  final List<({String requestId, bool accept})> beaconResponses = [];
   int panicWipeCalls = 0;
   final List<String> nodeRoles = [];
   final List<({String content, String? channel})> publicMessages = [];
@@ -113,6 +116,27 @@ class _FakePlatform extends MeshPlatformService {
     int minutes = 15,
   }) async {
     radarConsentCalls.add((enabled: enabled, minutes: minutes));
+  }
+
+  @override
+  Future<void> startLocalBeacon({
+    int flags = 0x07,
+    Duration duration = const Duration(minutes: 5),
+  }) async {
+    startLocalBeaconCalls += 1;
+  }
+
+  @override
+  Future<void> stopLocalBeacon() async {
+    stopLocalBeaconCalls += 1;
+  }
+
+  @override
+  Future<void> respondToBeaconRequest({
+    required String requestId,
+    required bool accept,
+  }) async {
+    beaconResponses.add((requestId: requestId, accept: accept));
   }
 
   @override
@@ -594,6 +618,77 @@ void main() {
     expect(controller.radarConsentActive, isFalse);
     expect(platform.radarConsentCalls.last.enabled, isFalse);
   });
+
+  test(
+    'solicitud de baliza requiere respuesta explícita fuera de rescate',
+    () async {
+      final expiresAt = DateTime.now().add(const Duration(minutes: 2));
+      platform.emit({
+        'type': 'beaconRequest',
+        'requestId': '00112233445566778899aabbccddeeff',
+        'peerId': '0011223344556677',
+        'nickname': 'Rescatista',
+        'expiresAt': expiresAt.millisecondsSinceEpoch,
+        'flags': 0x07,
+        'autoAccepted': false,
+      });
+      await pumpEvents();
+
+      expect(controller.pendingBeaconRequest?.nickname, 'Rescatista');
+      expect(platform.startLocalBeaconCalls, 0);
+
+      await controller.respondToBeaconRequest(true);
+      expect(controller.pendingBeaconRequest, isNull);
+      expect(platform.beaconResponses.single, (
+        requestId: '00112233445566778899aabbccddeeff',
+        accept: true,
+      ));
+    },
+  );
+
+  test('estado nativo controla inicio y fin de la baliza local', () async {
+    final expiresAt = DateTime.now().add(const Duration(minutes: 5));
+    platform.emit({
+      'type': 'beaconState',
+      'scope': 'local',
+      'status': 'active',
+      'expiresAt': expiresAt.millisecondsSinceEpoch,
+      'flags': 0x07,
+    });
+    await pumpEvents();
+    expect(controller.localBeaconActive, isTrue);
+    expect(controller.localBeaconExpiresAt, isNotNull);
+
+    platform.emit({
+      'type': 'beaconState',
+      'scope': 'local',
+      'status': 'stopped',
+    });
+    await pumpEvents();
+    expect(controller.localBeaconActive, isFalse);
+    expect(controller.localBeaconExpiresAt, isNull);
+  });
+
+  test(
+    'solicitud autoaceptada por consentimiento previo no abre diálogo',
+    () async {
+      platform.emit({
+        'type': 'beaconRequest',
+        'requestId': 'ffeeddccbbaa99887766554433221100',
+        'peerId': '0011223344556677',
+        'nickname': 'Rescatista',
+        'expiresAt': DateTime.now()
+            .add(const Duration(minutes: 2))
+            .millisecondsSinceEpoch,
+        'flags': 0x07,
+        'autoAccepted': true,
+      });
+      await pumpEvents();
+
+      expect(controller.pendingBeaconRequest, isNull);
+      expect(platform.beaconResponses, isEmpty);
+    },
+  );
 
   test('cambia el rol local y bloquea chat en modo presencia', () async {
     platform.emit({'type': 'status', 'status': 'active'});

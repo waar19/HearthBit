@@ -442,6 +442,27 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String beaconRequestTitle(String nickname) {
+    return '$nickname bittet dich, sichtbar zu werden';
+  }
+
+  @override
+  String get beaconRequestBody =>
+      'Bei Zustimmung werden Taschenlampe, Alarm und Vibration höchstens 5 Minuten verwendet. Ohne deine Zustimmung wird nichts aktiviert.';
+
+  @override
+  String get beaconMakeVisible => 'MICH SICHTBAR MACHEN';
+
+  @override
+  String get beaconStopVisible => 'PHYSISCHE BAKE STOPPEN';
+
+  @override
+  String get beaconRequestRemote => 'BAKE ANFORDERN';
+
+  @override
+  String get beaconStopRemote => 'BAKE STOPPEN';
+
+  @override
   String get radarSignalLost => 'SIGNAL VERLOREN';
 
   @override
