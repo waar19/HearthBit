@@ -41,6 +41,53 @@ TextTheme scaleDefinedTextTheme(TextTheme theme, double factor) {
   );
 }
 
+ThemeData buildAppTheme(
+  Brightness brightness, {
+  required bool amoled,
+  required bool highContrast,
+}) {
+  final dark = brightness == Brightness.dark;
+  final scheme = ColorScheme.fromSeed(
+    seedColor: dark ? const Color(0xFF5ADBAA) : const Color(0xFF006C4C),
+    brightness: brightness,
+  );
+  var theme = ThemeData(colorScheme: scheme, useMaterial3: true);
+  if (amoled && dark) {
+    theme = theme.copyWith(
+      scaffoldBackgroundColor: Colors.black,
+      canvasColor: Colors.black,
+      cardColor: const Color(0xFF0E0E0E),
+      dialogTheme: const DialogThemeData(backgroundColor: Color(0xFF0E0E0E)),
+      navigationBarTheme: const NavigationBarThemeData(
+        backgroundColor: Color(0xFF080808),
+      ),
+    );
+  }
+  theme = theme.copyWith(
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(textStyle: theme.textTheme.labelLarge),
+    ),
+  );
+  if (highContrast) {
+    final scaledText = scaleDefinedTextTheme(theme.textTheme, 1.12);
+    theme = theme.copyWith(
+      textTheme: scaledText,
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(56, 52),
+          textStyle: scaledText.labelLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(minimumSize: const Size(56, 52)),
+      ),
+    );
+  }
+  return theme;
+}
+
 class HearthBitApp extends StatefulWidget {
   const HearthBitApp({super.key});
 
@@ -92,8 +139,16 @@ class _HearthBitAppState extends State<HearthBitApp> {
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         debugShowCheckedModeBanner: false,
-        theme: _theme(Brightness.light),
-        darkTheme: _theme(Brightness.dark),
+        theme: buildAppTheme(
+          Brightness.light,
+          amoled: _preferences.amoledTheme,
+          highContrast: _preferences.highContrast || _controller.rescueMode,
+        ),
+        darkTheme: buildAppTheme(
+          Brightness.dark,
+          amoled: _preferences.amoledTheme,
+          highContrast: _preferences.highContrast || _controller.rescueMode,
+        ),
         themeMode: _preferences.amoledTheme ? ThemeMode.dark : ThemeMode.system,
         home: FutureBuilder<void>(
           future: _initialization,
@@ -132,40 +187,5 @@ class _HearthBitAppState extends State<HearthBitApp> {
         ),
       ),
     );
-  }
-
-  ThemeData _theme(Brightness brightness) {
-    final dark = brightness == Brightness.dark;
-    final scheme = ColorScheme.fromSeed(
-      seedColor: dark ? const Color(0xFF5ADBAA) : const Color(0xFF006C4C),
-      brightness: brightness,
-    );
-    var theme = ThemeData(colorScheme: scheme, useMaterial3: true);
-    if (_preferences.amoledTheme && dark) {
-      theme = theme.copyWith(
-        scaffoldBackgroundColor: Colors.black,
-        canvasColor: Colors.black,
-        cardColor: const Color(0xFF0E0E0E),
-        dialogTheme: const DialogThemeData(backgroundColor: Color(0xFF0E0E0E)),
-        navigationBarTheme: const NavigationBarThemeData(
-          backgroundColor: Color(0xFF080808),
-        ),
-      );
-    }
-    if (_preferences.highContrast || _controller.rescueMode) {
-      theme = theme.copyWith(
-        textTheme: scaleDefinedTextTheme(theme.textTheme, 1.12),
-        filledButtonTheme: FilledButtonThemeData(
-          style: FilledButton.styleFrom(
-            minimumSize: const Size(56, 52),
-            textStyle: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-        ),
-        outlinedButtonTheme: OutlinedButtonThemeData(
-          style: OutlinedButton.styleFrom(minimumSize: const Size(56, 52)),
-        ),
-      );
-    }
-    return theme;
   }
 }
