@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.hearthbit.app"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     sourceSets {
