@@ -355,5 +355,19 @@
   "voiceTooLong": "音声メモは20秒までです。",
   "voiceUnsupported": "受信側にもHearthBitが必要です。",
   "voicePlay": "音声メモを再生",
-  "voicePause": "音声メモを一時停止"
+  "voicePause": "音声メモを一時停止",
+  "shareApkButton": "インストール済みAPKを共有",
+  "sendApkToPeer": "HearthBit APKを送信",
+  "apkSafetyTitle": "Androidインストーラーを共有しますか？",
+  "apkSendToPeerWarning": "{peer} にHearthBitのAndroidインストーラーを送信します。",
+  "apkInstallWarning": "受信者はAndroid設定で、受信に使用した提供元からのアプリのインストールを許可する必要があります。HearthBitが自動的にインストールすることはありません。",
+  "apkSignatureWarning": "異なる鍵で署名されたAPKは、インストール済みアプリを更新できません。インストール前に提供元と署名を確認してください。",
+  "apkTransportWarning": "APK転送にBLEは使用しません。ローカルWi-Fi、Nearby、またはWi-Fi Awareが必要です。利用できない場合は転送エラーが表示されます。",
+  "apkConfirmShare": "続行",
+  "apkPreparing": "安全なAPKコピーを準備しています…",
+  "apkSplitUnavailable": "このインストールは分割APKを使用しています。ベースAPKだけでは不完全なため、HearthBitは共有しません。代わりにGitHubリンクを案内してください。",
+  "apkUnsupported": "インストール済みAPKの共有はAndroidでのみ利用できます。",
+  "apkShareError": "APKを準備または共有できませんでした：{error}",
+  "apkShareMessage": "HearthBit Androidインストーラーです。Androidでは、この提供元からのインストール許可が必要です。署名が異なるAPKは既存のインストールを更新できないため、先に提供元と署名を確認してください。",
+  "apkOfferSent": "{peer} にAPKを提案しました。適切な高速転送経路がない場合はエラーが表示されます。"
 }

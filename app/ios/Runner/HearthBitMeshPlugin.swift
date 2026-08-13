@@ -227,6 +227,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           "peripheralMode": true,
           "nodeRoles": IOSMeshNodeRole.allCases.map(\.rawValue),
         ])
+      case "getInstalledApkForShare":
+        result(["status": "unsupported"])
       case "requestPermissions":
         result(true)
       case "startMesh":

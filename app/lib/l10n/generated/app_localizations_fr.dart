@@ -1167,4 +1167,58 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get voicePause => 'Mettre en pause';
+
+  @override
+  String get shareApkButton => 'Partager l’APK installée';
+
+  @override
+  String get sendApkToPeer => 'Envoyer l’APK HearthBit';
+
+  @override
+  String get apkSafetyTitle => 'Partager l’installateur Android ?';
+
+  @override
+  String apkSendToPeerWarning(String peer) {
+    return '$peer recevra l’installateur Android de HearthBit.';
+  }
+
+  @override
+  String get apkInstallWarning =>
+      'Le destinataire devra autoriser l’installation d’applications depuis la source de réception dans les réglages Android. HearthBit n’installera rien automatiquement.';
+
+  @override
+  String get apkSignatureWarning =>
+      'Une APK signée avec une autre clé ne peut pas mettre à jour l’application installée. Vérifiez la source et la signature avant l’installation.';
+
+  @override
+  String get apkTransportWarning =>
+      'L’APK n’est pas transférée par BLE. Elle nécessite le Wi-Fi local, Nearby ou Wi-Fi Aware ; le transfert signalera une erreur si aucun n’est disponible.';
+
+  @override
+  String get apkConfirmShare => 'CONTINUER';
+
+  @override
+  String get apkPreparing => 'Préparation d’une copie sûre de l’APK…';
+
+  @override
+  String get apkSplitUnavailable =>
+      'Cette installation utilise des APK fractionnées. Partager uniquement l’APK de base produirait un installateur incomplet ; HearthBit ne la partagera donc pas. Proposez plutôt le lien GitHub.';
+
+  @override
+  String get apkUnsupported =>
+      'Le partage de l’APK installée est disponible uniquement sur Android.';
+
+  @override
+  String apkShareError(String error) {
+    return 'Impossible de préparer ou partager l’APK : $error';
+  }
+
+  @override
+  String get apkShareMessage =>
+      'Installateur HearthBit pour Android. Android exige d’autoriser les installations depuis cette source. Une APK signée différemment ne peut pas mettre à jour une installation existante ; vérifiez d’abord la source et la signature.';
+
+  @override
+  String apkOfferSent(String peer) {
+    return 'APK proposée à $peer. Le transfert signalera une erreur si aucun transport rapide adapté n’est disponible.';
+  }
 }

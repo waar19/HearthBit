@@ -394,5 +394,22 @@
   "voiceTooLong": "Voice notes are limited to 20 seconds.",
   "voiceUnsupported": "Voice notes require HearthBit on the recipient's device.",
   "voicePlay": "Play voice note",
-  "voicePause": "Pause voice note"
+  "voicePause": "Pause voice note",
+  "shareApkButton": "Share installed APK",
+  "sendApkToPeer": "Send HearthBit APK",
+  "apkSafetyTitle": "Share the Android installer?",
+  "apkSendToPeerWarning": "{peer} will receive the HearthBit Android installer.",
+  "@apkSendToPeerWarning": {"placeholders": {"peer": {"type": "String"}}},
+  "apkInstallWarning": "The recipient must allow app installation from the receiving source in Android settings. HearthBit will not install anything automatically.",
+  "apkSignatureWarning": "An APK signed with a different key cannot update the installed app. Verify the source and signature before installing.",
+  "apkTransportWarning": "APK transfer does not use BLE. It requires local Wi-Fi, Nearby or Wi-Fi Aware; the transfer will report an error if none is available.",
+  "apkConfirmShare": "CONTINUE",
+  "apkPreparing": "Preparing a safe APK copy…",
+  "apkSplitUnavailable": "This installation uses split APKs. Sharing only the base APK would create an incomplete installer, so HearthBit will not share it. Offer the GitHub link instead.",
+  "apkUnsupported": "Sharing an installed APK is only available on Android.",
+  "apkShareError": "Could not prepare or share the APK: {error}",
+  "@apkShareError": {"placeholders": {"error": {"type": "String"}}},
+  "apkShareMessage": "HearthBit Android installer. Android requires permission to install from this source. A differently signed APK cannot update an existing installation; verify the source and signature first.",
+  "apkOfferSent": "APK offered to {peer}. The transfer will show an error if no suitable high-speed transport is available.",
+  "@apkOfferSent": {"placeholders": {"peer": {"type": "String"}}}
 }

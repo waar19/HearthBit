@@ -2060,6 +2060,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pause voice note'**
   String get voicePause;
+
+  /// No description provided for @shareApkButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Share installed APK'**
+  String get shareApkButton;
+
+  /// No description provided for @sendApkToPeer.
+  ///
+  /// In en, this message translates to:
+  /// **'Send HearthBit APK'**
+  String get sendApkToPeer;
+
+  /// No description provided for @apkSafetyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Share the Android installer?'**
+  String get apkSafetyTitle;
+
+  /// No description provided for @apkSendToPeerWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'{peer} will receive the HearthBit Android installer.'**
+  String apkSendToPeerWarning(String peer);
+
+  /// No description provided for @apkInstallWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'The recipient must allow app installation from the receiving source in Android settings. HearthBit will not install anything automatically.'**
+  String get apkInstallWarning;
+
+  /// No description provided for @apkSignatureWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'An APK signed with a different key cannot update the installed app. Verify the source and signature before installing.'**
+  String get apkSignatureWarning;
+
+  /// No description provided for @apkTransportWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'APK transfer does not use BLE. It requires local Wi-Fi, Nearby or Wi-Fi Aware; the transfer will report an error if none is available.'**
+  String get apkTransportWarning;
+
+  /// No description provided for @apkConfirmShare.
+  ///
+  /// In en, this message translates to:
+  /// **'CONTINUE'**
+  String get apkConfirmShare;
+
+  /// No description provided for @apkPreparing.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing a safe APK copy…'**
+  String get apkPreparing;
+
+  /// No description provided for @apkSplitUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This installation uses split APKs. Sharing only the base APK would create an incomplete installer, so HearthBit will not share it. Offer the GitHub link instead.'**
+  String get apkSplitUnavailable;
+
+  /// No description provided for @apkUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Sharing an installed APK is only available on Android.'**
+  String get apkUnsupported;
+
+  /// No description provided for @apkShareError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not prepare or share the APK: {error}'**
+  String apkShareError(String error);
+
+  /// No description provided for @apkShareMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'HearthBit Android installer. Android requires permission to install from this source. A differently signed APK cannot update an existing installation; verify the source and signature first.'**
+  String get apkShareMessage;
+
+  /// No description provided for @apkOfferSent.
+  ///
+  /// In en, this message translates to:
+  /// **'APK offered to {peer}. The transfer will show an error if no suitable high-speed transport is available.'**
+  String apkOfferSent(String peer);
 }
 
 class _AppLocalizationsDelegate

@@ -1101,4 +1101,56 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get voicePause => '暂停语音消息';
+
+  @override
+  String get shareApkButton => '分享已安装的 APK';
+
+  @override
+  String get sendApkToPeer => '发送 HearthBit APK';
+
+  @override
+  String get apkSafetyTitle => '分享 Android 安装程序？';
+
+  @override
+  String apkSendToPeerWarning(String peer) {
+    return '$peer 将收到 HearthBit Android 安装程序。';
+  }
+
+  @override
+  String get apkInstallWarning =>
+      '接收方必须在 Android 设置中允许从接收来源安装应用。HearthBit 不会自动安装任何内容。';
+
+  @override
+  String get apkSignatureWarning => '使用不同密钥签名的 APK 无法更新已安装的应用。安装前请验证来源和签名。';
+
+  @override
+  String get apkTransportWarning =>
+      'APK 不通过 BLE 传输。它需要本地 Wi-Fi、Nearby 或 Wi-Fi Aware；如果均不可用，传输将报告错误。';
+
+  @override
+  String get apkConfirmShare => '继续';
+
+  @override
+  String get apkPreparing => '正在准备安全的 APK 副本…';
+
+  @override
+  String get apkSplitUnavailable =>
+      '此安装使用拆分 APK。仅分享基础 APK 会产生不完整的安装程序，因此 HearthBit 不会分享它。请改为提供 GitHub 链接。';
+
+  @override
+  String get apkUnsupported => '仅 Android 支持分享已安装的 APK。';
+
+  @override
+  String apkShareError(String error) {
+    return '无法准备或分享 APK：$error';
+  }
+
+  @override
+  String get apkShareMessage =>
+      'HearthBit Android 安装程序。Android 要求允许从此来源安装。签名不同的 APK 无法更新现有安装；请先验证来源和签名。';
+
+  @override
+  String apkOfferSent(String peer) {
+    return '已向 $peer 提供 APK。如果没有合适的高速传输方式，传输将显示错误。';
+  }
 }

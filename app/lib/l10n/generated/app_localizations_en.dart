@@ -1160,4 +1160,58 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get voicePause => 'Pause voice note';
+
+  @override
+  String get shareApkButton => 'Share installed APK';
+
+  @override
+  String get sendApkToPeer => 'Send HearthBit APK';
+
+  @override
+  String get apkSafetyTitle => 'Share the Android installer?';
+
+  @override
+  String apkSendToPeerWarning(String peer) {
+    return '$peer will receive the HearthBit Android installer.';
+  }
+
+  @override
+  String get apkInstallWarning =>
+      'The recipient must allow app installation from the receiving source in Android settings. HearthBit will not install anything automatically.';
+
+  @override
+  String get apkSignatureWarning =>
+      'An APK signed with a different key cannot update the installed app. Verify the source and signature before installing.';
+
+  @override
+  String get apkTransportWarning =>
+      'APK transfer does not use BLE. It requires local Wi-Fi, Nearby or Wi-Fi Aware; the transfer will report an error if none is available.';
+
+  @override
+  String get apkConfirmShare => 'CONTINUE';
+
+  @override
+  String get apkPreparing => 'Preparing a safe APK copy…';
+
+  @override
+  String get apkSplitUnavailable =>
+      'This installation uses split APKs. Sharing only the base APK would create an incomplete installer, so HearthBit will not share it. Offer the GitHub link instead.';
+
+  @override
+  String get apkUnsupported =>
+      'Sharing an installed APK is only available on Android.';
+
+  @override
+  String apkShareError(String error) {
+    return 'Could not prepare or share the APK: $error';
+  }
+
+  @override
+  String get apkShareMessage =>
+      'HearthBit Android installer. Android requires permission to install from this source. A differently signed APK cannot update an existing installation; verify the source and signature first.';
+
+  @override
+  String apkOfferSent(String peer) {
+    return 'APK offered to $peer. The transfer will show an error if no suitable high-speed transport is available.';
+  }
 }

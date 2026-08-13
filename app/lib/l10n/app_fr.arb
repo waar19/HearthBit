@@ -355,5 +355,19 @@
   "voiceTooLong": "Les messages vocaux sont limités à 20 secondes.",
   "voiceUnsupported": "Les messages vocaux nécessitent HearthBit chez le destinataire.",
   "voicePlay": "Lire le message vocal",
-  "voicePause": "Mettre en pause"
+  "voicePause": "Mettre en pause",
+  "shareApkButton": "Partager l’APK installée",
+  "sendApkToPeer": "Envoyer l’APK HearthBit",
+  "apkSafetyTitle": "Partager l’installateur Android ?",
+  "apkSendToPeerWarning": "{peer} recevra l’installateur Android de HearthBit.",
+  "apkInstallWarning": "Le destinataire devra autoriser l’installation d’applications depuis la source de réception dans les réglages Android. HearthBit n’installera rien automatiquement.",
+  "apkSignatureWarning": "Une APK signée avec une autre clé ne peut pas mettre à jour l’application installée. Vérifiez la source et la signature avant l’installation.",
+  "apkTransportWarning": "L’APK n’est pas transférée par BLE. Elle nécessite le Wi-Fi local, Nearby ou Wi-Fi Aware ; le transfert signalera une erreur si aucun n’est disponible.",
+  "apkConfirmShare": "CONTINUER",
+  "apkPreparing": "Préparation d’une copie sûre de l’APK…",
+  "apkSplitUnavailable": "Cette installation utilise des APK fractionnées. Partager uniquement l’APK de base produirait un installateur incomplet ; HearthBit ne la partagera donc pas. Proposez plutôt le lien GitHub.",
+  "apkUnsupported": "Le partage de l’APK installée est disponible uniquement sur Android.",
+  "apkShareError": "Impossible de préparer ou partager l’APK : {error}",
+  "apkShareMessage": "Installateur HearthBit pour Android. Android exige d’autoriser les installations depuis cette source. Une APK signée différemment ne peut pas mettre à jour une installation existante ; vérifiez d’abord la source et la signature.",
+  "apkOfferSent": "APK proposée à {peer}. Le transfert signalera une erreur si aucun transport rapide adapté n’est disponible."
 }

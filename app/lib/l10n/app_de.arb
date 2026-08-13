@@ -355,5 +355,19 @@
   "voiceTooLong": "Sprachnachrichten sind auf 20 Sekunden begrenzt.",
   "voiceUnsupported": "Sprachnachrichten erfordern HearthBit beim Empfänger.",
   "voicePlay": "Sprachnachricht abspielen",
-  "voicePause": "Sprachnachricht pausieren"
+  "voicePause": "Sprachnachricht pausieren",
+  "shareApkButton": "Installierte APK teilen",
+  "sendApkToPeer": "HearthBit-APK senden",
+  "apkSafetyTitle": "Android-Installationsdatei teilen?",
+  "apkSendToPeerWarning": "{peer} erhält die Android-Installationsdatei von HearthBit.",
+  "apkInstallWarning": "Der Empfänger muss in den Android-Einstellungen die Installation aus der empfangenden Quelle erlauben. HearthBit installiert nichts automatisch.",
+  "apkSignatureWarning": "Eine mit einem anderen Schlüssel signierte APK kann die installierte App nicht aktualisieren. Quelle und Signatur vor der Installation prüfen.",
+  "apkTransportWarning": "Die APK wird nicht über BLE übertragen. Sie benötigt lokales WLAN, Nearby oder Wi-Fi Aware; falls nichts davon verfügbar ist, meldet die Übertragung einen Fehler.",
+  "apkConfirmShare": "WEITER",
+  "apkPreparing": "Sichere APK-Kopie wird vorbereitet…",
+  "apkSplitUnavailable": "Diese Installation verwendet geteilte APKs. Nur die Basis-APK wäre unvollständig und wird daher nicht geteilt. Biete stattdessen den GitHub-Link an.",
+  "apkUnsupported": "Das Teilen der installierten APK ist nur unter Android verfügbar.",
+  "apkShareError": "APK konnte nicht vorbereitet oder geteilt werden: {error}",
+  "apkShareMessage": "HearthBit-Installationsdatei für Android. Android verlangt die Freigabe dieser Installationsquelle. Eine anders signierte APK kann eine vorhandene Installation nicht aktualisieren; Quelle und Signatur zuerst prüfen.",
+  "apkOfferSent": "APK wurde {peer} angeboten. Die Übertragung meldet einen Fehler, wenn kein geeigneter schneller Transport verfügbar ist."
 }

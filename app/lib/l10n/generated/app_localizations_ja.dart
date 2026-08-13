@@ -1122,4 +1122,57 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get voicePause => '音声メモを一時停止';
+
+  @override
+  String get shareApkButton => 'インストール済みAPKを共有';
+
+  @override
+  String get sendApkToPeer => 'HearthBit APKを送信';
+
+  @override
+  String get apkSafetyTitle => 'Androidインストーラーを共有しますか？';
+
+  @override
+  String apkSendToPeerWarning(String peer) {
+    return '$peer にHearthBitのAndroidインストーラーを送信します。';
+  }
+
+  @override
+  String get apkInstallWarning =>
+      '受信者はAndroid設定で、受信に使用した提供元からのアプリのインストールを許可する必要があります。HearthBitが自動的にインストールすることはありません。';
+
+  @override
+  String get apkSignatureWarning =>
+      '異なる鍵で署名されたAPKは、インストール済みアプリを更新できません。インストール前に提供元と署名を確認してください。';
+
+  @override
+  String get apkTransportWarning =>
+      'APK転送にBLEは使用しません。ローカルWi-Fi、Nearby、またはWi-Fi Awareが必要です。利用できない場合は転送エラーが表示されます。';
+
+  @override
+  String get apkConfirmShare => '続行';
+
+  @override
+  String get apkPreparing => '安全なAPKコピーを準備しています…';
+
+  @override
+  String get apkSplitUnavailable =>
+      'このインストールは分割APKを使用しています。ベースAPKだけでは不完全なため、HearthBitは共有しません。代わりにGitHubリンクを案内してください。';
+
+  @override
+  String get apkUnsupported => 'インストール済みAPKの共有はAndroidでのみ利用できます。';
+
+  @override
+  String apkShareError(String error) {
+    return 'APKを準備または共有できませんでした：$error';
+  }
+
+  @override
+  String get apkShareMessage =>
+      'HearthBit Androidインストーラーです。Androidでは、この提供元からのインストール許可が必要です。署名が異なるAPKは既存のインストールを更新できないため、先に提供元と署名を確認してください。';
+
+  @override
+  String apkOfferSent(String peer) {
+    return '$peer にAPKを提案しました。適切な高速転送経路がない場合はエラーが表示されます。';
+  }
 }

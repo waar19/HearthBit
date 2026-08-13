@@ -1169,4 +1169,58 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get voicePause => 'Pausar nota de voz';
+
+  @override
+  String get shareApkButton => 'Compartir APK instalado';
+
+  @override
+  String get sendApkToPeer => 'Enviar APK de HearthBit';
+
+  @override
+  String get apkSafetyTitle => '¿Compartir el instalador de Android?';
+
+  @override
+  String apkSendToPeerWarning(String peer) {
+    return '$peer recibirá el instalador de HearthBit para Android.';
+  }
+
+  @override
+  String get apkInstallWarning =>
+      'El receptor deberá permitir la instalación de aplicaciones desde la fuente receptora en los ajustes de Android. HearthBit no instalará nada automáticamente.';
+
+  @override
+  String get apkSignatureWarning =>
+      'Un APK firmado con una clave diferente no puede actualizar la aplicación instalada. Verifica el origen y la firma antes de instalarlo.';
+
+  @override
+  String get apkTransportWarning =>
+      'El APK no se transfiere por BLE. Requiere Wi-Fi local, Nearby o Wi-Fi Aware; la transferencia informará un error si ninguno está disponible.';
+
+  @override
+  String get apkConfirmShare => 'CONTINUAR';
+
+  @override
+  String get apkPreparing => 'Preparando una copia segura del APK…';
+
+  @override
+  String get apkSplitUnavailable =>
+      'Esta instalación usa APK divididos. Compartir solo el APK base produciría un instalador incompleto, por lo que HearthBit no lo compartirá. Ofrece en su lugar el enlace de GitHub.';
+
+  @override
+  String get apkUnsupported =>
+      'Compartir el APK instalado solo está disponible en Android.';
+
+  @override
+  String apkShareError(String error) {
+    return 'No se pudo preparar o compartir el APK: $error';
+  }
+
+  @override
+  String get apkShareMessage =>
+      'Instalador de HearthBit para Android. Android exige permitir instalaciones desde esta fuente. Un APK con firma distinta no puede actualizar una instalación existente; verifica primero el origen y la firma.';
+
+  @override
+  String apkOfferSent(String peer) {
+    return 'APK ofrecido a $peer. La transferencia mostrará un error si no hay un transporte rápido adecuado.';
+  }
 }

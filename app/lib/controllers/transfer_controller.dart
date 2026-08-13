@@ -36,12 +36,22 @@ class TransferController extends ChangeNotifier {
   static const Duration offerLifetime = Duration(minutes: 10);
   static const Duration priorityHold = Duration(seconds: 20);
   static const String voiceNoteMimeType = 'audio/x-hearthbit-voice';
+  static const String androidPackageMimeType =
+      'application/vnd.android.package-archive';
 
   static bool isInlineVoiceNote({
     required String mimeType,
     required int bytes,
   }) =>
       mimeType == voiceNoteMimeType && bytes > 0 && bytes <= voiceNoteMaxBytes;
+
+  static bool allowsBleTransfer({
+    required String mimeType,
+    required int bytes,
+  }) =>
+      mimeType != androidPackageMimeType &&
+      bytes > 0 &&
+      bytes <= bleMaxInlineBytes;
 
   /// Feature flag: Wi-Fi Aware es progresivo y puede desactivarse sin tocar
   /// el resto de transportes. QUIC sobre el data path queda para el futuro.
@@ -112,14 +122,17 @@ class TransferController extends ChangeNotifier {
     final idHex = _hex(transferId);
     final keyPair = await TransferCrypto.generateEphemeralKeyPair();
     final sha256Hex = await TransferCrypto.hashFile(file);
-    final chunkSize = fileSize <= bleMaxInlineBytes
-        ? bleChunkSize
-        : defaultChunkSize;
+    final resolvedMimeType = mimeType ?? _guessMime(fileName);
+    final allowsBle = allowsBleTransfer(
+      mimeType: resolvedMimeType,
+      bytes: fileSize,
+    );
+    final chunkSize = allowsBle ? bleChunkSize : defaultChunkSize;
 
     var transports = TransferProtocol.transportLan;
     if (nearbySupported) transports |= TransferProtocol.transportNearby;
     if (wifiAwareSupported) transports |= TransferProtocol.transportWifiAware;
-    if (fileSize <= bleMaxInlineBytes) {
+    if (allowsBle) {
       transports |= TransferProtocol.transportBle;
     }
 
@@ -129,7 +142,7 @@ class TransferController extends ChangeNotifier {
       peerNickname: peer.nickname,
       direction: TransferDirection.outgoing,
       fileName: sanitizeFileName(fileName),
-      mimeType: mimeType ?? _guessMime(fileName),
+      mimeType: resolvedMimeType,
       fileSize: fileSize,
       sha256Hex: sha256Hex,
       chunkSize: chunkSize,
@@ -1142,6 +1155,7 @@ class TransferController extends ChangeNotifier {
       '.pdf' => 'application/pdf',
       '.txt' => 'text/plain',
       '.zip' => 'application/zip',
+      '.apk' => androidPackageMimeType,
       _ => 'application/octet-stream',
     };
   }

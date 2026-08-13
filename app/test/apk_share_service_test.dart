@@ -26,10 +26,7 @@ void main() {
 
   test('no presenta una instalación split como APK compartible', () async {
     final service = ApkShareService(
-      prepare: () async => {
-        'status': 'splitInstallation',
-        'splitCount': 3,
-      },
+      prepare: () async => {'status': 'splitInstallation', 'splitCount': 3},
     );
 
     final result = await service.prepareInstalledApk();

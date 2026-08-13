@@ -81,6 +81,7 @@ class MainActivity : FlutterActivity() {
                         ),
                     ),
                 )
+                "getInstalledApkForShare" -> prepareInstalledApk(result)
                 "requestPermissions" -> requestMeshPermissions(result)
                 "startMesh" -> {
                     ContextCompat.startForegroundService(
@@ -384,6 +385,24 @@ class MainActivity : FlutterActivity() {
         if (!packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_AWARE)) return false
         val manager = getSystemService(WifiAwareManager::class.java)
         return manager?.isAvailable == true
+    }
+
+    private fun prepareInstalledApk(result: MethodChannel.Result) {
+        Thread {
+            runCatching {
+                InstalledApkSharePreparer(applicationContext).prepare()
+            }.onSuccess { prepared ->
+                runOnUiThread { result.success(prepared) }
+            }.onFailure { error ->
+                runOnUiThread {
+                    result.error(
+                        "apk_share_error",
+                        error.message ?: "Could not prepare the installed APK",
+                        null,
+                    )
+                }
+            }
+        }.start()
     }
 
     /**

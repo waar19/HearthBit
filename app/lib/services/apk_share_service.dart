@@ -3,8 +3,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
-typedef ApkPreparationInvoker =
-    Future<Map<Object?, Object?>?> Function();
+typedef ApkPreparationInvoker = Future<Map<Object?, Object?>?> Function();
 typedef ApkShareInvoker = Future<ShareResult> Function(ShareParams params);
 
 enum ApkPreparationStatus { ready, splitInstallation, unsupported, failed }
@@ -68,11 +67,9 @@ class ApkSharePreparation {
 }
 
 class ApkShareService {
-  ApkShareService({
-    ApkPreparationInvoker? prepare,
-    ApkShareInvoker? share,
-  }) : _prepare = prepare ?? _prepareFromPlatform,
-       _share = share ?? SharePlus.instance.share;
+  ApkShareService({ApkPreparationInvoker? prepare, ApkShareInvoker? share})
+    : _prepare = prepare ?? _prepareFromPlatform,
+      _share = share ?? SharePlus.instance.share;
 
   static const androidPackageMimeType =
       'application/vnd.android.package-archive';
@@ -96,9 +93,7 @@ class ApkShareService {
     } on MissingPluginException {
       return const ApkSharePreparation.unsupported();
     } on PlatformException catch (error) {
-      return ApkSharePreparation.failed(
-        error.message ?? error.code,
-      );
+      return ApkSharePreparation.failed(error.message ?? error.code);
     }
   }
 
@@ -116,12 +111,7 @@ class ApkShareService {
         : anchor.localToGlobal(Offset.zero) & anchor.size;
     return _share(
       ShareParams(
-        files: [
-          XFile(
-            preparation.path!,
-            mimeType: androidPackageMimeType,
-          ),
-        ],
+        files: [XFile(preparation.path!, mimeType: androidPackageMimeType)],
         text: message,
         subject: subject,
         title: subject,
