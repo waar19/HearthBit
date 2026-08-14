@@ -27,6 +27,9 @@ cambiarlo a `PASS`, `FAIL` o `BLOCKED`.
   calibración, pérdida de señal y texto al 200 % sin colapso de layout.
 - `P0-BATTERY-24H`: malla activa 24 horas en Android e iOS, registrando batería,
   memoria, duty-cycle BLE y estabilidad sin contenido ni identificadores.
+- `P0-IOS-MESH-RESTART`: en un iPhone con Bluetooth ya encendido, activar,
+  detener y reactivar la malla varias veces sin alternar Bluetooth; cada ciclo
+  debe abandonar «Iniciando» y llegar a «Malla activa».
 - `P0-PANIC-WIPE`: borrar sin matar el proceso y verificar identidad nueva,
   bases, colas, grupos, claves, gateways y diagnósticos vacíos.
 - `P0-OPTICAL-TRUST`: firma válida conocida, firma alterada rechazada, emisor
@@ -55,6 +58,23 @@ reales.
 La interoperabilidad HearthBit↔BitChat con hardware real (pasos 2-5) es una
 prueba manual obligatoria antes de declarar compatibilidad física; los tests
 binarios automatizados no la sustituyen.
+
+### Reactivación de la malla en iPhone
+
+Estado: `PENDING` hasta disponer de Mac con Xcode y un iPhone físico.
+
+1. Abra HearthBit con Bluetooth encendido y active la malla; espere «Malla
+   activa».
+2. Pulse «DETENER», espere el estado detenido y vuelva a activar sin apagar
+   Bluetooth ni cerrar la app.
+3. Repita el ciclo cinco veces, incluyendo una pasada después de enviar la app
+   a segundo plano y recuperarla.
+4. Registre el tiempo desde «Iniciando» hasta «Malla activa» y los estados de
+   `CBCentralManager` y `CBPeripheralManager`, sin guardar identificadores.
+
+**PASS:** los cinco ciclos llegan a «Malla activa» sin alternar Bluetooth.
+**FAIL:** un ciclo queda en «Iniciando», necesita alternar Bluetooth o duplica
+servicios/anuncios.
 
 ## D1 — guion reproducible pendiente de ejecución física
 

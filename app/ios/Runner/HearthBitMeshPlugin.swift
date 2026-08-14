@@ -959,6 +959,15 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     refreshPowerState(emitEvent: false)
     emitStatus("starting")
     initializeBluetoothRestoration()
+    // Los managers sobreviven a stopInternal(). Si ya están encendidos, sus
+    // callbacks de cambio de estado no volverán a ejecutarse al reactivar.
+    if peripheralManager?.state == .poweredOn {
+      configurePeripheralMode()
+    }
+    if central?.state == .poweredOn {
+      restartScan()
+      reconnectKnownPeripherals()
+    }
     if lifecycleObservers.isEmpty {
       let center = NotificationCenter.default
       lifecycleObservers = [
