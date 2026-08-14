@@ -522,7 +522,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get aboutBody =>
-      'HearthBit はオープンソースの緊急通信プロジェクトです。ご支援は実機テストと堅牢な中継ハードウェアの開発に役立ちます。';
+      'HearthBit は、プライバシーと安全性を監査できる source-available の緊急通信プロジェクトです。非商用利用はライセンスされ、商用利用には許可が必要です。';
 
   @override
   String aboutVersion(String version) {
@@ -540,7 +540,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String shareInviteMessage(String url) {
-    return 'インターネットなしで動作するオープンソースの緊急メッシュ、HearthBit に参加してください。ダウンロードまたは貢献はこちら: $url';
+    return 'インターネットなしで動作し、公開監査できる緊急メッシュ HearthBit に参加してください。ダウンロードまたは貢献はこちら: $url';
   }
 
   @override

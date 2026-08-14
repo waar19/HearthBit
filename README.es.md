@@ -107,7 +107,9 @@ límites de privacidad, limitaciones y procedimientos de validación. Empieza po
 Que el código sea visible no significa que todos los componentes tengan la
 misma licencia. El código de terceros y los submódulos conservan sus propios
 términos. Los reportes de seguridad no deben publicar identidades, ubicaciones
-precisas ni mensajes reales de emergencia.
+precisas ni mensajes reales de emergencia y deben seguir
+[SECURITY.md](SECURITY.md). Los aportes siguen
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Licencias
 

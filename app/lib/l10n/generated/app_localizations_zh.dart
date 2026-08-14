@@ -509,7 +509,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aboutTitle => '关于 HearthBit';
 
   @override
-  String get aboutBody => 'HearthBit 是一个开源应急通信项目。您的支持将帮助我们进行真机测试并开发可靠的中继硬件。';
+  String get aboutBody =>
+      'HearthBit 是一个源代码可见的应急通信项目，代码公开用于隐私和安全审查。非商业使用按许可证授权；商业使用需要许可。';
 
   @override
   String aboutVersion(String version) {
@@ -527,7 +528,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String shareInviteMessage(String url) {
-    return '加入 HearthBit：一个无需互联网即可工作的开源应急网状网络。下载或参与贡献：$url';
+    return '加入 HearthBit：一个无需互联网、可公开审查的应急网状网络。下载或参与贡献：$url';
   }
 
   @override

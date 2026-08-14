@@ -1008,7 +1008,7 @@ abstract class AppLocalizations {
   /// No description provided for @aboutBody.
   ///
   /// In en, this message translates to:
-  /// **'HearthBit is an open-source emergency communication project. Your support helps fund device testing and resilient relay hardware.'**
+  /// **'HearthBit is a source-available emergency communication project, public for privacy and security review. Noncommercial use is licensed; commercial use requires permission.'**
   String get aboutBody;
 
   /// No description provided for @aboutVersion.
@@ -1038,7 +1038,7 @@ abstract class AppLocalizations {
   /// No description provided for @shareInviteMessage.
   ///
   /// In en, this message translates to:
-  /// **'Join HearthBit, an open-source emergency mesh that works without internet. Download it or contribute at {url}'**
+  /// **'Join HearthBit, a publicly auditable emergency mesh that works without internet. Download it or contribute at {url}'**
   String shareInviteMessage(String url);
 
   /// No description provided for @tooltipShare.

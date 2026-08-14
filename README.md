@@ -106,7 +106,9 @@ validation procedures in the public repository. Start with
 
 Source visibility does not mean every component has the same license. Vendored
 code and Git submodules keep their original terms. Security reports should
-avoid publishing live identities, precise locations or emergency messages.
+avoid publishing live identities, precise locations or emergency messages and
+must follow [SECURITY.md](SECURITY.md). Contributions follow
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 Protocol references: [pinned BitChat core profile](docs/bitchat-core-profile.md)
 and [HearthBit extension registry](docs/extension-registry.md).

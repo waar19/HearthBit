@@ -540,7 +540,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get aboutBody =>
-      'HearthBit ist ein quelloffenes Projekt für Notfallkommunikation. Deine Unterstützung finanziert Gerätetests und robuste Relais-Hardware.';
+      'HearthBit ist ein source-available Notfallprojekt, dessen Code zur Datenschutz- und Sicherheitsprüfung einsehbar ist. Nichtkommerzielle Nutzung ist lizenziert; kommerzielle Nutzung erfordert eine Genehmigung.';
 
   @override
   String aboutVersion(String version) {
@@ -558,7 +558,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String shareInviteMessage(String url) {
-    return 'Mach bei HearthBit mit, einem quelloffenen Notfallnetz, das ohne Internet funktioniert. Lade es herunter oder hilf mit unter $url';
+    return 'Mach bei HearthBit mit, einem öffentlich prüfbaren Notfallnetz ohne Internet. Lade es herunter oder hilf mit unter $url';
   }
 
   @override

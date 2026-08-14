@@ -1,5 +1,11 @@
 # Validación del radar y medición de distancia
 
+[English](radar-ranging-validation.en.md) · **Español** ·
+[Deutsch](radar-ranging-validation.de.md) ·
+[Français](radar-ranging-validation.fr.md) ·
+[简体中文](radar-ranging-validation.zh.md) ·
+[日本語](radar-ranging-validation.ja.md)
+
 ## Alcance y seguridad
 
 HearthBit combina varias fuentes, pero ninguna sustituye el criterio del equipo
