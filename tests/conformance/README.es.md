@@ -93,9 +93,8 @@ presentar una prueba de otro lenguaje como capacidad del firmware.
 
 ## Integración continua
 
-El workflow móvil ya ejecuta todos los tests Dart y Kotlin. El job
-`conformance` añadido ejecuta pytest. La comprobación del header C permanece en
-el script local porque firmware es un submódulo y su cambio debe publicarse con
-su propio commit antes de actualizar el puntero del repositorio principal.
-XCTest queda listo para macOS, pero no se añadió al workflow de compilación iOS
-para no introducir una dependencia frágil de un modelo concreto de simulador.
+El workflow móvil ejecuta todos los tests Dart, Kotlin y Python, comprueba el
+header C generado, compila las variantes TV y Automotive y ejecuta XCTest en
+el primer simulador iPhone disponible por identificador. La selección dinámica
+evita depender del nombre de un modelo concreto. El self-test del firmware aún
+requiere ESP-IDF y hardware físico antes de una publicación.

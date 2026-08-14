@@ -136,80 +136,94 @@ class _TransferCardState extends State<_TransferCard> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final incoming = record.direction == TransferDirection.incoming;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  incoming
-                      ? Icons.file_download_outlined
-                      : Icons.file_upload_outlined,
-                  color: scheme.primary,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        record.fileName,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        '${incoming ? context.l10n.transferFrom(record.peerNickname) : context.l10n.transferTo(record.peerNickname)} · '
-                        '${_formatBytes(record.fileSize)}'
-                        '${record.transport != null ? " · ${_transportLabel(context, record.transport!)}" : ""}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+    return Semantics(
+      container: true,
+      liveRegion: record.isActive,
+      label:
+          '${record.fileName}, ${_stateLabel(context, record.state)}, '
+          '${_formatBytes(record.bytesDone)} ${_formatBytes(record.fileSize)}',
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 10),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    incoming
+                        ? Icons.file_download_outlined
+                        : Icons.file_upload_outlined,
+                    color: scheme.primary,
                   ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          record.fileName,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          '${incoming ? context.l10n.transferFrom(record.peerNickname) : context.l10n.transferTo(record.peerNickname)} · '
+                          '${_formatBytes(record.fileSize)}'
+                          '${record.transport != null ? " · ${_transportLabel(context, record.transport!)}" : ""}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!largeText) _StateChip(state: record.state),
+                ],
+              ),
+              if (largeText)
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: _StateChip(state: record.state),
                 ),
-                _StateChip(state: record.state),
+              if (record.state == TransferState.connecting ||
+                  record.state == TransferState.transferring) ...[
+                const SizedBox(height: 10),
+                LinearProgressIndicator(
+                  value: record.state == TransferState.transferring
+                      ? record.progress
+                      : null,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${context.l10n.transferProgress(_formatBytes(record.bytesDone), _formatBytes(record.fileSize))}'
+                  '${_speedBps > 0 ? " · ${_formatBytes(_speedBps.round())}/s" : ""}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ],
-            ),
-            if (record.state == TransferState.connecting ||
-                record.state == TransferState.transferring) ...[
-              const SizedBox(height: 10),
-              LinearProgressIndicator(
-                value: record.state == TransferState.transferring
-                    ? record.progress
-                    : null,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${context.l10n.transferProgress(_formatBytes(record.bytesDone), _formatBytes(record.fileSize))}'
-                '${_speedBps > 0 ? " · ${_formatBytes(_speedBps.round())}/s" : ""}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-            if (record.error != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                record.error!,
-                style: TextStyle(color: scheme.error, fontSize: 12),
-              ),
-            ],
-            if (record.state == TransferState.completed &&
-                incoming &&
-                record.filePath != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                context.l10n.transferSavedAt(record.filePath!),
-                style: Theme.of(context).textTheme.bodySmall,
+              if (record.error != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  record.error!,
+                  style: TextStyle(color: scheme.error, fontSize: 12),
+                ),
+              ],
+              if (record.state == TransferState.completed &&
+                  incoming &&
+                  record.filePath != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  context.l10n.transferSavedAt(record.filePath!),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.end,
+                runSpacing: 4,
+                children: _actions(context),
               ),
             ],
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: _actions(context),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -245,6 +259,19 @@ class _TransferCardState extends State<_TransferCard> {
       ),
     ];
   }
+}
+
+String _stateLabel(BuildContext context, TransferState state) {
+  final l10n = context.l10n;
+  return switch (state) {
+    TransferState.offered => l10n.stateOffered,
+    TransferState.connecting => l10n.stateConnecting,
+    TransferState.transferring => l10n.stateTransferring,
+    TransferState.completed => l10n.stateCompleted,
+    TransferState.rejected => l10n.stateRejected,
+    TransferState.cancelled => l10n.stateCancelled,
+    TransferState.failed => l10n.stateFailed,
+  };
 }
 
 class _StateChip extends StatelessWidget {

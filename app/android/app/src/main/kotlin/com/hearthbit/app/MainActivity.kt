@@ -21,6 +21,7 @@ import com.google.android.gms.common.GoogleApiAvailability
 import com.hearthbit.app.mesh.AdaptivePowerPolicy
 import com.hearthbit.app.mesh.MeshForegroundService
 import com.hearthbit.app.mesh.MeshRuntime
+import com.hearthbit.app.mesh.RescueModeStore
 import com.hearthbit.app.transfer.NearbyTransport
 import com.hearthbit.app.transfer.WifiAwareTransport
 import io.flutter.embedding.android.FlutterActivity
@@ -124,6 +125,32 @@ class MainActivity : FlutterActivity() {
                     )
                     result.success(null)
                 }
+                "getRescueModeState" -> runMethod(result) {
+                    RescueModeStore(this).read().asMap()
+                }
+                "configureRescueMode" -> runMethod(result) {
+                    val store = RescueModeStore(this)
+                    val active = call.argument<Boolean>("active") == true
+                    val state = if (active) {
+                        store.configure(
+                            description = call.argument<String>("description").orEmpty(),
+                            startedAt = call.argument<Number>("startedAt")?.toLong() ?: 0L,
+                            lastPingAt = call.argument<Number>("lastPingAt")?.toLong() ?: 0L,
+                            expiresAt = call.argument<Number>("expiresAt")?.toLong() ?: 0L,
+                            intervalMs = call.argument<Number>("intervalMs")?.toLong()
+                                ?: 120_000L,
+                        )
+                    } else {
+                        store.disable()
+                        store.read()
+                    }
+                    ContextCompat.startForegroundService(
+                        this,
+                        Intent(this, MeshForegroundService::class.java)
+                            .setAction(MeshForegroundService.ACTION_RESCUE_CHANGED),
+                    )
+                    state.asMap()
+                }
                 "configureLanBridge" -> runMethod(result) {
                     MeshRuntime.engine(this).configureLanBridge(
                         enabled = call.argument<Boolean>("enabled") == true,
@@ -167,6 +194,18 @@ class MainActivity : FlutterActivity() {
                         call.argument<String>("content").orEmpty(),
                         call.argument<Double>("latitude"),
                         call.argument<Double>("longitude"),
+                    )
+                }
+                "sendEmergency" -> runMethod(result) {
+                    MeshRuntime.engine(this).sendEmergency(
+                        messageId = requireNotNull(call.argument<String>("messageId")),
+                        content = requireNotNull(call.argument<String>("content")),
+                        channel = requireNotNull(call.argument<String>("channel")),
+                    )
+                }
+                "retryEmergency" -> runMethod(result) {
+                    MeshRuntime.engine(this).retryEmergency(
+                        requireNotNull(call.argument<String>("canonicalHash")),
                     )
                 }
                 "setNickname" -> runMethod(result) {
@@ -218,8 +257,7 @@ class MainActivity : FlutterActivity() {
                 }
                 "panicWipe" -> runMethod(result) {
                     MeshRuntime.engine(this).panicWipe()
-                    MeshRuntime.destroy()
-                    null
+                    MeshRuntime.stateSnapshot()
                 }
                 "startRadar" -> runMethod(result) {
                     MeshRuntime.engine(this).startRadar(

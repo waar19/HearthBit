@@ -54,6 +54,8 @@ class AcousticSonarDsp {
   static const Duration chirpDuration = Duration(milliseconds: 60);
   static const double startFrequencyHz = 15500;
   static const double endFrequencyHz = 19500;
+  static final int chirpSampleCount =
+      (sampleRate * chirpDuration.inMicroseconds / 1000000).round();
 
   static Float64List generateChirp({
     int rate = sampleRate,
@@ -232,6 +234,86 @@ class AcousticSonarDsp {
   }
 }
 
+/// Decodifica PCM16 de forma incremental en un buffer circular acotado.
+///
+/// Evita conservar toda la grabación y mantiene constante la memoria aun si
+/// el plugin de audio continúa produciendo datos más tiempo del previsto.
+class AcousticSonarStreamAnalyzer {
+  static const int maximumChunkBytes = 8192;
+  static const int maximumBufferedSeconds = 8;
+
+  final Float32List _samples = Float32List(
+    AcousticSonarDsp.sampleRate * maximumBufferedSeconds,
+  );
+  int _writeIndex = 0;
+  int _sampleCount = 0;
+  int _peakBufferedBytes = 0;
+  int? _pendingByte;
+
+  int get peakBufferedBytes => _peakBufferedBytes;
+
+  void add(Uint8List bytes) {
+    var offset = 0;
+    while (offset < bytes.length) {
+      final end = math.min(offset + maximumChunkBytes, bytes.length);
+      _addBounded(bytes.sublist(offset, end));
+      offset = end;
+    }
+  }
+
+  void _addBounded(Uint8List bytes) {
+    final merged = Uint8List(bytes.length + (_pendingByte == null ? 0 : 1));
+    var targetOffset = 0;
+    if (_pendingByte case final pending?) {
+      merged[0] = pending;
+      targetOffset = 1;
+      _pendingByte = null;
+    }
+    merged.setRange(targetOffset, merged.length, bytes);
+    var alignedLength = merged.length;
+    if (alignedLength.isOdd) {
+      _pendingByte = merged.last;
+      alignedLength -= 1;
+    }
+    if (alignedLength == 0) return;
+    final data = ByteData.sublistView(merged, 0, alignedLength);
+    for (var offset = 0; offset < alignedLength; offset += 2) {
+      _samples[_writeIndex] = data.getInt16(offset, Endian.little) / 32768;
+      _writeIndex = (_writeIndex + 1) % _samples.length;
+      if (_sampleCount < _samples.length) _sampleCount += 1;
+    }
+    _peakBufferedBytes = math.max(
+      _peakBufferedBytes,
+      _samples.lengthInBytes + merged.length,
+    );
+  }
+
+  List<AcousticDetection> finish({int maximumDetections = 2}) {
+    final ordered = Float32List(_sampleCount);
+    final start = _sampleCount == _samples.length ? _writeIndex : 0;
+    for (var index = 0; index < _sampleCount; index++) {
+      ordered[index] = _samples[(start + index) % _samples.length];
+    }
+    _peakBufferedBytes = math.max(
+      _peakBufferedBytes,
+      _samples.lengthInBytes + ordered.lengthInBytes,
+    );
+    final detections = AcousticSonarDsp.detectChirps(
+      ordered,
+      maximumDetections: maximumDetections,
+    );
+    reset(clearPeak: false);
+    return detections;
+  }
+
+  void reset({bool clearPeak = true}) {
+    _writeIndex = 0;
+    _sampleCount = 0;
+    _pendingByte = null;
+    if (clearPeak) _peakBufferedBytes = 0;
+  }
+}
+
 class AcousticSonarCapture {
   AcousticSonarCapture({AudioRecorder? recorder, AudioPlayer? player})
     : _recorder = recorder ?? AudioRecorder(),
@@ -239,16 +321,17 @@ class AcousticSonarCapture {
 
   final AudioRecorder _recorder;
   final AudioPlayer _player;
-  final List<Uint8List> _chunks = [];
+  final AcousticSonarStreamAnalyzer _analyzer = AcousticSonarStreamAnalyzer();
   StreamSubscription<Uint8List>? _subscription;
   bool _capturing = false;
 
   bool get isCapturing => _capturing;
+  int get peakBufferedBytes => _analyzer.peakBufferedBytes;
 
   Future<bool> start() async {
     if (_capturing) return true;
     if (!await _recorder.hasPermission()) return false;
-    _chunks.clear();
+    _analyzer.reset();
     final stream = await _recorder.startStream(
       const RecordConfig(
         encoder: AudioEncoder.pcm16bits,
@@ -260,7 +343,7 @@ class AcousticSonarCapture {
       ),
     );
     _subscription = stream.listen(
-      (chunk) => _chunks.add(Uint8List.fromList(chunk)),
+      (chunk) => _analyzer.add(Uint8List.fromList(chunk)),
     );
     _capturing = true;
     return true;
@@ -296,7 +379,7 @@ class AcousticSonarCapture {
     await _recorder.stop();
     await _subscription?.cancel();
     _subscription = null;
-    return AcousticSonarDsp.detectChirps(AcousticSonarDsp.decodePcm16(_chunks));
+    return _analyzer.finish();
   }
 
   Future<void> cancel() async {
@@ -305,7 +388,7 @@ class AcousticSonarCapture {
     await _recorder.cancel();
     await _subscription?.cancel();
     _subscription = null;
-    _chunks.clear();
+    _analyzer.reset();
   }
 
   Future<void> dispose() async {

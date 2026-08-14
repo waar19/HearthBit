@@ -103,6 +103,11 @@ class _MemoryTransferRepository extends TransferRepository {
   Future<void> clear() async {
     records.clear();
   }
+
+  @override
+  Future<void> destroy() async {
+    records.clear();
+  }
 }
 
 MeshPeer _peer({bool supportsTransfers = true}) => MeshPeer(
@@ -142,6 +147,19 @@ Future<TransferFrame> _offerFrame({
       TransferProtocol.tagSignature,
       Uint8List.fromList(List.filled(64, 9)),
     );
+}
+
+Future<void> _waitUntil(
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 3),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!condition()) {
+    if (DateTime.now().isAfter(deadline)) {
+      throw TimeoutException('condition was not met before timeout');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
 }
 
 void main() {
@@ -297,7 +315,11 @@ void main() {
       'peerId': _peer().id,
       'frame': offer.encode(),
     });
-    await pumpEventQueue(times: 30);
+    await _waitUntil(
+      () =>
+          controller.transfers.isNotEmpty &&
+          controller.transfers.single.state == TransferState.connecting,
+    );
 
     expect(controller.transfers.single.transport, TransferTransport.ble);
     expect(controller.transfers.single.state, TransferState.connecting);

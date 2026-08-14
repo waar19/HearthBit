@@ -46,7 +46,7 @@ class _MapScreenState extends State<MapScreen> {
     try {
       final cache = await OfflineTileCache.create(source: _tileSource);
       if (!mounted) {
-        cache.dispose();
+        unawaited(cache.close());
         return;
       }
       setState(() {
@@ -88,13 +88,11 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  LatLng get _initialCenter {
+  LatLng? get _initialCenter {
     final local = _localPosition;
     if (local != null) return LatLng(local.latitude, local.longitude);
     final peer = widget.controller.peerLocations.latestLocations.firstOrNull;
-    return peer == null
-        ? const LatLng(0, 0)
-        : LatLng(peer.latitude, peer.longitude);
+    return peer == null ? null : LatLng(peer.latitude, peer.longitude);
   }
 
   List<RescueIncident> get _incidents => RescueIncidentList.fromMessages(
@@ -163,6 +161,24 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _shareCsv() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.locationExportConfirmTitle),
+        content: Text(context.l10n.locationExportConfirmBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.l10n.actionCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.l10n.locationExportConfirmAction),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
     try {
       final renderBox = context.findRenderObject() as RenderBox?;
       await RescueExportService.share(
@@ -190,7 +206,8 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void dispose() {
     _mapController.dispose();
-    _tileCache?.dispose();
+    final cache = _tileCache;
+    if (cache != null) unawaited(cache.close());
     super.dispose();
   }
 
@@ -283,6 +300,32 @@ class _MapScreenState extends State<MapScreen> {
     if (provider == null) {
       return const Center(child: CircularProgressIndicator());
     }
+    final initialCenter = _initialCenter;
+    if (initialCenter == null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.location_off_outlined,
+                size: 56,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                context.l10n.mapNoLocationTitle,
+                style: Theme.of(context).textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(context.l10n.mapNoLocationBody, textAlign: TextAlign.center),
+            ],
+          ),
+        ),
+      );
+    }
     final markers = <Marker>[
       if (_localPosition case final position?)
         Marker(
@@ -335,8 +378,8 @@ class _MapScreenState extends State<MapScreen> {
         FlutterMap(
           mapController: _mapController,
           options: MapOptions(
-            initialCenter: _initialCenter,
-            initialZoom: _initialCenter == const LatLng(0, 0) ? 2 : 14,
+            initialCenter: initialCenter,
+            initialZoom: 14,
             minZoom: 2,
             maxZoom: _planner.maximumZoom.toDouble(),
           ),

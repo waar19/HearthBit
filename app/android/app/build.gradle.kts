@@ -57,6 +57,10 @@ android {
         versionName = flutter.versionName
     }
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {

@@ -72,6 +72,7 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
   String? _currentQr;
   bool _confirmed = false;
   String? _error;
+  int _encoderGeneration = 0;
 
   @override
   void initState() {
@@ -96,7 +97,7 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
         );
         _seed = random.nextInt(0xffffffff);
       });
-      _rebuildEncoder();
+      await _rebuildEncoder();
     } catch (error) {
       setState(() => _error = error.toString());
     }
@@ -105,9 +106,10 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
   /// Cambiar la densidad altera el tamaño de chunk, así que se reinicia la
   /// sesión con un nuevo transferId: el receptor se resincroniza al ver la
   /// nueva cabecera.
-  void _rebuildEncoder() {
+  Future<void> _rebuildEncoder() async {
     final bytes = _fileBytes;
     if (bytes == null) return;
+    final generation = ++_encoderGeneration;
     final random = Random.secure();
     _transferId = Uint8List.fromList(
       List.generate(16, (_) => random.nextInt(256)),
@@ -118,16 +120,41 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
       chunkSize: _density.chunkSize,
       seed: _seed,
     );
+    final unsignedHeader = OpticalHeader(
+      transferId: _transferId,
+      seed: _seed,
+      fileSize: bytes.length,
+      chunkSize: _density.chunkSize,
+      chunkCount: _encoder!.chunkCount,
+      sha256: _sha256,
+      fileName: widget.fileName,
+      senderPeerId: widget.senderPeerId,
+      protocolVersion: OpticalProtocol.version,
+    );
+    Uint8List signature;
+    try {
+      signature = await _mesh.signPayload(
+        OpticalProtocol.signingPayload(unsignedHeader),
+      );
+    } catch (error) {
+      if (mounted && generation == _encoderGeneration) {
+        setState(() => _error = error.toString());
+      }
+      return;
+    }
+    if (!mounted || generation != _encoderGeneration) return;
     _headerContent = OpticalProtocol.encodeHeader(
       OpticalHeader(
-        transferId: _transferId,
-        seed: _seed,
-        fileSize: bytes.length,
-        chunkSize: _density.chunkSize,
-        chunkCount: _encoder!.chunkCount,
-        sha256: _sha256,
-        fileName: widget.fileName,
-        senderPeerId: widget.senderPeerId,
+        transferId: unsignedHeader.transferId,
+        seed: unsignedHeader.seed,
+        fileSize: unsignedHeader.fileSize,
+        chunkSize: unsignedHeader.chunkSize,
+        chunkCount: unsignedHeader.chunkCount,
+        sha256: unsignedHeader.sha256,
+        fileName: unsignedHeader.fileName,
+        senderPeerId: unsignedHeader.senderPeerId,
+        protocolVersion: OpticalProtocol.version,
+        signature: signature,
       ),
     );
     _frameCounter = 0;
@@ -276,7 +303,7 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
                             selected: {_density},
                             onSelectionChanged: (selection) {
                               setState(() => _density = selection.first);
-                              _rebuildEncoder();
+                              unawaited(_rebuildEncoder());
                             },
                           ),
                           Padding(

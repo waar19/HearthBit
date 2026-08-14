@@ -11,6 +11,8 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'diagnostics_log.dart';
+
 const osmTileUrlTemplate = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const osmAttribution = '© OpenStreetMap contributors';
 const osmAttributionUrl = 'https://www.openstreetmap.org/copyright';
@@ -277,6 +279,13 @@ class TileDownloadPlanner {
 
 typedef TileDownloadProgress = void Function(int completed, int total);
 
+class OfflineTileCacheStats {
+  const OfflineTileCacheStats({required this.tileCount, required this.bytes});
+
+  final int tileCount;
+  final int bytes;
+}
+
 class OfflineTileCache {
   OfflineTileCache._({
     required this._root,
@@ -295,6 +304,9 @@ class OfflineTileCache {
   final DateTime Function() _now;
   final MapTileSource source;
   final Map<OfflineTileCoordinate, Future<Uint8List>> _loads = {};
+  DateTime? _lastPassiveTrimAt;
+  int _writesSinceTrim = 0;
+  bool _trimming = false;
 
   static Future<OfflineTileCache> create({
     http.Client? client,
@@ -446,6 +458,7 @@ class OfflineTileCache {
           lastModified: response.headers[HttpHeaders.lastModifiedHeader],
         ),
       );
+      _schedulePassiveTrim();
       return bytes;
     } catch (_) {
       if (staleBytes != null) return staleBytes;
@@ -494,6 +507,48 @@ class OfflineTileCache {
       total -= entry.length;
       if (total <= maximumCacheBytes) break;
     }
+  }
+
+  Future<OfflineTileCacheStats> stats() async {
+    if (!await _root.exists()) {
+      return const OfflineTileCacheStats(tileCount: 0, bytes: 0);
+    }
+    var count = 0;
+    var bytes = 0;
+    await for (final entity in _root.list(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.png')) continue;
+      final stat = await entity.stat();
+      count += 1;
+      bytes += stat.size;
+    }
+    return OfflineTileCacheStats(tileCount: count, bytes: bytes);
+  }
+
+  void _schedulePassiveTrim() {
+    _writesSinceTrim += 1;
+    final now = _now();
+    final dueByTime =
+        _lastPassiveTrimAt == null ||
+        now.difference(_lastPassiveTrimAt!) >= const Duration(minutes: 5);
+    if (_trimming || (_writesSinceTrim < 50 && !dueByTime)) return;
+    _trimming = true;
+    _writesSinceTrim = 0;
+    _lastPassiveTrimAt = now;
+    unawaited(
+      trim().whenComplete(() {
+        _trimming = false;
+      }),
+    );
+  }
+
+  Future<void> close() async {
+    await trim();
+    final current = await stats();
+    DiagnosticsLog.instance.info(
+      'map.cache.stats',
+      data: {'tileCount': current.tileCount, 'bytes': current.bytes},
+    );
+    dispose();
   }
 
   void dispose() {

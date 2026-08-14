@@ -1,0 +1,108 @@
+name: Publicar HearthBit
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android-release:
+    name: AAB y APK Android firmados
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: relay/pyproject.toml
+      - name: Exigir credenciales de firma protegidas
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_BASE64" || { echo "Falta ANDROID_KEYSTORE_BASE64"; exit 1; }
+          test -n "$STORE_PASSWORD" || { echo "Falta ANDROID_STORE_PASSWORD"; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "Falta ANDROID_KEY_ALIAS"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "Falta ANDROID_KEY_PASSWORD"; exit 1; }
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > app/android/release.keystore
+          {
+            echo "storeFile=release.keystore"
+            echo "storePassword=$STORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > app/android/key.properties
+      - run: flutter pub get
+        working-directory: app
+      - name: Validar formato y análisis Flutter
+        run: |
+          dart format --output=none --set-exit-if-changed lib test
+          flutter analyze
+        working-directory: app
+      - run: flutter test
+        working-directory: app
+      - name: Ejecutar pruebas nativas Android
+        run: ./gradlew :app:testDebugUnitTest
+        working-directory: app/android
+      - name: Validar relays Android TV y Automotive
+        run: ./gradlew :relay:test :relay:assembleTvDebug :relay:assembleAutomotiveDebug
+        working-directory: app/android
+      - name: Ejecutar conformidad relay y firmware
+        run: |
+          python -m pip install -e "relay[test]"
+          python -m pytest relay
+          python tests/conformance/generate_firmware_header.py --check
+      - run: flutter build appbundle --release
+        working-directory: app
+      - run: flutter build apk --release
+        working-directory: app
+      - name: Preparar artefactos y hashes
+        run: |
+          mkdir -p dist
+          cp app/build/app/outputs/bundle/release/app-release.aab dist/hearthbit-release.aab
+          cp app/build/app/outputs/flutter-apk/app-release.apk dist/hearthbit-universal.apk
+          cd dist
+          sha256sum hearthbit-release.aab hearthbit-universal.apk > SHA256SUMS.txt
+      - name: Generar SBOM del release
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: dist/hearthbit-sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hearthbit-android-release
+          path: dist/
+          if-no-files-found: error
+      - name: Publicar release del tag
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "${GITHUB_REF_NAME}"
+          dist/hearthbit-release.aab
+          dist/hearthbit-universal.apk
+          dist/SHA256SUMS.txt
+          dist/hearthbit-sbom.cdx.json
+          --verify-tag
+          --generate-notes
+          --title "HearthBit ${GITHUB_REF_NAME}"

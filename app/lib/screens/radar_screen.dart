@@ -116,8 +116,8 @@ class _RadarScreenState extends State<RadarScreen>
     _targetLongitude = widget.longitude;
     unawaited(_startRadar());
     _events = _platform.events.listen(_onEvent);
-    _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) => _tick());
-    _startCompassTracking();
+    _scheduleTick();
+    if (_hasTargetCoordinates) _startCompassTracking();
     _watchGps();
     unawaited(_loadRangingCapabilities());
   }
@@ -255,7 +255,8 @@ class _RadarScreenState extends State<RadarScreen>
   }
 
   void _startDirectionSweep() {
-    if (_compassEvents == null) {
+    _startCompassTracking();
+    if (_compassUnavailable) {
       setState(() => _compassUnavailable = true);
       return;
     }
@@ -301,7 +302,13 @@ class _RadarScreenState extends State<RadarScreen>
     if (!await _acousticCapture.start()) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.radarSonarMicrophoneRequired)),
+        SnackBar(
+          content: Text(context.l10n.radarSonarMicrophoneRequired),
+          action: SnackBarAction(
+            label: context.l10n.actionOpenSettings,
+            onPressed: Geolocator.openAppSettings,
+          ),
+        ),
       );
       return;
     }
@@ -384,6 +391,10 @@ class _RadarScreenState extends State<RadarScreen>
 
   Future<void> _finishAcousticCapture({required bool selfChirpFirst}) async {
     final detections = await _acousticCapture.stopAndAnalyze();
+    DiagnosticsLog.instance.info(
+      'radar.sonar.memory',
+      data: {'peakBufferedBytes': _acousticCapture.peakBufferedBytes},
+    );
     if (detections.length < 2) {
       await _sendAcoustic(RangingControlAction.error);
       await _stopAcousticSonar(notifyPeer: false);
@@ -559,6 +570,7 @@ class _RadarScreenState extends State<RadarScreen>
   }
 
   void _startCompassTracking() {
+    if (_compassEvents != null) return;
     final compassStream = FlutterCompass.events;
     if (compassStream == null) {
       _compassUnavailable = true;
@@ -635,7 +647,39 @@ class _RadarScreenState extends State<RadarScreen>
       setState(() {});
     }
     if (stale != _stale) setState(() => _stale = stale);
+    if (!_hasTargetCoordinates &&
+        !_sweepActive &&
+        _directionEstimate == null &&
+        _compassEvents != null) {
+      unawaited(_compassEvents?.cancel());
+      _compassEvents = null;
+      _headingDegrees = null;
+    }
     _maybeVibrate();
+  }
+
+  bool get _hasTargetCoordinates =>
+      _targetLatitude != null && _targetLongitude != null;
+
+  bool get _highActivity =>
+      _sweepActive ||
+      _radioRangingActive ||
+      _acousticActive ||
+      (_reading != null && !_stale);
+
+  bool get _resourceSaverActive => !_highActivity;
+
+  void _scheduleTick() {
+    _ticker?.cancel();
+    _ticker = Timer(
+      _highActivity
+          ? const Duration(milliseconds: 200)
+          : const Duration(seconds: 1),
+      () {
+        _tick();
+        if (mounted) _scheduleTick();
+      },
+    );
   }
 
   /// Vibración tipo contador Geiger: más frecuente e intensa cuanto más cerca.
@@ -644,7 +688,7 @@ class _RadarScreenState extends State<RadarScreen>
     if (reading == null || _stale) return;
     final (interval, feedback) = switch (reading.proximity) {
       RadarProximity.veryClose => (
-        const Duration(milliseconds: 250),
+        const Duration(milliseconds: 500),
         HapticFeedback.heavyImpact,
       ),
       RadarProximity.close => (
@@ -682,9 +726,11 @@ class _RadarScreenState extends State<RadarScreen>
       }
       _positions =
           Geolocator.getPositionStream(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.high,
-              distanceFilter: 3,
+            locationSettings: LocationSettings(
+              accuracy: _hasTargetCoordinates
+                  ? LocationAccuracy.high
+                  : LocationAccuracy.medium,
+              distanceFilter: _hasTargetCoordinates ? 3 : 10,
             ),
           ).listen((position) {
             if (!mounted) return;
@@ -694,9 +740,11 @@ class _RadarScreenState extends State<RadarScreen>
             });
           });
       final current = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 10),
+        locationSettings: LocationSettings(
+          accuracy: _hasTargetCoordinates
+              ? LocationAccuracy.high
+              : LocationAccuracy.medium,
+          timeLimit: const Duration(seconds: 10),
         ),
       );
       if (mounted) {
@@ -764,6 +812,7 @@ class _RadarScreenState extends State<RadarScreen>
     final previous = _targetPositionAt;
     if (previous != null && timestamp.isBefore(previous)) return;
     if (!mounted) return;
+    final hadTarget = _hasTargetCoordinates;
     setState(() {
       _targetLatitude = latitude;
       _targetLongitude = longitude;
@@ -771,6 +820,12 @@ class _RadarScreenState extends State<RadarScreen>
       _targetPositionAt = timestamp;
       _updateGpsDistance();
     });
+    if (!hadTarget) {
+      _startCompassTracking();
+      unawaited(_positions?.cancel());
+      _positions = null;
+      unawaited(_watchGps());
+    }
   }
 
   void _updateGpsDistance() {
@@ -789,6 +844,16 @@ class _RadarScreenState extends State<RadarScreen>
 
   @override
   void dispose() {
+    final localPosition = _localPosition;
+    DiagnosticsLog.instance.info(
+      'radar.resource.stats',
+      data: {
+        'gpsFixAgeMs': localPosition == null
+            ? -1
+            : DateTime.now().difference(localPosition.timestamp).inMilliseconds,
+        'adaptiveSaver': _resourceSaverActive,
+      },
+    );
     unawaited(_platform.stopRadar());
     unawaited(_platform.stopRadioRanging());
     unawaited(_acousticCapture.dispose());
@@ -813,6 +878,16 @@ class _RadarScreenState extends State<RadarScreen>
         backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
         title: Text(context.l10n.radarTitle(widget.nickname)),
+        actions: [
+          if (_resourceSaverActive)
+            Tooltip(
+              message: context.l10n.adaptivePowerSaving,
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: Icon(Icons.battery_saver_outlined),
+              ),
+            ),
+        ],
       ),
       body: SafeArea(
         child: LayoutBuilder(
@@ -857,22 +932,36 @@ class _RadarScreenState extends State<RadarScreen>
                 math.min(constraints.maxWidth, constraints.maxHeight),
               );
               return Center(
-                child: SizedBox.square(
-                  key: const ValueKey('radar-canvas'),
-                  dimension: radarSide,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      _AnimatedRadarCanvas(
-                        sweep: _sweep,
-                        pulse: _pulse,
-                        strength: _stale ? null : reading?.strength,
-                        directionSweepSectors: _sweepEstimator.sectorCoverage,
-                        estimatedDirectionRadians: _bleDirectionRadians(fusion),
-                        gpsDirectionRadians: _gpsDirectionRadians(fusion),
+                child: Semantics(
+                  image: true,
+                  liveRegion: true,
+                  label: searching
+                      ? context.l10n.radarSearching
+                      : _stale
+                      ? context.l10n.radarSignalLost
+                      : _proximityLabel(context.l10n, reading!.proximity),
+                  child: ExcludeSemantics(
+                    child: SizedBox.square(
+                      key: const ValueKey('radar-canvas'),
+                      dimension: radarSide,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          _AnimatedRadarCanvas(
+                            sweep: _sweep,
+                            pulse: _pulse,
+                            strength: _stale ? null : reading?.strength,
+                            directionSweepSectors:
+                                _sweepEstimator.sectorCoverage,
+                            estimatedDirectionRadians: _bleDirectionRadians(
+                              fusion,
+                            ),
+                            gpsDirectionRadians: _gpsDirectionRadians(fusion),
+                          ),
+                          if (_sweepActive) _buildSweepOverlay(),
+                        ],
                       ),
-                      if (_sweepActive) _buildSweepOverlay(),
-                    ],
+                    ),
                   ),
                 ),
               );
@@ -896,6 +985,7 @@ class _RadarScreenState extends State<RadarScreen>
   }
 
   Widget _buildBannerSlot(RadarFusionResult fusion) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
     final kind = resolveRadarBanner(
       permissionExpired: _permissionExpired,
       hasStartError: _startError != null,
@@ -945,7 +1035,7 @@ class _RadarScreenState extends State<RadarScreen>
     };
     return SizedBox(
       key: const ValueKey('radar-banner-slot'),
-      height: 58,
+      height: 58 + ((textScale - 1).clamp(0, 1) * 44),
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 220),
         child: kind == null
@@ -1021,25 +1111,34 @@ class _RadarScreenState extends State<RadarScreen>
 
   Widget _buildActionRow() {
     final estimate = _directionEstimate;
-    final directionButton = OutlinedButton.icon(
-      onPressed: _compassUnavailable || _sweepActive
-          ? null
-          : _startDirectionSweep,
-      icon: const Icon(Icons.explore_outlined),
-      label: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Text(
-          estimate == null
-              ? context.l10n.radarSweepStart
-              : context.l10n.radarSweepRestart,
-        ),
-      ),
-    );
+    final directionLabel = estimate == null
+        ? context.l10n.radarSweepStart
+        : context.l10n.radarSweepRestart;
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+    final directionButton = largeText
+        ? IconButton.outlined(
+            tooltip: directionLabel,
+            onPressed: _compassUnavailable || _sweepActive
+                ? null
+                : _startDirectionSweep,
+            icon: const Icon(Icons.explore_outlined),
+          )
+        : OutlinedButton.icon(
+            onPressed: _compassUnavailable || _sweepActive
+                ? null
+                : _startDirectionSweep,
+            icon: const Icon(Icons.explore_outlined),
+            label: Text(
+              directionLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          );
     return SizedBox(
-      height: 44,
+      height: 48,
       child: Row(
         children: [
-          Expanded(child: directionButton),
+          if (largeText) directionButton else Expanded(child: directionButton),
           if (_radioRangingAvailable) ...[
             const SizedBox(width: 6),
             IconButton.filledTonal(
@@ -1134,7 +1233,9 @@ class _RadarScreenState extends State<RadarScreen>
     const green = Color(0xFF4ADE80);
     const red = Color(0xFFF87171);
     const dim = Color(0xFF94A3B8);
-    final height = compact ? 142.0 : 170.0;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final baseHeight = compact ? 142.0 : 170.0;
+    final height = baseHeight + ((textScale - 1).clamp(0, 1) * 72);
     Widget content;
     if (_permissionExpired || _startError != null) {
       content = Row(

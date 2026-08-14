@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'controllers/mesh_controller.dart';
 import 'controllers/emergency_gateway_controller.dart';
 import 'controllers/family_controller.dart';
+import 'controllers/lan_gateway_controller.dart';
 import 'controllers/transfer_controller.dart';
 import 'l10n/l10n.dart';
 import 'screens/home_screen.dart';
@@ -135,6 +136,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
   late final AppPreferences _preferences;
   late final EmergencyGatewayController _gateway;
   late final FamilyController _family;
+  late final LanGatewayController _lanGateway;
   late final Future<void> _initialization;
 
   @override
@@ -149,11 +151,13 @@ class _HearthBitAppState extends State<HearthBitApp> {
       preferences: _preferences,
     );
     _family = FamilyController(mesh: _controller);
+    _lanGateway = LanGatewayController();
     _initialization = Future.wait([
       _controller.initialize(),
       _transfers.initialize(),
       _preferences.initialize(),
       _gateway.initialize(),
+      _lanGateway.initialize(),
     ]).then((_) => _family.initialize());
   }
 
@@ -161,6 +165,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
   void dispose() {
     _gateway.dispose();
     _family.dispose();
+    _lanGateway.dispose();
     _transfers.dispose();
     _controller.dispose();
     _preferences.dispose();
@@ -170,7 +175,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge([_preferences, _controller]),
+      animation: Listenable.merge([_preferences, _controller, _lanGateway]),
       builder: (context, _) => MaterialApp(
         onGenerateTitle: (context) => context.l10n.appTitle,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -230,6 +235,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
               preferences: _preferences,
               gateway: _gateway,
               family: _family,
+              lanGateway: _lanGateway,
             );
           },
         ),

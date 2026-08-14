@@ -123,7 +123,14 @@ internal class MeshIdentity(context: Context) {
     }
 
     fun clear() {
-        preferences.edit().clear().apply()
+        check(preferences.edit().clear().commit()) {
+            "No se pudo borrar la identidad cifrada"
+        }
+        noisePrivateKey.fill(0)
+        noisePublicKey.fill(0)
+        signingPrivateKey.fill(0)
+        signingPublicKey.fill(0)
+        peerId.fill(0)
     }
 
     private fun read(key: String): ByteArray? = preferences.getString(key, null)?.let {

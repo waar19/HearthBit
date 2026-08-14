@@ -3,6 +3,7 @@ import sqlite3
 from hearthbit_relay.config import StoreConfig
 from hearthbit_relay.protocol import (
     TYPE_ANNOUNCE,
+    TYPE_EMERGENCY_CAPABILITY,
     TYPE_HBT_CAPABILITY,
     TYPE_MESSAGE,
     TYPE_NODE_CAPABILITY,
@@ -52,6 +53,34 @@ def test_store_replays_once_per_link_and_evicts_oldest(tmp_path) -> None:
     store.close()
 
 
+def test_emergency_priority_survives_limits_and_replays_first(tmp_path) -> None:
+    store = PacketStore(
+        StoreConfig(path=str(tmp_path / "relay.db"), max_packets=2, max_bytes=100)
+    )
+    store.enqueue(
+        fingerprint=b"e" * 16,
+        packet=b"emergency",
+        message_type=TYPE_MESSAGE,
+        sender_id=b"sender01",
+        expires_at_ms=100_000,
+        priority=100,
+        now_ms=1_000,
+    )
+    for index in range(2):
+        store.enqueue(
+            fingerprint=bytes([index]) * 16,
+            packet=b"normal",
+            message_type=TYPE_MESSAGE,
+            sender_id=b"sender02",
+            expires_at_ms=100_000,
+            now_ms=2_000 + index,
+        )
+
+    pending = store.pending_for("peer", limit=10, now_ms=3_000)
+    assert [item.packet for item in pending] == [b"emergency", b"normal"]
+    store.close()
+
+
 def test_expired_packets_are_removed(tmp_path) -> None:
     store = PacketStore(StoreConfig(path=str(tmp_path / "relay.db")))
     store.enqueue(
@@ -72,7 +101,12 @@ def test_store_rejects_ephemeral_packets_even_when_called_directly(tmp_path) -> 
     store = PacketStore(StoreConfig(path=str(tmp_path / "relay.db")))
 
     for index, message_type in enumerate(
-        (TYPE_ANNOUNCE, TYPE_HBT_CAPABILITY, TYPE_NODE_CAPABILITY)
+        (
+            TYPE_ANNOUNCE,
+            TYPE_HBT_CAPABILITY,
+            TYPE_NODE_CAPABILITY,
+            TYPE_EMERGENCY_CAPABILITY,
+        )
     ):
         assert not store.enqueue(
             fingerprint=bytes([index]) * 16,

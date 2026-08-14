@@ -52,6 +52,19 @@ release oficial**.
    Si la versión instalada anteriormente usó otra firma, Android no permitirá
    actualizarla: será necesaria una desinstalación o conservar la firma previa.
 
+El workflow `.github/workflows/release.yml` exige estos secretos protegidos y
+falla de forma explícita si falta cualquiera:
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_STORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+
+Un tag `v*` ejecuta pruebas, genera AAB y APK universal firmados, SBOM
+CycloneDX, `SHA256SUMS.txt` y un GitHub Release. Configure aprobación manual del
+environment de publicación y no exponga estos secretos a pull requests de
+forks.
+
 ## Google Play
 
 - [ ] Crear un Android App Bundle de release firmado con la clave de carga.

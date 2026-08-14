@@ -38,9 +38,15 @@ class MessageComposer extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          IconButton.filled(
-            onPressed: enabled ? onSend : null,
-            icon: const Icon(Icons.send),
+          Semantics(
+            button: true,
+            enabled: enabled,
+            label: hint,
+            child: IconButton.filled(
+              tooltip: hint,
+              onPressed: enabled ? onSend : null,
+              icon: const Icon(Icons.send),
+            ),
           ),
         ],
       ),

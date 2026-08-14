@@ -27,7 +27,32 @@ class EmergencyGatewayCard extends StatelessWidget {
             ),
             subtitle: Text(context.l10n.gatewayBody),
             value: preferences.gatewayOptIn,
-            onChanged: preferences.setGatewayOptIn,
+            onChanged: (enabled) async {
+              if (!enabled) {
+                await preferences.setGatewayOptIn(false);
+                return;
+              }
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (dialogContext) => AlertDialog(
+                  title: Text(context.l10n.gatewayTitle),
+                  content: Text(context.l10n.gatewayPrivacyConfirm),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                      child: Text(context.l10n.actionCancel),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(dialogContext, true),
+                      child: Text(context.l10n.gatewayEnableAction),
+                    ),
+                  ],
+                ),
+              );
+              if (confirmed == true) {
+                await preferences.setGatewayOptIn(true);
+              }
+            },
           ),
           ListTile(
             leading: Icon(
@@ -95,8 +120,8 @@ class _GatewayConfigDialogState extends State<_GatewayConfigDialog> {
   late final TextEditingController _username;
   late final TextEditingController _port;
   late final TextEditingController _secret;
-  var _tls = true;
   var _saving = false;
+  String? _error;
 
   @override
   void initState() {
@@ -108,7 +133,6 @@ class _GatewayConfigDialogState extends State<_GatewayConfigDialog> {
     _username = TextEditingController(text: config?.username ?? '');
     _port = TextEditingController(text: '${config?.port ?? 443}');
     _secret = TextEditingController();
-    _tls = config?.tls ?? true;
   }
 
   @override
@@ -124,19 +148,31 @@ class _GatewayConfigDialogState extends State<_GatewayConfigDialog> {
   Future<void> _save() async {
     final port = int.tryParse(_port.text);
     if (port == null || port <= 0) return;
-    setState(() => _saving = true);
-    await widget.controller.saveConfig(
-      EmergencyGatewayConfig(
-        kind: _kind,
-        server: _server.text,
-        destination: _destination.text,
-        username: _username.text,
-        port: port,
-        tls: _tls,
-      ),
-      _secret.text,
-    );
-    if (mounted) Navigator.pop(context);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.controller.saveConfig(
+        EmergencyGatewayConfig(
+          kind: _kind,
+          server: _server.text,
+          destination: _destination.text,
+          username: _username.text,
+          port: port,
+          tls: true,
+        ),
+        _secret.text,
+      );
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = error.toString();
+        });
+      }
+    }
   }
 
   @override
@@ -209,10 +245,16 @@ class _GatewayConfigDialogState extends State<_GatewayConfigDialog> {
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              value: _tls,
-              onChanged: (value) => setState(() => _tls = value),
+              value: true,
+              onChanged: null,
               title: Text(context.l10n.gatewayTls),
+              subtitle: Text(context.l10n.gatewayTlsRequired),
             ),
+            if (_error != null)
+              Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
           ],
         ),
       ),

@@ -66,6 +66,46 @@ void main() {
     expect(await repository.listPendingPrivateMessages(), isEmpty);
   });
 
+  test('vence privados tras 20 intentos o 7 días y limita el outbox', () async {
+    final now = DateTime.utc(2026, 8, 14);
+    await repository.insertPendingPrivateMessage(
+      PendingPrivateMessage(
+        localId: 'too-many-attempts',
+        recipientPeerId: 'peer-a',
+        content: 'A',
+        createdAt: now,
+        attempts: 20,
+      ),
+    );
+    await repository.insertPendingPrivateMessage(
+      PendingPrivateMessage(
+        localId: 'too-old',
+        recipientPeerId: 'peer-b',
+        content: 'B',
+        createdAt: now.subtract(const Duration(days: 8)),
+      ),
+    );
+    await repository.expirePrivateMessageOutbox(now);
+
+    final expired = await repository.listPendingPrivateMessages();
+    expect(
+      expired.map((message) => message.status),
+      everyElement(PrivateMessageOutboxStatus.expired),
+    );
+
+    for (var index = 0; index < 205; index++) {
+      await repository.insertPendingPrivateMessage(
+        PendingPrivateMessage(
+          localId: 'bounded-$index',
+          recipientPeerId: 'peer',
+          content: '$index',
+          createdAt: now.add(Duration(milliseconds: index)),
+        ),
+      );
+    }
+    expect(await repository.listPendingPrivateMessages(), hasLength(200));
+  });
+
   test('migra una base v2 sin perder mensajes existentes', () async {
     await repository.close();
     final oldDatabase = await databaseFactoryFfi.openDatabase(
@@ -125,6 +165,67 @@ void main() {
       (await repository.listPendingPrivateMessages()).single.content,
       'Después',
     );
+  });
+
+  test('persiste estados, ACK únicos y expiración de emergencias', () async {
+    final createdAt = DateTime.utc(2026, 8, 14, 1);
+    var delivery = EmergencyDelivery(
+      localId: 'emergency-1',
+      kind: EmergencyDeliveryKind.sos,
+      content: 'SOS|Ayuda||',
+      createdAt: createdAt,
+      expiresAt: createdAt.add(const Duration(hours: 24)),
+      nextAttemptAt: createdAt,
+      state: EmergencyDeliveryState.pending,
+    );
+    await repository.insertEmergencyDelivery(delivery);
+    delivery = delivery.copyWith(
+      state: EmergencyDeliveryState.relayed,
+      attempts: 1,
+      lastAttemptAt: createdAt,
+      nextAttemptAt: createdAt.add(const Duration(seconds: 15)),
+      canonicalHash: 'a' * 64,
+    );
+    await repository.updateEmergencyDelivery(delivery);
+
+    await repository.recordEmergencyAcknowledgement(
+      canonicalHash: 'a' * 64,
+      peerId: 'peer-a',
+      acknowledgedAt: createdAt.add(const Duration(seconds: 2)),
+    );
+    await repository.recordEmergencyAcknowledgement(
+      canonicalHash: 'a' * 64,
+      peerId: 'peer-a',
+      acknowledgedAt: createdAt.add(const Duration(seconds: 3)),
+    );
+    await repository.recordEmergencyAcknowledgement(
+      canonicalHash: 'a' * 64,
+      peerId: 'peer-b',
+      acknowledgedAt: createdAt.add(const Duration(seconds: 4)),
+    );
+
+    final acknowledged = (await repository.loadEmergencyDeliveries()).single;
+    expect(acknowledged.state, EmergencyDeliveryState.acknowledged);
+    expect(acknowledged.confirmationCount, 2);
+
+    await repository.insertEmergencyDelivery(
+      EmergencyDelivery(
+        localId: 'emergency-expired',
+        kind: EmergencyDeliveryKind.checkIn,
+        content: 'Estoy bien\n[HB-CHECKIN|OK|1|||1]',
+        createdAt: createdAt,
+        expiresAt: createdAt.add(const Duration(minutes: 1)),
+        nextAttemptAt: createdAt,
+        state: EmergencyDeliveryState.pending,
+      ),
+    );
+    await repository.expireEmergencyDeliveries(
+      createdAt.add(const Duration(minutes: 2)),
+    );
+    final expired = (await repository.loadEmergencyDeliveries()).firstWhere(
+      (item) => item.localId == 'emergency-expired',
+    );
+    expect(expired.state, EmergencyDeliveryState.expired);
   });
 
   test('carga los 500 más recientes y conserva 1000 en disco', () async {

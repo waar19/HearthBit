@@ -24,6 +24,9 @@ internal object MeshProtocol {
     const val TYPE_NODE_CAPABILITY: Byte = 0x25
     const val TYPE_BEACON_CONTROL: Byte = 0x26
     const val TYPE_RANGING_CONTROL: Byte = 0x27
+    const val TYPE_EMERGENCY_CAPABILITY: Byte = 0x28
+    const val TYPE_EMERGENCY_ACK: Byte = 0x29
+    const val EMERGENCY_PROTOCOL_VERSION: Byte = 0x01
     const val TTL: Byte = 7
     const val HBT_VERSION: Byte = 0x01
 
@@ -665,6 +668,41 @@ internal object MeshProtocol {
         val canonical = encode(packet.copy(ttl = 0, isRsr = false), padded = false)
         return hex(MessageDigest.getInstance("SHA-256").digest(canonical).copyOfRange(0, 12))
     }
+
+    fun emergencyCanonicalHash(packet: Packet): ByteArray {
+        val canonical = encode(
+            packet.copy(ttl = 0, isRsr = false),
+            padded = false,
+        )
+        return MessageDigest.getInstance("SHA-256").digest(canonical)
+    }
+
+    fun isEmergencyPublicPacket(packet: Packet): Boolean {
+        if (packet.type != TYPE_MESSAGE) return false
+        val content = packet.payload.toString(Charsets.UTF_8)
+        return isEmergencyPublicPacketPayload(content)
+    }
+
+    fun isEmergencyPublicPacketPayload(content: String): Boolean =
+        content.startsWith("SOS|") || content.contains("[HB-CHECKIN|")
+
+    fun encodeEmergencyCapability(): ByteArray =
+        byteArrayOf(EMERGENCY_PROTOCOL_VERSION, 0x01)
+
+    fun supportsEmergencyAcknowledgements(payload: ByteArray): Boolean =
+        payload.size == 2 &&
+            payload[0] == EMERGENCY_PROTOCOL_VERSION &&
+            payload[1].toInt() and 0x01 != 0
+
+    fun encodeEmergencyAcknowledgement(canonicalHash: ByteArray): ByteArray {
+        require(canonicalHash.size == 32)
+        return byteArrayOf(EMERGENCY_PROTOCOL_VERSION) + canonicalHash
+    }
+
+    fun decodeEmergencyAcknowledgement(payload: ByteArray): ByteArray? =
+        payload.takeIf {
+            it.size == 33 && it[0] == EMERGENCY_PROTOCOL_VERSION
+        }?.copyOfRange(1, 33)
 
     /**
      * Fingerprint de relay sobre bytes opacos: ignora padding, TTL y RSR, pero

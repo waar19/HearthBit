@@ -339,7 +339,7 @@ class TransferController extends ChangeNotifier {
       }
     }
     _transfers.clear();
-    await _repository.clear();
+    await _repository.destroy();
     final directory = await _transfersDirectory();
     if (await directory.exists()) {
       await directory.delete(recursive: true);

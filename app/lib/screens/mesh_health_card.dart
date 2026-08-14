@@ -3,13 +3,15 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../controllers/mesh_controller.dart';
+import '../controllers/lan_gateway_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 
 class MeshHealthCard extends StatelessWidget {
-  const MeshHealthCard({required this.controller, super.key});
+  const MeshHealthCard({required this.controller, this.lanGateway, super.key});
 
   final MeshController controller;
+  final LanGatewayController? lanGateway;
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +34,12 @@ class MeshHealthCard extends StatelessWidget {
       context.l10n.meshHealthAnchors(anchors),
       context.l10n.meshHealthTrunks(trunks),
       context.l10n.meshHealthSignals(signals),
+      if (lanGateway case final lan?)
+        lan.status.connected
+            ? context.l10n.lanGatewayConnected
+            : lan.enabled
+            ? context.l10n.lanGatewaySearching
+            : context.l10n.lanGatewayDisabled,
     ].join(', ');
 
     return Semantics(
@@ -80,6 +88,41 @@ class MeshHealthCard extends StatelessWidget {
                   Text(context.l10n.meshHealthRelays(relays)),
                   if (trunks > 0) Text(context.l10n.meshHealthTrunks(trunks)),
                   Text(context.l10n.meshHealthSignals(signals)),
+                  if (lanGateway case final lan?) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      lan.status.connected
+                          ? context.l10n.lanGatewayConnected
+                          : lan.enabled
+                          ? context.l10n.lanGatewaySearching
+                          : context.l10n.lanGatewayDisabled,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: lan.status.connected
+                            ? Theme.of(context).colorScheme.primary
+                            : null,
+                      ),
+                    ),
+                    if (lan.status.error case final error?)
+                      Text(
+                        error,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    TextButton.icon(
+                      onPressed: lan.enabled
+                          ? lan.disable
+                          : () => _configureLan(context, lan),
+                      icon: Icon(
+                        lan.enabled ? Icons.lan_outlined : Icons.add_link,
+                      ),
+                      label: Text(
+                        lan.enabled
+                            ? context.l10n.lanGatewayDisable
+                            : context.l10n.lanGatewayConfigure,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 6),
                   Text(
                     anchors > 0
@@ -110,6 +153,77 @@ class MeshHealthCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _configureLan(
+    BuildContext context,
+    LanGatewayController lan,
+  ) async {
+    final keyController = TextEditingController();
+    String? error;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(context.l10n.lanGatewayConfigure),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(context.l10n.lanGatewayPrivacy),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: keyController,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.lanGatewayPsk,
+                    errorText: error,
+                  ),
+                ),
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: TextButton(
+                    onPressed: () {
+                      keyController.text = lan.generatePairingKey();
+                      setDialogState(() => error = null);
+                    },
+                    child: Text(context.l10n.lanGatewayGeneratePsk),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(context.l10n.actionCancel),
+            ),
+            FilledButton(
+              onPressed: () async {
+                try {
+                  await lan.enable(keyController.text);
+                  if (dialogContext.mounted) {
+                    Navigator.pop(dialogContext, true);
+                  }
+                } on FormatException {
+                  setDialogState(
+                    () => error = context.l10n.lanGatewayInvalidPsk,
+                  );
+                }
+              },
+              child: Text(context.l10n.gatewayEnableAction),
+            ),
+          ],
+        ),
+      ),
+    );
+    keyController.dispose();
+    if (accepted == true && context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.lanGatewaySearching)));
+    }
   }
 }
 

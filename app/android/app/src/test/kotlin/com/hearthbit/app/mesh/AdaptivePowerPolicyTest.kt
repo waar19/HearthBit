@@ -5,10 +5,19 @@ import org.junit.Test
 
 class AdaptivePowerPolicyTest {
     @Test
-    fun `foreground charging uses performance unless an override is active`() {
+    fun `charging only uses performance for explicit rescue work`() {
+        assertEquals(
+            PowerProfile.BALANCED,
+            profile(battery = 70, charging = true, screenOn = true),
+        )
         assertEquals(
             PowerProfile.PERFORMANCE,
-            profile(battery = 70, charging = true, screenOn = true),
+            profile(
+                battery = 70,
+                charging = true,
+                screenOn = true,
+                highPerformance = true,
+            ),
         )
         assertEquals(
             PowerProfile.SURVIVAL,
@@ -80,11 +89,13 @@ class AdaptivePowerPolicyTest {
         screenOn: Boolean = true,
         systemPowerSave: Boolean = false,
         survival: Boolean = false,
+        highPerformance: Boolean = false,
     ): PowerProfile = AdaptivePowerPolicy.profileFor(
         batteryPercent = battery,
         isCharging = charging,
         screenOn = screenOn,
         systemPowerSave = systemPowerSave,
         survivalMode = survival,
+        highPerformanceRequested = highPerformance,
     )
 }

@@ -118,6 +118,17 @@ class FamilyController extends ChangeNotifier {
     await _reload();
   }
 
+  Future<void> panicWipe() async {
+    await _repository.destroy();
+    _groups = const [];
+    _members = const [];
+    _observedMessageIds.clear();
+    _lastObservedLocalKey = null;
+    _localQrToken = null;
+    _localQrFuture = null;
+    notifyListeners();
+  }
+
   Future<String> buildLocalQr() {
     final key = mesh.signingPublicKey;
     if (key == null || !canShowIdentityQr) {

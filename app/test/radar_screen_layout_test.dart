@@ -26,7 +26,11 @@ class _RadarPlatform extends MeshPlatformService {
 }
 
 void main() {
-  Future<void> pumpRadar(WidgetTester tester, {required Size size}) async {
+  Future<void> pumpRadar(
+    WidgetTester tester, {
+    required Size size,
+    double textScale = 1,
+  }) async {
     await tester.binding.setSurfaceSize(size);
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
@@ -34,6 +38,12 @@ void main() {
         locale: const Locale('es'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
         home: RadarScreen(
           peerId: '0011223344556677',
           nickname: 'Rescate',
@@ -62,4 +72,14 @@ void main() {
       expect(radar.top, greaterThanOrEqualTo(banner.bottom));
     });
   }
+
+  testWidgets('mantiene acciones y radar utilizables con texto al 200%', (
+    tester,
+  ) async {
+    await pumpRadar(tester, size: const Size(411, 870), textScale: 2);
+
+    expect(find.byKey(const ValueKey('radar-canvas')), findsOneWidget);
+    expect(find.byIcon(Icons.explore_outlined), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

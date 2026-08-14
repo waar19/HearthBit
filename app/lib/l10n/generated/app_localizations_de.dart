@@ -267,6 +267,20 @@ class AppLocalizationsDe extends AppLocalizations {
       'Schlüssel, Verlauf und ausstehende Nachrichten werden gelöscht. Das kann nicht rückgängig gemacht werden.';
 
   @override
+  String get wipeDialogInstruction => 'Zur Bestätigung BORRAR eingeben.';
+
+  @override
+  String get wipeDialogKeyword => 'BORRAR eingeben';
+
+  @override
+  String get wipeDialogComplete =>
+      'Identität und sensible Daten wurden gelöscht.';
+
+  @override
+  String get wipeDialogError =>
+      'Das Löschen wurde nicht abgeschlossen. Vor der Weitergabe des Geräts erneut versuchen.';
+
+  @override
   String get actionWipe => 'ALLES LÖSCHEN';
 
   @override
@@ -897,6 +911,40 @@ class AppLocalizationsDe extends AppLocalizations {
   String get emergencyStopRescue => 'Rettungsmodus beenden';
 
   @override
+  String get emergencyDeliveryTitle => 'Status gesendeter Warnungen';
+
+  @override
+  String get deliveryPending => 'Übertragung ausstehend';
+
+  @override
+  String get deliveryRelayed => 'An das Mesh übertragen';
+
+  @override
+  String get deliveryAcknowledged => 'Von HearthBit bestätigt';
+
+  @override
+  String get deliveryExpired => 'Ohne Bestätigung abgelaufen';
+
+  @override
+  String get deliveryAttemptsLabel => 'Versuche';
+
+  @override
+  String get deliveryConfirmationsLabel => 'Bestätigungen';
+
+  @override
+  String get deliveryLastAttemptLabel => 'Letzter Versuch';
+
+  @override
+  String get deliveryExpiresLabel => 'Läuft ab';
+
+  @override
+  String get deliveryNoHearthBitConfirmation =>
+      'Keine Bestätigung eines anderen HearthBit; ein BitChat-Knoten kann die Warnung dennoch empfangen haben.';
+
+  @override
+  String get deliveryRetry => 'Warnung erneut senden';
+
+  @override
   String get errorEmergencyMeshUnavailable =>
       'Das Bluetooth-Mesh konnte nicht aktiviert werden. Berechtigungen prüfen und erneut versuchen.';
 
@@ -1464,6 +1512,106 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get drillSendRealSos => 'ÜBUNG BEENDEN UND SOS SENDEN';
+
+  @override
+  String get drillDisableTitle => 'Übungsmodus beenden?';
+
+  @override
+  String get drillDisableBody =>
+      'Übungsnachrichten werden beendet und HearthBit kehrt zum echten Notfallbetrieb zurück.';
+
+  @override
+  String get drillDisableAction => 'ÜBUNG BEENDEN';
+
+  @override
+  String get mapNoLocationTitle => 'Kein Standort verfügbar';
+
+  @override
+  String get mapNoLocationBody =>
+      'Aktiviere den Standort oder warte auf eine gültige Rettungsposition eines Knotens. Die Karte verwendet niemals (0,0) als Ersatz.';
+
+  @override
+  String get voiceMicrophoneRequired =>
+      'Für eine Sprachnachricht ist Mikrofonzugriff erforderlich.';
+
+  @override
+  String get actionOpenSettings => 'EINSTELLUNGEN ÖFFNEN';
+
+  @override
+  String get opticalUnverifiedTitle => 'Nicht verifizierte Quelle';
+
+  @override
+  String get opticalUnverifiedBody =>
+      'HearthBit kann diese Übertragung keiner zuvor authentifizierten Identität zuordnen. Vergleiche den Fingerabdruck vor Annahme mit dem Absender.';
+
+  @override
+  String get opticalLegacyWarning =>
+      'Dieser Absender verwendet das ältere unsignierte optische Format.';
+
+  @override
+  String opticalFingerprint(String fingerprint) {
+    return 'Fingerabdruck: $fingerprint';
+  }
+
+  @override
+  String get opticalAcceptUnverified => 'UNVERIFIZIERT ANNEHMEN';
+
+  @override
+  String get opticalSignatureInvalid =>
+      'Die Signatur des optischen Manifests stimmt nicht mit dem bekannten Absender überein. Die Datei wurde abgelehnt.';
+
+  @override
+  String get opticalVerifiedSource => 'Verifizierter Absender';
+
+  @override
+  String get gatewayPrivacyConfirm =>
+      'Dadurch werden Notfallnachrichten, Absenderdaten und enthaltene Rettungsstandorte an den konfigurierten Internetdienst gesendet. Nur mit Zustimmung der betroffenen Personen aktivieren.';
+
+  @override
+  String get gatewayEnableAction => 'GATEWAY AKTIVIEREN';
+
+  @override
+  String get gatewayTlsRequired =>
+      'Für Notfalldaten erforderlich; unsichere Verbindungen werden blockiert.';
+
+  @override
+  String get locationExportConfirmTitle => 'Rettungsstandorte exportieren?';
+
+  @override
+  String get locationExportConfirmBody =>
+      'Die CSV-Datei kann genaue Standorte und Notfalldetails enthalten. Nur mit vertrauenswürdigen Einsatzkräften teilen und schützen.';
+
+  @override
+  String get locationExportConfirmAction => 'STANDORTE EXPORTIEREN';
+
+  @override
+  String get lanGatewayConnected => 'LAN-Relay verbunden';
+
+  @override
+  String get lanGatewaySearching => 'LAN-Relay aktiv · lokale Suche';
+
+  @override
+  String get lanGatewayDisabled => 'LAN-Relay deaktiviert';
+
+  @override
+  String get lanGatewayConfigure => 'LAN-RELAY KONFIGURIEREN';
+
+  @override
+  String get lanGatewayDisable => 'LAN-RELAY DEAKTIVIEREN';
+
+  @override
+  String get lanGatewayPrivacy =>
+      'Nur nach Zustimmung. Der gemeinsame Schlüssel muss mit deinem vertrauenswürdigen HearthBit-Raspberry-Pi-Relay übereinstimmen. Mesh-Frames werden lokal authentifiziert und verschlüsselt.';
+
+  @override
+  String get lanGatewayPsk => '32-Byte-Kopplungsschlüssel (Base64)';
+
+  @override
+  String get lanGatewayGeneratePsk => 'SCHLÜSSEL ERZEUGEN';
+
+  @override
+  String get lanGatewayInvalidPsk =>
+      'Gib einen gültigen 32-Byte-Base64-Schlüssel ein.';
 
   @override
   String get emergencyContactsOpen => 'Notrufnummern und offizielle Links';

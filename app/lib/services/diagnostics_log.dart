@@ -249,6 +249,30 @@ class DiagnosticsLog {
     await _pendingWrite;
   }
 
+  Future<void> clear() async {
+    await initialize();
+    await _pendingWrite;
+    _entries.clear();
+    final file = _file;
+    if (file != null) {
+      if (await file.exists()) await file.delete();
+      await file.create(recursive: true);
+    }
+    try {
+      final directory = await _temporaryDirectory();
+      if (await directory.exists()) {
+        await for (final entity in directory.list()) {
+          if (entity is File &&
+              p.basename(entity.path).startsWith('hearthbit-diagnostics-')) {
+            await entity.delete();
+          }
+        }
+      }
+    } on Object {
+      // Los exports temporales son best-effort y no bloquean el borrado.
+    }
+  }
+
   String exportText() {
     final buffer = StringBuffer()
       ..writeln('HearthBit diagnostics')

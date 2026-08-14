@@ -163,6 +163,42 @@ void main() {
       expect(detections[1].sampleIndex, closeTo(8200, 3));
     });
 
+    test('analiza PCM por bloques con memoria acotada', () {
+      final chirp = AcousticSonarDsp.generateChirp();
+      final samples = List<double>.filled(14000, 0);
+      for (final start in [1200, 8200]) {
+        for (var index = 0; index < chirp.length; index++) {
+          samples[start + index] = chirp[index];
+        }
+      }
+      final bytes = Uint8List(samples.length * 2);
+      final data = ByteData.sublistView(bytes);
+      for (var index = 0; index < samples.length; index++) {
+        data.setInt16(
+          index * 2,
+          (samples[index] * 32767).round().clamp(-32768, 32767),
+          Endian.little,
+        );
+      }
+      final analyzer = AcousticSonarStreamAnalyzer();
+      for (var offset = 0; offset < bytes.length; offset += 3001) {
+        analyzer.add(
+          Uint8List.sublistView(
+            bytes,
+            offset,
+            math.min(offset + 3001, bytes.length),
+          ),
+        );
+      }
+
+      final detections = analyzer.finish();
+
+      expect(detections, hasLength(2));
+      expect(detections[0].sampleIndex, closeTo(1200, 3));
+      expect(detections[1].sampleIndex, closeTo(8200, 3));
+      expect(analyzer.peakBufferedBytes, lessThan(2 * 1024 * 1024));
+    });
+
     test('BeepBeep elimina el desfase entre relojes', () {
       const local = AcousticRoundObservation(
         selfChirpSample: 1000,

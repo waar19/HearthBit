@@ -267,6 +267,19 @@ class AppLocalizationsEn extends AppLocalizations {
       'Keys, history and pending messages will be deleted. This cannot be undone.';
 
   @override
+  String get wipeDialogInstruction => 'To confirm, type BORRAR.';
+
+  @override
+  String get wipeDialogKeyword => 'Type BORRAR';
+
+  @override
+  String get wipeDialogComplete => 'Identity and sensitive data were erased.';
+
+  @override
+  String get wipeDialogError =>
+      'The erase did not complete. Try again before handing over the device.';
+
+  @override
   String get actionWipe => 'ERASE EVERYTHING';
 
   @override
@@ -892,6 +905,40 @@ class AppLocalizationsEn extends AppLocalizations {
   String get emergencyStopRescue => 'Stop rescue mode';
 
   @override
+  String get emergencyDeliveryTitle => 'Broadcast alert status';
+
+  @override
+  String get deliveryPending => 'Pending broadcast';
+
+  @override
+  String get deliveryRelayed => 'Broadcast to the mesh';
+
+  @override
+  String get deliveryAcknowledged => 'Confirmed by HearthBit';
+
+  @override
+  String get deliveryExpired => 'Expired without confirmation';
+
+  @override
+  String get deliveryAttemptsLabel => 'Attempts';
+
+  @override
+  String get deliveryConfirmationsLabel => 'Confirmations';
+
+  @override
+  String get deliveryLastAttemptLabel => 'Last attempt';
+
+  @override
+  String get deliveryExpiresLabel => 'Expires';
+
+  @override
+  String get deliveryNoHearthBitConfirmation =>
+      'No confirmation from another HearthBit; a BitChat node may still have received it.';
+
+  @override
+  String get deliveryRetry => 'Retry alert';
+
+  @override
   String get errorEmergencyMeshUnavailable =>
       'The Bluetooth mesh could not be activated. Check Bluetooth permissions and try again.';
 
@@ -1455,6 +1502,105 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get drillSendRealSos => 'END DRILL AND SEND SOS';
+
+  @override
+  String get drillDisableTitle => 'End drill mode?';
+
+  @override
+  String get drillDisableBody =>
+      'Practice messages will stop and HearthBit will return to real emergency operation.';
+
+  @override
+  String get drillDisableAction => 'END DRILL';
+
+  @override
+  String get mapNoLocationTitle => 'No location available';
+
+  @override
+  String get mapNoLocationBody =>
+      'Turn on location or wait for a peer to share a valid rescue position. The map will never use (0,0) as a fallback.';
+
+  @override
+  String get voiceMicrophoneRequired =>
+      'Microphone permission is required to record a voice note.';
+
+  @override
+  String get actionOpenSettings => 'OPEN SETTINGS';
+
+  @override
+  String get opticalUnverifiedTitle => 'Unverified source';
+
+  @override
+  String get opticalUnverifiedBody =>
+      'HearthBit cannot match this transfer to a previously authenticated identity. Confirm the fingerprint with the sender before accepting the file.';
+
+  @override
+  String get opticalLegacyWarning =>
+      'This sender uses the legacy unsigned optical format.';
+
+  @override
+  String opticalFingerprint(String fingerprint) {
+    return 'Fingerprint: $fingerprint';
+  }
+
+  @override
+  String get opticalAcceptUnverified => 'ACCEPT UNVERIFIED';
+
+  @override
+  String get opticalSignatureInvalid =>
+      'The optical manifest signature does not match the known sender. The file was rejected.';
+
+  @override
+  String get opticalVerifiedSource => 'Verified sender';
+
+  @override
+  String get gatewayPrivacyConfirm =>
+      'This sends emergency messages, sender details and any included rescue location to the configured internet service. Enable it only with the consent of affected people.';
+
+  @override
+  String get gatewayEnableAction => 'ENABLE GATEWAY';
+
+  @override
+  String get gatewayTlsRequired =>
+      'Required for emergency data; insecure connections are blocked.';
+
+  @override
+  String get locationExportConfirmTitle => 'Export rescue locations?';
+
+  @override
+  String get locationExportConfirmBody =>
+      'The CSV can contain precise locations and emergency details. Share it only with trusted responders and protect the exported file.';
+
+  @override
+  String get locationExportConfirmAction => 'EXPORT LOCATIONS';
+
+  @override
+  String get lanGatewayConnected => 'LAN relay connected';
+
+  @override
+  String get lanGatewaySearching => 'LAN relay enabled · searching locally';
+
+  @override
+  String get lanGatewayDisabled => 'LAN relay disabled';
+
+  @override
+  String get lanGatewayConfigure => 'CONFIGURE LAN RELAY';
+
+  @override
+  String get lanGatewayDisable => 'DISABLE LAN RELAY';
+
+  @override
+  String get lanGatewayPrivacy =>
+      'Opt-in only. The shared key must match your trusted HearthBit Raspberry Pi relay. Mesh frames are authenticated and encrypted on the local network.';
+
+  @override
+  String get lanGatewayPsk => '32-byte pairing key (base64)';
+
+  @override
+  String get lanGatewayGeneratePsk => 'GENERATE KEY';
+
+  @override
+  String get lanGatewayInvalidPsk => 'Enter a valid 32-byte base64 key.';
 
   @override
   String get emergencyContactsOpen => 'Emergency numbers and official links';

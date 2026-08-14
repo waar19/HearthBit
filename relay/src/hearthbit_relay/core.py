@@ -11,6 +11,7 @@ from .link import RelayLink
 from .protocol import (
     EPHEMERAL_MESSAGE_TYPES,
     TYPE_ANNOUNCE,
+    TYPE_MESSAGE,
     TYPE_NOISE_HANDSHAKE,
     TYPE_REQUEST_SYNC,
     Packet,
@@ -212,6 +213,7 @@ class RelayCore:
             message_type=packet.message_type,
             sender_id=packet.sender_id,
             expires_at_ms=expires_at,
+            priority=_packet_priority(packet),
             now_ms=now_ms,
         )
 
@@ -224,6 +226,14 @@ def _relay_policy(packet: Packet) -> str | None:
     if packet.message_type == TYPE_NOISE_HANDSHAKE and not packet.is_directed:
         return "undirected-handshake"
     return None
+
+
+def _packet_priority(packet: Packet) -> int:
+    if packet.message_type != TYPE_MESSAGE:
+        return 0
+    if packet.payload.startswith(b"SOS|") or b"[HB-CHECKIN|" in packet.payload:
+        return 100
+    return 0
 
 
 def _now_ms() -> int:

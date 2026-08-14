@@ -11,6 +11,35 @@ import java.security.MessageDigest
 
 class MeshProtocolTest {
     @Test
+    fun `ACK de emergencia es versionado y ligado al hash canonico`() {
+        val emergency = MeshProtocol.Packet(
+            type = MeshProtocol.TYPE_MESSAGE,
+            ttl = 7,
+            timestamp = 1234,
+            senderId = ByteArray(8) { it.toByte() },
+            payload = "SOS|Ayuda||".toByteArray(),
+            signature = ByteArray(64) { 7 },
+        )
+        val relayed = emergency.copy(ttl = 2, isRsr = true)
+
+        val originalHash = MeshProtocol.emergencyCanonicalHash(emergency)
+        val relayedHash = MeshProtocol.emergencyCanonicalHash(relayed)
+        val payload = MeshProtocol.encodeEmergencyAcknowledgement(originalHash)
+
+        assertArrayEquals(originalHash, relayedHash)
+        assertArrayEquals(
+            originalHash,
+            MeshProtocol.decodeEmergencyAcknowledgement(payload),
+        )
+        assertTrue(MeshProtocol.isEmergencyPublicPacket(emergency))
+        assertTrue(
+            MeshProtocol.supportsEmergencyAcknowledgements(
+                MeshProtocol.encodeEmergencyCapability(),
+            ),
+        )
+    }
+
+    @Test
     fun `FragmentPayload coincide con el formato binario BitChat`() {
         val encoded = MeshProtocol.encodeFragmentPayload(
             MeshProtocol.FragmentPayload(

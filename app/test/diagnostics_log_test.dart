@@ -84,4 +84,31 @@ void main() {
     final exported = await restored.createExportFile();
     expect(await exported.readAsString(), contains('third'));
   });
+
+  test('panic clear removes persisted and exported diagnostics', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'hearthbit-diagnostics-wipe-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    Future<Directory> directoryProvider() async => directory;
+    final log = DiagnosticsLog(
+      supportDirectory: directoryProvider,
+      temporaryDirectory: directoryProvider,
+    );
+    await log.initialize();
+    log.warning('before.wipe');
+    final export = await log.createExportFile();
+    expect(await export.exists(), isTrue);
+
+    await log.clear();
+
+    expect(log.entries, isEmpty);
+    expect(await export.exists(), isFalse);
+    final restored = DiagnosticsLog(
+      supportDirectory: directoryProvider,
+      temporaryDirectory: directoryProvider,
+    );
+    await restored.initialize();
+    expect(restored.entries, isEmpty);
+  });
 }

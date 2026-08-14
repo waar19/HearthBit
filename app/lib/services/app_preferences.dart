@@ -10,6 +10,7 @@ class AppPreferences extends ChangeNotifier {
   static const _highContrastKey = 'appearance.highContrast';
   static const _gatewayOptInKey = 'gateway.optIn';
   static const _drillModeKey = 'emergency.drillModeEnabled.v1';
+  static const _drillModeExpiresAtKey = 'emergency.drillModeExpiresAt.v1';
   static const _emergencyCountryKey = 'emergency.countryOverride.v1';
 
   final SharedPreferencesAsync _preferences;
@@ -20,6 +21,7 @@ class AppPreferences extends ChangeNotifier {
   bool highContrast = false;
   bool gatewayOptIn = false;
   bool drillModeEnabled = false;
+  DateTime? drillModeExpiresAt;
   String? emergencyCountryOverride;
 
   Future<void> initialize() async {
@@ -28,6 +30,18 @@ class AppPreferences extends ChangeNotifier {
     highContrast = await _preferences.getBool(_highContrastKey) ?? false;
     gatewayOptIn = await _preferences.getBool(_gatewayOptInKey) ?? false;
     drillModeEnabled = await _preferences.getBool(_drillModeKey) ?? false;
+    final drillExpiry = await _preferences.getInt(_drillModeExpiresAtKey);
+    drillModeExpiresAt = drillExpiry == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(drillExpiry);
+    if (drillModeEnabled &&
+        (drillModeExpiresAt == null ||
+            !drillModeExpiresAt!.isAfter(DateTime.now()))) {
+      drillModeEnabled = false;
+      drillModeExpiresAt = null;
+      await _preferences.setBool(_drillModeKey, false);
+      await _preferences.remove(_drillModeExpiresAtKey);
+    }
     emergencyCountryOverride = await _preferences.getString(
       _emergencyCountryKey,
     );
@@ -63,6 +77,16 @@ class AppPreferences extends ChangeNotifier {
     if (drillModeEnabled == enabled) return;
     drillModeEnabled = enabled;
     await _preferences.setBool(_drillModeKey, enabled);
+    if (enabled) {
+      drillModeExpiresAt = DateTime.now().add(const Duration(hours: 2));
+      await _preferences.setInt(
+        _drillModeExpiresAtKey,
+        drillModeExpiresAt!.millisecondsSinceEpoch,
+      );
+    } else {
+      drillModeExpiresAt = null;
+      await _preferences.remove(_drillModeExpiresAtKey);
+    }
     notifyListeners();
   }
 
