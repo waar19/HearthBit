@@ -538,8 +538,13 @@ class OfflineTileCache {
   void _schedulePassiveTrim() {
     _writesSinceTrim += 1;
     final now = _now();
+    if (_lastPassiveTrimAt == null) {
+      // La primera escritura establece la ventana. Recortar inmediatamente
+      // duplica I/O y puede sobrevivir al cierre rápido de una pantalla/test.
+      _lastPassiveTrimAt = now;
+      return;
+    }
     final dueByTime =
-        _lastPassiveTrimAt == null ||
         now.difference(_lastPassiveTrimAt!) >= const Duration(minutes: 5);
     if (_trimming || (_writesSinceTrim < 50 && !dueByTime)) return;
     _trimming = true;

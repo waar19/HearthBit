@@ -5171,12 +5171,13 @@ private final class IOSEmergencyFingerprintCache {
   private let lifetime: UInt64 = 24 * 60 * 60 * 1_000
   private let maximum = 512
 
-  func seenOrRemember(_ fingerprint: String, now: UInt64 = currentMilliseconds()) -> Bool {
+  func seenOrRemember(_ fingerprint: String, now: UInt64? = nil) -> Bool {
+    let timestamp = now ?? UInt64(Date().timeIntervalSince1970 * 1000)
     let normalized = fingerprint.lowercased()
-    var entries = validEntries(now: now)
+    var entries = validEntries(now: timestamp)
     let duplicate = entries.contains { $0.fingerprint == normalized }
     if !duplicate {
-      entries.append((now, normalized))
+      entries.append((timestamp, normalized))
     }
     UserDefaults.standard.set(
       entries.suffix(maximum).map {

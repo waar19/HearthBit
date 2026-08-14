@@ -61,10 +61,10 @@ jobs:
       - run: flutter test
         working-directory: app
       - name: Ejecutar pruebas nativas Android
-        run: ./gradlew :app:testDebugUnitTest
+        run: bash ./gradlew :app:testDebugUnitTest
         working-directory: app/android
       - name: Validar relays Android TV y Automotive
-        run: ./gradlew :relay:test :relay:assembleTvDebug :relay:assembleAutomotiveDebug
+        run: bash ./gradlew :relay:test :relay:assembleTvDebug :relay:assembleAutomotiveDebug
         working-directory: app/android
       - name: Ejecutar conformidad relay y firmware
         run: |

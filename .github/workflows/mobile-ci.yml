@@ -66,9 +66,9 @@ jobs:
           cache: gradle
       - run: flutter pub get
         working-directory: app
-      - run: ./gradlew :app:testDebugUnitTest
+      - run: bash ./gradlew :app:testDebugUnitTest
         working-directory: app/android
-      - run: ./gradlew :relay:test :relay:assembleTvDebug :relay:assembleAutomotiveDebug
+      - run: bash ./gradlew :relay:test :relay:assembleTvDebug :relay:assembleAutomotiveDebug
         working-directory: app/android
       - run: flutter build apk --release
         working-directory: app
