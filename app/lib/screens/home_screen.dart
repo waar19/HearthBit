@@ -20,11 +20,17 @@ import '../models/transfer_models.dart';
 import '../models/voice_note.dart';
 import '../services/apk_share_service.dart';
 import '../services/app_preferences.dart';
+import '../services/diagnostics_export_service.dart';
+import '../services/diagnostics_log.dart';
 import '../services/emergency_shortcut_service.dart';
 import '../services/invite_share_service.dart';
 import '../services/photo_profile.dart';
 import '../services/voice_note_audio_controller.dart';
 import '../utils/message_chronology.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/list_section_title.dart';
+import '../widgets/message_composer.dart';
+import '../widgets/nickname_dialog.dart';
 import '../widgets/voice_waveform.dart';
 import 'emergency_screen.dart';
 import 'family_screen.dart';
@@ -46,6 +52,8 @@ class HomeScreen extends StatefulWidget {
     required this.preferences,
     required this.gateway,
     required this.family,
+    this.emergencyOpens,
+    this.consumeInitialEmergencyOpen,
     super.key,
   });
 
@@ -54,6 +62,8 @@ class HomeScreen extends StatefulWidget {
   final AppPreferences preferences;
   final EmergencyGatewayController gateway;
   final FamilyController family;
+  final Stream<void>? emergencyOpens;
+  final Future<bool> Function()? consumeInitialEmergencyOpen;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -63,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   final _apkShare = ApkShareService();
+  final _diagnosticsExport = DiagnosticsExportService();
   int _tab = 0;
   int _publicMessageCount = 0;
   bool _scrollScheduled = false;
@@ -76,10 +87,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _publicMessageCount = _countPublicMessages();
     widget.controller.addListener(_handleMeshUpdate);
-    _emergencyShortcutSubscription = EmergencyShortcutService.opens.listen(
-      (_) => _openEmergencyTab(),
-    );
-    EmergencyShortcutService.consumeInitialOpen().then((open) {
+    _listenForEmergencyShortcuts();
+    final consumeInitialOpen =
+        widget.consumeInitialEmergencyOpen ??
+        EmergencyShortcutService.consumeInitialOpen;
+    consumeInitialOpen().then((open) {
       if (open) _openEmergencyTab();
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -94,6 +106,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _syncGenericPresenceScan();
   }
 
+  void _listenForEmergencyShortcuts() {
+    final opens = widget.emergencyOpens ?? EmergencyShortcutService.opens;
+    _emergencyShortcutSubscription = opens.listen((_) => _openEmergencyTab());
+  }
+
   void _syncGenericPresenceScan({bool force = false}) {
     final enabled = _appInForeground && _tab == 2;
     if (!force && _genericPresenceScanRequested == enabled) return;
@@ -104,6 +121,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void didUpdateWidget(covariant HomeScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.emergencyOpens != widget.emergencyOpens) {
+      unawaited(_emergencyShortcutSubscription?.cancel());
+      _listenForEmergencyShortcuts();
+    }
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller.removeListener(_handleMeshUpdate);
       unawaited(oldWidget.controller.setGenericPresenceScanEnabled(false));
@@ -489,7 +510,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       children: [
         Expanded(
           child: publicMessages.isEmpty
-              ? _EmptyState(
+              ? EmptyState(
                   icon: Icons.bluetooth_searching,
                   title: context.l10n.emptyChatTitle,
                   description: context.l10n.emptyChatBody,
@@ -507,7 +528,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                 ),
         ),
-        _MessageComposer(
+        MessageComposer(
           controller: _messageController,
           enabled: controller.canSend,
           hint: context.l10n.composerPublicHint,
@@ -541,7 +562,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             child: MeshHealthCard(controller: controller),
           ),
           Expanded(
-            child: _EmptyState(
+            child: EmptyState(
               icon: Icons.portable_wifi_off,
               title: context.l10n.emptyPeersTitle,
               description: context.l10n.emptyPeersBody,
@@ -563,7 +584,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         MeshHealthCard(controller: controller),
         const SizedBox(height: 8),
         if (conversations.isNotEmpty) ...[
-          _ListSectionTitle(title: context.l10n.recentChatsTitle),
+          ListSectionTitle(title: context.l10n.recentChatsTitle),
           ...conversations.map((conversation) {
             final peer = conversation.peer;
             final message = conversation.lastMessage;
@@ -626,7 +647,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           }),
         ],
         if (newNearbyPeers.isNotEmpty) ...[
-          _ListSectionTitle(title: context.l10n.nearbyPeopleTitle),
+          ListSectionTitle(title: context.l10n.nearbyPeopleTitle),
           ...newNearbyPeers.map(
             (peer) => ListTile(
               leading: CircleAvatar(child: Text(_avatarLetter(peer.nickname))),
@@ -676,7 +697,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
         ],
         if (genericPresences.isNotEmpty) ...[
-          _ListSectionTitle(title: context.l10n.genericPresenceSectionTitle),
+          ListSectionTitle(title: context.l10n.genericPresenceSectionTitle),
           Card(
             child: ExpansionTile(
               leading: const CircleAvatar(child: Icon(Icons.sensors)),
@@ -884,7 +905,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final value = await showDialog<String>(
       context: context,
       builder: (context) =>
-          _NicknameDialog(initialNickname: controller.nickname),
+          NicknameDialog(initialNickname: controller.nickname),
     );
     if (value != null) await controller.updateNickname(value);
   }
@@ -1009,6 +1030,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               onPressed: () => _shareInvite(buttonContext),
               icon: const Icon(Icons.ios_share),
               label: Text(context.l10n.shareInviteButton),
+            ),
+          ),
+          Builder(
+            builder: (buttonContext) => TextButton.icon(
+              onPressed: () => _shareDiagnostics(buttonContext),
+              icon: const Icon(Icons.bug_report_outlined),
+              label: Text(context.l10n.diagnosticsExportButton),
             ),
           ),
           if (ApkShareService.isSupportedPlatform)
@@ -1185,6 +1213,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _shareDiagnostics(BuildContext anchorContext) async {
+    final anchor = anchorContext.findRenderObject() as RenderBox?;
+    try {
+      DiagnosticsLog.instance.info('diagnostics.export.requested');
+      await _diagnosticsExport.share(
+        anchor: anchor,
+        subject: context.l10n.diagnosticsExportSubject,
+      );
+    } catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'diagnostics.export.failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.diagnosticsExportError)),
+      );
+    }
+  }
+
   Future<void> _openExternal(Uri uri) async {
     var opened = false;
     try {
@@ -1254,24 +1303,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
     });
   }
-}
-
-class _ListSectionTitle extends StatelessWidget {
-  const _ListSectionTitle({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-    child: Text(
-      title,
-      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-        color: Theme.of(context).colorScheme.primary,
-        fontWeight: FontWeight.bold,
-      ),
-    ),
-  );
 }
 
 class _PrivateChatSheet extends StatefulWidget {
@@ -1740,7 +1771,7 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
                     icon: const Icon(Icons.mic),
                   ),
                   Expanded(
-                    child: _MessageComposer(
+                    child: MessageComposer(
                       controller: _textController,
                       enabled: canQueueText,
                       hint: context.l10n.composerPrivateHint,
@@ -1752,54 +1783,6 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _NicknameDialog extends StatefulWidget {
-  const _NicknameDialog({required this.initialNickname});
-
-  final String initialNickname;
-
-  @override
-  State<_NicknameDialog> createState() => _NicknameDialogState();
-}
-
-class _NicknameDialogState extends State<_NicknameDialog> {
-  late final TextEditingController _textController;
-
-  @override
-  void initState() {
-    super.initState();
-    _textController = TextEditingController(text: widget.initialNickname);
-  }
-
-  @override
-  void dispose() {
-    _textController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(context.l10n.nicknameDialogTitle),
-      content: TextField(
-        controller: _textController,
-        autofocus: true,
-        maxLength: 31,
-        decoration: InputDecoration(hintText: context.l10n.nicknameDialogHint),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(context.l10n.actionCancel),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, _textController.text),
-          child: Text(context.l10n.actionSave),
-        ),
-      ],
     );
   }
 }
@@ -1889,53 +1872,6 @@ class _StatusBanner extends StatelessWidget {
               ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _MessageComposer extends StatelessWidget {
-  const _MessageComposer({
-    required this.controller,
-    required this.enabled,
-    required this.hint,
-    required this.onSend,
-  });
-
-  final TextEditingController controller;
-  final bool enabled;
-  final String hint;
-  final VoidCallback onSend;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              enabled: enabled,
-              minLines: 1,
-              maxLines: 4,
-              maxLength: 240,
-              decoration: InputDecoration(
-                hintText: hint,
-                counterText: '',
-                border: const OutlineInputBorder(),
-              ),
-              onTapOutside: (_) =>
-                  FocusManager.instance.primaryFocus?.unfocus(),
-              onSubmitted: (_) => onSend(),
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton.filled(
-            onPressed: enabled ? onSend : null,
-            icon: const Icon(Icons.send),
-          ),
-        ],
       ),
     );
   }
@@ -2318,47 +2254,6 @@ class _DateSeparator extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(label, style: Theme.of(context).textTheme.labelMedium),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({
-    required this.icon,
-    required this.title,
-    required this.description,
-    this.action,
-  });
-
-  final IconData icon;
-  final String title;
-  final String description;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: constraints.maxHeight),
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 64),
-                  const SizedBox(height: 16),
-                  Text(title, style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 8),
-                  Text(description, textAlign: TextAlign.center),
-                  if (action != null) ...[const SizedBox(height: 20), action!],
-                ],
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

@@ -8,6 +8,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
 
+import 'diagnostics_log.dart';
 import 'mesh_platform_service.dart';
 
 const _serviceType = '_hearthbit._tcp.local';
@@ -321,7 +322,12 @@ class LanMeshGatewayService {
         messageId: LanGatewayFraming.messageId(frame),
         path: [_gatewayId],
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'lan_gateway.receive.failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
       await _disconnect();
     }
   }
@@ -332,7 +338,12 @@ class LanMeshGatewayService {
     if (cipher == null || socket == null) return;
     try {
       await cipher.sendPing(socket);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'lan_gateway.keepalive.failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
       await _disconnect();
     }
   }

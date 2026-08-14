@@ -538,6 +538,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shareInviteError => '无法打开分享选项';
 
   @override
+  String get diagnosticsExportButton => '导出诊断信息';
+
+  @override
+  String get diagnosticsExportSubject => 'HearthBit 诊断信息';
+
+  @override
+  String get diagnosticsExportError => '无法导出诊断报告';
+
+  @override
   String get openLinkError => '无法打开链接';
 
   @override

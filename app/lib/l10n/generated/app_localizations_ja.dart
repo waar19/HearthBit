@@ -550,6 +550,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get shareInviteError => '共有オプションを開けませんでした';
 
   @override
+  String get diagnosticsExportButton => '診断情報をエクスポート';
+
+  @override
+  String get diagnosticsExportSubject => 'HearthBit 診断情報';
+
+  @override
+  String get diagnosticsExportError => '診断レポートをエクスポートできませんでした';
+
+  @override
   String get openLinkError => 'リンクを開けませんでした';
 
   @override

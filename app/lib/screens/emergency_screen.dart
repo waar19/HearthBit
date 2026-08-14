@@ -19,6 +19,7 @@ class EmergencyScreen extends StatelessWidget {
     required this.preferences,
     required this.gateway,
     required this.family,
+    this.emergencyHoldDuration = const Duration(seconds: 2),
     super.key,
   });
 
@@ -26,6 +27,7 @@ class EmergencyScreen extends StatelessWidget {
   final AppPreferences preferences;
   final EmergencyGatewayController gateway;
   final FamilyController family;
+  final Duration emergencyHoldDuration;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -57,6 +59,7 @@ class EmergencyScreen extends StatelessWidget {
           child: _HoldSosButton(
             enabled: !controller.activatingEmergency,
             active: controller.rescueMode,
+            holdDuration: emergencyHoldDuration,
             onActivated: () => _activateRealEmergency(context),
           ),
         ),
@@ -403,11 +406,13 @@ class _HoldSosButton extends StatefulWidget {
   const _HoldSosButton({
     required this.enabled,
     required this.active,
+    required this.holdDuration,
     required this.onActivated,
   });
 
   final bool enabled;
   final bool active;
+  final Duration holdDuration;
   final Future<void> Function() onActivated;
 
   @override
@@ -422,14 +427,13 @@ class _HoldSosButtonState extends State<_HoldSosButton>
   @override
   void initState() {
     super.initState();
-    _progress =
-        AnimationController(vsync: this, duration: const Duration(seconds: 2))
-          ..addStatusListener((status) {
-            if (status == AnimationStatus.completed && !_triggered) {
-              _triggered = true;
-              widget.onActivated();
-            }
-          });
+    _progress = AnimationController(vsync: this, duration: widget.holdDuration)
+      ..addStatusListener((status) {
+        if (status == AnimationStatus.completed && !_triggered) {
+          _triggered = true;
+          widget.onActivated();
+        }
+      });
   }
 
   @override
@@ -460,6 +464,7 @@ class _HoldSosButtonState extends State<_HoldSosButton>
           : context.l10n.emergencyHoldSos,
       onLongPress: _start,
       child: Listener(
+        key: const Key('emergency-hold-button'),
         onPointerDown: (_) => _start(),
         onPointerUp: (_) => _cancel(),
         onPointerCancel: (_) => _cancel(),

@@ -566,6 +566,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shareInviteError => 'Could not open the sharing options';
 
   @override
+  String get diagnosticsExportButton => 'Export diagnostics';
+
+  @override
+  String get diagnosticsExportSubject => 'HearthBit diagnostics';
+
+  @override
+  String get diagnosticsExportError => 'Could not export the diagnostic report';
+
+  @override
   String get openLinkError => 'Could not open the link';
 
   @override

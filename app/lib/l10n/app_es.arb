@@ -174,6 +174,9 @@
   "shareInviteMessage": "Únete a HearthBit, una malla de emergencia auditable públicamente que funciona sin internet. Descárgala o contribuye en {url}",
   "tooltipShare": "Invitar personas a HearthBit",
   "shareInviteError": "No se pudieron abrir las opciones para compartir",
+  "diagnosticsExportButton": "Exportar diagnóstico",
+  "diagnosticsExportSubject": "Diagnóstico de HearthBit",
+  "diagnosticsExportError": "No se pudo exportar el informe de diagnóstico",
   "openLinkError": "No se pudo abrir el enlace",
   "actionClose": "Cerrar",
 

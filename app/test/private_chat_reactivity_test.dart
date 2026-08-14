@@ -82,6 +82,7 @@ void main() {
   late AppPreferences preferences;
   late EmergencyGatewayController gateway;
   late FamilyController family;
+  late StreamController<void> emergencyOpens;
 
   setUp(() async {
     SharedPreferencesAsyncPlatform.instance =
@@ -96,6 +97,7 @@ void main() {
     preferences = AppPreferences();
     gateway = EmergencyGatewayController(mesh: mesh, preferences: preferences);
     family = FamilyController(mesh: mesh);
+    emergencyOpens = StreamController<void>.broadcast();
   });
 
   tearDown(() {
@@ -104,6 +106,7 @@ void main() {
     transfers.dispose();
     mesh.dispose();
     preferences.dispose();
+    unawaited(emergencyOpens.close());
   });
 
   Future<void> pumpHome(WidgetTester tester) async {
@@ -118,11 +121,30 @@ void main() {
           preferences: preferences,
           gateway: gateway,
           family: family,
+          emergencyOpens: emergencyOpens.stream,
+          consumeInitialEmergencyOpen: () async => false,
         ),
       ),
     );
     await tester.pump();
   }
+
+  testWidgets('shortcut vuelve directamente a la pestaña SOS', (tester) async {
+    await pumpHome(tester);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('Channel'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('emergency-hold-button')), findsNothing);
+
+    emergencyOpens.add(null);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('emergency-hold-button')), findsOneWidget);
+  });
 
   Map<Object?, Object?> snapshot({
     required bool secure,

@@ -174,6 +174,9 @@
   "shareInviteMessage": "加入 HearthBit：一个无需互联网、可公开审查的应急网状网络。下载或参与贡献：{url}",
   "tooltipShare": "邀请他人使用 HearthBit",
   "shareInviteError": "无法打开分享选项",
+  "diagnosticsExportButton": "导出诊断信息",
+  "diagnosticsExportSubject": "HearthBit 诊断信息",
+  "diagnosticsExportError": "无法导出诊断报告",
   "openLinkError": "无法打开链接",
   "actionClose": "关闭",
 

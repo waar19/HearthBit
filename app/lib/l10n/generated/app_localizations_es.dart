@@ -568,6 +568,16 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se pudieron abrir las opciones para compartir';
 
   @override
+  String get diagnosticsExportButton => 'Exportar diagnóstico';
+
+  @override
+  String get diagnosticsExportSubject => 'Diagnóstico de HearthBit';
+
+  @override
+  String get diagnosticsExportError =>
+      'No se pudo exportar el informe de diagnóstico';
+
+  @override
   String get openLinkError => 'No se pudo abrir el enlace';
 
   @override

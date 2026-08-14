@@ -82,12 +82,33 @@ class _DrillMessages extends MessageRepository {
   Future<void> saveKnownPeers(Iterable<MeshPeer> peers) async {}
 }
 
+class _EmergencyActionController extends MeshController {
+  _EmergencyActionController({
+    required this.testPlatform,
+    required MessageRepository repository,
+    required AppPreferences preferences,
+  }) : super(
+         platform: testPlatform,
+         repository: repository,
+         preferences: preferences,
+       );
+
+  final _DrillPlatform testPlatform;
+  var emergencyActivations = 0;
+
+  @override
+  Future<void> activateEmergency({String? description}) async {
+    emergencyActivations += 1;
+    await testPlatform.sendSos(content: description ?? 'real emergency');
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late _DrillPlatform platform;
   late AppPreferences preferences;
-  late MeshController mesh;
+  late _EmergencyActionController mesh;
   late EmergencyGatewayController gateway;
   late FamilyController family;
 
@@ -97,8 +118,8 @@ void main() {
     platform = _DrillPlatform();
     preferences = AppPreferences();
     await preferences.initialize();
-    mesh = MeshController(
-      platform: platform,
+    mesh = _EmergencyActionController(
+      testPlatform: platform,
       repository: _DrillMessages(),
       preferences: preferences,
     );
@@ -137,6 +158,7 @@ void main() {
               preferences: preferences,
               gateway: gateway,
               family: family,
+              emergencyHoldDuration: const Duration(milliseconds: 20),
             ),
           ),
         ),
@@ -154,6 +176,26 @@ void main() {
     final drillTop = tester.getTopLeft(find.text('Modo simulacro')).dy;
 
     expect(sosTop, lessThan(drillTop));
+  });
+
+  testWidgets('mantener el botón real ejecuta la acción de SOS', (
+    tester,
+  ) async {
+    await pumpScreen(tester);
+    final holdButton = find.byKey(const Key('emergency-hold-button'));
+    await tester.ensureVisible(holdButton);
+
+    final semantics = tester.widget<Semantics>(
+      find.ancestor(of: holdButton, matching: find.byType(Semantics)).first,
+    );
+    semantics.properties.onLongPress!();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+
+    expect(platform.sosCalls, 1);
+    expect(mesh.emergencyActivations, 1);
+    expect(platform.publicMessages, isEmpty);
   });
 
   testWidgets('confirmación activa banner y envío aislado de simulacro', (

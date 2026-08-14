@@ -11,6 +11,7 @@ import '../models/mesh_models.dart';
 import '../services/acoustic_sonar.dart';
 import '../services/beacon_control_protocol.dart';
 import '../services/compass_calibration_gate.dart';
+import '../services/diagnostics_log.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/radar_fusion.dart';
 import '../services/radar_signal.dart';
@@ -125,6 +126,7 @@ class _RadarScreenState extends State<RadarScreen>
     try {
       await _platform.startRadar(widget.peerId);
     } on PlatformException catch (error) {
+      DiagnosticsLog.instance.error('radar.ble.start_failed', error: error);
       if (!mounted) return;
       setState(() => _startError = error.message ?? error.code);
     }
@@ -137,8 +139,13 @@ class _RadarScreenState extends State<RadarScreen>
       setState(() {
         _radioRangingAvailable = capabilities['available'] == true;
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
       // El radar BLE y el sonar acústico siguen disponibles.
+      DiagnosticsLog.instance.warning(
+        'radar.radio.capabilities_unavailable',
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 
@@ -271,6 +278,7 @@ class _RadarScreenState extends State<RadarScreen>
         if (mounted) setState(() => _radioRangingActive = true);
       }
     } on PlatformException catch (error) {
+      DiagnosticsLog.instance.warning('radar.radio.start_failed', error: error);
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -535,6 +543,10 @@ class _RadarScreenState extends State<RadarScreen>
         }
       }
     } on PlatformException catch (error) {
+      DiagnosticsLog.instance.warning(
+        'radar.beacon.request_failed',
+        error: error,
+      );
       if (mounted) {
         final message = error.message ?? error.code;
         ScaffoldMessenger.of(
@@ -693,8 +705,13 @@ class _RadarScreenState extends State<RadarScreen>
           _updateGpsDistance();
         });
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
       // Sin GPS disponible el radar BLE sigue funcionando.
+      DiagnosticsLog.instance.warning(
+        'radar.gps.unavailable',
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 

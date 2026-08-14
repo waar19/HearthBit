@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import 'controllers/mesh_controller.dart';
@@ -8,11 +11,41 @@ import 'l10n/l10n.dart';
 import 'screens/home_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'services/app_preferences.dart';
+import 'services/diagnostics_log.dart';
 import 'services/mesh_platform_service.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  runApp(const HearthBitApp());
+  runZonedGuarded(
+    () {
+      WidgetsFlutterBinding.ensureInitialized();
+      final diagnostics = DiagnosticsLog.instance;
+      FlutterError.onError = (details) {
+        FlutterError.presentError(details);
+        diagnostics.error(
+          'flutter.framework.uncaught',
+          error: details.exception,
+          stackTrace: details.stack,
+        );
+      };
+      PlatformDispatcher.instance.onError = (error, stackTrace) {
+        diagnostics.error(
+          'flutter.platform.uncaught',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        return true;
+      };
+      unawaited(diagnostics.initialize());
+      runApp(const HearthBitApp());
+    },
+    (error, stackTrace) {
+      DiagnosticsLog.instance.error(
+        'dart.zone.uncaught',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    },
+  );
 }
 
 TextTheme scaleDefinedTextTheme(TextTheme theme, double factor) {

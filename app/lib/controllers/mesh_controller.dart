@@ -8,6 +8,7 @@ import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../services/app_preferences.dart';
 import '../services/beacon_control_protocol.dart';
+import '../services/diagnostics_log.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/message_repository.dart';
 import '../services/peer_location_tracker.dart';
@@ -359,6 +360,7 @@ class MeshController extends ChangeNotifier {
   }
 
   Future<void> start() async {
+    DiagnosticsLog.instance.info('mesh.start.requested');
     lastError = null;
     status = MeshConnectionStatus.starting;
     notifyListeners();
@@ -373,6 +375,7 @@ class MeshController extends ChangeNotifier {
     } catch (error) {
       status = MeshConnectionStatus.error;
       lastError = error.toString();
+      DiagnosticsLog.instance.error('mesh.start.failed', error: error);
       notifyListeners();
     }
   }
@@ -383,6 +386,7 @@ class MeshController extends ChangeNotifier {
     await _platform.stop();
     status = MeshConnectionStatus.stopped;
     _presences.clear();
+    DiagnosticsLog.instance.info('mesh.stopped');
     notifyListeners();
   }
 
@@ -440,6 +444,7 @@ class MeshController extends ChangeNotifier {
   }
 
   Future<void> sendSos(String description) async {
+    DiagnosticsLog.instance.info('sos.send.started');
     final position = await _currentPosition();
     await _run(
       () => _platform.sendSos(
@@ -450,6 +455,14 @@ class MeshController extends ChangeNotifier {
         longitude: position?.longitude,
       ),
     );
+    if (lastError == null) {
+      DiagnosticsLog.instance.info(
+        'sos.send.accepted_by_mesh',
+        data: {'gpsAttached': position != null},
+      );
+    } else {
+      DiagnosticsLog.instance.warning('sos.send.failed');
+    }
   }
 
   Future<void> sendCheckIn(CheckInStatus status, String readableMessage) async {
@@ -505,6 +518,7 @@ class MeshController extends ChangeNotifier {
     if (activatingEmergency || rescueMode) return;
     if (drillModeEnabled) await deactivateDrill();
     activatingEmergency = true;
+    DiagnosticsLog.instance.info('sos.activation.started');
     lastError = null;
     notifyListeners();
     try {
@@ -525,8 +539,10 @@ class MeshController extends ChangeNotifier {
         true,
         description: description ?? currentL10n.sosDefaultMessage,
       );
+      DiagnosticsLog.instance.info('sos.activation.completed');
     } catch (error) {
       lastError = error.toString();
+      DiagnosticsLog.instance.error('sos.activation.failed', error: error);
     } finally {
       activatingEmergency = false;
       notifyListeners();
@@ -551,7 +567,12 @@ class MeshController extends ChangeNotifier {
           ),
         );
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'location.current.unavailable',
+        error: error,
+        stackTrace: stackTrace,
+      );
       return null;
     }
     return null;
@@ -577,10 +598,13 @@ class MeshController extends ChangeNotifier {
   Future<void> setGenericPresenceScanEnabled(bool enabled) async {
     try {
       await _platform.setGenericPresenceScanEnabled(enabled);
-    } catch (error) {
-      if (kDebugMode) {
-        debugPrint('Generic BLE presence scan unavailable: $error');
-      }
+    } catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'mesh.generic_scan.unavailable',
+        error: error,
+        stackTrace: stackTrace,
+        data: {'requestedEnabled': enabled},
+      );
     }
   }
 
@@ -680,7 +704,12 @@ class MeshController extends ChangeNotifier {
         _latestRadarPosition = position;
         await _shareRadarLocation(position, force: true);
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'radar.location_sharing.stopped',
+        error: error,
+        stackTrace: stackTrace,
+      );
       _stopRadarLocationSharing();
     } finally {
       _startingRadarLocationSharing = false;
@@ -748,8 +777,13 @@ class MeshController extends ChangeNotifier {
         try {
           await _platform.sendPrivate(peer.id, content);
           delivered = true;
-        } catch (_) {
+        } catch (error, stackTrace) {
           // La ubicación es efímera: nunca se encola para entrega posterior.
+          DiagnosticsLog.instance.warning(
+            'radar.location_update.not_delivered',
+            error: error,
+            stackTrace: stackTrace,
+          );
         }
       }
       if (delivered) {
@@ -1062,6 +1096,10 @@ class MeshController extends ChangeNotifier {
         break;
       case 'error':
         lastError = event['message'] as String? ?? currentL10n.errorUnknown;
+        DiagnosticsLog.instance.warning(
+          'mesh.native.error',
+          data: {'whileStarting': status == MeshConnectionStatus.starting},
+        );
         if (status == MeshConnectionStatus.starting) {
           status = MeshConnectionStatus.error;
         }
@@ -1094,6 +1132,7 @@ class MeshController extends ChangeNotifier {
 
   void _applyStatus(Map<Object?, Object?> event) {
     final couldSend = canSend;
+    final previousStatus = status;
     status = switch (event['status'] as String?) {
       'active' => MeshConnectionStatus.active,
       'degraded' => MeshConnectionStatus.degraded,
@@ -1101,6 +1140,12 @@ class MeshController extends ChangeNotifier {
       'error' => MeshConnectionStatus.error,
       _ => MeshConnectionStatus.stopped,
     };
+    if (status != previousStatus) {
+      DiagnosticsLog.instance.info(
+        'mesh.status.changed',
+        data: {'from': previousStatus, 'to': status},
+      );
+    }
     nickname = event['nickname'] as String? ?? nickname;
     peerId = event['peerId'] as String? ?? peerId;
     signingPublicKey = switch (event['signingPublicKey']) {

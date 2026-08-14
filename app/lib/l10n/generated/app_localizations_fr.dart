@@ -566,6 +566,16 @@ class AppLocalizationsFr extends AppLocalizations {
   String get shareInviteError => 'Impossible d\'ouvrir les options de partage';
 
   @override
+  String get diagnosticsExportButton => 'Exporter le diagnostic';
+
+  @override
+  String get diagnosticsExportSubject => 'Diagnostic HearthBit';
+
+  @override
+  String get diagnosticsExportError =>
+      'Impossible d\'exporter le rapport de diagnostic';
+
+  @override
   String get openLinkError => 'Impossible d\'ouvrir le lien';
 
   @override

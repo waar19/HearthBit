@@ -1053,6 +1053,24 @@ abstract class AppLocalizations {
   /// **'Could not open the sharing options'**
   String get shareInviteError;
 
+  /// No description provided for @diagnosticsExportButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Export diagnostics'**
+  String get diagnosticsExportButton;
+
+  /// No description provided for @diagnosticsExportSubject.
+  ///
+  /// In en, this message translates to:
+  /// **'HearthBit diagnostics'**
+  String get diagnosticsExportSubject;
+
+  /// No description provided for @diagnosticsExportError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not export the diagnostic report'**
+  String get diagnosticsExportError;
+
   /// No description provided for @openLinkError.
   ///
   /// In en, this message translates to:

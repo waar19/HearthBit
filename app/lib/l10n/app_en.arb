@@ -197,6 +197,9 @@
   "@shareInviteMessage": {"placeholders": {"url": {"type": "String"}}},
   "tooltipShare": "Invite people to HearthBit",
   "shareInviteError": "Could not open the sharing options",
+  "diagnosticsExportButton": "Export diagnostics",
+  "diagnosticsExportSubject": "HearthBit diagnostics",
+  "diagnosticsExportError": "Could not export the diagnostic report",
   "openLinkError": "Could not open the link",
   "actionClose": "Close",
 

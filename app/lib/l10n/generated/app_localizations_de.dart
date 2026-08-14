@@ -569,6 +569,16 @@ class AppLocalizationsDe extends AppLocalizations {
       'Die Teilen-Optionen konnten nicht geöffnet werden';
 
   @override
+  String get diagnosticsExportButton => 'Diagnose exportieren';
+
+  @override
+  String get diagnosticsExportSubject => 'HearthBit-Diagnose';
+
+  @override
+  String get diagnosticsExportError =>
+      'Der Diagnosebericht konnte nicht exportiert werden';
+
+  @override
   String get openLinkError => 'Der Link konnte nicht geöffnet werden';
 
   @override
