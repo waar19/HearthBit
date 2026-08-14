@@ -273,6 +273,71 @@ class RunnerTests: XCTestCase {
     XCTAssertTrue(tracker.snapshot(now: 121).isEmpty)
   }
 
+  func testGenericScanPolicyKeepsMeshFilterOutsideForegroundWindows() {
+    XCTAssertEqual(IOSGenericBLEScanPolicy.windowDuration, 10)
+    XCTAssertEqual(IOSGenericBLEScanPolicy.pauseDuration, 50)
+    XCTAssertEqual(
+      IOSGenericBLEScanPolicy.selection(
+        genericEnabled: false,
+        genericWindowActive: true,
+        foreground: true,
+        radarActive: false,
+        recoveryActive: false
+      ),
+      .meshFiltered
+    )
+    XCTAssertEqual(
+      IOSGenericBLEScanPolicy.selection(
+        genericEnabled: true,
+        genericWindowActive: true,
+        foreground: true,
+        radarActive: false,
+        recoveryActive: false
+      ),
+      .genericUnfiltered
+    )
+    XCTAssertEqual(
+      IOSGenericBLEScanPolicy.selection(
+        genericEnabled: true,
+        genericWindowActive: false,
+        foreground: true,
+        radarActive: false,
+        recoveryActive: false
+      ),
+      .meshFiltered
+    )
+    XCTAssertEqual(
+      IOSGenericBLEScanPolicy.selection(
+        genericEnabled: true,
+        genericWindowActive: true,
+        foreground: false,
+        radarActive: false,
+        recoveryActive: false
+      ),
+      .meshFiltered
+    )
+    XCTAssertEqual(
+      IOSGenericBLEScanPolicy.selection(
+        genericEnabled: true,
+        genericWindowActive: true,
+        foreground: true,
+        radarActive: true,
+        recoveryActive: false
+      ),
+      .meshFiltered
+    )
+    XCTAssertEqual(
+      IOSGenericBLEScanPolicy.selection(
+        genericEnabled: true,
+        genericWindowActive: true,
+        foreground: true,
+        radarActive: false,
+        recoveryActive: true
+      ),
+      .meshFiltered
+    )
+  }
+
   func testPhoneBeaconDisablesDataPlanePolicy() {
     XCTAssertFalse(IOSMeshNodeRole.phoneBeacon.allowsDataPlane)
     XCTAssertFalse(IOSMeshNodeRole.phoneBeacon.relaysPackets)

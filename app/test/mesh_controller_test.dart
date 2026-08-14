@@ -151,12 +151,16 @@ class _FakePlatform extends MeshPlatformService {
 }
 
 class _FakeRepository extends MessageRepository {
+  _FakeRepository({List<MeshMessage> initialMessages = const []})
+    : loaded = List.of(initialMessages);
+
+  final List<MeshMessage> loaded;
   final List<MeshMessage> saved = [];
   final List<MeshPeer> knownPeers = [];
   final List<PendingPrivateMessage> outbox = [];
 
   @override
-  Future<List<MeshMessage>> load() async => const [];
+  Future<List<MeshMessage>> load() async => List.of(loaded);
 
   @override
   Future<void> save(MeshMessage message) async {
@@ -252,6 +256,35 @@ void main() {
       ],
     };
   }
+
+  test('limita mensajes en memoria y conserva los más recientes', () async {
+    final initialMessages = List.generate(
+      520,
+      (index) => MeshMessage(
+        id: 'message-$index',
+        sender: 'Peer',
+        content: 'Mensaje $index',
+        senderPeerId: 'peer',
+        isPrivate: false,
+        isMine: false,
+        timestamp: DateTime.fromMillisecondsSinceEpoch(index),
+      ),
+    );
+    final localController = MeshController(
+      platform: _FakePlatform(),
+      repository: _FakeRepository(initialMessages: initialMessages),
+    );
+    addTearDown(localController.dispose);
+
+    await localController.initialize();
+
+    expect(
+      localController.messages,
+      hasLength(MeshController.maximumMessagesInMemory),
+    );
+    expect(localController.messages.first.id, 'message-20');
+    expect(localController.messages.last.id, 'message-519');
+  });
 
   test('el estado degraded llega desde el nativo y permite enviar', () async {
     platform.emit({'type': 'status', 'status': 'degraded'});

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:hearth_bit/models/mesh_models.dart';
 import 'package:hearth_bit/services/message_repository.dart';
 
 void main() {
@@ -124,5 +125,70 @@ void main() {
       (await repository.listPendingPrivateMessages()).single.content,
       'Después',
     );
+  });
+
+  test('carga los 500 más recientes y conserva 1000 en disco', () async {
+    await repository.load();
+    final database = await databaseFactoryFfi.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(singleInstance: false),
+    );
+    final batch = database.batch();
+    for (var index = 0; index < 1005; index++) {
+      batch.insert(
+        'messages',
+        MeshMessage(
+          id: 'message-$index',
+          sender: 'Peer',
+          content: 'Mensaje $index',
+          senderPeerId: 'peer',
+          isPrivate: false,
+          isMine: false,
+          timestamp: DateTime.fromMillisecondsSinceEpoch(index),
+        ).toDatabase(),
+      );
+    }
+    await batch.commit(noResult: true);
+    await database.close();
+
+    final loaded = await repository.load();
+    expect(loaded, hasLength(MessageRepository.maximumLoadedMessages));
+    expect(loaded.first.id, 'message-505');
+    expect(loaded.last.id, 'message-1004');
+    expect(
+      loaded.map((message) => message.timestamp.millisecondsSinceEpoch),
+      orderedEquals(
+        loaded
+            .map((message) => message.timestamp.millisecondsSinceEpoch)
+            .toList()
+          ..sort(),
+      ),
+    );
+
+    await repository.save(
+      MeshMessage(
+        id: 'message-1005',
+        sender: 'Peer',
+        content: 'Mensaje 1005',
+        senderPeerId: 'peer',
+        isPrivate: false,
+        isMine: false,
+        timestamp: DateTime.fromMillisecondsSinceEpoch(1005),
+      ),
+    );
+    final prunedDatabase = await databaseFactoryFfi.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(singleInstance: false),
+    );
+    final countRows = await prunedDatabase.rawQuery(
+      'SELECT COUNT(*) AS total FROM messages',
+    );
+    final count = (countRows.single['total'] as num).toInt();
+    await prunedDatabase.close();
+
+    expect(count, MessageRepository.maximumStoredMessages);
+    final afterPrune = await repository.load();
+    expect(afterPrune.first.id, 'message-506');
+    expect(afterPrune.last.id, 'message-1005');
   });
 }

@@ -20,6 +20,7 @@ class _ReactivePlatform extends MeshPlatformService {
   final StreamController<Map<Object?, Object?>> _events =
       StreamController.broadcast();
   final List<String> privateMessages = [];
+  final List<bool> genericPresenceScanStates = [];
   Object? privateMessageError;
 
   void emit(Map<Object?, Object?> event) => _events.add(event);
@@ -47,6 +48,11 @@ class _ReactivePlatform extends MeshPlatformService {
 
   @override
   Future<void> ensurePrivateChannel(String peerId) async {}
+
+  @override
+  Future<void> setGenericPresenceScanEnabled(bool enabled) async {
+    genericPresenceScanStates.add(enabled);
+  }
 }
 
 class _MemoryMessageRepository extends MessageRepository {
@@ -161,13 +167,52 @@ void main() {
     await tester.tap(composer);
     await tester.enterText(composer, 'Draft');
     final editableText = find.byType(EditableText);
-    expect(tester.widget<EditableText>(editableText).focusNode.hasFocus, isTrue);
+    expect(
+      tester.widget<EditableText>(editableText).focusNode.hasFocus,
+      isTrue,
+    );
 
     await tester.tap(find.text('No messages yet'));
     await tester.pump();
 
-    expect(tester.widget<EditableText>(editableText).focusNode.hasFocus, isFalse);
+    expect(
+      tester.widget<EditableText>(editableText).focusNode.hasFocus,
+      isFalse,
+    );
     expect(find.text('Draft'), findsOneWidget);
+  });
+
+  testWidgets('escanea presencias genéricas solo en Cercanos y foreground', (
+    tester,
+  ) async {
+    await pumpHome(tester);
+    expect(platform.genericPresenceScanStates, [false]);
+
+    await tester.tap(find.text('Nearby'));
+    await tester.pump();
+    expect(platform.genericPresenceScanStates, [false, true]);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    expect(platform.genericPresenceScanStates, [false, true, false]);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(platform.genericPresenceScanStates, [false, true, false, true]);
+
+    await tester.tap(find.text('Channel'));
+    await tester.pump();
+    expect(platform.genericPresenceScanStates, [
+      false,
+      true,
+      false,
+      true,
+      false,
+    ]);
   });
 
   testWidgets('el sheet actualiza peer y canal seguro sin cerrarse', (

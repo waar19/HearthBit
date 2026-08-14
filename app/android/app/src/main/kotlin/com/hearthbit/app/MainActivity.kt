@@ -168,6 +168,12 @@ class MainActivity : FlutterActivity() {
                     )
                     null
                 }
+                "setGenericPresenceScanEnabled" -> runMethod(result) {
+                    MeshRuntime.engine(this).setGenericPresenceScanEnabled(
+                        call.argument<Boolean>("enabled") == true,
+                    )
+                    null
+                }
                 "getPeers" -> runMethod(result) {
                     MeshRuntime.engine(this).peersSnapshot()
                 }

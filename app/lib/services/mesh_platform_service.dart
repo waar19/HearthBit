@@ -57,6 +57,12 @@ class MeshPlatformService {
     });
   }
 
+  Future<void> setGenericPresenceScanEnabled(bool enabled) {
+    return _methods.invokeMethod<void>('setGenericPresenceScanEnabled', {
+      'enabled': enabled,
+    });
+  }
+
   Future<void> injectRawMeshFrame({
     required String gatewayId,
     required Uint8List frame,

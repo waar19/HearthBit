@@ -40,6 +40,26 @@ internal class StoreForwardCache(context: Context) {
         }
     }
 
+    /**
+     * Destinatarios que deben conservar metadatos de peer mientras exista un
+     * paquete pendiente de entrega en la caché.
+     */
+    @Synchronized
+    fun pendingRecipientPeerIds(now: Long = System.currentTimeMillis()): Set<String> {
+        val entries = readValid(now)
+        return entries.asSequence()
+            .mapNotNull { entry ->
+                runCatching { Base64.decode(entry.encoded, Base64.NO_WRAP) }
+                    .getOrNull()
+                    ?.let(MeshProtocol::decode)
+            }
+            .filter { isReplaySafe(it) }
+            .mapNotNull { it.recipientId }
+            .filterNot { it.contentEquals(MeshProtocol.broadcastRecipient) }
+            .map(MeshProtocol::hex)
+            .toSet()
+    }
+
     fun clear() {
         preferences.edit().clear().apply()
     }

@@ -33,6 +33,7 @@ class TransferController extends ChangeNotifier {
   static const int voiceNoteMaxBytes = 64 * 1024;
   static const int defaultChunkSize = 64 * 1024;
   static const int maxFileBytes = 512 * 1024 * 1024;
+  static const int maximumTransfersInMemory = 200;
   static const Duration offerLifetime = Duration(minutes: 10);
   static const Duration priorityHold = Duration(seconds: 20);
   static const String voiceNoteMimeType = 'audio/x-hearthbit-voice';
@@ -78,6 +79,7 @@ class TransferController extends ChangeNotifier {
     _transfers
       ..clear()
       ..addAll(await _repository.load());
+    _trimTransfersInMemory();
     // Las transferencias que quedaron a medias en una sesión anterior no
     // tienen ya sesión criptográfica en memoria: se marcan como fallidas.
     for (final record in _transfers) {
@@ -160,6 +162,7 @@ class TransferController extends ChangeNotifier {
     });
     _sessions[idHex] = session;
     _transfers.insert(0, record);
+    _trimTransfersInMemory();
     await _repository.save(record);
     notifyListeners();
 
@@ -295,6 +298,7 @@ class TransferController extends ChangeNotifier {
       filePath: filePath,
     );
     _transfers.insert(0, record);
+    _trimTransfersInMemory();
     await _repository.save(record);
     notifyListeners();
   }
@@ -456,6 +460,7 @@ class TransferController extends ChangeNotifier {
       offeredTransports: frame.u32(TransferProtocol.tagTransports) ?? 0,
     );
     _transfers.insert(0, record);
+    _trimTransfersInMemory();
     await _repository.save(record);
     notifyListeners();
     if (isInlineVoiceNote(mimeType: record.mimeType, bytes: record.fileSize)) {
@@ -1082,6 +1087,7 @@ class TransferController extends ChangeNotifier {
     }
     await _platform.nearbyStop(record.id);
     await _platform.wifiAwareStop(record.id);
+    _trimTransfersInMemory();
     await _repository.save(record);
     notifyListeners();
   }
@@ -1102,6 +1108,16 @@ class TransferController extends ChangeNotifier {
         ? '${record.id}$suffix.part'
         : '${record.id}_${record.fileName}';
     return p.join(directory.path, name);
+  }
+
+  void _trimTransfersInMemory() {
+    while (_transfers.length > maximumTransfersInMemory) {
+      final removable = _transfers.lastIndexWhere(
+        (record) => !record.isActive && !_sessions.containsKey(record.id),
+      );
+      if (removable < 0) return;
+      _transfers.removeAt(removable);
+    }
   }
 
   TransferRecord? _find(String transferId) {

@@ -60,6 +60,33 @@ private enum IOSPowerProfile: String {
   }
 }
 
+enum IOSBLEScanSelection: Equatable {
+  case meshFiltered
+  case genericUnfiltered
+}
+
+enum IOSGenericBLEScanPolicy {
+  static let windowDuration: TimeInterval = 10
+  static let pauseDuration: TimeInterval = 50
+
+  static func selection(
+    genericEnabled: Bool,
+    genericWindowActive: Bool,
+    foreground: Bool,
+    radarActive: Bool,
+    recoveryActive: Bool
+  ) -> IOSBLEScanSelection {
+    if genericEnabled &&
+       genericWindowActive &&
+       foreground &&
+       !radarActive &&
+       !recoveryActive {
+      return .genericUnfiltered
+    }
+    return .meshFiltered
+  }
+}
+
 enum IOSPeerReachabilityPolicy {
   static let window: TimeInterval = 4 * 60
 
@@ -146,6 +173,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private let genericPresenceTracker = IOSGenericBLEPresenceTracker()
   private var genericPresenceEmitWorkItem: DispatchWorkItem?
   private var genericPresenceExpiryWorkItem: DispatchWorkItem?
+  private var genericPresenceScanEnabled = false
+  private var genericPresenceWindowActive = false
+  private var genericPresenceWindowStartTimer: Timer?
+  private var genericPresenceWindowEndTimer: Timer?
   private var restoredPeripheralService = false
   private var lastSubscriptionAnnouncement: [UUID: Date] = [:]
   private var lifecycleObservers: [NSObjectProtocol] = []
@@ -285,6 +316,14 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       case "setLanDiscoveryEnabled":
         // Network.framework/Dart owns Bonjour. The method keeps the native
         // bridge API symmetric with Android, where a MulticastLock is needed.
+        result(nil)
+      case "setGenericPresenceScanEnabled":
+        guard
+          let enabled = (call.arguments as? Bool) ?? (arguments["enabled"] as? Bool)
+        else {
+          throw IOSMeshError.invalidPayload
+        }
+        setGenericPresenceScanEnabled(enabled)
         result(nil)
       case "configureLanBridge":
         let enabled = arguments["enabled"] as? Bool ?? false
@@ -527,12 +566,16 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         ) { [weak self] _ in
           self?.stopLocalBeacon()
           self?.refreshPowerState()
+          self?.restartScan()
         },
         center.addObserver(
           forName: UIApplication.didBecomeActiveNotification,
           object: nil,
           queue: .main
-        ) { [weak self] _ in self?.refreshPowerState() },
+        ) { [weak self] _ in
+          self?.refreshPowerState()
+          self?.restartScan()
+        },
         center.addObserver(
           forName: UIDevice.batteryLevelDidChangeNotification,
           object: nil,
@@ -611,6 +654,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     genericPresenceEmitWorkItem = nil
     genericPresenceExpiryWorkItem?.cancel()
     genericPresenceExpiryWorkItem = nil
+    cancelGenericPresenceScanWindows()
     genericPresenceTracker.clear()
     lanBridgeGatewayID = nil
     suppressLanBridge = false
@@ -703,6 +747,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     genericPresenceEmitWorkItem = nil
     genericPresenceExpiryWorkItem?.cancel()
     genericPresenceExpiryWorkItem = nil
+    cancelGenericPresenceScanWindows()
     genericPresenceTracker.clear()
     emit(["type": "presences", "presences": []])
     configurePeripheralMode()
@@ -953,41 +998,171 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     ])
   }
 
-  /// Escanea sin filtro para observar presencia genérica. Solo los anuncios
-  /// mesh llegan a conexión; los demás se convierten en IDs locales efímeros.
+  private func setGenericPresenceScanEnabled(_ enabled: Bool) {
+    genericPresenceScanEnabled = enabled
+    cancelGenericPresenceScanWindows()
+    if !enabled {
+      genericPresenceEmitWorkItem?.cancel()
+      genericPresenceEmitWorkItem = nil
+      genericPresenceExpiryWorkItem?.cancel()
+      genericPresenceExpiryWorkItem = nil
+      genericPresenceTracker.clear()
+      emit(["type": "presences", "presences": []])
+    }
+    if running {
+      restartScan()
+    }
+  }
+
+  private func cancelGenericPresenceScanWindows() {
+    genericPresenceWindowStartTimer?.invalidate()
+    genericPresenceWindowStartTimer = nil
+    genericPresenceWindowEndTimer?.invalidate()
+    genericPresenceWindowEndTimer = nil
+    genericPresenceWindowActive = false
+  }
+
+  private func genericPresenceWindowIsAllowed() -> Bool {
+    running &&
+      genericPresenceScanEnabled &&
+      localRole.allowsDataPlane &&
+      UIApplication.shared.applicationState == .active &&
+      radarPeerID == nil &&
+      linkLossScanTimer == nil
+  }
+
+  private func startFilteredMeshScan(
+    using central: CBCentralManager,
+    allowDuplicates: Bool
+  ) {
+    central.stopScan()
+    central.scanForPeripherals(
+      withServices: [Self.serviceUUID],
+      options: [CBCentralManagerScanOptionAllowDuplicatesKey: allowDuplicates]
+    )
+  }
+
+  private func beginGenericPresenceWindow() {
+    genericPresenceWindowStartTimer?.invalidate()
+    genericPresenceWindowStartTimer = nil
+    guard
+      genericPresenceWindowIsAllowed(),
+      let central = central,
+      central.state == .poweredOn
+    else {
+      genericPresenceWindowActive = false
+      return
+    }
+
+    genericPresenceWindowActive = true
+    let selection = IOSGenericBLEScanPolicy.selection(
+      genericEnabled: genericPresenceScanEnabled,
+      genericWindowActive: genericPresenceWindowActive,
+      foreground: UIApplication.shared.applicationState == .active,
+      radarActive: radarPeerID != nil,
+      recoveryActive: linkLossScanTimer != nil
+    )
+    guard selection == .genericUnfiltered else {
+      genericPresenceWindowActive = false
+      return
+    }
+    central.stopScan()
+    central.scanForPeripherals(
+      withServices: nil,
+      options: [
+        CBCentralManagerScanOptionAllowDuplicatesKey: powerProfile == .performance
+      ]
+    )
+    genericPresenceWindowEndTimer?.invalidate()
+    genericPresenceWindowEndTimer = Timer.scheduledTimer(
+      withTimeInterval: IOSGenericBLEScanPolicy.windowDuration,
+      repeats: false
+    ) { [weak self] _ in
+      guard let self = self else { return }
+      self.genericPresenceWindowEndTimer = nil
+      self.genericPresenceWindowActive = false
+      guard
+        self.running,
+        let central = self.central,
+        central.state == .poweredOn,
+        self.localRole.allowsDataPlane
+      else { return }
+
+      let foreground = UIApplication.shared.applicationState == .active
+      let selection = IOSGenericBLEScanPolicy.selection(
+        genericEnabled: self.genericPresenceScanEnabled,
+        genericWindowActive: false,
+        foreground: foreground,
+        radarActive: self.radarPeerID != nil,
+        recoveryActive: self.linkLossScanTimer != nil
+      )
+      switch selection {
+      case .meshFiltered:
+        let allowDuplicates = foreground &&
+          (self.radarPeerID != nil || self.powerProfile == .performance)
+        self.startFilteredMeshScan(
+          using: central,
+          allowDuplicates: allowDuplicates
+        )
+      case .genericUnfiltered:
+        break
+      }
+      self.scheduleNextGenericPresenceWindow()
+    }
+  }
+
+  private func scheduleNextGenericPresenceWindow() {
+    genericPresenceWindowStartTimer?.invalidate()
+    genericPresenceWindowStartTimer = nil
+    guard genericPresenceWindowIsAllowed() else { return }
+    genericPresenceWindowStartTimer = Timer.scheduledTimer(
+      withTimeInterval: IOSGenericBLEScanPolicy.pauseDuration,
+      repeats: false
+    ) { [weak self] _ in
+      self?.beginGenericPresenceWindow()
+    }
+  }
+
+  /// El filtro HearthBit es la base. La presencia genérica, si Flutter la
+  /// habilita, sustituye ese scan solo durante ventanas acotadas en foreground.
   private func restartScan() {
     guard running, let central, central.state == .poweredOn else { return }
     adaptiveScanTimer?.invalidate()
     adaptiveScanTimer = nil
+    cancelGenericPresenceScanWindows()
     central.stopScan()
     guard localRole.allowsDataPlane else { return }
     let foreground = UIApplication.shared.applicationState == .active
     guard powerProfile != .survival || radarPeerID != nil else { return }
     if radarPeerID != nil {
-      central.scanForPeripherals(
-        withServices: [Self.serviceUUID],
-        options: [CBCentralManagerScanOptionAllowDuplicatesKey: true]
-      )
+      startFilteredMeshScan(using: central, allowDuplicates: true)
+      return
+    }
+    if linkLossScanTimer != nil {
+      startFilteredMeshScan(using: central, allowDuplicates: false)
       return
     }
     // En segundo plano iOS ya coalescea y limita el escaneo. Mantener un scan
     // filtrado continuo es más fiable que depender de timers que el SO suspende.
     if !foreground {
-      central.scanForPeripherals(
-        withServices: [Self.serviceUUID],
-        options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+      startFilteredMeshScan(using: central, allowDuplicates: false)
+      return
+    }
+    if genericPresenceScanEnabled {
+      startFilteredMeshScan(
+        using: central,
+        allowDuplicates: powerProfile == .performance
       )
+      beginGenericPresenceWindow()
       return
     }
     if powerProfile.scanBurst > 0 {
       startAdaptiveScanBurst()
       return
     }
-    central.scanForPeripherals(
-      withServices: nil,
-      options: [
-        CBCentralManagerScanOptionAllowDuplicatesKey: powerProfile == .performance
-      ]
+    startFilteredMeshScan(
+      using: central,
+      allowDuplicates: powerProfile == .performance
     )
   }
 
@@ -1002,7 +1177,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let profile = powerProfile
     central.stopScan()
     central.scanForPeripherals(
-      withServices: profile == .critical ? [Self.serviceUUID] : nil,
+      withServices: [Self.serviceUUID],
       options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
     )
     adaptiveScanTimer = Timer.scheduledTimer(
@@ -2621,6 +2796,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     else { return }
     adaptiveScanTimer?.invalidate()
     adaptiveScanTimer = nil
+    cancelGenericPresenceScanWindows()
     linkLossScanTimer?.invalidate()
     central.stopScan()
     central.scanForPeripherals(
@@ -2736,7 +2912,10 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
       localRole.allowsDataPlane
     else { return }
     guard isMeshAdvertisement(advertisementData) else {
-      if RSSI.intValue != 127 {
+      if genericPresenceScanEnabled &&
+         genericPresenceWindowActive &&
+         UIApplication.shared.applicationState == .active &&
+         RSSI.intValue != 127 {
         recordGenericPresence(advertisementData: advertisementData, rssi: RSSI.intValue)
       }
       return

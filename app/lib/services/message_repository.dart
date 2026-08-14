@@ -80,6 +80,9 @@ class PendingPrivateMessage {
 }
 
 class MessageRepository {
+  static const int maximumLoadedMessages = 500;
+  static const int maximumStoredMessages = 1000;
+
   MessageRepository({this.databaseFactory, this.databasePath})
     : assert(databasePath == null || databasePath.isNotEmpty);
 
@@ -171,18 +174,32 @@ class MessageRepository {
   Future<List<MeshMessage>> load() async {
     final rows = await (await _db).query(
       'messages',
-      orderBy: 'timestamp ASC',
-      limit: 500,
+      orderBy: 'timestamp DESC, id DESC',
+      limit: maximumLoadedMessages,
     );
-    return rows.map(MeshMessage.fromDatabase).toList(growable: false);
+    return rows
+        .map(MeshMessage.fromDatabase)
+        .toList(growable: false)
+        .reversed
+        .toList(growable: false);
   }
 
   Future<void> save(MeshMessage message) async {
-    await (await _db).insert(
-      'messages',
-      message.toDatabase(),
-      conflictAlgorithm: ConflictAlgorithm.ignore,
-    );
+    final database = await _db;
+    await database.transaction((transaction) async {
+      await transaction.insert(
+        'messages',
+        message.toDatabase(),
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+      await transaction.rawDelete(
+        'DELETE FROM messages WHERE id NOT IN ('
+        'SELECT id FROM messages '
+        'ORDER BY timestamp DESC, id DESC LIMIT ?'
+        ')',
+        [maximumStoredMessages],
+      );
+    });
   }
 
   Future<List<MeshPeer>> loadKnownPeers() async {

@@ -66,6 +66,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _tab = 0;
   int _publicMessageCount = 0;
   bool _scrollScheduled = false;
+  bool _appInForeground = true;
+  bool? _genericPresenceScanRequested;
   StreamSubscription<void>? _emergencyShortcutSubscription;
 
   @override
@@ -80,12 +82,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     EmergencyShortcutService.consumeInitialOpen().then((open) {
       if (open) _openEmergencyTab();
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _syncGenericPresenceScan(force: true);
+    });
     _scrollToBottom(animate: false);
   }
 
   void _openEmergencyTab() {
     if (!mounted) return;
     setState(() => _tab = 0);
+    _syncGenericPresenceScan();
+  }
+
+  void _syncGenericPresenceScan({bool force = false}) {
+    final enabled = _appInForeground && _tab == 2;
+    if (!force && _genericPresenceScanRequested == enabled) return;
+    _genericPresenceScanRequested = enabled;
+    unawaited(widget.controller.setGenericPresenceScanEnabled(enabled));
   }
 
   @override
@@ -93,7 +106,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller.removeListener(_handleMeshUpdate);
+      unawaited(oldWidget.controller.setGenericPresenceScanEnabled(false));
       widget.controller.addListener(_handleMeshUpdate);
+      _genericPresenceScanRequested = null;
+      _syncGenericPresenceScan(force: true);
       _publicMessageCount = _countPublicMessages();
       _scrollToBottom(animate: false);
     }
@@ -101,6 +117,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appInForeground = state == AppLifecycleState.resumed;
+    _syncGenericPresenceScan();
     // Al volver de Ajustes (batería/ubicación) se refresca el estado real.
     if (state == AppLifecycleState.resumed) {
       widget.controller.refreshPowerStatus();
@@ -155,6 +173,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
       if (!mounted) return;
       setState(() => _tab = 2);
+      _syncGenericPresenceScan();
     } catch (error) {
       if (!mounted) return;
       final detail = error is StateError ? error.message : '$error';
@@ -253,6 +272,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(widget.controller.setGenericPresenceScanEnabled(false));
     widget.controller.removeListener(_handleMeshUpdate);
     _emergencyShortcutSubscription?.cancel();
     _messageController.dispose();
@@ -390,6 +410,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             selectedIndex: _tab,
             onDestinationSelected: (value) {
               setState(() => _tab = value);
+              _syncGenericPresenceScan();
               if (value == 1) _scrollToBottom(animate: false);
             },
             destinations: [
@@ -463,6 +484,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final publicMessages = controller.messages
         .where((message) => !message.isPrivate)
         .toList(growable: false);
+    final timeline = _messageTimelineEntries(publicMessages);
     return Column(
       children: [
         Expanded(
@@ -472,14 +494,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   title: context.l10n.emptyChatTitle,
                   description: context.l10n.emptyChatBody,
                 )
-              : ListView(
+              : ListView.builder(
                   controller: _scrollController,
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: const EdgeInsets.all(12),
-                  children: _messageTimeline(
+                  itemCount: timeline.length,
+                  itemBuilder: (context, index) => _buildMessageTimelineEntry(
                     context,
-                    publicMessages,
+                    timeline[index],
                     compactSos: true,
                   ),
                 ),
@@ -1131,6 +1154,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
       if (!mounted) return;
       setState(() => _tab = 3);
+      _syncGenericPresenceScan();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.l10n.apkOfferSent(peer.nickname))),
       );
@@ -1548,6 +1572,7 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
               message.isPrivate && message.senderPeerId == widget.peer.id,
         )
         .toList(growable: false);
+    final timeline = _messageTimelineEntries(privateMessages);
     final mediaQuery = MediaQuery.of(context);
     final availableHeight =
         mediaQuery.size.height - mediaQuery.viewInsets.bottom - 32;
@@ -1621,16 +1646,18 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
                         textAlign: TextAlign.center,
                       ),
                     )
-                  : ListView(
+                  : ListView.builder(
                       controller: _scrollController,
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
-                      children: _messageTimeline(
-                        context,
-                        privateMessages,
-                        transfers: widget.transfers,
-                        voiceAudio: _voiceAudio,
-                      ),
+                      itemCount: timeline.length,
+                      itemBuilder: (context, index) =>
+                          _buildMessageTimelineEntry(
+                            context,
+                            timeline[index],
+                            transfers: widget.transfers,
+                            voiceAudio: _voiceAudio,
+                          ),
                     ),
             ),
             if (_sendError case final error?)
@@ -2023,32 +2050,43 @@ class _MessageBubble extends StatelessWidget {
   }
 }
 
-List<Widget> _messageTimeline(
-  BuildContext context,
-  List<MeshMessage> messages, {
-  TransferController? transfers,
-  VoiceNoteAudioController? voiceAudio,
-  bool compactSos = false,
-}) {
-  final widgets = <Widget>[];
+typedef _MessageTimelineEntry = ({DateTime? day, MeshMessage? message});
+
+List<_MessageTimelineEntry> _messageTimelineEntries(
+  List<MeshMessage> messages,
+) {
+  final entries = <_MessageTimelineEntry>[];
   DateTime? previousDay;
   for (final message in messages) {
     final day = localCalendarDay(message.timestamp);
     if (previousDay != day) {
-      widgets.add(_DateSeparator(label: _formatDayLabel(context, day)));
+      entries.add((day: day, message: null));
       previousDay = day;
     }
-    widgets.add(
-      compactSos && message.isSos
-          ? _CompactSosMessage(message: message)
-          : _MessageBubble(
-              message: message,
-              transfers: transfers,
-              voiceAudio: voiceAudio,
-            ),
-    );
+    entries.add((day: null, message: message));
   }
-  return widgets;
+  return entries;
+}
+
+Widget _buildMessageTimelineEntry(
+  BuildContext context,
+  _MessageTimelineEntry entry, {
+  TransferController? transfers,
+  VoiceNoteAudioController? voiceAudio,
+  bool compactSos = false,
+}) {
+  final day = entry.day;
+  if (day != null) {
+    return _DateSeparator(label: _formatDayLabel(context, day));
+  }
+  final message = entry.message!;
+  return compactSos && message.isSos
+      ? _CompactSosMessage(message: message)
+      : _MessageBubble(
+          message: message,
+          transfers: transfers,
+          voiceAudio: voiceAudio,
+        );
 }
 
 class _CompactSosMessage extends StatelessWidget {

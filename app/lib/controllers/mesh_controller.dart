@@ -74,6 +74,8 @@ class MeshController extends ChangeNotifier {
   static const Duration radarLocationInterval = Duration(seconds: 20);
   static const int radarLocationDistanceMeters = 15;
   static const Duration peerReachabilityWindow = Duration(minutes: 4);
+  static const int maximumMessagesInMemory = 500;
+  static const Duration topologyNotificationInterval = Duration(seconds: 1);
 
   final MeshPlatformService _platform;
   final MessageRepository _repository;
@@ -87,7 +89,6 @@ class MeshController extends ChangeNotifier {
   final Random _random = Random.secure();
 
   StreamSubscription<Map<Object?, Object?>>? _subscription;
-  StreamSubscription<Position>? _radarPositionSubscription;
   bool _drainingPrivateMessageOutbox = false;
   bool _privateMessageOutboxDrainRequested = false;
   bool _startingRadarLocationSharing = false;
@@ -112,6 +113,8 @@ class MeshController extends ChangeNotifier {
   Timer? _rescueTimer;
   Timer? _consentTimer;
   Timer? _radarLocationTimer;
+  Timer? _topologyNotificationTimer;
+  DateTime? _lastTopologyNotificationAt;
   Position? _latestRadarPosition;
   Position? _lastSharedRadarPosition;
   DateTime? _lastRadarLocationShareAt;
@@ -242,19 +245,23 @@ class MeshController extends ChangeNotifier {
     _messages.sort(
       (first, second) => first.timestamp.compareTo(second.timestamp),
     );
+    _trimMessagesInMemory();
     _subscription = _platform.events.listen(_handleEvent);
     final capabilities = await _platform.getCapabilities();
     supportsBackgroundRelay = capabilities['backgroundRelay'] as bool? ?? false;
     await refreshPowerStatus();
     _consentTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
+      var changed = false;
       if (radarConsentUntil != null && !radarConsentActive) {
         radarConsentUntil = null;
         _syncRadarLocationSharing();
+        changed = true;
       }
       if (pendingBeaconRequest?.expiresAt.isAfter(DateTime.now()) == false) {
         pendingBeaconRequest = null;
+        changed = true;
       }
-      notifyListeners();
+      if (changed) notifyListeners();
     });
     _requestPrivateMessageOutboxDrain();
     notifyListeners();
@@ -526,7 +533,9 @@ class MeshController extends ChangeNotifier {
     }
   }
 
-  Future<Position?> _currentPosition() async {
+  Future<Position?> _currentPosition({
+    LocationAccuracy accuracy = LocationAccuracy.high,
+  }) async {
     try {
       if (!await Geolocator.isLocationServiceEnabled()) return null;
       var permission = await Geolocator.checkPermission();
@@ -536,9 +545,9 @@ class MeshController extends ChangeNotifier {
       if (permission == LocationPermission.always ||
           permission == LocationPermission.whileInUse) {
         return await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            timeLimit: Duration(seconds: 10),
+          locationSettings: LocationSettings(
+            accuracy: accuracy,
+            timeLimit: const Duration(seconds: 10),
           ),
         );
       }
@@ -563,6 +572,16 @@ class MeshController extends ChangeNotifier {
     await _platform.setNodeRole(role.wireName);
     localRole = role;
     notifyListeners();
+  }
+
+  Future<void> setGenericPresenceScanEnabled(bool enabled) async {
+    try {
+      await _platform.setGenericPresenceScanEnabled(enabled);
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Generic BLE presence scan unavailable: $error');
+      }
+    }
   }
 
   Future<void> setSurvivalMode(bool enabled) async {
@@ -637,7 +656,7 @@ class MeshController extends ChangeNotifier {
 
   Future<void> _startRadarLocationSharing() async {
     if (_startingRadarLocationSharing ||
-        _radarPositionSubscription != null ||
+        _radarLocationTimer != null ||
         !radarConsentActive ||
         !canSend) {
       return;
@@ -650,21 +669,13 @@ class MeshController extends ChangeNotifier {
           permission != LocationPermission.whileInUse) {
         return;
       }
-      _radarPositionSubscription =
-          Geolocator.getPositionStream(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.high,
-              distanceFilter: radarLocationDistanceMeters,
-            ),
-          ).listen((position) {
-            _latestRadarPosition = position;
-            unawaited(_shareRadarLocation(position));
-          }, onError: (_) {});
       _radarLocationTimer ??= Timer.periodic(
         radarLocationInterval,
         (_) => unawaited(_shareLatestRadarLocation()),
       );
-      final position = await _currentPosition();
+      final position = await _currentPosition(
+        accuracy: rescueMode ? LocationAccuracy.high : LocationAccuracy.medium,
+      );
       if (position != null) {
         _latestRadarPosition = position;
         await _shareRadarLocation(position, force: true);
@@ -681,7 +692,9 @@ class MeshController extends ChangeNotifier {
       _stopRadarLocationSharing();
       return;
     }
-    final position = _latestRadarPosition ?? await _currentPosition();
+    final position = await _currentPosition(
+      accuracy: rescueMode ? LocationAccuracy.high : LocationAccuracy.medium,
+    );
     if (position != null) {
       _latestRadarPosition = position;
       await _shareRadarLocation(position);
@@ -751,9 +764,6 @@ class MeshController extends ChangeNotifier {
   void _stopRadarLocationSharing() {
     _radarLocationTimer?.cancel();
     _radarLocationTimer = null;
-    final subscription = _radarPositionSubscription;
-    _radarPositionSubscription = null;
-    if (subscription != null) unawaited(subscription.cancel());
     _latestRadarPosition = null;
     _lastSharedRadarPosition = null;
     _lastRadarLocationShareAt = null;
@@ -812,6 +822,7 @@ class MeshController extends ChangeNotifier {
       _messages.sort(
         (first, second) => first.timestamp.compareTo(second.timestamp),
       );
+      _trimMessagesInMemory();
       notifyListeners();
       return const PrivateMessageSendResult.queued();
     } catch (error) {
@@ -859,6 +870,7 @@ class MeshController extends ChangeNotifier {
     _messages.sort(
       (first, second) => first.timestamp.compareTo(second.timestamp),
     );
+    _trimMessagesInMemory();
     await _repository.save(message);
     notifyListeners();
   }
@@ -953,6 +965,43 @@ class MeshController extends ChangeNotifier {
     if (index >= 0) _privateMessageOutbox[index] = pending;
   }
 
+  void _trimMessagesInMemory() {
+    if (_messages.length <= maximumMessagesInMemory) return;
+    final pendingIds = _privateMessageOutbox
+        .map((message) => message.localId)
+        .toSet();
+    while (_messages.length > maximumMessagesInMemory) {
+      final removable = _messages.indexWhere(
+        (message) => !pendingIds.contains(message.id),
+      );
+      _messages.removeAt(removable >= 0 ? removable : 0);
+    }
+  }
+
+  void _scheduleTopologyNotification() {
+    final now = DateTime.now();
+    final last = _lastTopologyNotificationAt;
+    final elapsed = last == null
+        ? topologyNotificationInterval
+        : now.difference(last);
+    if (elapsed >= topologyNotificationInterval) {
+      _topologyNotificationTimer?.cancel();
+      _topologyNotificationTimer = null;
+      _lastTopologyNotificationAt = now;
+      notifyListeners();
+      return;
+    }
+    if (_topologyNotificationTimer != null) return;
+    _topologyNotificationTimer = Timer(
+      topologyNotificationInterval - elapsed,
+      () {
+        _topologyNotificationTimer = null;
+        _lastTopologyNotificationAt = DateTime.now();
+        notifyListeners();
+      },
+    );
+  }
+
   void _handleEvent(Map<Object?, Object?> event) {
     switch (event['type']) {
       case 'snapshot':
@@ -971,10 +1020,12 @@ class MeshController extends ChangeNotifier {
         break;
       case 'peers':
         _replacePeers(event['peers']);
-        break;
+        _scheduleTopologyNotification();
+        return;
       case 'presences':
         _replacePresences(event['presences']);
-        break;
+        _scheduleTopologyNotification();
+        return;
       case 'radarConsent':
         _applyRadarConsent(event);
         _replacePeers(event['peers']);
@@ -1003,6 +1054,7 @@ class MeshController extends ChangeNotifier {
           if (_messages.every((existing) => existing.id != message.id)) {
             _messages.add(message);
             _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+            _trimMessagesInMemory();
             peerLocations.ingestPersisted(message);
             unawaited(_repository.save(message));
           }
@@ -1229,6 +1281,7 @@ class MeshController extends ChangeNotifier {
   void dispose() {
     _rescueTimer?.cancel();
     _consentTimer?.cancel();
+    _topologyNotificationTimer?.cancel();
     _stopRadarLocationSharing();
     _subscription?.cancel();
     _preferences?.removeListener(_handlePreferencesChanged);
