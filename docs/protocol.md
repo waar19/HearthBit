@@ -14,6 +14,19 @@ HearthBit usa el UUID principal de BitChat:
 
 La característica acepta `write`, `write without response` y `notify`.
 
+## Descubrimiento privado e interoperabilidad
+
+El modo privado es el valor predeterminado. Android sustituye el peer ID del
+scan response por `0xA5 || token`, donde `token` son los primeros 8 octetos de
+`HMAC-SHA256(noisePrivateKey, floor(unixMillis / 15 minutos))`. El receptor
+trata este valor solo como pista para conectar: no crea identidad, confianza ni
+estado de radar. iOS no añade identidad al anuncio.
+
+Los `ANNOUNCE` ordinarios usan TTL 1 en modo privado. Al emitir un SOS público,
+el emisor envía primero un `ANNOUNCE` con TTL completo; es necesario para que
+los saltos posteriores autentiquen el mensaje. La interoperabilidad BitChat
+opt-in restaura el peer ID estático y el TTL completo de los anuncios.
+
 ## Paquete v1
 
 Los enteros usan orden big-endian.
@@ -98,6 +111,12 @@ quedan ligados a una generación de claves y serían indescifrables después de
 renegociar. La entrega privada diferida usa la cola persistente del emisor o un
 `CourierEnvelope`, que mantiene el ciphertext dentro de su sobre firmado.
 
+El SOS abierto conserva el formato `SOS|texto|latitud|longitud`. Campos vacíos
+significan «sin GPS»; el modo aproximado redondea ambas coordenadas a tres
+decimales antes de firmar. Un check-in del círculo usa el marcador
+`[HB-CHECKIN|...]` dentro de un mensaje Noise privado dirigido por separado a
+cada familiar verificado; no usa el canal público.
+
 ## Paquete dedicado de capacidad de nodo (`0x25`)
 
 Payload firmado:
@@ -136,10 +155,11 @@ puede durar más de 5 minutos.
 
 El receptor valida longitud exacta, versión, acción, flags, timestamp,
 expiración y firma contra el peer previamente anunciado. La trama nunca entra
-en store-forward, sincronización ni relay. `REQUEST` no enciende hardware:
-requiere aceptación explícita, salvo que el teléfono ya estuviera en modo
-rescate o con consentimiento de radar activo. En iOS la actuación se detiene
-al pasar la app a segundo plano; no se declara audio de fondo.
+en store-forward, sincronización ni relay. `REQUEST` no enciende hardware y
+siempre requiere aceptación explícita. El modo rescate y el consentimiento
+temporal de radar autorizan medición, no el control remoto de flash, sonido o
+vibración. En iOS la actuación se detiene al pasar la app a segundo plano; no
+se declara audio de fondo.
 
 ## Privacidad de balizas BLE genéricas en Android
 

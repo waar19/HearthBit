@@ -40,7 +40,7 @@ options:
     bridge_burst: 64
   lan:
     enabled: false
-    listen_host: "0.0.0.0"
+    listen_host: "127.0.0.1"
     port: 45893
     psk_base64: ""
     discovery: true

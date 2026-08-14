@@ -24,6 +24,7 @@ from .public_bridge import (
     BoundedIngressQueue,
     PublicBridgePolicy,
     expiry_for,
+    has_emergency_coordinates,
     valid_expiry,
 )
 
@@ -169,6 +170,15 @@ class MatrixBridge(RelayLink):
         self._purge(now_ms)
         inspected = self._policy.inspect_outbound(frame)
         if inspected is None:
+            return
+        if (
+            not self.config.allow_sensitive_emergency_coordinates
+            and has_emergency_coordinates(inspected.packet.payload)
+        ):
+            LOGGER.warning(
+                "Matrix privacy policy blocked emergency coordinates; "
+                "enable allow_sensitive_emergency_coordinates explicitly"
+            )
             return
         path = tuple(gateway_path)
         if (

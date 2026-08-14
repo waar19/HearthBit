@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:crypto/crypto.dart';
@@ -197,6 +198,7 @@ class EmergencyGatewayController extends ChangeNotifier {
   }
 
   Future<void> panicWipe() async {
+    await _deleteAllTofuTrust();
     await Future.wait([
       _storage.remove(_kindKey),
       _storage.remove(_serverKey),
@@ -223,6 +225,21 @@ class EmergencyGatewayController extends ChangeNotifier {
     lastError = null;
     lastPublishedAt = null;
     notifyListeners();
+  }
+
+  Future<void> _deleteAllTofuTrust() async {
+    await Future.wait(
+      _tofuWrites.values.map((write) => write.catchError((_) {})),
+    );
+    final values = await _secureStorage.readAll();
+    await Future.wait(
+      values.keys
+          .where((key) => key.startsWith('gateway.tls.tofu.'))
+          .map((key) => _secureStorage.delete(key: key)),
+    );
+    _tofuWrites.clear();
+    _tofuClaims.clear();
+    _tofuWriteErrors.clear();
   }
 
   void _handleConnectivity(List<ConnectivityResult> results) {
@@ -469,12 +486,9 @@ class EmergencyGatewayController extends ChangeNotifier {
     MeshMessage message,
   ) async {
     final verifier = await _tlsVerifier(config);
+    final clientId = _ephemeralMqttClientId();
     final client =
-        MqttServerClient.withPort(
-            config.server,
-            'hearthbit-${_shortPeerId()}',
-            config.port,
-          )
+        MqttServerClient.withPort(config.server, clientId, config.port)
           ..secure = config.tls
           ..logging(on: false)
           ..keepAlivePeriod = 20;
@@ -485,7 +499,7 @@ class EmergencyGatewayController extends ChangeNotifier {
             _verifyAndClaimCertificate(config, verifier, certificate);
     }
     var connection = MqttConnectMessage()
-        .withClientIdentifier('hearthbit-${_shortPeerId()}')
+        .withClientIdentifier(clientId)
         .startClean();
     if (config.username.isNotEmpty) {
       connection = connection.authenticateAs(config.username, password);
@@ -541,8 +555,14 @@ class EmergencyGatewayController extends ChangeNotifier {
     super.dispose();
   }
 
-  String _shortPeerId() =>
-      mesh.peerId.length <= 12 ? mesh.peerId : mesh.peerId.substring(0, 12);
+  String _ephemeralMqttClientId() {
+    final random = Random.secure();
+    final suffix = List.generate(
+      12,
+      (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+    ).join();
+    return 'hearthbit-$suffix';
+  }
 
   Future<TlsPeerVerifier> _tlsVerifier(EmergencyGatewayConfig config) async {
     await _awaitTofuPersistence(config);

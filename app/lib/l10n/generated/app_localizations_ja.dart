@@ -57,6 +57,23 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tooltipPanicWipe => '緊急消去';
 
   @override
+  String get privacyTitle => 'プライバシー';
+
+  @override
+  String get privacyPrivateDefaultBody =>
+      'プライベートモードは既定で有効です。HearthBit は固定された無線識別子と本人情報の通知を最小限にします。';
+
+  @override
+  String get privacyBitchatInteropTitle => 'BitChat 互換性';
+
+  @override
+  String get privacyBitchatInteropOffBody => '無効です。プライベートモードは有効なままです。';
+
+  @override
+  String get privacyBitchatInteropWarning =>
+      '有効です。近くの第三者が固定無線識別子でこの端末を追跡でき、公開メッセージはメッシュから読み取れます。';
+
+  @override
   String get tabChannel => 'チャンネル';
 
   @override
@@ -125,6 +142,34 @@ class AppLocalizationsJa extends AppLocalizations {
   String get sosCardBody => '可能であれば GPS 位置情報が添付されます。アラートは公開され、メッシュ全体に中継されます。';
 
   @override
+  String get sosPrivacyTitle => '公開 SOS のプライバシー';
+
+  @override
+  String get sosPrivacyPublicWarning =>
+      '公開 SOS はメッシュ参加者にメッセージと暗号学的な本人情報を公開します。位置精度を選んでください。';
+
+  @override
+  String get sosLocationExact => '正確な位置';
+
+  @override
+  String get sosLocationExactBody => '迅速な救助に最適ですが、正確な座標を公開します。';
+
+  @override
+  String get sosLocationApproximate => 'おおよその位置（推奨）';
+
+  @override
+  String get sosLocationApproximateBody => '座標をおよそ近隣地域単位に丸めます。';
+
+  @override
+  String get sosLocationNone => '位置情報なし';
+
+  @override
+  String get sosLocationNoneBody => 'SOS メッセージのみ送信します。';
+
+  @override
+  String get sosSendPublic => '公開 SOS を送信';
+
+  @override
   String get sosMedical => '医療支援が必要です';
 
   @override
@@ -141,6 +186,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get sosNoneReceived => 'SOS アラートは受信していません。';
+
+  @override
+  String get checkInPrivateBody => '確認済みの家族だけにエンドツーエンド暗号化された更新を送ります。';
+
+  @override
+  String get checkInNoCircle => '非公開チェックインを送る前に確認済みの家族を追加してください。';
 
   @override
   String get actionTrack => '追跡';

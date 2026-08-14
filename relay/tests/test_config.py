@@ -16,6 +16,13 @@ def test_default_central_limit_is_greater_than_two() -> None:
     assert RelayConfig().max_central_links > 2
 
 
+def test_privacy_defaults_bind_lan_to_loopback() -> None:
+    config = RelayConfig()
+    assert config.lan.listen_host == "127.0.0.1"
+    assert not config.mqtt.allow_sensitive_emergency_coordinates
+    assert not config.matrix.allow_sensitive_emergency_coordinates
+
+
 def test_identity_role_and_presence_interval_are_configurable(tmp_path) -> None:
     path = tmp_path / "config.json"
     path.write_text(

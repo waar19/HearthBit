@@ -72,6 +72,7 @@ class _FakePlatform extends MeshPlatformService {
     DateTime? lastPingAt,
     DateTime? expiresAt,
     Duration interval = const Duration(minutes: 2),
+    SosLocationPrecision locationPrecision = SosLocationPrecision.approximate,
   }) async {
     rescueConfigurations.add(active);
     rescueState = NativeRescueState(
@@ -80,6 +81,7 @@ class _FakePlatform extends MeshPlatformService {
       startedAt: active ? startedAt : null,
       lastPingAt: active ? lastPingAt : null,
       expiresAt: active ? expiresAt : null,
+      locationPrecision: locationPrecision,
     );
     return rescueState;
   }
@@ -1036,6 +1038,39 @@ void main() {
       );
     },
   );
+
+  test('check-in al círculo usa exclusivamente canales privados', () async {
+    const first = '1111222233334444';
+    const second = '8899aabbccddeeff';
+    platform.emit(peerSnapshot(peerId: first, secure: true));
+    platform.emit(peerSnapshot(peerId: second, secure: true));
+    await pumpEvents();
+
+    final accepted = await controller.sendCircleCheckIn(
+      CheckInStatus.ok,
+      'Estamos bien',
+      const [first, second],
+    );
+
+    expect(accepted, 2);
+    expect(platform.publicMessages, isEmpty);
+    final recipients = {
+      ...platform.privateMessages.map((item) => item.peerId),
+      ...repository.outbox.map((item) => item.recipientPeerId),
+    };
+    expect(recipients, {first, second});
+    expect(
+      platform.privateMessages.every(
+        (item) => item.content.contains(EmergencyCheckIn.marker),
+      ),
+      isTrue,
+    );
+  });
+
+  test('redondea coordenadas aproximadas a tres decimales', () {
+    expect(MeshController.coarsenEmergencyCoordinate(4.609710), 4.610);
+    expect(MeshController.coarsenEmergencyCoordinate(-74.081750), -74.082);
+  });
 
   test(
     'simulacro solo usa sendPublic y no toca subsistemas de emergencia',

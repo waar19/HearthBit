@@ -24,7 +24,7 @@
   },
   "lan": {
     "enabled": false,
-    "listen_host": "0.0.0.0",
+    "listen_host": "127.0.0.1",
     "port": 45893,
     "psk_base64": "",
     "discovery": true,
@@ -56,7 +56,8 @@
     "future_skew_seconds": 120,
     "max_bridge_hops": 8,
     "bridge_allowlist": [],
-    "inbound_queue_size": 128
+    "inbound_queue_size": 128,
+    "allow_sensitive_emergency_coordinates": false
   },
   "matrix": {
     "enabled": false,
@@ -82,6 +83,7 @@
     "max_bridge_hops": 8,
     "inbound_queue_size": 128,
     "allow_insecure_localhost_for_tests": false,
+    "allow_sensitive_emergency_coordinates": false,
     "private_opaque": {
       "enabled": false,
       "peer_ids": []

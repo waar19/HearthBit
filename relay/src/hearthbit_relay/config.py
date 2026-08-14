@@ -44,7 +44,7 @@ class LanConfig:
     """
 
     enabled: bool = False
-    listen_host: str = "0.0.0.0"
+    listen_host: str = "127.0.0.1"
     port: int = 45893
     psk_base64: str = ""
     discovery: bool = True
@@ -81,6 +81,7 @@ class MqttConfig:
     max_bridge_hops: int = 8
     bridge_allowlist: frozenset[bytes] = field(default_factory=frozenset)
     inbound_queue_size: int = 128
+    allow_sensitive_emergency_coordinates: bool = False
 
     @property
     def topic(self) -> str:
@@ -118,6 +119,7 @@ class MatrixConfig:
     max_bridge_hops: int = 8
     inbound_queue_size: int = 128
     allow_insecure_localhost_for_tests: bool = False
+    allow_sensitive_emergency_coordinates: bool = False
     private_opaque: MatrixPrivateConfig = field(default_factory=MatrixPrivateConfig)
 
 
@@ -328,6 +330,12 @@ def load_config(path: str | Path | None) -> RelayConfig:
             "inbound_queue_size",
             _DEFAULT_MQTT.inbound_queue_size,
         ),
+        allow_sensitive_emergency_coordinates=bool(
+            mqtt_raw.get(
+                "allow_sensitive_emergency_coordinates",
+                _DEFAULT_MQTT.allow_sensitive_emergency_coordinates,
+            )
+        ),
     )
     matrix_raw = raw.get("matrix", {})
     if not isinstance(matrix_raw, dict):
@@ -428,6 +436,12 @@ def load_config(path: str | Path | None) -> RelayConfig:
             matrix_raw.get(
                 "allow_insecure_localhost_for_tests",
                 _DEFAULT_MATRIX.allow_insecure_localhost_for_tests,
+            )
+        ),
+        allow_sensitive_emergency_coordinates=bool(
+            matrix_raw.get(
+                "allow_sensitive_emergency_coordinates",
+                _DEFAULT_MATRIX.allow_sensitive_emergency_coordinates,
             )
         ),
         private_opaque=matrix_private,
@@ -578,6 +592,11 @@ def load_config(path: str | Path | None) -> RelayConfig:
         if not config.mqtt.username_env and not config.mqtt.secrets_file:
             raise ValueError(
                 "MQTT credentials require an environment variable or secrets file"
+            )
+        if not config.mqtt.bridge_allowlist:
+            raise ValueError(
+                "'mqtt.bridge_allowlist' must explicitly authorize at least "
+                "one remote bridge before MQTT egress is enabled"
             )
     if config.matrix.max_bridge_hops > 32:
         raise ValueError("'matrix.max_bridge_hops' cannot exceed 32")

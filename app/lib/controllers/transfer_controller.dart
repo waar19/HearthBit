@@ -12,6 +12,8 @@ import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../models/transfer_models.dart';
 import '../services/diagnostics_log.dart';
+import '../services/at_rest_file_cipher.dart';
+import '../services/backup_protection.dart';
 import '../services/lan_transport.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/transfer_crypto.dart';
@@ -27,9 +29,11 @@ class TransferController extends ChangeNotifier {
     this._mesh, {
     TransferPlatformService? platform,
     TransferRepository? repository,
+    AtRestFileCipher? fileCipher,
     this.offerLifetime = defaultOfferLifetime,
   }) : _platform = platform ?? TransferPlatformService(),
-       _repository = repository ?? TransferRepository();
+       _repository = repository ?? TransferRepository(),
+       _fileCipher = fileCipher ?? AtRestFileCipher();
 
   static const int bleChunkSize = 350;
   static const int bleMaxInlineBytes = 256 * 1024;
@@ -65,6 +69,7 @@ class TransferController extends ChangeNotifier {
   final MeshPlatformService _mesh;
   final TransferPlatformService _platform;
   final TransferRepository _repository;
+  final AtRestFileCipher _fileCipher;
   final Duration offerLifetime;
 
   final List<TransferRecord> _transfers = [];
@@ -372,6 +377,7 @@ class TransferController extends ChangeNotifier {
     required String filePath,
     String peerId = '',
   }) async {
+    final protected = await _fileCipher.encrypt(File(filePath));
     final record = TransferRecord(
       id: transferIdHex,
       peerId: peerId,
@@ -387,7 +393,7 @@ class TransferController extends ChangeNotifier {
       state: TransferState.completed,
       transport: TransferTransport.optical,
       bytesDone: fileSize,
-      filePath: filePath,
+      filePath: protected.path,
     );
     _transfers.insert(0, record);
     _trimTransfersInMemory();
@@ -1346,6 +1352,7 @@ class TransferController extends ChangeNotifier {
     }
     await _platform.nearbyStop(record.id);
     await _platform.wifiAwareStop(record.id);
+    await _protectCompletedFile(record);
     _trimTransfersInMemory();
     await _repository.save(
       record,
@@ -1355,9 +1362,33 @@ class TransferController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _protectCompletedFile(TransferRecord record) async {
+    if (record.state != TransferState.completed || record.filePath == null) {
+      return;
+    }
+    final source = File(record.filePath!);
+    if (!await source.exists() ||
+        AtRestFileCipher.isEncryptedPath(source.path)) {
+      return;
+    }
+    var shouldProtect = record.direction == TransferDirection.incoming;
+    if (!shouldProtect) {
+      final temporary = await getTemporaryDirectory();
+      final name = p.basename(source.path);
+      shouldProtect =
+          p.isWithin(temporary.path, source.path) &&
+          (name.startsWith('hearthbit_voice_') || name.startsWith('hb_'));
+    }
+    if (!shouldProtect) return;
+    record.filePath = (await _fileCipher.encrypt(source)).path;
+  }
+
   Future<Directory> _transfersDirectory() async {
     final documents = await getApplicationDocumentsDirectory();
-    return Directory(p.join(documents.path, 'hearthbit_transfers'));
+    final directory = Directory(p.join(documents.path, 'hearthbit_transfers'));
+    await directory.create(recursive: true);
+    await BackupProtection.exclude(directory.path);
+    return directory;
   }
 
   Future<String> _incomingPath(

@@ -19,6 +19,34 @@ from .protocol import (
 LOGGER = logging.getLogger(__name__)
 
 SOS_PREFIX = b"SOS|"
+CHECKIN_MARKER = b"[HB-CHECKIN|"
+
+
+def has_emergency_coordinates(payload: bytes) -> bool:
+    """Return true when a public emergency payload carries parseable GPS."""
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    if text.startswith("SOS|"):
+        fields = text.split("|")
+        if len(fields) < 4:
+            return False
+        return _coordinates_present(fields[-2], fields[-1])
+    marker = text.rfind("[HB-CHECKIN|")
+    if marker < 0 or not text.endswith("]"):
+        return False
+    fields = text[marker + len("[HB-CHECKIN|") : -1].split("|")
+    return len(fields) == 5 and _coordinates_present(fields[2], fields[3])
+
+
+def _coordinates_present(latitude: str, longitude: str) -> bool:
+    try:
+        lat = float(latitude)
+        lon = float(longitude)
+    except ValueError:
+        return False
+    return -90 <= lat <= 90 and -180 <= lon <= 180
 
 
 class BoundedIngressQueue:

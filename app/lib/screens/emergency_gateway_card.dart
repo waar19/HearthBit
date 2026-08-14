@@ -4,6 +4,7 @@ import '../controllers/emergency_gateway_controller.dart';
 import '../l10n/l10n.dart';
 import '../services/app_preferences.dart';
 import '../services/tls_peer_verifier.dart';
+import '../widgets/sensitive_screen.dart';
 
 class EmergencyGatewayCard extends StatelessWidget {
   const EmergencyGatewayCard({
@@ -223,214 +224,218 @@ class _GatewayConfigDialogState extends State<_GatewayConfigDialog> {
   @override
   Widget build(BuildContext context) {
     final matrix = _kind == EmergencyGatewayKind.matrix;
-    return AlertDialog(
-      title: Text(context.l10n.gatewayConfigure),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SegmentedButton<EmergencyGatewayKind>(
-              segments: [
-                ButtonSegment(
-                  value: EmergencyGatewayKind.matrix,
-                  label: Text(context.l10n.gatewayKindMatrix),
-                ),
-                ButtonSegment(
-                  value: EmergencyGatewayKind.mqtt,
-                  label: Text(context.l10n.gatewayKindMqtt),
-                ),
-              ],
-              selected: {_kind},
-              onSelectionChanged: (selected) {
-                setState(() {
-                  _kind = selected.single;
-                  _port.text = _kind == EmergencyGatewayKind.matrix
-                      ? '443'
-                      : '8883';
-                });
-              },
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _server,
-              decoration: InputDecoration(
-                labelText: matrix
-                    ? context.l10n.gatewayHomeserver
-                    : context.l10n.gatewayBroker,
+    return SensitiveScreen(
+      child: AlertDialog(
+        title: Text(context.l10n.gatewayConfigure),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SegmentedButton<EmergencyGatewayKind>(
+                segments: [
+                  ButtonSegment(
+                    value: EmergencyGatewayKind.matrix,
+                    label: Text(context.l10n.gatewayKindMatrix),
+                  ),
+                  ButtonSegment(
+                    value: EmergencyGatewayKind.mqtt,
+                    label: Text(context.l10n.gatewayKindMqtt),
+                  ),
+                ],
+                selected: {_kind},
+                onSelectionChanged: (selected) {
+                  setState(() {
+                    _kind = selected.single;
+                    _port.text = _kind == EmergencyGatewayKind.matrix
+                        ? '443'
+                        : '8883';
+                  });
+                },
               ),
-            ),
-            TextField(
-              controller: _destination,
-              decoration: InputDecoration(
-                labelText: matrix
-                    ? context.l10n.gatewayRoom
-                    : context.l10n.gatewayTopic,
-              ),
-            ),
-            if (!matrix)
+              const SizedBox(height: 16),
               TextField(
-                controller: _username,
+                controller: _server,
                 decoration: InputDecoration(
-                  labelText: context.l10n.gatewayUsername,
+                  labelText: matrix
+                      ? context.l10n.gatewayHomeserver
+                      : context.l10n.gatewayBroker,
                 ),
               ),
-            TextField(
-              controller: _secret,
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: matrix
-                    ? context.l10n.gatewayAccessToken
-                    : context.l10n.gatewayPassword,
-              ),
-            ),
-            TextField(
-              controller: _port,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: context.l10n.gatewayPort),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: true,
-              onChanged: null,
-              title: Text(context.l10n.gatewayTls),
-              subtitle: Text(context.l10n.gatewayTlsRequired),
-            ),
-            const Divider(),
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Text(
-                context.l10n.gatewayTrustTitle,
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                ChoiceChip(
-                  key: const Key('gateway-trust-system'),
-                  selected: _trustMode == TlsTrustMode.system,
-                  onSelected: _saving
-                      ? null
-                      : (_) {
-                          setState(() => _trustMode = TlsTrustMode.system);
-                        },
-                  avatar: const Icon(Icons.verified_user_outlined),
-                  label: Text(context.l10n.gatewayTrustSystem),
-                ),
-                ChoiceChip(
-                  key: const Key('gateway-trust-tofu'),
-                  selected: _trustMode == TlsTrustMode.tofu,
-                  onSelected: _saving
-                      ? null
-                      : (_) {
-                          setState(() => _trustMode = TlsTrustMode.tofu);
-                        },
-                  avatar: const Icon(Icons.fingerprint),
-                  label: Text(context.l10n.gatewayTrustTofu),
-                ),
-                ChoiceChip(
-                  key: const Key('gateway-trust-pinned'),
-                  selected: _trustMode == TlsTrustMode.pinned,
-                  onSelected: _saving
-                      ? null
-                      : (_) {
-                          setState(() => _trustMode = TlsTrustMode.pinned);
-                        },
-                  avatar: const Icon(Icons.push_pin_outlined),
-                  label: Text(context.l10n.gatewayTrustPinned),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Text(switch (_trustMode) {
-                TlsTrustMode.system => context.l10n.gatewayTrustSystemBody,
-                TlsTrustMode.tofu => context.l10n.gatewayTrustTofuBody,
-                TlsTrustMode.pinned => context.l10n.gatewayTrustPinnedBody,
-              }, style: Theme.of(context).textTheme.bodySmall),
-            ),
-            if (_trustMode == TlsTrustMode.pinned)
               TextField(
-                key: const Key('gateway-fingerprint'),
-                controller: _fingerprint,
-                autocorrect: false,
-                enableSuggestions: false,
-                keyboardType: TextInputType.visiblePassword,
+                controller: _destination,
                 decoration: InputDecoration(
-                  labelText: context.l10n.gatewayFingerprint,
-                  helperText: context.l10n.gatewayFingerprintHint,
+                  labelText: matrix
+                      ? context.l10n.gatewayRoom
+                      : context.l10n.gatewayTopic,
                 ),
               ),
-            if (_trustMode == TlsTrustMode.tofu)
+              if (!matrix)
+                TextField(
+                  controller: _username,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.gatewayUsername,
+                  ),
+                ),
+              TextField(
+                controller: _secret,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: matrix
+                      ? context.l10n.gatewayAccessToken
+                      : context.l10n.gatewayPassword,
+                ),
+              ),
+              TextField(
+                controller: _port,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: context.l10n.gatewayPort,
+                ),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: true,
+                onChanged: null,
+                title: Text(context.l10n.gatewayTls),
+                subtitle: Text(context.l10n.gatewayTlsRequired),
+              ),
+              const Divider(),
               Align(
                 alignment: AlignmentDirectional.centerStart,
-                child: TextButton.icon(
-                  key: const Key('gateway-reset-tofu'),
-                  onPressed: _saving ? null : _resetTofuTrust,
-                  icon: const Icon(Icons.restart_alt),
-                  label: Text(context.l10n.gatewayResetTofu),
+                child: Text(
+                  context.l10n.gatewayTrustTitle,
+                  style: Theme.of(context).textTheme.titleSmall,
                 ),
               ),
-            const Divider(),
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Text(
-                context.l10n.gatewayPrivacyScopeTitle,
-                style: Theme.of(context).textTheme.titleSmall,
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  ChoiceChip(
+                    key: const Key('gateway-trust-system'),
+                    selected: _trustMode == TlsTrustMode.system,
+                    onSelected: _saving
+                        ? null
+                        : (_) {
+                            setState(() => _trustMode = TlsTrustMode.system);
+                          },
+                    avatar: const Icon(Icons.verified_user_outlined),
+                    label: Text(context.l10n.gatewayTrustSystem),
+                  ),
+                  ChoiceChip(
+                    key: const Key('gateway-trust-tofu'),
+                    selected: _trustMode == TlsTrustMode.tofu,
+                    onSelected: _saving
+                        ? null
+                        : (_) {
+                            setState(() => _trustMode = TlsTrustMode.tofu);
+                          },
+                    avatar: const Icon(Icons.fingerprint),
+                    label: Text(context.l10n.gatewayTrustTofu),
+                  ),
+                  ChoiceChip(
+                    key: const Key('gateway-trust-pinned'),
+                    selected: _trustMode == TlsTrustMode.pinned,
+                    onSelected: _saving
+                        ? null
+                        : (_) {
+                            setState(() => _trustMode = TlsTrustMode.pinned);
+                          },
+                    avatar: const Icon(Icons.push_pin_outlined),
+                    label: Text(context.l10n.gatewayTrustPinned),
+                  ),
+                ],
               ),
-            ),
-            SwitchListTile(
-              key: const Key('gateway-sensitive-consent'),
-              contentPadding: EdgeInsets.zero,
-              value: _includeSensitiveContent,
-              onChanged: _saving
-                  ? null
-                  : (value) {
-                      setState(() => _includeSensitiveContent = value);
-                    },
-              title: Text(context.l10n.gatewaySensitiveContentConsent),
-              subtitle: Text(context.l10n.gatewaySensitiveContentConsentBody),
-            ),
-            SwitchListTile(
-              key: const Key('gateway-coordinates-consent'),
-              contentPadding: EdgeInsets.zero,
-              value: _includeCoordinates,
-              onChanged: _saving
-                  ? null
-                  : (value) {
-                      setState(() => _includeCoordinates = value);
-                    },
-              title: Text(context.l10n.gatewayCoordinatesConsent),
-              subtitle: Text(context.l10n.gatewayCoordinatesConsentBody),
-            ),
-            Text(
-              context.l10n.gatewayPrivacyScopeWarning,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.error,
+              const SizedBox(height: 8),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(switch (_trustMode) {
+                  TlsTrustMode.system => context.l10n.gatewayTrustSystemBody,
+                  TlsTrustMode.tofu => context.l10n.gatewayTrustTofuBody,
+                  TlsTrustMode.pinned => context.l10n.gatewayTrustPinnedBody,
+                }, style: Theme.of(context).textTheme.bodySmall),
               ),
-            ),
-            if (_error != null)
+              if (_trustMode == TlsTrustMode.pinned)
+                TextField(
+                  key: const Key('gateway-fingerprint'),
+                  controller: _fingerprint,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  keyboardType: TextInputType.visiblePassword,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.gatewayFingerprint,
+                    helperText: context.l10n.gatewayFingerprintHint,
+                  ),
+                ),
+              if (_trustMode == TlsTrustMode.tofu)
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton.icon(
+                    key: const Key('gateway-reset-tofu'),
+                    onPressed: _saving ? null : _resetTofuTrust,
+                    icon: const Icon(Icons.restart_alt),
+                    label: Text(context.l10n.gatewayResetTofu),
+                  ),
+                ),
+              const Divider(),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(
+                  context.l10n.gatewayPrivacyScopeTitle,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              SwitchListTile(
+                key: const Key('gateway-sensitive-consent'),
+                contentPadding: EdgeInsets.zero,
+                value: _includeSensitiveContent,
+                onChanged: _saving
+                    ? null
+                    : (value) {
+                        setState(() => _includeSensitiveContent = value);
+                      },
+                title: Text(context.l10n.gatewaySensitiveContentConsent),
+                subtitle: Text(context.l10n.gatewaySensitiveContentConsentBody),
+              ),
+              SwitchListTile(
+                key: const Key('gateway-coordinates-consent'),
+                contentPadding: EdgeInsets.zero,
+                value: _includeCoordinates,
+                onChanged: _saving
+                    ? null
+                    : (value) {
+                        setState(() => _includeCoordinates = value);
+                      },
+                title: Text(context.l10n.gatewayCoordinatesConsent),
+                subtitle: Text(context.l10n.gatewayCoordinatesConsentBody),
+              ),
               Text(
-                _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                context.l10n.gatewayPrivacyScopeWarning,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.error,
+                ),
               ),
-          ],
+              if (_error != null)
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+            ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : () => Navigator.pop(context),
+            child: Text(context.l10n.actionCancel),
+          ),
+          FilledButton(
+            key: const Key('gateway-save'),
+            onPressed: _saving ? null : _save,
+            child: Text(context.l10n.actionSave),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.pop(context),
-          child: Text(context.l10n.actionCancel),
-        ),
-        FilledButton(
-          key: const Key('gateway-save'),
-          onPressed: _saving ? null : _save,
-          child: Text(context.l10n.actionSave),
-        ),
-      ],
     );
   }
 }

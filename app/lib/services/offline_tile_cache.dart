@@ -12,6 +12,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'diagnostics_log.dart';
+import 'backup_protection.dart';
 
 const osmTileUrlTemplate = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const osmAttribution = '© OpenStreetMap contributors';
@@ -298,6 +299,14 @@ class OfflineTileCache {
   static const int maximumTileBytes = 1024 * 1024;
   static const int maximumCacheBytes = 250 * 1024 * 1024;
 
+  static Future<void> clearAll() async {
+    final support = await getApplicationSupportDirectory();
+    final mapRoot = Directory(p.join(support.path, 'map_tiles'));
+    if (await mapRoot.exists()) {
+      await mapRoot.delete(recursive: true);
+    }
+  }
+
   final Directory _root;
   final http.Client _client;
   final bool _ownsClient;
@@ -332,6 +341,7 @@ class OfflineTileCache {
       p.join(mapRoot.path, effectiveSource.cacheDirectoryName),
     );
     await root.create(recursive: true);
+    await BackupProtection.exclude(mapRoot.path);
     return OfflineTileCache._(
       root: root,
       client: client ?? http.Client(),

@@ -57,6 +57,24 @@ class AppLocalizationsEs extends AppLocalizations {
   String get tooltipPanicWipe => 'Borrado de emergencia';
 
   @override
+  String get privacyTitle => 'Privacidad';
+
+  @override
+  String get privacyPrivateDefaultBody =>
+      'El modo privado está activo por defecto. HearthBit minimiza los identificadores de radio estables y limita los anuncios de identidad.';
+
+  @override
+  String get privacyBitchatInteropTitle => 'Compatibilidad con BitChat';
+
+  @override
+  String get privacyBitchatInteropOffBody =>
+      'Desactivada. El modo privado permanece activo.';
+
+  @override
+  String get privacyBitchatInteropWarning =>
+      'Activada. Observadores cercanos pueden correlacionar este dispositivo mediante un identificador de radio estable y los mensajes públicos siguen siendo legibles por la malla.';
+
+  @override
   String get tabChannel => 'Canal';
 
   @override
@@ -128,6 +146,36 @@ class AppLocalizationsEs extends AppLocalizations {
       'Se intentará incluir tu ubicación GPS. La alerta será pública y se retransmitirá por la malla.';
 
   @override
+  String get sosPrivacyTitle => 'Privacidad del SOS público';
+
+  @override
+  String get sosPrivacyPublicWarning =>
+      'Un SOS público revela tu mensaje e identidad criptográfica a los participantes de la malla. Elige cuánta ubicación incluir.';
+
+  @override
+  String get sosLocationExact => 'Ubicación exacta';
+
+  @override
+  String get sosLocationExactBody =>
+      'Mejor para rescate inmediato; expone coordenadas precisas.';
+
+  @override
+  String get sosLocationApproximate => 'Ubicación aproximada (recomendado)';
+
+  @override
+  String get sosLocationApproximateBody =>
+      'Redondea las coordenadas aproximadamente al tamaño de un vecindario.';
+
+  @override
+  String get sosLocationNone => 'Sin ubicación';
+
+  @override
+  String get sosLocationNoneBody => 'Envía únicamente tu mensaje SOS.';
+
+  @override
+  String get sosSendPublic => 'ENVIAR SOS PÚBLICO';
+
+  @override
   String get sosMedical => 'Necesito ayuda médica';
 
   @override
@@ -144,6 +192,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get sosNoneReceived => 'No se han recibido alertas SOS.';
+
+  @override
+  String get checkInPrivateBody =>
+      'Envía una actualización cifrada de extremo a extremo solo a familiares verificados.';
+
+  @override
+  String get checkInNoCircle =>
+      'Añade un familiar verificado antes de enviar un check-in privado.';
 
   @override
   String get actionTrack => 'RASTREAR';

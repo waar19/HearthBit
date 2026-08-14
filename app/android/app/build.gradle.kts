@@ -30,6 +30,13 @@ val hasReleaseSigning = if (keystorePropertiesFile.exists()) {
     )
     false
 }
+val releaseRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+val ciBuild = System.getenv("CI")?.equals("true", ignoreCase = true) == true
+require(hasReleaseSigning || !releaseRequested || ciBuild) {
+    "Release builds require android/key.properties. Debug signing is allowed only in CI."
+}
 
 android {
     namespace = "com.hearthbit.app"

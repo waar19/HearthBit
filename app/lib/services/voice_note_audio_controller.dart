@@ -4,9 +4,12 @@ import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 
+import 'at_rest_file_cipher.dart';
+
 class VoiceNoteAudioController extends ChangeNotifier {
-  VoiceNoteAudioController({AudioPlayer? player})
-    : _player = player ?? AudioPlayer() {
+  VoiceNoteAudioController({AudioPlayer? player, AtRestFileCipher? fileCipher})
+    : _player = player ?? AudioPlayer(),
+      _fileCipher = fileCipher ?? AtRestFileCipher() {
     _subscriptions.add(
       _player.onPlayerStateChanged.listen((value) {
         state = value;
@@ -29,13 +32,16 @@ class VoiceNoteAudioController extends ChangeNotifier {
       _player.onPlayerComplete.listen((_) {
         state = PlayerState.completed;
         position = duration;
+        unawaited(_deletePlaybackTemporary());
         notifyListeners();
       }),
     );
   }
 
   final AudioPlayer _player;
+  final AtRestFileCipher _fileCipher;
   final List<StreamSubscription<Object?>> _subscriptions = [];
+  File? _playbackTemporary;
 
   String? activeTransferId;
   PlayerState state = PlayerState.stopped;
@@ -74,12 +80,15 @@ class VoiceNoteAudioController extends ChangeNotifier {
         throw StateError('Voice note file is not available');
       }
       await _player.stop();
+      await _deletePlaybackTemporary();
       activeTransferId = transferId;
       position = Duration.zero;
       duration = Duration.zero;
       state = PlayerState.stopped;
       notifyListeners();
-      await _player.play(DeviceFileSource(filePath), volume: 1);
+      final playbackFile = await _fileCipher.decryptToTemporary(File(filePath));
+      if (playbackFile.path != filePath) _playbackTemporary = playbackFile;
+      await _player.play(DeviceFileSource(playbackFile.path), volume: 1);
     } catch (exception) {
       error = exception.toString();
       state = PlayerState.stopped;
@@ -103,6 +112,7 @@ class VoiceNoteAudioController extends ChangeNotifier {
 
   Future<void> stop() async {
     await _player.stop();
+    await _deletePlaybackTemporary();
     activeTransferId = null;
     state = PlayerState.stopped;
     position = Duration.zero;
@@ -128,11 +138,20 @@ class VoiceNoteAudioController extends ChangeNotifier {
     await _player.setVolume(1);
   }
 
+  Future<void> _deletePlaybackTemporary() async {
+    final temporary = _playbackTemporary;
+    _playbackTemporary = null;
+    if (temporary != null && await temporary.exists()) {
+      await temporary.delete();
+    }
+  }
+
   @override
   void dispose() {
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }
+    unawaited(_deletePlaybackTemporary());
     unawaited(_player.dispose());
     super.dispose();
   }

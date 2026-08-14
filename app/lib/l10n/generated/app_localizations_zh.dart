@@ -57,6 +57,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tooltipPanicWipe => '紧急抹除';
 
   @override
+  String get privacyTitle => '隐私';
+
+  @override
+  String get privacyPrivateDefaultBody =>
+      '默认启用隐私模式。HearthBit 会尽量减少固定无线标识符并限制身份广播。';
+
+  @override
+  String get privacyBitchatInteropTitle => 'BitChat 兼容性';
+
+  @override
+  String get privacyBitchatInteropOffBody => '已关闭。隐私模式保持启用。';
+
+  @override
+  String get privacyBitchatInteropWarning =>
+      '已开启。附近观察者可通过固定无线标识符关联此设备，网状网络仍可读取公开消息。';
+
+  @override
   String get tabChannel => '频道';
 
   @override
@@ -123,6 +140,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sosCardBody => '如有可能将附上您的 GPS 位置。警报是公开的，并将通过网状网络转发。';
 
   @override
+  String get sosPrivacyTitle => '公开 SOS 隐私';
+
+  @override
+  String get sosPrivacyPublicWarning => '公开 SOS 会向网状网络参与者透露您的消息和加密身份。请选择位置精度。';
+
+  @override
+  String get sosLocationExact => '精确位置';
+
+  @override
+  String get sosLocationExactBody => '最适合立即救援；会公开精确坐标。';
+
+  @override
+  String get sosLocationApproximate => '大致位置（推荐）';
+
+  @override
+  String get sosLocationApproximateBody => '将坐标取整到大约一个街区范围。';
+
+  @override
+  String get sosLocationNone => '不含位置';
+
+  @override
+  String get sosLocationNoneBody => '仅发送 SOS 消息。';
+
+  @override
+  String get sosSendPublic => '发送公开 SOS';
+
+  @override
   String get sosMedical => '我需要医疗救助';
 
   @override
@@ -139,6 +183,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sosNoneReceived => '尚未收到 SOS 警报。';
+
+  @override
+  String get checkInPrivateBody => '仅向已验证的家人发送端到端加密状态。';
+
+  @override
+  String get checkInNoCircle => '发送私密签到前，请先添加已验证的家人。';
 
   @override
   String get actionTrack => '追踪';

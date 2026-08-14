@@ -21,6 +21,11 @@ class MeshAdvertisePlanTest {
             MeshAdvertisePlan.SCAN_RESPONSE_BYTES <=
                 MeshAdvertisePlan.LEGACY_PDU_LIMIT_BYTES,
         )
+        assertEquals(27, MeshAdvertisePlan.PRIVATE_SCAN_RESPONSE_BYTES)
+        assertTrue(
+            MeshAdvertisePlan.PRIVATE_SCAN_RESPONSE_BYTES <=
+                MeshAdvertisePlan.LEGACY_PDU_LIMIT_BYTES,
+        )
     }
 
     @Test

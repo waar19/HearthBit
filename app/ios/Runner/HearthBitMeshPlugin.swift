@@ -249,6 +249,11 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var identity: IOSMeshIdentity!
   private var identityFailure: Error?
   private var localRole = IOSMeshNodeRole.load()
+  private var privateMode = true
+  private var bitchatInteropEnabled = false
+  private var announcementTTL: UInt8 {
+    privateMode && !bitchatInteropEnabled ? 1 : IOSMeshProtocol.defaultTTL
+  }
   private let storeForward = IOSStoreForward()
   private let peerIdentityPins = IOSPeerIdentityPinStore()
   private let emergencyFingerprints = IOSEmergencyFingerprintCache()
@@ -323,6 +328,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   /// Peer objetivo del radar de rescate; nil cuando el radar está apagado.
   private var radarPeerID: String?
   private var radarTimer: Timer?
+  private var secureScreenEnabled = false
+  private var secureOverlay: UIView?
 
   override init() {
     do {
@@ -332,6 +339,12 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       identity = nil
     }
     super.init()
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(screenCaptureChanged),
+      name: UIScreen.capturedDidChangeNotification,
+      object: nil
+    )
     initializeBluetoothRestoration()
   }
 
@@ -482,7 +495,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
             startedAt: (arguments["startedAt"] as? NSNumber)?.int64Value ?? 0,
             lastPingAt: (arguments["lastPingAt"] as? NSNumber)?.int64Value ?? 0,
             expiresAt: (arguments["expiresAt"] as? NSNumber)?.int64Value ?? 0,
-            intervalMs: (arguments["intervalMs"] as? NSNumber)?.int64Value ?? 120_000
+            intervalMs: (arguments["intervalMs"] as? NSNumber)?.int64Value ?? 120_000,
+            locationPrecision: arguments["locationPrecision"] as? String ?? "approximate"
           )
         } else {
           try IOSRescueModeStore.clear()
@@ -493,6 +507,29 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       case "setLanDiscoveryEnabled":
         // Network.framework/Dart owns Bonjour. The method keeps the native
         // bridge API symmetric with Android, where a MulticastLock is needed.
+        result(nil)
+      case "setSecureScreen":
+        secureScreenEnabled = arguments["enabled"] as? Bool ?? false
+        updateSecureOverlay()
+        result(nil)
+      case "excludeFromBackup":
+        guard let path = arguments["path"] as? String else {
+          throw IOSMeshError.invalidPayload
+        }
+        let standardized = URL(fileURLWithPath: path).standardizedFileURL
+        let home = URL(fileURLWithPath: NSHomeDirectory()).standardizedFileURL.path
+        guard standardized.path.hasPrefix(home + "/") else {
+          throw IOSMeshError.invalidPayload
+        }
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var protectedURL = standardized
+        try protectedURL.setResourceValues(values)
+        result(nil)
+      case "configurePrivacyMode":
+        let interop = arguments["bitchatInteropEnabled"] as? Bool ?? false
+        bitchatInteropEnabled = interop
+        privateMode = (arguments["privateMode"] as? Bool ?? true) && !interop
         result(nil)
       case "setGenericPresenceScanEnabled":
         guard
@@ -551,6 +588,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         let longitude = arguments["longitude"] as? Double
         let location = latitude != nil && longitude != nil
           ? "|\(latitude!)|\(longitude!)" : "||"
+        if privateMode {
+          sendAnnouncement(ttl: IOSMeshProtocol.defaultTTL)
+        }
         result(try sendPublic(content: "SOS|\(description)\(location)", channel: "sos"))
       case "sendEmergency":
         let messageID = arguments["messageId"] as? String ?? ""
@@ -561,6 +601,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         }
         guard content.hasPrefix("SOS|") || content.contains("[HB-CHECKIN|") else {
           throw IOSMeshError.invalidPayload
+        }
+        if privateMode {
+          sendAnnouncement(ttl: IOSMeshProtocol.defaultTTL)
         }
         let transmitted = try transmitPublic(
           messageID: String(messageID.prefix(255)),
@@ -790,6 +833,32 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     }
   }
 
+  @objc private func screenCaptureChanged() {
+    updateSecureOverlay()
+  }
+
+  private func updateSecureOverlay() {
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      let shouldCover = secureScreenEnabled && UIScreen.main.isCaptured
+      if !shouldCover {
+        secureOverlay?.removeFromSuperview()
+        secureOverlay = nil
+        return
+      }
+      guard secureOverlay == nil else { return }
+      let windows = UIApplication.shared.connectedScenes
+        .compactMap { $0 as? UIWindowScene }
+        .flatMap(\.windows)
+      guard let window = windows.first(where: \.isKeyWindow) ?? windows.first else { return }
+      let overlay = UIView(frame: window.bounds)
+      overlay.backgroundColor = .black
+      overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      window.addSubview(overlay)
+      secureOverlay = overlay
+    }
+  }
+
   private func locationAuthorization() -> CLAuthorizationStatus {
     if #available(iOS 14.0, *) {
       return locationManager.authorizationStatus
@@ -836,7 +905,17 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         return
       }
     }
-    let locationSuffix = "|\(location.coordinate.latitude)|\(location.coordinate.longitude)"
+    let locationSuffix: String
+    switch state.locationPrecision ?? "approximate" {
+    case "none":
+      locationSuffix = "||"
+    case "exact":
+      locationSuffix = "|\(location.coordinate.latitude)|\(location.coordinate.longitude)"
+    default:
+      let latitude = (location.coordinate.latitude * 1_000).rounded() / 1_000
+      let longitude = (location.coordinate.longitude * 1_000).rounded() / 1_000
+      locationSuffix = "|\(latitude)|\(longitude)"
+    }
     do {
       _ = try sendPublic(
         content: "SOS|\(state.description)\(locationSuffix)",
@@ -1944,7 +2023,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     send(packet: courier, toPeerID: anchorID)
   }
 
-  private func sendAnnouncement() {
+  private func sendAnnouncement(ttl: UInt8? = nil) {
     guard running, identity != nil else { return }
     let payload = IOSMeshProtocol.announcement(
       nickname: identity.nickname,
@@ -1955,7 +2034,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       identity.sign(
         IOSMeshPacket(
           type: IOSMeshProtocol.announce,
-          ttl: IOSMeshProtocol.defaultTTL,
+          ttl: ttl ?? announcementTTL,
           timestamp: UInt64(Date().timeIntervalSince1970 * 1000),
           senderID: identity.peerID,
           payload: payload
@@ -2239,7 +2318,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       identity.sign(
         IOSMeshPacket(
           type: IOSMeshProtocol.announce,
-          ttl: IOSMeshProtocol.defaultTTL,
+          ttl: announcementTTL,
           timestamp: currentMilliseconds(),
           senderID: identity.peerID,
           payload: IOSMeshProtocol.announcement(
@@ -2555,7 +2634,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         validateAnnouncementIdentity(packet, senderID: senderID)
       else { return }
       // Solo una identidad ya validada y fijada puede promover presencia.
-      if packet.ttl == IOSMeshProtocol.defaultTTL, let source {
+      if (packet.ttl == announcementTTL ||
+          packet.ttl == IOSMeshProtocol.defaultTTL), let source {
         peripheralPeers[source] = senderID
       }
       let now = Date()
@@ -2706,7 +2786,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
             senderID: senderID
           ) else { return }
           validatedAnnouncement = announcement
-          if packet.ttl == IOSMeshProtocol.defaultTTL, let source {
+          if (packet.ttl == announcementTTL ||
+              packet.ttl == IOSMeshProtocol.defaultTTL), let source {
             peripheralPeers[source] = senderID
           }
         }
@@ -2871,32 +2952,17 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         control: control
       )
       pendingBeaconRequests[requestID] = request
-      if IOSBeaconControlProtocol.shouldAutoAccept(
-        localRadarConsentUntil: activeLocalRadarConsentUntil(),
-        now: currentMilliseconds()
-      ) {
-        pendingBeaconRequests.removeValue(forKey: requestID)
-        emit([
-          "type": "beaconRequest",
-          "requestId": requestID,
-          "peerId": senderID,
-          "nickname": peer.nickname,
-          "expiresAt": control.expiresAt,
-          "flags": Int(control.flags),
-          "autoAccepted": true,
-        ])
-        respondToBeaconRequest(request, accept: true, autoAccepted: true)
-      } else {
-        emit([
-          "type": "beaconRequest",
-          "requestId": requestID,
-          "peerId": senderID,
-          "nickname": peer.nickname,
-          "expiresAt": control.expiresAt,
-          "flags": Int(control.flags),
-          "autoAccepted": false,
-        ])
-      }
+      // Radar y rescate autorizan medición, no control del hardware.
+      // Sonido, flash y vibración siempre requieren confirmación.
+      emit([
+        "type": "beaconRequest",
+        "requestId": requestID,
+        "peerId": senderID,
+        "nickname": peer.nickname,
+        "expiresAt": control.expiresAt,
+        "flags": Int(control.flags),
+        "autoAccepted": false,
+      ])
     case IOSBeaconControlProtocol.grantAction:
       guard
         let outgoing = outgoingBeaconRequests[requestID],
@@ -5730,6 +5796,7 @@ struct IOSRescueModeState: Codable {
   let expiresAt: Int64
   let intervalMs: Int64
   let pingCount: Int64?
+  let locationPrecision: String?
 
   var asMap: [String: Any] {
     let now = Int64(Date().timeIntervalSince1970 * 1000)
@@ -5745,6 +5812,7 @@ struct IOSRescueModeState: Codable {
       "intervalMs": intervalMs,
       "expectedPings": expected,
       "executedPings": pingCount ?? 0,
+      "locationPrecision": locationPrecision ?? "approximate",
     ]
   }
 }
@@ -6116,7 +6184,8 @@ enum IOSRescueModeStore {
         lastPingAt: 0,
         expiresAt: 0,
         intervalMs: 120_000,
-        pingCount: 0
+        pingCount: 0,
+        locationPrecision: "approximate"
       )
     }
     guard var state = try? JSONDecoder().decode(IOSRescueModeState.self, from: data) else {
@@ -6131,7 +6200,8 @@ enum IOSRescueModeStore {
         lastPingAt: state.lastPingAt,
         expiresAt: 0,
         intervalMs: state.intervalMs,
-        pingCount: state.pingCount
+        pingCount: state.pingCount,
+        locationPrecision: state.locationPrecision
       )
     }
     return state
@@ -6143,6 +6213,7 @@ enum IOSRescueModeStore {
     lastPingAt: Int64,
     expiresAt: Int64,
     intervalMs: Int64,
+    locationPrecision: String,
     now: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
   ) throws -> IOSRescueModeState {
     let safeStart = startedAt > 0 && startedAt <= now ? startedAt : now
@@ -6154,7 +6225,9 @@ enum IOSRescueModeStore {
       lastPingAt: max(lastPingAt, 0),
       expiresAt: min(requestedExpiry, safeStart + maximumLifetime),
       intervalMs: min(max(intervalMs, minimumInterval), maximumInterval),
-      pingCount: lastPingAt > 0 ? 1 : 0
+      pingCount: lastPingAt > 0 ? 1 : 0,
+      locationPrecision: ["exact", "approximate", "none"].contains(locationPrecision)
+        ? locationPrecision : "approximate"
     )
     let data = try JSONEncoder().encode(state)
     try write(data)
@@ -6171,7 +6244,8 @@ enum IOSRescueModeStore {
       lastPingAt: timestamp,
       expiresAt: current.expiresAt,
       intervalMs: current.intervalMs,
-      pingCount: (current.pingCount ?? 0) + 1
+      pingCount: (current.pingCount ?? 0) + 1,
+      locationPrecision: current.locationPrecision
     )
     try write(JSONEncoder().encode(updated))
   }

@@ -190,6 +190,36 @@ abstract class AppLocalizations {
   /// **'Emergency wipe'**
   String get tooltipPanicWipe;
 
+  /// No description provided for @privacyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy'**
+  String get privacyTitle;
+
+  /// No description provided for @privacyPrivateDefaultBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Private mode is on by default. HearthBit minimizes stable radio identifiers and limits identity announcements.'**
+  String get privacyPrivateDefaultBody;
+
+  /// No description provided for @privacyBitchatInteropTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'BitChat compatibility'**
+  String get privacyBitchatInteropTitle;
+
+  /// No description provided for @privacyBitchatInteropOffBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Off. Private mode remains active.'**
+  String get privacyBitchatInteropOffBody;
+
+  /// No description provided for @privacyBitchatInteropWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'On. Nearby observers can correlate this device through a stable radio identifier, and public messages remain readable by the mesh.'**
+  String get privacyBitchatInteropWarning;
+
   /// No description provided for @tabChannel.
   ///
   /// In en, this message translates to:
@@ -316,6 +346,60 @@ abstract class AppLocalizations {
   /// **'Your GPS location will be attached if possible. The alert is public and relayed across the mesh.'**
   String get sosCardBody;
 
+  /// No description provided for @sosPrivacyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Public SOS privacy'**
+  String get sosPrivacyTitle;
+
+  /// No description provided for @sosPrivacyPublicWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'A public SOS reveals your message and cryptographic identity to mesh participants. Choose how much location to include.'**
+  String get sosPrivacyPublicWarning;
+
+  /// No description provided for @sosLocationExact.
+  ///
+  /// In en, this message translates to:
+  /// **'Exact location'**
+  String get sosLocationExact;
+
+  /// No description provided for @sosLocationExactBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Best for immediate rescue; exposes precise coordinates.'**
+  String get sosLocationExactBody;
+
+  /// No description provided for @sosLocationApproximate.
+  ///
+  /// In en, this message translates to:
+  /// **'Approximate location (recommended)'**
+  String get sosLocationApproximate;
+
+  /// No description provided for @sosLocationApproximateBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Rounds coordinates to roughly a neighborhood-sized area.'**
+  String get sosLocationApproximateBody;
+
+  /// No description provided for @sosLocationNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No location'**
+  String get sosLocationNone;
+
+  /// No description provided for @sosLocationNoneBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Sends only your SOS message.'**
+  String get sosLocationNoneBody;
+
+  /// No description provided for @sosSendPublic.
+  ///
+  /// In en, this message translates to:
+  /// **'SEND PUBLIC SOS'**
+  String get sosSendPublic;
+
   /// No description provided for @sosMedical.
   ///
   /// In en, this message translates to:
@@ -351,6 +435,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No SOS alerts received.'**
   String get sosNoneReceived;
+
+  /// No description provided for @checkInPrivateBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Sends an end-to-end encrypted update only to verified family members.'**
+  String get checkInPrivateBody;
+
+  /// No description provided for @checkInNoCircle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a verified family member before sending a private check-in.'**
+  String get checkInNoCircle;
 
   /// No description provided for @actionTrack.
   ///

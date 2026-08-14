@@ -104,10 +104,15 @@ class _EmergencyActionController extends MeshController {
 
   final _DrillPlatform testPlatform;
   var emergencyActivations = 0;
+  SosLocationPrecision? lastLocationPrecision;
 
   @override
-  Future<void> activateEmergency({String? description}) async {
+  Future<void> activateEmergency({
+    String? description,
+    SosLocationPrecision locationPrecision = SosLocationPrecision.approximate,
+  }) async {
     emergencyActivations += 1;
+    lastLocationPrecision = locationPrecision;
     await testPlatform.sendSos(content: description ?? 'real emergency');
   }
 }
@@ -204,12 +209,14 @@ void main() {
       find.ancestor(of: holdButton, matching: find.byType(Semantics)).first,
     );
     semantics.properties.onLongPress!();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(find.text('Privacidad del SOS público'), findsOneWidget);
+    await tester.tap(find.text('ENVIAR SOS PÚBLICO'));
+    await tester.pumpAndSettle();
 
     expect(platform.sosCalls, 1);
     expect(mesh.emergencyActivations, 1);
+    expect(mesh.lastLocationPrecision, SosLocationPrecision.approximate);
     expect(platform.publicMessages, isEmpty);
   });
 
@@ -223,7 +230,9 @@ void main() {
     );
 
     semantics.properties.onTap!();
-    await tester.pump();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ENVIAR SOS PÚBLICO'));
+    await tester.pumpAndSettle();
 
     expect(mesh.emergencyActivations, 1);
     expect(platform.sosCalls, 1);

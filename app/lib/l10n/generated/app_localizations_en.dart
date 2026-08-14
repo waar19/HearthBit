@@ -57,6 +57,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tooltipPanicWipe => 'Emergency wipe';
 
   @override
+  String get privacyTitle => 'Privacy';
+
+  @override
+  String get privacyPrivateDefaultBody =>
+      'Private mode is on by default. HearthBit minimizes stable radio identifiers and limits identity announcements.';
+
+  @override
+  String get privacyBitchatInteropTitle => 'BitChat compatibility';
+
+  @override
+  String get privacyBitchatInteropOffBody =>
+      'Off. Private mode remains active.';
+
+  @override
+  String get privacyBitchatInteropWarning =>
+      'On. Nearby observers can correlate this device through a stable radio identifier, and public messages remain readable by the mesh.';
+
+  @override
   String get tabChannel => 'Channel';
 
   @override
@@ -128,6 +146,36 @@ class AppLocalizationsEn extends AppLocalizations {
       'Your GPS location will be attached if possible. The alert is public and relayed across the mesh.';
 
   @override
+  String get sosPrivacyTitle => 'Public SOS privacy';
+
+  @override
+  String get sosPrivacyPublicWarning =>
+      'A public SOS reveals your message and cryptographic identity to mesh participants. Choose how much location to include.';
+
+  @override
+  String get sosLocationExact => 'Exact location';
+
+  @override
+  String get sosLocationExactBody =>
+      'Best for immediate rescue; exposes precise coordinates.';
+
+  @override
+  String get sosLocationApproximate => 'Approximate location (recommended)';
+
+  @override
+  String get sosLocationApproximateBody =>
+      'Rounds coordinates to roughly a neighborhood-sized area.';
+
+  @override
+  String get sosLocationNone => 'No location';
+
+  @override
+  String get sosLocationNoneBody => 'Sends only your SOS message.';
+
+  @override
+  String get sosSendPublic => 'SEND PUBLIC SOS';
+
+  @override
   String get sosMedical => 'I need medical help';
 
   @override
@@ -144,6 +192,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sosNoneReceived => 'No SOS alerts received.';
+
+  @override
+  String get checkInPrivateBody =>
+      'Sends an end-to-end encrypted update only to verified family members.';
+
+  @override
+  String get checkInNoCircle =>
+      'Add a verified family member before sending a private check-in.';
 
   @override
   String get actionTrack => 'TRACK';

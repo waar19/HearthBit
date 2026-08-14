@@ -67,11 +67,18 @@ internal class MeshEngine(
         RELATIONSHIP_PREFERENCES,
         Context.MODE_PRIVATE,
     )
+    private val relationshipSecureStore =
+        KeystoreSecureStore.open(context, RELATIONSHIP_SECURE_STORE)
     private val peersWithSessionHistory = ConcurrentHashMap.newKeySet<String>().apply {
-        addAll(
-            relationshipPreferences.getStringSet(KEY_SESSION_PEERS, emptySet())
-                .orEmpty(),
-        )
+        val legacy = relationshipPreferences
+            .getStringSet(KEY_SESSION_PEERS, emptySet())
+            .orEmpty()
+        addAll(relationshipSecureStore.getStringSet(KEY_SESSION_PEERS))
+        addAll(legacy)
+        if (legacy.isNotEmpty()) {
+            check(relationshipSecureStore.putStringSet(KEY_SESSION_PEERS, toSet()))
+            relationshipPreferences.edit().remove(KEY_SESSION_PEERS).commit()
+        }
     }
     private val lastHandshakeAttemptByPeer = ConcurrentHashMap<String, Long>()
     private val latestAnnouncementTimestampByPeer = ConcurrentHashMap<String, Long>()
@@ -160,6 +167,10 @@ internal class MeshEngine(
 
     @Volatile
     private var running = false
+    @Volatile
+    private var privateMode = true
+    @Volatile
+    private var bitchatInteropEnabled = false
 
     @Volatile
     private var advertising = false
@@ -174,6 +185,7 @@ internal class MeshEngine(
     private var advertiseAttempt = 0
     private var advertiseGeneration = 0
     private var advertiseWatchdog: Runnable? = null
+    private var advertiseTokenRotationRunnable: Runnable? = null
     private var genericPresenceEmitRunnable: Runnable? = null
     private var genericPresenceScanStartRunnable: Runnable? = null
     private var genericPresenceScanStopRunnable: Runnable? = null
@@ -355,6 +367,18 @@ internal class MeshEngine(
         }
     }
 
+    fun configurePrivacyMode(privateMode: Boolean, bitchatInteropEnabled: Boolean) {
+        val effectivePrivateMode = privateMode && !bitchatInteropEnabled
+        if (this.privateMode == effectivePrivateMode &&
+            this.bitchatInteropEnabled == bitchatInteropEnabled
+        ) {
+            return
+        }
+        this.privateMode = effectivePrivateMode
+        this.bitchatInteropEnabled = bitchatInteropEnabled
+        if (running) restartAdvertising()
+    }
+
     fun stop() {
         if (!running) return
         stopInternal(notify = true)
@@ -414,6 +438,8 @@ internal class MeshEngine(
         advertiseGeneration += 1
         advertiseWatchdog?.let(mainHandler::removeCallbacks)
         advertiseWatchdog = null
+        advertiseTokenRotationRunnable?.let(mainHandler::removeCallbacks)
+        advertiseTokenRotationRunnable = null
         advertiseCallback?.let { callback ->
             runCatching { adapter.bluetoothLeAdvertiser?.stopAdvertising(callback) }
         }
@@ -657,6 +683,11 @@ internal class MeshEngine(
     fun sendEmergency(messageId: String, content: String, channel: String): Map<String, String> {
         require(channel == "sos" || channel == "checkin")
         require(MeshProtocol.isEmergencyPublicPacketPayload(content))
+        if (privateMode) {
+            // Un SOS abierto prioriza alcance y autenticidad: publica la
+            // identidad por toda la malla justo antes del mensaje.
+            broadcast(createAnnouncementPacket(ttl = MeshProtocol.TTL))
+        }
         val (id, packet) = transmitPublic(messageId.take(255), content, channel)
         return mapOf(
             "messageId" to id,
@@ -698,6 +729,9 @@ internal class MeshEngine(
     }
 
     fun sendSos(content: String, latitude: Double?, longitude: Double?): String {
+        if (privateMode) {
+            broadcast(createAnnouncementPacket(ttl = MeshProtocol.TTL))
+        }
         val location = if (latitude != null && longitude != null) {
             "|$latitude|$longitude"
         } else {
@@ -952,6 +986,7 @@ internal class MeshEngine(
         peerTrustStore.clear()
         RescueModeStore(context).disable()
         relationshipPreferences.edit().clear().commit()
+        relationshipSecureStore.clear()
         peersWithSessionHistory.clear()
         learnedIosOverflowBit = null
         syncPackets.clear()
@@ -1089,7 +1124,9 @@ internal class MeshEngine(
         }
     }
 
-    private fun createAnnouncementPacket(): MeshProtocol.Packet {
+    private fun createAnnouncementPacket(
+        ttl: Byte = if (privateMode) PRIVATE_ANNOUNCE_TTL else MeshProtocol.TTL,
+    ): MeshProtocol.Packet {
         val payload = MeshProtocol.encodeAnnouncement(
             nickname,
             identity.noisePublicKey,
@@ -1098,7 +1135,7 @@ internal class MeshEngine(
         return identity.sign(
             MeshProtocol.Packet(
                 type = MeshProtocol.TYPE_ANNOUNCE,
-                ttl = MeshProtocol.TTL,
+                ttl = ttl,
                 timestamp = System.currentTimeMillis(),
                 senderId = identity.peerId,
                 payload = payload,
@@ -1405,12 +1442,12 @@ internal class MeshEngine(
                 .toList()
                 .forEach(peersWithSessionHistory::remove)
         }
-        relationshipPreferences.edit()
-            .putStringSet(
+        check(
+            relationshipSecureStore.putStringSet(
                 KEY_SESSION_PEERS,
                 peersWithSessionHistory.toSet(),
-            )
-            .apply()
+            ),
+        )
     }
 
     private fun sendEncryptedPrivate(peerIdHex: String, id: String, content: String) {
@@ -2016,7 +2053,10 @@ internal class MeshEngine(
         }
         // Solo vincular dirección y peerId después de validar claves y firma.
         // TTL intacto prueba que el anuncio llegó directamente, no por relay.
-        if (packet.ttl == MeshProtocol.TTL) {
+        val directAnnouncement =
+            packet.ttl == MeshProtocol.TTL ||
+                (privateMode && packet.ttl == PRIVATE_ANNOUNCE_TTL)
+        if (directAnnouncement) {
             addressToPeer[sourceAddress] = senderHex
         }
         val previouslySupported = previousPeer?.supportsTransfers == true
@@ -2214,33 +2254,19 @@ internal class MeshEngine(
                 }
                 val request = PendingBeaconRequest(senderHex, peer.nickname, control)
                 pendingBeaconRequests[requestId] = request
-                if (BeaconControlProtocol.shouldAutoAccept(activeLocalRadarConsentUntil())) {
-                    pendingBeaconRequests.remove(requestId)
-                    emit(
-                        mapOf(
-                            "type" to "beaconRequest",
-                            "requestId" to requestId,
-                            "peerId" to senderHex,
-                            "nickname" to peer.nickname,
-                            "expiresAt" to control.expiresAt,
-                            "flags" to control.flags,
-                            "autoAccepted" to true,
-                        ),
-                    )
-                    respondToBeaconRequest(request, accept = true, autoAccepted = true)
-                } else {
-                    emit(
-                        mapOf(
-                            "type" to "beaconRequest",
-                            "requestId" to requestId,
-                            "peerId" to senderHex,
-                            "nickname" to peer.nickname,
-                            "expiresAt" to control.expiresAt,
-                            "flags" to control.flags,
-                            "autoAccepted" to false,
-                        ),
-                    )
-                }
+                // Radar y rescate autorizan medición, no control del hardware.
+                // Sonido, flash y vibración siempre requieren confirmación.
+                emit(
+                    mapOf(
+                        "type" to "beaconRequest",
+                        "requestId" to requestId,
+                        "peerId" to senderHex,
+                        "nickname" to peer.nickname,
+                        "expiresAt" to control.expiresAt,
+                        "flags" to control.flags,
+                        "autoAccepted" to false,
+                    ),
+                )
             }
             BeaconControlProtocol.ACTION_GRANT -> {
                 val outgoing = outgoingBeaconRequests[requestId] ?: return
@@ -2602,15 +2628,23 @@ internal class MeshEngine(
             .setConnectable(localRole != MeshNodeRole.PHONE_BEACON)
             .build()
         // El PDU legado de BLE admite 31 bytes. UUID (18B + banderas) viaja en
-        // el anuncio principal y el peerId (26B con cabeceras) en la respuesta
-        // de escaneo, igual que BitChat. Ver MeshAdvertisePlan.
+        // el anuncio principal y un identificador de descubrimiento en la
+        // respuesta. En modo privado es un HMAC rotatorio, no el peerId.
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
             .addServiceUuid(ParcelUuid(SERVICE_UUID))
             .build()
+        val serviceData = if (privateMode && !bitchatInteropEnabled) {
+            RotatingAdvertiseToken.serviceData(
+                identity.noisePrivateKey,
+                System.currentTimeMillis(),
+            )
+        } else {
+            identity.peerId
+        }
         val scanResponse = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
-            .addServiceData(ParcelUuid(SERVICE_UUID), identity.peerId)
+            .addServiceData(ParcelUuid(SERVICE_UUID), serviceData)
             .build()
         val generation = ++advertiseGeneration
         val callback = object : AdvertiseCallback() {
@@ -2620,6 +2654,7 @@ internal class MeshEngine(
                 advertising = true
                 advertiseAttempt = 0
                 emitStatus("active")
+                scheduleAdvertiseTokenRotation()
                 sendAnnouncement()
             }
 
@@ -2634,6 +2669,24 @@ internal class MeshEngine(
         advertiseCallback = callback
         advertiser.startAdvertising(settings, data, scanResponse, callback)
         scheduleAdvertiseWatchdog(generation)
+    }
+
+    private fun scheduleAdvertiseTokenRotation() {
+        advertiseTokenRotationRunnable?.let(mainHandler::removeCallbacks)
+        advertiseTokenRotationRunnable = null
+        if (!privateMode || bitchatInteropEnabled || !running) return
+        val now = System.currentTimeMillis()
+        advertiseTokenRotationRunnable = Runnable {
+            advertiseTokenRotationRunnable = null
+            if (running && privateMode && !bitchatInteropEnabled) {
+                restartAdvertising()
+            }
+        }.also {
+            mainHandler.postDelayed(
+                it,
+                RotatingAdvertiseToken.delayUntilRotation(now) + 50L,
+            )
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -3108,11 +3161,26 @@ internal class MeshEngine(
 
     @SuppressLint("MissingPermission")
     private fun handleMeshScanResult(result: ScanResult) {
-        val advertisedPeer = result.scanRecord
+        val serviceData = result.scanRecord
             ?.getServiceData(ParcelUuid(SERVICE_UUID))
+        val privateToken = RotatingAdvertiseToken.isPrivateToken(serviceData)
+        val advertisedPeer = serviceData
+            ?.takeUnless { privateToken }
             ?.takeIf { it.size >= 8 }
             ?.copyOfRange(0, 8)
-        if (advertisedPeer?.contentEquals(identity.peerId) == true) return
+        if (advertisedPeer?.contentEquals(identity.peerId) == true ||
+            (
+                privateToken &&
+                    serviceData.contentEquals(
+                        RotatingAdvertiseToken.serviceData(
+                            identity.noisePrivateKey,
+                            System.currentTimeMillis(),
+                        ),
+                    )
+                )
+        ) {
+            return
+        }
         val address = result.device.address
         knownDevices[address] = result.device
         knownDeviceLastSeenAt[address] = System.currentTimeMillis()
@@ -3863,7 +3931,9 @@ internal class MeshEngine(
         const val MIN_OVERFLOW_CANDIDATE_RSSI = -90
         const val IOS_OVERFLOW_TYPE: Byte = 0x01
         const val MAX_REMEMBERED_SESSION_PEERS = 256
+        const val PRIVATE_ANNOUNCE_TTL: Byte = 1
         const val RELATIONSHIP_PREFERENCES = "hearthbit_mesh_relationships"
+        const val RELATIONSHIP_SECURE_STORE = "hearthbit_mesh_relationships_secure"
         const val KEY_SESSION_PEERS = "session_peers"
         const val KEY_IOS_OVERFLOW_BIT = "ios_overflow_service_bit"
 

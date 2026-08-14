@@ -70,6 +70,14 @@ enum CheckInStatus {
   }
 }
 
+enum SosLocationPrecision {
+  exact,
+  approximate,
+  none;
+
+  String get wireName => name;
+}
+
 class DrillCheckIn {
   const DrillCheckIn({
     required this.version,

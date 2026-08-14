@@ -16,6 +16,7 @@ internal object MeshAdvertisePlan {
     const val AD_FIELD_HEADER_BYTES = 2
     const val SERVICE_UUID_BYTES = 16
     const val PEER_ID_BYTES = 8
+    const val PRIVATE_TOKEN_BYTES = 9
 
     /** Anuncio principal: banderas + UUID de servicio de 128 bits. */
     const val ADVERTISEMENT_BYTES =
@@ -24,6 +25,8 @@ internal object MeshAdvertisePlan {
     /** Respuesta de escaneo: service data = UUID + peerId (sin banderas). */
     const val SCAN_RESPONSE_BYTES =
         AD_FIELD_HEADER_BYTES + SERVICE_UUID_BYTES + PEER_ID_BYTES
+    const val PRIVATE_SCAN_RESPONSE_BYTES =
+        AD_FIELD_HEADER_BYTES + SERVICE_UUID_BYTES + PRIVATE_TOKEN_BYTES
 
     /** Distribución previa (todo en un PDU) que provocaba el fallo código 1. */
     const val LEGACY_SINGLE_PDU_BYTES =

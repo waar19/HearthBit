@@ -10,6 +10,7 @@ internal data class RescueModeState(
     val expiresAt: Long,
     val intervalMs: Long,
     val pingCount: Long,
+    val locationPrecision: String,
 ) {
     fun asMap(now: Long = System.currentTimeMillis()): Map<String, Any?> {
         val expected = if (active && startedAt > 0L) {
@@ -26,6 +27,7 @@ internal data class RescueModeState(
             "intervalMs" to intervalMs,
             "expectedPings" to expected,
             "executedPings" to pingCount,
+            "locationPrecision" to locationPrecision,
         )
     }
 }
@@ -53,6 +55,10 @@ internal class RescueModeStore(context: Context) {
             intervalMs = preferences.getLong(KEY_INTERVAL_MS, DEFAULT_INTERVAL_MS)
                 .coerceIn(MIN_INTERVAL_MS, MAX_INTERVAL_MS),
             pingCount = preferences.getLong(KEY_PING_COUNT, 0L),
+            locationPrecision = preferences
+                .getString(KEY_LOCATION_PRECISION, LOCATION_APPROXIMATE)
+                .takeIf { it in LOCATION_PRECISIONS }
+                ?: LOCATION_APPROXIMATE,
         )
     }
 
@@ -63,6 +69,7 @@ internal class RescueModeStore(context: Context) {
         lastPingAt: Long,
         expiresAt: Long,
         intervalMs: Long,
+        locationPrecision: String,
         now: Long = System.currentTimeMillis(),
     ): RescueModeState {
         val safeStartedAt = startedAt.takeIf { it in 1..now } ?: now
@@ -77,6 +84,13 @@ internal class RescueModeStore(context: Context) {
         check(preferences.putLong(KEY_EXPIRES_AT, safeExpiresAt))
         check(preferences.putLong(KEY_INTERVAL_MS, intervalMs.coerceIn(MIN_INTERVAL_MS, MAX_INTERVAL_MS)))
         check(preferences.putLong(KEY_PING_COUNT, if (lastPingAt > 0L) 1L else 0L))
+        check(
+            preferences.putString(
+                KEY_LOCATION_PRECISION,
+                locationPrecision.takeIf { it in LOCATION_PRECISIONS }
+                    ?: LOCATION_APPROXIMATE,
+            ),
+        )
         return read(now)
     }
 
@@ -100,6 +114,15 @@ internal class RescueModeStore(context: Context) {
         private const val KEY_EXPIRES_AT = "expires_at"
         private const val KEY_INTERVAL_MS = "interval_ms"
         private const val KEY_PING_COUNT = "ping_count"
+        private const val KEY_LOCATION_PRECISION = "location_precision"
+        const val LOCATION_EXACT = "exact"
+        const val LOCATION_APPROXIMATE = "approximate"
+        const val LOCATION_NONE = "none"
+        private val LOCATION_PRECISIONS = setOf(
+            LOCATION_EXACT,
+            LOCATION_APPROXIMATE,
+            LOCATION_NONE,
+        )
         private const val MAX_DESCRIPTION_LENGTH = 500
         private const val MIN_INTERVAL_MS = 30_000L
         private const val DEFAULT_INTERVAL_MS = 120_000L

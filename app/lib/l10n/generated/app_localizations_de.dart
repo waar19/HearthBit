@@ -57,6 +57,24 @@ class AppLocalizationsDe extends AppLocalizations {
   String get tooltipPanicWipe => 'Notfall-Löschung';
 
   @override
+  String get privacyTitle => 'Datenschutz';
+
+  @override
+  String get privacyPrivateDefaultBody =>
+      'Der private Modus ist standardmäßig aktiv. HearthBit minimiert stabile Funkkennungen und begrenzt Identitätsankündigungen.';
+
+  @override
+  String get privacyBitchatInteropTitle => 'BitChat-Kompatibilität';
+
+  @override
+  String get privacyBitchatInteropOffBody =>
+      'Aus. Der private Modus bleibt aktiv.';
+
+  @override
+  String get privacyBitchatInteropWarning =>
+      'An. Beobachter in der Nähe können dieses Gerät über eine stabile Funkkennung verfolgen; öffentliche Nachrichten bleiben für das Mesh lesbar.';
+
+  @override
   String get tabChannel => 'Kanal';
 
   @override
@@ -128,6 +146,36 @@ class AppLocalizationsDe extends AppLocalizations {
       'Wenn möglich, wird dein GPS-Standort angehängt. Der Alarm ist öffentlich und wird über das Mesh weitergeleitet.';
 
   @override
+  String get sosPrivacyTitle => 'Datenschutz beim öffentlichen SOS';
+
+  @override
+  String get sosPrivacyPublicWarning =>
+      'Ein öffentliches SOS legt Nachricht und kryptografische Identität gegenüber Mesh-Teilnehmern offen. Wähle die Standortgenauigkeit.';
+
+  @override
+  String get sosLocationExact => 'Genauer Standort';
+
+  @override
+  String get sosLocationExactBody =>
+      'Am besten für sofortige Rettung; legt genaue Koordinaten offen.';
+
+  @override
+  String get sosLocationApproximate => 'Ungefährer Standort (empfohlen)';
+
+  @override
+  String get sosLocationApproximateBody =>
+      'Rundet Koordinaten ungefähr auf ein Wohngebiet.';
+
+  @override
+  String get sosLocationNone => 'Ohne Standort';
+
+  @override
+  String get sosLocationNoneBody => 'Sendet nur deine SOS-Nachricht.';
+
+  @override
+  String get sosSendPublic => 'ÖFFENTLICHES SOS SENDEN';
+
+  @override
   String get sosMedical => 'Ich brauche medizinische Hilfe';
 
   @override
@@ -144,6 +192,14 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get sosNoneReceived => 'Keine SOS-Alarme empfangen.';
+
+  @override
+  String get checkInPrivateBody =>
+      'Sendet ein Ende-zu-Ende-verschlüsseltes Update nur an verifizierte Familienmitglieder.';
+
+  @override
+  String get checkInNoCircle =>
+      'Füge ein verifiziertes Familienmitglied hinzu, bevor du privat eincheckst.';
 
   @override
   String get actionTrack => 'ORTEN';
