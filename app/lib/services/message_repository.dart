@@ -101,7 +101,7 @@ class MessageRepository {
     );
     return _database ??= await SecureDatabase.open(
       databasePath: resolvedDatabasePath,
-      version: 4,
+      version: 5,
       testFactory: databaseFactory,
       onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
       onCreate: (database, version) async {
@@ -119,6 +119,20 @@ class MessageRepository {
         }
         if (oldVersion < 4) {
           await _createEmergencyDeliveryTables(database);
+        }
+        if (oldVersion < 5) {
+          await _addColumnIfMissing(
+            database,
+            table: 'messages',
+            column: 'external',
+            definition: 'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _addColumnIfMissing(
+            database,
+            table: 'known_peers',
+            column: 'hearthbit_verified',
+            definition: 'INTEGER NOT NULL DEFAULT 0',
+          );
         }
       },
     );
@@ -138,7 +152,8 @@ class MessageRepository {
             is_private INTEGER NOT NULL,
             is_mine INTEGER NOT NULL,
             timestamp INTEGER NOT NULL,
-            channel TEXT
+            channel TEXT,
+            external INTEGER NOT NULL DEFAULT 0
           )
         ''');
     await database.execute(
@@ -146,12 +161,24 @@ class MessageRepository {
     );
   }
 
+  static Future<void> _addColumnIfMissing(
+    Database database, {
+    required String table,
+    required String column,
+    required String definition,
+  }) async {
+    final columns = await database.rawQuery('PRAGMA table_info($table)');
+    if (columns.any((entry) => entry['name'] == column)) return;
+    await database.execute('ALTER TABLE $table ADD COLUMN $column $definition');
+  }
+
   static Future<void> _createKnownPeersTable(Database database) async {
     await database.execute('''
       CREATE TABLE known_peers (
         id TEXT PRIMARY KEY,
         nickname TEXT NOT NULL,
-        last_seen INTEGER NOT NULL
+        last_seen INTEGER NOT NULL,
+        hearthbit_verified INTEGER NOT NULL DEFAULT 0
       )
     ''');
     await database.execute(

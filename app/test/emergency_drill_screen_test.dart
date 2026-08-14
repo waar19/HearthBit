@@ -220,6 +220,36 @@ void main() {
     expect(platform.publicMessages, isEmpty);
   });
 
+  testWidgets('etiqueta los SOS que llegan desde una red externa', (
+    tester,
+  ) async {
+    await pumpScreen(tester);
+    platform.eventsController.add({
+      'type': 'message',
+      'message': {
+        'id': 'external-sos',
+        'sender': 'BitChat',
+        'content': 'SOS|Ayuda||',
+        'senderPeerId': 'external-peer',
+        'private': false,
+        'mine': false,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'channel': 'sos',
+        'external': true,
+      },
+    });
+    await tester.pumpAndSettle();
+
+    expect(
+      mesh.messages.any((message) => message.id == 'external-sos'),
+      isTrue,
+    );
+    await tester.fling(find.byType(ListView), const Offset(0, -2000), 1000);
+    await tester.pumpAndSettle();
+    final badge = find.text('RED EXTERNA');
+    expect(badge, findsOneWidget);
+  });
+
   testWidgets('la acción accesible activa el SOS sin gesto mantenido', (
     tester,
   ) async {

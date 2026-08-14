@@ -28,10 +28,18 @@ data no mejoraría el descubrimiento y sí ampliaría la superficie de huella.
 
 ## Reidentificación y confianza
 
-Tras conectar por GATT, el `ANNOUNCE` firmado vincula la conexión con la
-identidad criptográfica. El token rotatorio nunca se escribe en el trust store.
-Los contactos confiables se reconocen por sus claves firmadas después de la
-conexión, no por el anuncio BLE.
+Tras conectar por GATT, dos HearthBit intercambian primero la prueba anónima de
+enlace `HB-LINK1`. No contiene `peerId`, nickname ni claves; solo evita el
+deadlock en plataformas que no pueden anunciar service data. Un enlace queda
+habilitado para recibir nuestra identidad si anunció el token rotatorio, envió
+esa prueba o entregó directamente un `ANNOUNCE` con TLV `0xF0`/un
+`HBT_CAPABILITY` válido. BitChat no responde a la prueba y no recibe nuestros
+paquetes locales de identidad con interoperabilidad desactivada.
+
+Después, el `ANNOUNCE` firmado vincula la conexión con la identidad
+criptográfica. El token rotatorio y la prueba anónima nunca se escriben en el
+trust store. Los contactos confiables se reconocen por sus claves firmadas
+después de la conexión, no por el anuncio BLE.
 
 En modo privado, los `ANNOUNCE` ordinarios tienen TTL 1 para que no se propaguen
 más allá del vecino directo. Esto limita el chat autenticado ordinario a peers
@@ -54,10 +62,22 @@ Con interoperabilidad activa:
 La opción permanece desactivada por defecto y advierte del riesgo de
 correlación pasiva.
 
+Con interoperabilidad desactivada:
+
+- los mensajes públicos de un peer sin prueba HearthBit se descartan solo en la
+  presentación local; el relay del paquete no se altera;
+- sus SOS públicos sí se muestran, con la etiqueta «red externa»;
+- el dispositivo sigue visible como presencia externa sin acciones de chat;
+- `ANNOUNCE`, `HBT_CAPABILITY` y capacidades locales solo salen por enlaces
+  probados HearthBit. El `ANNOUNCE` de alcance completo previo a un SOS sigue
+  siendo la excepción deliberada.
+
 ## Límites
 
-- Un adversario activo que se conecte puede recibir la identidad necesaria para
-  autenticar el enlace.
+- Un adversario activo puede imitar la prueba pública `HB-LINK1` o el protocolo
+  HearthBit y recibir la identidad necesaria para autenticar el enlace. La
+  prueba separa clientes BitChat normales; no es autenticación ni defensa ante
+  un cliente malicioso compatible.
 - El UUID de servicio revela que hay un dispositivo HearthBit cercano.
 - Un SOS abierto no puede ser anónimo y a la vez verificable y enrutable con el
   protocolo actual.

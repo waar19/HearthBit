@@ -173,6 +173,7 @@ void main() {
           'lastSeen': DateTime.now().millisecondsSinceEpoch,
           'secure': secure,
           'role': 'PHONE_RELAY',
+          'hearthbitVerified': true,
           if (radarAllowed)
             'radarAllowedUntil': DateTime.now()
                 .add(const Duration(minutes: 10))

@@ -325,6 +325,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   /// con el service data del anuncio (teléfonos Android) y con anuncios de
   /// malla recibidos con TTL intacto, que solo pueden venir del emisor.
   private var peripheralPeers: [UUID: String] = [:]
+  private var hearthbitProvenLinks: Set<UUID> = []
   /// Peer objetivo del radar de rescate; nil cuando el radar está apagado.
   private var radarPeerID: String?
   private var radarTimer: Timer?
@@ -530,6 +531,16 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         let interop = arguments["bitchatInteropEnabled"] as? Bool ?? false
         bitchatInteropEnabled = interop
         privateMode = (arguments["privateMode"] as? Bool ?? true) && !interop
+        if running {
+          if privateMode {
+            let linkIDs = Set(remoteCharacteristics.keys).union(
+              localCharacteristic?.subscribedCentrals?.map(\.identifier) ?? []
+            )
+            linkIDs.forEach { sendHearthBitLinkProof(to: $0) }
+          } else {
+            sendAnnouncement()
+          }
+        }
         result(nil)
       case "setGenericPresenceScanEnabled":
         guard
@@ -589,7 +600,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         let location = latitude != nil && longitude != nil
           ? "|\(latitude!)|\(longitude!)" : "||"
         if privateMode {
-          sendAnnouncement(ttl: IOSMeshProtocol.defaultTTL)
+          sendAnnouncement(
+            ttl: IOSMeshProtocol.defaultTTL,
+            allowUnprovenIdentity: true
+          )
         }
         result(try sendPublic(content: "SOS|\(description)\(location)", channel: "sos"))
       case "sendEmergency":
@@ -603,7 +617,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           throw IOSMeshError.invalidPayload
         }
         if privateMode {
-          sendAnnouncement(ttl: IOSMeshProtocol.defaultTTL)
+          sendAnnouncement(
+            ttl: IOSMeshProtocol.defaultTTL,
+            allowUnprovenIdentity: true
+          )
         }
         let transmitted = try transmitPublic(
           messageID: String(messageID.prefix(255)),
@@ -1043,6 +1060,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     centralWritesInFlight.removeAll()
     peripheralNotifyQueues.removeAll()
     peripheralPeers.removeAll()
+    hearthbitProvenLinks.removeAll()
     peripheralManager?.stopAdvertising()
     peripheralManager?.removeAllServices()
     localCharacteristic = nil
@@ -1143,6 +1161,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     centralWritesInFlight.removeAll()
     peripheralNotifyQueues.removeAll()
     peripheralPeers.removeAll()
+    hearthbitProvenLinks.removeAll()
     sessions.removeAll()
     responderCandidates.removeAll()
     securePeerIDs.removeAll()
@@ -2032,7 +2051,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     send(packet: courier, toPeerID: anchorID)
   }
 
-  private func sendAnnouncement(ttl: UInt8? = nil) {
+  private func sendAnnouncement(
+    ttl: UInt8? = nil,
+    allowUnprovenIdentity: Bool = false
+  ) {
     guard running, identity != nil else { return }
     let payload = IOSMeshProtocol.announcement(
       nickname: identity.nickname,
@@ -2048,7 +2070,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           senderID: identity.peerID,
           payload: payload
         )
-      )
+      ),
+      allowUnprovenIdentity: allowUnprovenIdentity
     )
     broadcastHbtCapability()
     broadcastEmergencyCapability()
@@ -2164,7 +2187,11 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     ])
   }
 
-  private func broadcast(_ packet: IOSMeshPacket, excluding: UUID? = nil) {
+  private func broadcast(
+    _ packet: IOSMeshPacket,
+    excluding: UUID? = nil,
+    allowUnprovenIdentity: Bool = false
+  ) {
     rememberSyncPacket(packet)
     let bytes = IOSMeshProtocol.encodeForBLE(packet)
     let emergency = IOSMeshProtocol.isEmergency(packet)
@@ -2172,6 +2199,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let directed = packet.recipientID.map {
       $0 != Data(repeating: 0xff, count: 8)
     } ?? false
+    let restrictIdentity = privateMode &&
+      !allowUnprovenIdentity &&
+      packet.senderID == identity.peerID &&
+      IOSMeshInteropPolicy.identityPacketTypes.contains(packet.type)
     if (localRole.storesDirectedPackets || emergency && localRole.relaysPackets),
        packet.type != IOSMeshProtocol.beaconControl,
        packet.type != IOSMeshProtocol.rangingControl,
@@ -2189,7 +2220,12 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     }
     if let characteristic = localCharacteristic, let manager = peripheralManager {
       for central in characteristic.subscribedCentrals ?? []
-      where central.identifier != excluding {
+      where central.identifier != excluding &&
+        (!restrictIdentity || IOSMeshInteropPolicy.canSendIdentityToLink(
+          privateMode: privateMode,
+          hearthbitProven: hearthbitProvenLinks.contains(central.identifier),
+          emergencyException: false
+        )) {
         guard
           let frames = packetFragmenter.prepare(
             packet: packet,
@@ -2214,7 +2250,13 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         )
       }
     }
-    for (identifier, characteristic) in remoteCharacteristics where identifier != excluding {
+    for (identifier, characteristic) in remoteCharacteristics
+    where identifier != excluding &&
+      (!restrictIdentity || IOSMeshInteropPolicy.canSendIdentityToLink(
+        privateMode: privateMode,
+        hearthbitProven: hearthbitProvenLinks.contains(identifier),
+        emergencyException: false
+      )) {
       guard let peripheral = connectedPeripherals[identifier] else { continue }
       let writeType: CBCharacteristicWriteType =
         characteristic.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
@@ -2306,6 +2348,40 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     }
   }
 
+  private func sendHearthBitLinkProof(to identifier: UUID) {
+    guard running, privateMode else { return }
+    let proof = IOSMeshInteropPolicy.linkProof
+    if
+      let characteristic = remoteCharacteristics[identifier],
+      let peripheral = connectedPeripherals[identifier]
+    {
+      let writeType: CBCharacteristicWriteType =
+        characteristic.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
+      enqueueCentralWrites(
+        [proof],
+        peripheral: peripheral,
+        characteristic: characteristic,
+        type: writeType,
+        priority: .normal
+      )
+    }
+    if
+      let characteristic = localCharacteristic,
+      let manager = peripheralManager,
+      let central = characteristic.subscribedCentrals?.first(where: {
+        $0.identifier == identifier
+      })
+    {
+      enqueuePeripheralUpdates(
+        [proof],
+        central: central,
+        manager: manager,
+        characteristic: characteristic,
+        priority: .normal
+      )
+    }
+  }
+
   private func sendSubscriptionAnnouncement(to central: CBCentral) {
     guard
       running,
@@ -2316,6 +2392,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         $0.identifier == central.identifier
       }) == true
     else { return }
+    if privateMode && !hearthbitProvenLinks.contains(central.identifier) {
+      sendHearthBitLinkProof(to: central.identifier)
+      return
+    }
     let now = Date()
     if let previous = lastSubscriptionAnnouncement[central.identifier],
        now.timeIntervalSince(previous) < Self.subscriptionAnnouncementCooldown {
@@ -2504,6 +2584,12 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func receive(_ data: Data, source: UUID?) {
+    if data == IOSMeshInteropPolicy.linkProof, let source {
+      if hearthbitProvenLinks.insert(source).inserted {
+        sendAnnouncement()
+      }
+      return
+    }
     guard
       let fingerprint = IOSMeshProtocol.relayFingerprint(data),
       let packet = IOSMeshProtocol.decode(data)
@@ -2667,6 +2753,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         signingPublicKey: announcement.signingPublicKey,
         supportsTransfers: announcement.supportsTransfers ||
           (previousPeer?.supportsTransfers ?? false),
+        hearthbitVerified: announcement.supportsTransfers ||
+          (previousPeer?.hearthbitVerified ?? false),
         supportsEmergencyAck: previousPeer?.supportsEmergencyAck ?? false,
         isInfrastructure: announcement.isInfrastructure ||
           (previousPeer?.isInfrastructure ?? false),
@@ -2674,15 +2762,27 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         hasLongRangeTrunk: false,
         lastSeen: now
       )
+      if
+        announcement.supportsTransfers,
+        (packet.ttl == announcementTTL ||
+         packet.ttl == IOSMeshProtocol.defaultTTL),
+        let source,
+        hearthbitProvenLinks.insert(source).inserted
+      {
+        sendAnnouncement()
+      }
       latestAnnouncementTimestampByPeer[senderID] = max(
         latestAnnouncementTimestampByPeer[senderID] ?? 0,
         packet.timestamp
       )
       rememberSyncPacket(packet)
       emit(["type": "peers", "peers": peerMaps()])
+      let verifiedHearthBit = peers[senderID]?.hearthbitVerified == true
       if let source {
         preferredPeripheralIDs.insert(source)
-        requestMissingMessages(peerID: senderID, source: source)
+        if !privateMode || verifiedHearthBit {
+          requestMissingMessages(peerID: senderID, source: source)
+        }
       }
       do {
         for stored in try storeForward.packets(for: packet.senderID) {
@@ -2698,16 +2798,18 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           "message": error.localizedDescription,
         ])
       }
-      if requiresTransportRekey {
-        if shouldAutoHandshake(peerID: senderID) {
-          scheduleAutoHandshake(peerID: senderID, force: true, delay: 0.5)
+      if !privateMode || verifiedHearthBit {
+        if requiresTransportRekey {
+          if shouldAutoHandshake(peerID: senderID) {
+            scheduleAutoHandshake(peerID: senderID, force: true, delay: 0.5)
+          }
+        } else if !(pendingPrivate[senderID] ?? []).isEmpty ||
+                    !(pendingFrames[senderID] ?? []).isEmpty ||
+                    !(pendingCourier[senderID] ?? []).isEmpty {
+          try? initiateHandshake(peerID: senderID)
+        } else {
+          scheduleAutoHandshake(peerID: senderID)
         }
-      } else if !(pendingPrivate[senderID] ?? []).isEmpty ||
-                  !(pendingFrames[senderID] ?? []).isEmpty ||
-                  !(pendingCourier[senderID] ?? []).isEmpty {
-        try? initiateHandshake(peerID: senderID)
-      } else {
-        scheduleAutoHandshake(peerID: senderID)
       }
     case IOSMeshProtocol.message:
       guard
@@ -2715,6 +2817,16 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         IOSMeshIdentity.verify(packet, key: peer.signingPublicKey)
       else { return }
       let emergency = IOSMeshProtocol.isEmergency(packet)
+      guard IOSMeshInteropPolicy.shouldProcessPublicMessage(
+        privateMode: privateMode,
+        hearthbitVerified: peer.hearthbitVerified,
+        emergency: emergency
+      ) else { return }
+      let external = IOSMeshInteropPolicy.isExternalEmergency(
+        privateMode: privateMode,
+        hearthbitVerified: peer.hearthbitVerified,
+        emergency: emergency
+      )
       let emergencyHash = emergency
         ? IOSMeshProtocol.emergencyCanonicalHash(packet).hex
         : nil
@@ -2752,7 +2864,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         isPrivate: false,
         isMine: false,
         timestamp: message.timestamp,
-        channel: message.channel
+        channel: message.channel,
+        external: external
       )
     case IOSMeshProtocol.noiseHandshake:
       processHandshake(packet, senderID: senderID)
@@ -2765,7 +2878,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     case IOSMeshProtocol.radarControl:
       processRadarControl(packet, senderID: senderID)
     case IOSMeshProtocol.hbtCapability:
-      processHbtCapability(packet, senderID: senderID)
+      processHbtCapability(packet, senderID: senderID, source: source)
     case IOSMeshProtocol.nodeCapability:
       processNodeCapability(packet, senderID: senderID)
     case IOSMeshProtocol.beaconControl:
@@ -2812,15 +2925,28 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     }
   }
 
-  private func processHbtCapability(_ packet: IOSMeshPacket, senderID: String) {
+  private func processHbtCapability(
+    _ packet: IOSMeshPacket,
+    senderID: String,
+    source: UUID?
+  ) {
     guard
       var peer = peers[senderID],
       packet.payload == Data([IOSMeshProtocol.hbtVersion]),
       IOSMeshIdentity.verify(packet, key: peer.signingPublicKey)
     else { return }
     peer.supportsTransfers = true
+    peer.hearthbitVerified = true
     peer.lastSeen = Date()
     peers[senderID] = peer
+    if
+      packet.ttl == IOSMeshProtocol.defaultTTL,
+      let source,
+      hearthbitProvenLinks.insert(source).inserted
+    {
+      sendAnnouncement()
+      requestMissingMessages(peerID: senderID, source: source)
+    }
     emit(["type": "peers", "peers": peerMaps()])
   }
 
@@ -3051,6 +3177,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func processHandshake(_ packet: IOSMeshPacket, senderID: String) {
+    guard !privateMode || peers[senderID]?.hearthbitVerified == true else { return }
     guard IOSNoiseReplayPolicy.isCurrent(
       packetTimestamp: packet.timestamp,
       latestAnnouncementTimestamp: latestAnnouncementTimestampByPeer[senderID]
@@ -3176,6 +3303,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func processEncrypted(_ packet: IOSMeshPacket, senderID: String) {
+    guard !privateMode || peers[senderID]?.hearthbitVerified == true else { return }
     guard IOSNoiseReplayPolicy.isCurrent(
       packetTimestamp: packet.timestamp,
       latestAnnouncementTimestamp: latestAnnouncementTimestampByPeer[senderID]
@@ -3284,6 +3412,20 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let remoteBuckets = IOSMeshProtocol.decodeGCS(request)
     var sent = 0
     for candidate in syncSnapshot() where sent < 40 {
+      if
+        privateMode,
+        candidate.senderID == identity.peerID,
+        IOSMeshInteropPolicy.identityPacketTypes.contains(candidate.type),
+        !IOSMeshInteropPolicy.canSendIdentityToLink(
+          privateMode: true,
+          hearthbitProven: hearthbitProvenLinks.contains(source),
+          emergencyException:
+            candidate.type == IOSMeshProtocol.announce &&
+            candidate.ttl == IOSMeshProtocol.defaultTTL
+        )
+      {
+        continue
+      }
       let typeFlag: UInt64
       switch candidate.type {
       case IOSMeshProtocol.announce:
@@ -3393,6 +3535,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         "signingPublicKey": FlutterStandardTypedData(bytes: peer.signingPublicKey),
         "supportsTransfers": peer.supportsTransfers,
         "supportsEmergencyAck": peer.supportsEmergencyAck,
+        "hearthbitVerified": peer.hearthbitVerified,
         "role": peer.role.rawValue,
         "hasLongRangeTrunk": peer.hasLongRangeTrunk,
         "radarAllowedUntil": consent?.expiresAt ?? 0,
@@ -3436,7 +3579,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     isPrivate: Bool,
     isMine: Bool,
     timestamp: UInt64,
-    channel: String?
+    channel: String?,
+    external: Bool = false
   ) {
     var message: [String: Any] = [
       "id": id,
@@ -3446,6 +3590,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       "private": isPrivate,
       "mine": isMine,
       "timestamp": Int(timestamp),
+      "external": external,
     ]
     if let channel { message["channel"] = channel }
     emit(["type": "message", "message": message])
@@ -3586,6 +3731,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       $0.identifier == source
     } ?? false
     guard !hasCentralLink, !hasPeripheralLink else { return }
+    hearthbitProvenLinks.remove(source)
     guard let disconnectedPeer = peripheralPeers.removeValue(forKey: source) else { return }
     guard !peripheralPeers.values.contains(disconnectedPeer) else { return }
     invalidateNoiseState(peerID: disconnectedPeer)
@@ -3848,6 +3994,7 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
     else { return }
     remoteCharacteristics[peripheral.identifier] = characteristic
     peripheral.setNotifyValue(true, for: characteristic)
+    sendHearthBitLinkProof(to: peripheral.identifier)
     sendAnnouncement()
   }
 
@@ -4398,11 +4545,46 @@ private struct IOSMeshPeer {
   let noisePublicKey: Data
   let signingPublicKey: Data
   var supportsTransfers: Bool
+  var hearthbitVerified: Bool
   var supportsEmergencyAck: Bool
   var isInfrastructure: Bool
   var role: IOSMeshNodeRole
   var hasLongRangeTrunk: Bool
   var lastSeen: Date
+}
+
+enum IOSMeshInteropPolicy {
+  static let linkProof = Data("HB-LINK1".utf8)
+  static let identityPacketTypes: Set<UInt8> = [
+    IOSMeshProtocol.announce,
+    IOSMeshProtocol.hbtCapability,
+    IOSMeshProtocol.emergencyCapability,
+    IOSMeshProtocol.nodeCapability,
+  ]
+
+  static func shouldProcessPublicMessage(
+    privateMode: Bool,
+    hearthbitVerified: Bool,
+    emergency: Bool
+  ) -> Bool {
+    !privateMode || hearthbitVerified || emergency
+  }
+
+  static func isExternalEmergency(
+    privateMode: Bool,
+    hearthbitVerified: Bool,
+    emergency: Bool
+  ) -> Bool {
+    privateMode && !hearthbitVerified && emergency
+  }
+
+  static func canSendIdentityToLink(
+    privateMode: Bool,
+    hearthbitProven: Bool,
+    emergencyException: Bool
+  ) -> Bool {
+    !privateMode || hearthbitProven || emergencyException
+  }
 }
 
 private struct IOSRemoteRadarConsent {

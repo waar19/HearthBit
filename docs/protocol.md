@@ -27,6 +27,21 @@ el emisor envía primero un `ANNOUNCE` con TTL completo; es necesario para que
 los saltos posteriores autentiquen el mensaje. La interoperabilidad BitChat
 opt-in restaura el peer ID estático y el TTL completo de los anuncios.
 
+Antes de compartir identidad en un enlace GATT privado, HearthBit intercambia
+la secuencia de transporte ASCII `HB-LINK1`. No es un paquete mesh, no se
+reenvía y no contiene identidad. Un enlace se considera HearthBit si presentó
+el token rotatorio `0xA5`, esa secuencia, un `ANNOUNCE` directo con TLV `0xF0`
+o un `HBT_CAPABILITY` directo cuya firma se verificó con el anuncio previo.
+Esta prueba evita que un cliente BitChat normal reciba nuestros `ANNOUNCE` y
+paquetes de capacidades, pero no autentica al software remoto.
+
+Con interoperabilidad desactivada, un `MESSAGE` firmado por un peer aún no
+verificado como HearthBit se reenvía según el TTL, pero no se entrega a la UI.
+La excepción es un SOS público: se entrega con `external=true` para mostrar la
+insignia «red externa». El peer permanece visible como presencia externa sin
+chat. El `ANNOUNCE` de alcance completo previo al SOS también conserva su
+excepción de envío a enlaces no probados.
+
 ## Paquete v1
 
 Los enteros usan orden big-endian.

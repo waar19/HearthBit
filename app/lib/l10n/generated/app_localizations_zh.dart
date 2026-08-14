@@ -67,11 +67,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get privacyBitchatInteropTitle => 'BitChat 兼容性';
 
   @override
-  String get privacyBitchatInteropOffBody => '已关闭。隐私模式保持启用。';
+  String get privacyBitchatInteropOffBody =>
+      '已关闭。BitChat 公共聊天将被隐藏。外部设备仍会显示但无法聊天，只显示其公共 SOS 警报。';
 
   @override
   String get privacyBitchatInteropWarning =>
       '已开启。附近观察者可通过固定无线标识符关联此设备，网状网络仍可读取公开消息。';
+
+  @override
+  String get externalPresenceNoChat => '外部网络设备 · 无法聊天';
+
+  @override
+  String get externalNetworkBadge => '外部网络';
 
   @override
   String get tabChannel => '频道';

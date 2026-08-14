@@ -19,8 +19,10 @@
   "privacyTitle": "隐私",
   "privacyPrivateDefaultBody": "默认启用隐私模式。HearthBit 会尽量减少固定无线标识符并限制身份广播。",
   "privacyBitchatInteropTitle": "BitChat 兼容性",
-  "privacyBitchatInteropOffBody": "已关闭。隐私模式保持启用。",
+  "privacyBitchatInteropOffBody": "已关闭。BitChat 公共聊天将被隐藏。外部设备仍会显示但无法聊天，只显示其公共 SOS 警报。",
   "privacyBitchatInteropWarning": "已开启。附近观察者可通过固定无线标识符关联此设备，网状网络仍可读取公开消息。",
+  "externalPresenceNoChat": "外部网络设备 · 无法聊天",
+  "externalNetworkBadge": "外部网络",
 
   "tabChannel": "频道",
   "tabNearby": "附近",

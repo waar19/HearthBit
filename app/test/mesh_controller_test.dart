@@ -372,6 +372,7 @@ void main() {
           'online': online,
           'secure': secure,
           'role': 'PHONE_RELAY',
+          'hearthbitVerified': true,
         },
       ],
     };
@@ -402,6 +403,62 @@ void main() {
       isTrue,
     );
   });
+
+  test(
+    'interop OFF presenta externos sin chat y conserva su SOS marcado',
+    () async {
+      const externalPeerId = 'bitchat-external';
+      platform.emit({
+        'type': 'snapshot',
+        'status': 'active',
+        'nickname': 'Yo',
+        'peerId': 'local-peer',
+        'role': 'PHONE_RELAY',
+        'peers': [
+          {
+            'id': externalPeerId,
+            'nickname': 'BitChat',
+            'lastSeen': DateTime.now().millisecondsSinceEpoch,
+            'online': true,
+            'secure': false,
+            'hearthbitVerified': false,
+          },
+        ],
+      });
+      await pumpEvents();
+
+      final externalPeer = controller.peerById(externalPeerId)!;
+      expect(controller.canChatWithPeer(externalPeer), isFalse);
+      final sendResult = await controller.sendPrivate(
+        externalPeer,
+        'No enviar',
+      );
+      expect(sendResult.disposition, PrivateMessageSendDisposition.failed);
+      expect(repository.outbox, isEmpty);
+
+      platform.emit({
+        'type': 'message',
+        'message': {
+          'id': 'external-sos',
+          'sender': 'BitChat',
+          'content': 'SOS|Ayuda||',
+          'senderPeerId': externalPeerId,
+          'private': false,
+          'mine': false,
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+          'channel': 'sos',
+          'external': true,
+        },
+      });
+      await pumpEvents();
+
+      final sos = controller.messages.singleWhere(
+        (message) => message.id == 'external-sos',
+      );
+      expect(sos.isSos, isTrue);
+      expect(sos.external, isTrue);
+    },
+  );
 
   test('limita mensajes en memoria y conserva los más recientes', () async {
     final initialMessages = List.generate(
@@ -539,6 +596,7 @@ void main() {
       nickname: 'Rescate',
       lastSeen: DateTime.now(),
       secure: false,
+      hearthbitVerified: true,
     );
 
     final result = await controller.sendPrivate(peer, 'Sigo aquí');
@@ -668,6 +726,7 @@ void main() {
         nickname: 'Rescate',
         lastSeen: DateTime.now(),
         secure: false,
+        hearthbitVerified: true,
       );
       await controller.sendPrivate(peer, 'Mensaje pendiente');
       final localId = repository.outbox.single.localId;
@@ -721,6 +780,7 @@ void main() {
       nickname: 'Rescate',
       lastSeen: DateTime.now(),
       secure: false,
+      hearthbitVerified: true,
     );
     await controller.sendPrivate(peer, 'No duplicar');
     final localId = repository.outbox.single.localId;
@@ -755,6 +815,7 @@ void main() {
       nickname: 'Rescate',
       lastSeen: DateTime.now(),
       secure: false,
+      hearthbitVerified: true,
     );
     await controller.sendPrivate(peer, 'Solo una vez');
     platform.privateMessageGate = Completer<String>();

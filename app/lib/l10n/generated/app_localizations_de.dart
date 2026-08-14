@@ -68,11 +68,17 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get privacyBitchatInteropOffBody =>
-      'Aus. Der private Modus bleibt aktiv.';
+      'Aus. Öffentliche BitChat-Chats werden ausgeblendet. Externe Geräte bleiben ohne Chat sichtbar; nur ihre öffentlichen SOS-Alarme werden angezeigt.';
 
   @override
   String get privacyBitchatInteropWarning =>
       'An. Beobachter in der Nähe können dieses Gerät über eine stabile Funkkennung verfolgen; öffentliche Nachrichten bleiben für das Mesh lesbar.';
+
+  @override
+  String get externalPresenceNoChat => 'Externes Netzwerk · kein Chat';
+
+  @override
+  String get externalNetworkBadge => 'EXTERNES NETZWERK';
 
   @override
   String get tabChannel => 'Kanal';

@@ -148,6 +148,7 @@ class MeshController extends ChangeNotifier {
   bool _bitchatInteropEnabled;
 
   List<MeshMessage> get messages => List.unmodifiable(_messages);
+  bool get bitchatInteropEnabled => _bitchatInteropEnabled;
   List<EmergencyDelivery> get emergencyDeliveries =>
       List.unmodifiable(_emergencyDeliveries);
   bool get drillModeEnabled => _drillModeEnabled;
@@ -238,6 +239,9 @@ class MeshController extends ChangeNotifier {
       localRole.canChat &&
       (status == MeshConnectionStatus.active ||
           status == MeshConnectionStatus.degraded);
+
+  bool canChatWithPeer(MeshPeer peer) =>
+      peer.role.canChat && (_bitchatInteropEnabled || peer.hearthbitVerified);
 
   Future<void> initialize() async {
     _messages
@@ -511,7 +515,7 @@ class MeshController extends ChangeNotifier {
     String content,
   ) async {
     final cleaned = content.trim();
-    if (!peer.role.canChat || cleaned.isEmpty) {
+    if (!canChatWithPeer(peer) || cleaned.isEmpty) {
       return PrivateMessageSendResult.failed(currentL10n.errorUnknown);
     }
     final currentPeer = peerById(peer.id);
@@ -646,6 +650,7 @@ class MeshController extends ChangeNotifier {
             nickname: recipient.substring(0, min(8, recipient.length)),
             lastSeen: DateTime.fromMillisecondsSinceEpoch(0),
             secure: false,
+            hearthbitVerified: true,
           );
       final result = await sendPrivate(peer, content);
       if (result.disposition != PrivateMessageSendDisposition.failed) {
@@ -1368,7 +1373,7 @@ class MeshController extends ChangeNotifier {
         continue;
       }
       final peer = peerById(original.recipientPeerId);
-      if (peer == null || !peer.secure || !peer.role.canChat) continue;
+      if (peer == null || !peer.secure || !canChatWithPeer(peer)) continue;
       var pending = original.copyWith(
         attempts: original.attempts + 1,
         status: PrivateMessageOutboxStatus.retrying,

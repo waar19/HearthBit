@@ -800,6 +800,45 @@ class RunnerTests: XCTestCase {
     XCTAssertTrue(responder.requiresRekey)
   }
 
+  func testPrivateInteropPolicyHidesChatPreservesSOSAndGatesIdentity() {
+    XCTAssertFalse(
+      IOSMeshInteropPolicy.shouldProcessPublicMessage(
+        privateMode: true,
+        hearthbitVerified: false,
+        emergency: false
+      )
+    )
+    XCTAssertTrue(
+      IOSMeshInteropPolicy.shouldProcessPublicMessage(
+        privateMode: true,
+        hearthbitVerified: false,
+        emergency: true
+      )
+    )
+    XCTAssertTrue(
+      IOSMeshInteropPolicy.isExternalEmergency(
+        privateMode: true,
+        hearthbitVerified: false,
+        emergency: true
+      )
+    )
+    XCTAssertFalse(
+      IOSMeshInteropPolicy.canSendIdentityToLink(
+        privateMode: true,
+        hearthbitProven: false,
+        emergencyException: false
+      )
+    )
+    XCTAssertTrue(
+      IOSMeshInteropPolicy.canSendIdentityToLink(
+        privateMode: true,
+        hearthbitProven: false,
+        emergencyException: true
+      )
+    )
+    XCTAssertEqual(IOSMeshInteropPolicy.linkProof, Data("HB-LINK1".utf8))
+  }
+
   private func makePeerPinMaterial() -> (peerID: String, noise: Data, signing: Data) {
     let noise = Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation
     let signing = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation

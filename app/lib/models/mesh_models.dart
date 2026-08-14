@@ -414,6 +414,7 @@ class MeshPeer {
     this.online = true,
     this.supportsTransfers = false,
     this.supportsEmergencyAck = false,
+    this.hearthbitVerified = false,
     this.role = MeshNodeRole.phoneRelay,
     this.hasLongRangeTrunk = false,
     this.radarAllowedUntil,
@@ -462,6 +463,8 @@ class MeshPeer {
       online: online,
       supportsTransfers: map['supportsTransfers'] == true,
       supportsEmergencyAck: map['supportsEmergencyAck'] == true,
+      hearthbitVerified:
+          map['hearthbitVerified'] == true || map['supportsTransfers'] == true,
       role: MeshNodeRole.fromWire(map['role']),
       hasLongRangeTrunk: map['hasLongRangeTrunk'] == true,
       radarAllowedUntil: switch (map['radarAllowedUntil']) {
@@ -488,6 +491,7 @@ class MeshPeer {
   final bool online;
   final bool supportsTransfers;
   final bool supportsEmergencyAck;
+  final bool hearthbitVerified;
   final MeshNodeRole role;
   final bool hasLongRangeTrunk;
   final DateTime? radarAllowedUntil;
@@ -508,6 +512,7 @@ class MeshPeer {
       lastSeen: DateTime.fromMillisecondsSinceEpoch(map['last_seen']! as int),
       secure: false,
       online: false,
+      hearthbitVerified: map['hearthbit_verified'] == 1,
     );
   }
 
@@ -515,6 +520,7 @@ class MeshPeer {
     'id': id,
     'nickname': nickname,
     'last_seen': lastSeen.millisecondsSinceEpoch,
+    'hearthbit_verified': hearthbitVerified ? 1 : 0,
   };
 }
 
@@ -596,6 +602,7 @@ class MeshMessage {
     required this.timestamp,
     this.channel,
     this.deliveryStatus = MeshMessageDeliveryStatus.transmitted,
+    this.external = false,
   });
 
   factory MeshMessage.fromMap(Map<Object?, Object?> map) {
@@ -639,6 +646,7 @@ class MeshMessage {
       isMine: map['mine'] == true,
       timestamp: DateTime.fromMillisecondsSinceEpoch(timestamp.toInt()),
       channel: channel as String?,
+      external: map['external'] == true,
     );
   }
 
@@ -652,6 +660,7 @@ class MeshMessage {
       isMine: map['is_mine'] == 1,
       timestamp: DateTime.fromMillisecondsSinceEpoch(map['timestamp']! as int),
       channel: map['channel'] as String?,
+      external: map['external'] == 1,
     );
   }
 
@@ -664,6 +673,7 @@ class MeshMessage {
   final DateTime timestamp;
   final String? channel;
   final MeshMessageDeliveryStatus deliveryStatus;
+  final bool external;
 
   bool get isDrill =>
       channel?.trim().toLowerCase() == 'drill' ||
@@ -739,6 +749,7 @@ class MeshMessage {
     'is_mine': isMine ? 1 : 0,
     'timestamp': timestamp.millisecondsSinceEpoch,
     'channel': channel,
+    'external': external ? 1 : 0,
   };
 }
 

@@ -68,11 +68,18 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get privacyBitchatInteropOffBody =>
-      'Désactivée. Le mode privé reste actif.';
+      'Désactivée. Les discussions publiques BitChat sont masquées. Les appareils externes restent visibles sans discussion ; seules leurs alertes SOS publiques sont affichées.';
 
   @override
   String get privacyBitchatInteropWarning =>
       'Activée. Des observateurs proches peuvent corréler cet appareil grâce à un identifiant radio stable et les messages publics restent lisibles par le réseau.';
+
+  @override
+  String get externalPresenceNoChat =>
+      'Présence réseau externe · sans discussion';
+
+  @override
+  String get externalNetworkBadge => 'RÉSEAU EXTERNE';
 
   @override
   String get tabChannel => 'Canal';

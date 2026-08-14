@@ -29,15 +29,24 @@ Private mode is enabled by default. On Android, the scan response contains a
 keyed discovery token that rotates every 15 minutes instead of the stable peer
 ID. iOS advertises only the service UUID. Nearby observers may still infer that
 a HearthBit-compatible device is present, measure radio strength and correlate
-timing. An active peer that connects can learn the identity needed to
-authenticate the link. HearthBit reduces passive tracking; it does not provide
-radio anonymity.
+timing. After connection, HearthBit first sends an anonymous protocol proof
+without nickname, keys or peer ID. Identity packets are released only to a link
+that presents this proof, a rotating HearthBit token or a verified HearthBit
+capability. A malicious active client can imitate that public proof, so
+HearthBit reduces passive tracking but does not provide radio anonymity.
 
 BitChat interoperability is an advanced opt-in. It restores the stable peer ID
 and full identity-announcement propagation required by compatible BitChat
 clients, increasing correlation risk. In private mode ordinary identity
 announcements remain one hop. A public SOS deliberately sends a full-reach
 signed announcement first so distant relays can verify it.
+
+With interoperability off, public chat from unverified BitChat peers is hidden
+locally while relay behavior remains unchanged. Their public SOS alerts are
+still shown and labeled as external-network alerts. Such devices remain visible
+as external presence without chat actions. HearthBit identity and capability
+packets are not sent over an unproven BLE link; the full-reach announcement
+required for a public SOS is the documented exception.
 
 Public-channel messages are intended for channel participants and must not be
 treated as confidential. They are signed to detect tampering. Private messages

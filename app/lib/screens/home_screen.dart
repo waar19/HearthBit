@@ -616,10 +616,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ...conversations.map((conversation) {
             final peer = conversation.peer;
             final message = conversation.lastMessage;
+            final chatAvailable = controller.canChatWithPeer(peer);
             return Card(
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
-                onTap: peer.role.canChat
+                onTap: chatAvailable
                     ? () => _openPrivateChat(controller, peer)
                     : null,
                 child: Padding(
@@ -662,11 +663,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           ],
                         ),
                       ),
-                      _peerControls(
-                        controller,
-                        peer,
-                        online: conversation.isOnline,
-                      ),
+                      if (chatAvailable)
+                        _peerControls(
+                          controller,
+                          peer,
+                          online: conversation.isOnline,
+                        ),
                     ],
                   ),
                 ),
@@ -676,8 +678,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ],
         if (newNearbyPeers.isNotEmpty) ...[
           ListSectionTitle(title: context.l10n.nearbyPeopleTitle),
-          ...newNearbyPeers.map(
-            (peer) => Card(
+          ...newNearbyPeers.map((peer) {
+            final chatAvailable = controller.canChatWithPeer(peer);
+            return Card(
               child: Column(
                 children: [
                   ListTile(
@@ -690,20 +693,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       children: [
                         Text(
                           '${peer.id.substring(0, 8)} · '
-                          '${peer.role.canChat ? (peer.secure ? context.l10n.peerSecure : context.l10n.peerTapToEncrypt) : context.l10n.genericPresenceNoChat}',
+                          '${chatAvailable ? (peer.secure ? context.l10n.peerSecure : context.l10n.peerTapToEncrypt) : context.l10n.externalPresenceNoChat}',
                         ),
                         _peerCapabilityBadges(peer),
                       ],
                     ),
-                    onTap: peer.role.canChat
+                    onTap: chatAvailable
                         ? () => _openPrivateChat(controller, peer)
                         : null,
                   ),
-                  _peerControls(controller, peer, online: true),
+                  if (chatAvailable)
+                    _peerControls(controller, peer, online: true),
                 ],
               ),
-            ),
-          ),
+            );
+          }),
         ],
         if (genericPresences.isNotEmpty) ...[
           ListSectionTitle(title: context.l10n.genericPresenceSectionTitle),

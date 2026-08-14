@@ -222,6 +222,13 @@ class EmergencyScreen extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                    if (message.external)
+                      Text(
+                        context.l10n.externalNetworkBadge,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                   ],
                 ),
                 subtitle: Text(

@@ -160,6 +160,7 @@ internal class MeshEngine(
      * (un salto), que solo pueden venir del propio emisor.
      */
     private val addressToPeer = ConcurrentHashMap<String, String>()
+    private val hearthbitProvenAddresses = ConcurrentHashMap.newKeySet<String>()
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private var gattServer: BluetoothGattServer? = null
@@ -235,6 +236,7 @@ internal class MeshEngine(
         var hasLongRangeTrunk: Boolean = false,
         var lastSeen: Long = System.currentTimeMillis(),
         var supportsEmergencyAck: Boolean = false,
+        var hearthbitVerified: Boolean = supportsTransfers,
     )
 
     private data class PendingPrivate(val id: String, val content: String)
@@ -453,6 +455,7 @@ internal class MeshEngine(
         seenBeaconActions.clear()
         activeBeaconRequest = null
         addressToPeer.clear()
+        hearthbitProvenAddresses.clear()
         runCatching { adapter.bluetoothLeScanner?.stopScan(scanCallback) }
         runCatching { adapter.bluetoothLeScanner?.stopScan(bitchatOverflowScanCallback) }
         recordMeshScanStopped()
@@ -686,7 +689,11 @@ internal class MeshEngine(
         if (privateMode) {
             // Un SOS abierto prioriza alcance y autenticidad: publica la
             // identidad por toda la malla justo antes del mensaje.
-            broadcast(createAnnouncementPacket(ttl = MeshProtocol.TTL))
+            broadcast(
+                createAnnouncementPacket(ttl = MeshProtocol.TTL),
+                excludeAddress = null,
+                allowUnprovenIdentity = true,
+            )
         }
         val (id, packet) = transmitPublic(messageId.take(255), content, channel)
         return mapOf(
@@ -730,7 +737,11 @@ internal class MeshEngine(
 
     fun sendSos(content: String, latitude: Double?, longitude: Double?): String {
         if (privateMode) {
-            broadcast(createAnnouncementPacket(ttl = MeshProtocol.TTL))
+            broadcast(
+                createAnnouncementPacket(ttl = MeshProtocol.TTL),
+                excludeAddress = null,
+                allowUnprovenIdentity = true,
+            )
         }
         val location = if (latitude != null && longitude != null) {
             "|$latitude|$longitude"
@@ -944,6 +955,7 @@ internal class MeshEngine(
                 "signingPublicKey" to peer.signingPublicKey,
                 "supportsTransfers" to peer.supportsTransfers,
                 "supportsEmergencyAck" to peer.supportsEmergencyAck,
+                "hearthbitVerified" to peer.hearthbitVerified,
                 "role" to peer.role.wireName,
                 "hasLongRangeTrunk" to peer.hasLongRangeTrunk,
                 "radarAllowedUntil" to (consent?.expiresAt ?: 0L),
@@ -972,6 +984,7 @@ internal class MeshEngine(
         knownDevices.clear()
         knownDeviceLastSeenAt.clear()
         addressToPeer.clear()
+        hearthbitProvenAddresses.clear()
         reconnectPeerByAddress.clear()
         autoReconnectExpiryByAddress.clear()
         autoReconnectAddresses.clear()
@@ -1147,7 +1160,11 @@ internal class MeshEngine(
         if (!running || !hasActiveBleLink()) return
         // El keepalive no entra al historial de REQUEST_SYNC: de lo contrario
         // anuncios frecuentes desplazarían mensajes útiles de la caché.
-        broadcastBytes(MeshProtocol.encodeForBle(createAnnouncementPacket()), excludeAddress = null)
+        broadcastBytes(
+            MeshProtocol.encodeForBle(createAnnouncementPacket()),
+            excludeAddress = null,
+            restrictToHearthBit = privateMode,
+        )
     }
 
     private fun broadcastHbtCapability() {
@@ -1530,9 +1547,18 @@ internal class MeshEngine(
     }
 
     private fun broadcast(packet: MeshProtocol.Packet, excludeAddress: String? = null) {
+        broadcast(packet, excludeAddress, allowUnprovenIdentity = false)
+    }
+
+    private fun broadcast(
+        packet: MeshProtocol.Packet,
+        excludeAddress: String?,
+        allowUnprovenIdentity: Boolean,
+    ) {
         rememberSyncPacket(packet)
         val bytes = MeshProtocol.encodeForBle(packet)
-        broadcastBytes(bytes, excludeAddress)
+        val restrictIdentity = isLocalIdentityPacket(packet) && !allowUnprovenIdentity
+        broadcastBytes(bytes, excludeAddress, restrictToHearthBit = restrictIdentity)
         val emergency = MeshProtocol.isEmergencyPublicPacket(packet)
         val directed = packet.recipientId != null &&
             !packet.recipientId.contentEquals(MeshProtocol.broadcastRecipient)
@@ -1547,10 +1573,48 @@ internal class MeshEngine(
     }
 
     @SuppressLint("MissingPermission")
-    private fun broadcastBytes(bytes: ByteArray, excludeAddress: String?) {
+    private fun broadcastBytes(
+        bytes: ByteArray,
+        excludeAddress: String?,
+        restrictToHearthBit: Boolean = false,
+    ) {
         activeLinks()
             .filterNot { it.capabilities.id.substringAfter(':') == excludeAddress }
+            .filter {
+                !restrictToHearthBit ||
+                    it.capabilities.kind != LinkKind.BLE ||
+                    MeshInteropPolicy.canSendIdentityToLink(
+                        privateMode = privateMode,
+                        hearthbitProven =
+                            it.capabilities.id.substringAfter(':') in hearthbitProvenAddresses,
+                        emergencyException = false,
+                    )
+            }
             .forEach { sendViaLink(it, bytes) }
+    }
+
+    private fun sendHearthBitLinkProof(address: String) {
+        if (!running || !privateMode) return
+        sendBytesToAddress(HearthBitLinkProof.bytes(), address)
+    }
+
+    private fun isLocalIdentityPacket(packet: MeshProtocol.Packet): Boolean =
+        privateMode &&
+            packet.senderId.contentEquals(identity.peerId) &&
+            packet.type in IDENTITY_PACKET_TYPES
+
+    private fun canSendSyncCandidate(
+        packet: MeshProtocol.Packet,
+        address: String,
+    ): Boolean {
+        if (!isLocalIdentityPacket(packet)) return true
+        return MeshInteropPolicy.canSendIdentityToLink(
+            privateMode = privateMode,
+            hearthbitProven = address in hearthbitProvenAddresses,
+            emergencyException =
+                packet.type == MeshProtocol.TYPE_ANNOUNCE &&
+                    packet.ttl == MeshProtocol.TTL,
+        )
     }
 
     private fun activeLinks(): List<LinkAdapter> {
@@ -1705,6 +1769,7 @@ internal class MeshEngine(
         overflowCandidateAddresses.remove(address)
         notifyNotificationObserver()
         rescheduleKeepAlive()
+        sendHearthBitLinkProof(address)
         val shouldStart = synchronized(clientWriteLock) {
             clientWriteQueues[address]?.size?.let { it > 0 } == true &&
                 clientWritesInFlight.add(address)
@@ -1915,6 +1980,12 @@ internal class MeshEngine(
     }
 
     private fun receive(bytes: ByteArray, sourceAddress: String) {
+        if (HearthBitLinkProof.matches(bytes)) {
+            if (hearthbitProvenAddresses.add(sourceAddress)) {
+                mainHandler.post { sendAnnouncement() }
+            }
+            return
+        }
         Log.d(
             LOG_TAG,
             "RX address=${sourceAddress.takeLast(5)} bytes=${bytes.size} " +
@@ -1983,7 +2054,8 @@ internal class MeshEngine(
             MeshProtocol.TYPE_COURIER_ENVELOPE -> processCourier(packet, senderHex)
             MeshProtocol.TYPE_REQUEST_SYNC -> processSyncRequest(packet, senderHex, sourceAddress)
             MeshProtocol.TYPE_RADAR_CONTROL -> processRadarControl(packet, senderHex)
-            MeshProtocol.TYPE_HBT_CAPABILITY -> processHbtCapability(packet, senderHex)
+            MeshProtocol.TYPE_HBT_CAPABILITY ->
+                processHbtCapability(packet, senderHex, sourceAddress)
             MeshProtocol.TYPE_NODE_CAPABILITY -> processNodeCapability(packet, senderHex)
             MeshProtocol.TYPE_BEACON_CONTROL -> processBeaconControl(packet, senderHex)
             MeshProtocol.TYPE_RANGING_CONTROL -> processRangingControl(packet, senderHex)
@@ -2072,26 +2144,52 @@ internal class MeshEngine(
             hasLongRangeTrunk = false,
             lastSeen = now,
             supportsEmergencyAck = previouslySupportedEmergencyAck,
+            hearthbitVerified =
+                announcement.supportsTransfers || previousPeer?.hearthbitVerified == true,
         )
+        if (directAnnouncement && announcement.supportsTransfers &&
+            hearthbitProvenAddresses.add(sourceAddress)
+        ) {
+            mainHandler.post { sendAnnouncement() }
+        }
         latestAnnouncementTimestampByPeer.merge(senderHex, packet.timestamp) { current, candidate ->
             maxOf(current, candidate)
         }
         rememberSyncPacket(packet)
         emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
         notifyNotificationObserver()
-        requestMissingMessages(senderHex, sourceAddress)
+        val verifiedHearthBit = peers[senderHex]?.hearthbitVerified == true
+        if (!privateMode || verifiedHearthBit) {
+            requestMissingMessages(senderHex, sourceAddress)
+        }
         storeForward.forRecipient(packet.senderId).forEach(::broadcast)
         storeForward.emergencyBroadcasts().forEach(::broadcast)
-        if (isKnownRelationship(senderHex) && !noiseSessions.isEstablished(senderHex)) {
+        if ((!privateMode || verifiedHearthBit) &&
+            isKnownRelationship(senderHex) &&
+            !noiseSessions.isEstablished(senderHex)
+        ) {
             initiateHandshake(senderHex)
         }
     }
 
-    private fun processHbtCapability(packet: MeshProtocol.Packet, senderHex: String) {
+    private fun processHbtCapability(
+        packet: MeshProtocol.Packet,
+        senderHex: String,
+        sourceAddress: String,
+    ) {
         val peer = peers[senderHex] ?: return
         if (packet.payload.size != 1 || packet.payload[0] != MeshProtocol.HBT_VERSION) return
         if (!identity.verify(packet, peer.signingPublicKey)) return
         peer.supportsTransfers = true
+        peer.hearthbitVerified = true
+        if (packet.ttl == MeshProtocol.TTL &&
+            hearthbitProvenAddresses.add(sourceAddress)
+        ) {
+            mainHandler.post {
+                sendAnnouncement()
+                requestMissingMessages(senderHex, sourceAddress)
+            }
+        }
         peer.lastSeen = System.currentTimeMillis()
         emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
     }
@@ -2159,6 +2257,23 @@ internal class MeshEngine(
             return
         }
         val emergency = MeshProtocol.isEmergencyPublicPacket(packet)
+        if (!MeshInteropPolicy.shouldProcessPublicMessage(
+                privateMode = privateMode,
+                hearthbitVerified = peer.hearthbitVerified,
+                emergency = emergency,
+            )
+        ) {
+            Log.i(
+                LOG_TAG,
+                "MESSAGE hidden by private interop policy from ${senderHex.take(8)}",
+            )
+            return
+        }
+        val external = MeshInteropPolicy.isExternalEmergency(
+            privateMode = privateMode,
+            hearthbitVerified = peer.hearthbitVerified,
+            emergency = emergency,
+        )
         val emergencyHash = if (emergency) {
             MeshProtocol.hex(MeshProtocol.emergencyCanonicalHash(packet))
         } else {
@@ -2196,6 +2311,7 @@ internal class MeshEngine(
             false,
             message.timestamp,
             message.channel,
+            external,
         )
     }
 
@@ -2348,6 +2464,10 @@ internal class MeshEngine(
     }
 
     private fun processHandshake(packet: MeshProtocol.Packet, senderHex: String) {
+        if (privateMode && peers[senderHex]?.hearthbitVerified != true) {
+            Log.i(LOG_TAG, "Ignoring external Noise handshake from ${senderHex.take(8)}")
+            return
+        }
         if (!peers.containsKey(senderHex)) {
             Log.i(LOG_TAG, "Ignoring Noise handshake from unannounced peer ${senderHex.take(8)}")
             return
@@ -2396,6 +2516,10 @@ internal class MeshEngine(
     }
 
     private fun processEncrypted(packet: MeshProtocol.Packet, senderHex: String) {
+        if (privateMode && peers[senderHex]?.hearthbitVerified != true) {
+            Log.i(LOG_TAG, "Ignoring external Noise ciphertext from ${senderHex.take(8)}")
+            return
+        }
         if (!peers.containsKey(senderHex)) {
             Log.i(LOG_TAG, "Ignoring Noise ciphertext from unannounced peer ${senderHex.take(8)}")
             return
@@ -2493,6 +2617,7 @@ internal class MeshEngine(
         var sent = 0
         syncSnapshot().forEach { candidate ->
             if (sent >= SYNC_MAX_REPLAY) return@forEach
+            if (!canSendSyncCandidate(candidate, sourceAddress)) return@forEach
             val typeFlag = when (candidate.type) {
                 MeshProtocol.TYPE_ANNOUNCE -> MeshProtocol.SYNC_FLAG_ANNOUNCE
                 MeshProtocol.TYPE_MESSAGE -> MeshProtocol.SYNC_FLAG_MESSAGE
@@ -3182,6 +3307,9 @@ internal class MeshEngine(
             return
         }
         val address = result.device.address
+        if (privateToken) {
+            hearthbitProvenAddresses.add(address)
+        }
         knownDevices[address] = result.device
         knownDeviceLastSeenAt[address] = System.currentTimeMillis()
         val advertisedPeerId = advertisedPeer?.let(MeshProtocol::hex)
@@ -3330,6 +3458,7 @@ internal class MeshEngine(
         val hasClientLink = clientReady.contains(address)
         val hasServerLink = serverSubscribers.any { it.address == address }
         if (hasClientLink || hasServerLink) return
+        hearthbitProvenAddresses.remove(address)
         val disconnectedPeer =
             addressToPeer.remove(address) ?: reconnectPeerByAddress[address] ?: return
         reconnectPeerByAddress[address] = disconnectedPeer
@@ -3740,7 +3869,10 @@ internal class MeshEngine(
                 gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
             }
             if (descriptor.uuid == CLIENT_CONFIGURATION_UUID) {
-                mainHandler.post { sendAnnouncement() }
+                mainHandler.post {
+                    sendHearthBitLinkProof(device.address)
+                    sendAnnouncement()
+                }
             }
         }
 
@@ -3772,6 +3904,7 @@ internal class MeshEngine(
         mine: Boolean,
         timestamp: Long,
         channel: String?,
+        external: Boolean = false,
     ) {
         emit(
             mapOf(
@@ -3785,6 +3918,7 @@ internal class MeshEngine(
                     "mine" to mine,
                     "timestamp" to timestamp,
                     "channel" to channel,
+                    "external" to external,
                 ),
             ),
         )
@@ -3938,6 +4072,12 @@ internal class MeshEngine(
         const val KEY_IOS_OVERFLOW_BIT = "ios_overflow_service_bit"
 
         const val LOG_TAG = "HearthBitMesh"
+        val IDENTITY_PACKET_TYPES = setOf(
+            MeshProtocol.TYPE_ANNOUNCE,
+            MeshProtocol.TYPE_HBT_CAPABILITY,
+            MeshProtocol.TYPE_EMERGENCY_CAPABILITY,
+            MeshProtocol.TYPE_NODE_CAPABILITY,
+        )
 
         val SERVICE_UUID: UUID =
             UUID.fromString("F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C")

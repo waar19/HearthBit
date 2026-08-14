@@ -12,6 +12,7 @@ void main() {
       isMine: false,
       timestamp: DateTime.fromMillisecondsSinceEpoch(1234),
       channel: 'sos',
+      external: true,
     );
 
     final restored = MeshMessage.fromDatabase(original.toDatabase());
@@ -19,6 +20,7 @@ void main() {
     expect(restored.id, original.id);
     expect(restored.content, original.content);
     expect(restored.isSos, isTrue);
+    expect(restored.external, isTrue);
   });
 
   test('solo ofrece archivos a un peer HearthBit conectado', () {
@@ -72,6 +74,24 @@ void main() {
 
     expect(advertised.hasLongRangeTrunk, isTrue);
     expect(roleOnly.hasLongRangeTrunk, isFalse);
+  });
+
+  test('distingue presencia HearthBit de presencia de red externa', () {
+    final verified = MeshPeer.fromMap({
+      'id': '0123456789abcdef',
+      'nickname': 'HearthBit',
+      'lastSeen': 1234,
+      'supportsTransfers': true,
+    });
+    final external = MeshPeer.fromMap({
+      'id': 'fedcba9876543210',
+      'nickname': 'BitChat',
+      'lastSeen': 1234,
+      'hearthbitVerified': false,
+    });
+
+    expect(verified.hearthbitVerified, isTrue);
+    expect(external.hearthbitVerified, isFalse);
   });
 
   test('online es compatible y nunca deja secure en un peer offline', () {

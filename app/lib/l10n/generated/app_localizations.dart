@@ -211,7 +211,7 @@ abstract class AppLocalizations {
   /// No description provided for @privacyBitchatInteropOffBody.
   ///
   /// In en, this message translates to:
-  /// **'Off. Private mode remains active.'**
+  /// **'Off. BitChat public chat is hidden. External devices remain visible without chat, and only their public SOS alerts are shown.'**
   String get privacyBitchatInteropOffBody;
 
   /// No description provided for @privacyBitchatInteropWarning.
@@ -219,6 +219,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'On. Nearby observers can correlate this device through a stable radio identifier, and public messages remain readable by the mesh.'**
   String get privacyBitchatInteropWarning;
+
+  /// No description provided for @externalPresenceNoChat.
+  ///
+  /// In en, this message translates to:
+  /// **'External network presence · no chat'**
+  String get externalPresenceNoChat;
+
+  /// No description provided for @externalNetworkBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'EXTERNAL NETWORK'**
+  String get externalNetworkBadge;
 
   /// No description provided for @tabChannel.
   ///

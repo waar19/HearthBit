@@ -22,8 +22,10 @@
   "privacyTitle": "Privacy",
   "privacyPrivateDefaultBody": "Private mode is on by default. HearthBit minimizes stable radio identifiers and limits identity announcements.",
   "privacyBitchatInteropTitle": "BitChat compatibility",
-  "privacyBitchatInteropOffBody": "Off. Private mode remains active.",
+  "privacyBitchatInteropOffBody": "Off. BitChat public chat is hidden. External devices remain visible without chat, and only their public SOS alerts are shown.",
   "privacyBitchatInteropWarning": "On. Nearby observers can correlate this device through a stable radio identifier, and public messages remain readable by the mesh.",
+  "externalPresenceNoChat": "External network presence · no chat",
+  "externalNetworkBadge": "EXTERNAL NETWORK",
 
   "tabChannel": "Channel",
   "tabNearby": "Nearby",

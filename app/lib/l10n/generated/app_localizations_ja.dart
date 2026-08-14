@@ -67,11 +67,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get privacyBitchatInteropTitle => 'BitChat 互換性';
 
   @override
-  String get privacyBitchatInteropOffBody => '無効です。プライベートモードは有効なままです。';
+  String get privacyBitchatInteropOffBody =>
+      '無効です。BitChat の公開チャットは表示されません。外部端末はチャット不可の状態で表示され、公開 SOS のみ受信します。';
 
   @override
   String get privacyBitchatInteropWarning =>
       '有効です。近くの第三者が固定無線識別子でこの端末を追跡でき、公開メッセージはメッシュから読み取れます。';
+
+  @override
+  String get externalPresenceNoChat => '外部ネットワーク端末 · チャット不可';
+
+  @override
+  String get externalNetworkBadge => '外部ネットワーク';
 
   @override
   String get tabChannel => 'チャンネル';

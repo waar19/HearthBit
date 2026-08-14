@@ -68,11 +68,17 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get privacyBitchatInteropOffBody =>
-      'Desactivada. El modo privado permanece activo.';
+      'Desactivada. Se oculta el chat público de BitChat. Los dispositivos externos siguen visibles sin chat y solo se muestran sus alertas SOS públicas.';
 
   @override
   String get privacyBitchatInteropWarning =>
       'Activada. Observadores cercanos pueden correlacionar este dispositivo mediante un identificador de radio estable y los mensajes públicos siguen siendo legibles por la malla.';
+
+  @override
+  String get externalPresenceNoChat => 'Presencia de red externa · sin chat';
+
+  @override
+  String get externalNetworkBadge => 'RED EXTERNA';
 
   @override
   String get tabChannel => 'Canal';

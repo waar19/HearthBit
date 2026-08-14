@@ -19,8 +19,10 @@
   "privacyTitle": "Confidentialité",
   "privacyPrivateDefaultBody": "Le mode privé est activé par défaut. HearthBit réduit les identifiants radio stables et limite les annonces d’identité.",
   "privacyBitchatInteropTitle": "Compatibilité BitChat",
-  "privacyBitchatInteropOffBody": "Désactivée. Le mode privé reste actif.",
+  "privacyBitchatInteropOffBody": "Désactivée. Les discussions publiques BitChat sont masquées. Les appareils externes restent visibles sans discussion ; seules leurs alertes SOS publiques sont affichées.",
   "privacyBitchatInteropWarning": "Activée. Des observateurs proches peuvent corréler cet appareil grâce à un identifiant radio stable et les messages publics restent lisibles par le réseau.",
+  "externalPresenceNoChat": "Présence réseau externe · sans discussion",
+  "externalNetworkBadge": "RÉSEAU EXTERNE",
 
   "tabChannel": "Canal",
   "tabNearby": "À proximité",
