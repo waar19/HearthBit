@@ -768,6 +768,35 @@ class AppLocalizationsDe extends AppLocalizations {
       'Kein zuverlässiger Bereich gefunden. Drehe dich langsamer und entferne dich von Metall oder Elektronik.';
 
   @override
+  String get radarSweepExpired =>
+      'Die Richtung hat sich geändert oder ist abgelaufen. Wiederhole den Rundblick an deiner aktuellen Position.';
+
+  @override
+  String radarMeasuredDistance(String distance) {
+    return 'Gemessen: $distance';
+  }
+
+  @override
+  String get radarRadioStart => 'Entfernung per Funk messen';
+
+  @override
+  String get radarRadioStop => 'Funkmessung beenden';
+
+  @override
+  String get radarSonarStart => 'Mit akustischem Sonar messen';
+
+  @override
+  String get radarSonarStop => 'Akustisches Sonar beenden';
+
+  @override
+  String get radarSonarMicrophoneRequired =>
+      'Das akustische Sonar benötigt Mikrofonzugriff.';
+
+  @override
+  String get radarSonarTooNoisy =>
+      'Die Signaltöne konnten nicht gemessen werden. Reduziere Geräusche, decke die Telefone nicht ab und versuche es erneut.';
+
+  @override
   String get radarSweepEstimateWarning =>
       'BLE kann nur einen breiten Bereich schätzen, keine genaue Richtung. Bestätige ihn durch Bewegung und eine erneute Suche.';
 

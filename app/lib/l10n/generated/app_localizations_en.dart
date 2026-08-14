@@ -763,6 +763,35 @@ class AppLocalizationsEn extends AppLocalizations {
       'No reliable sector was found. Turn more slowly and move away from metal or electronic equipment.';
 
   @override
+  String get radarSweepExpired =>
+      'The direction changed or expired. Repeat the sweep from your current position.';
+
+  @override
+  String radarMeasuredDistance(String distance) {
+    return 'Measured: $distance';
+  }
+
+  @override
+  String get radarRadioStart => 'Measure distance by radio';
+
+  @override
+  String get radarRadioStop => 'Stop radio distance measurement';
+
+  @override
+  String get radarSonarStart => 'Measure with acoustic sonar';
+
+  @override
+  String get radarSonarStop => 'Stop acoustic sonar';
+
+  @override
+  String get radarSonarMicrophoneRequired =>
+      'Microphone permission is required for acoustic sonar.';
+
+  @override
+  String get radarSonarTooNoisy =>
+      'The chirps could not be measured. Reduce noise, keep both phones uncovered, and try again.';
+
+  @override
   String get radarSweepEstimateWarning =>
       'BLE can only estimate a broad sector, not an exact direction. Confirm it by moving and repeating the sweep.';
 

@@ -3,5 +3,5 @@
 "NSCameraUsageDescription" = "HearthBit verwendet die Kamera, um Dateien über QR-Codes zu empfangen, wenn keine Funkverbindung verfügbar ist.";
 "NSLocationWhenInUseUsageDescription" = "Dein Standort wird an SOS-Meldungen angehängt, damit Rettungskräfte dich finden können.";
 "NSLocationAlwaysAndWhenInUseUsageDescription" = "Der dauerhafte Standortzugriff ermöglicht es dem Rettungsmodus, deine GPS-Position auch bei ausgeschaltetem Bildschirm über das Netz weiterzuleiten.";
-"NSMicrophoneUsageDescription" = "HearthBit verwendet das Mikrofon, um während eines Notfalls kurze Sprachnachrichten zu senden.";
+"NSMicrophoneUsageDescription" = "HearthBit verwendet das Mikrofon für Notfall-Sprachnachrichten und die optionale akustische Kurzstreckenmessung.";
 "NSLocalNetworkUsageDescription" = "HearthBit sucht in deinem lokalen WLAN nach Notfall-Gateways, um das Netz ohne Internetzugang zu erweitern.";

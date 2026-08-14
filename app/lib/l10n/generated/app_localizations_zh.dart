@@ -725,6 +725,32 @@ class AppLocalizationsZh extends AppLocalizations {
   String get radarSweepInconclusive => '未找到可靠扇区。请更慢转动，并远离金属或电子设备。';
 
   @override
+  String get radarSweepExpired => '方向已变化或已过期。请从当前位置重新扫描。';
+
+  @override
+  String radarMeasuredDistance(String distance) {
+    return '实测：$distance';
+  }
+
+  @override
+  String get radarRadioStart => '通过无线电测距';
+
+  @override
+  String get radarRadioStop => '停止无线电测距';
+
+  @override
+  String get radarSonarStart => '使用声学声纳测距';
+
+  @override
+  String get radarSonarStop => '停止声学声纳';
+
+  @override
+  String get radarSonarMicrophoneRequired => '声学声纳需要麦克风权限。';
+
+  @override
+  String get radarSonarTooNoisy => '无法测量啁啾信号。请降低环境噪声，勿遮挡两部手机，然后重试。';
+
+  @override
   String get radarSweepEstimateWarning =>
       'BLE 只能估计较宽的扇区，无法提供精确方向。请移动位置并重新扫描确认。';
 

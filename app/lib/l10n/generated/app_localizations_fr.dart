@@ -767,6 +767,35 @@ class AppLocalizationsFr extends AppLocalizations {
       'Aucun secteur fiable détecté. Tournez plus lentement et éloignez-vous du métal ou des appareils électroniques.';
 
   @override
+  String get radarSweepExpired =>
+      'La direction a changé ou a expiré. Recommencez le balayage depuis votre position actuelle.';
+
+  @override
+  String radarMeasuredDistance(String distance) {
+    return 'Mesurée : $distance';
+  }
+
+  @override
+  String get radarRadioStart => 'Mesurer la distance par radio';
+
+  @override
+  String get radarRadioStop => 'Arrêter la mesure radio';
+
+  @override
+  String get radarSonarStart => 'Mesurer avec le sonar acoustique';
+
+  @override
+  String get radarSonarStop => 'Arrêter le sonar acoustique';
+
+  @override
+  String get radarSonarMicrophoneRequired =>
+      'Le sonar acoustique nécessite l’accès au microphone.';
+
+  @override
+  String get radarSonarTooNoisy =>
+      'Les signaux n’ont pas pu être mesurés. Réduisez le bruit, laissez les téléphones découverts et réessayez.';
+
+  @override
   String get radarSweepEstimateWarning =>
       'Le BLE estime seulement un secteur large, pas une direction exacte. Confirmez-le en vous déplaçant et en recommençant.';
 

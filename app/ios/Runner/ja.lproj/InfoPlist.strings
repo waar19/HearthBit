@@ -3,5 +3,5 @@
 "NSCameraUsageDescription" = "無線接続が利用できないとき、HearthBitはカメラでQRコードを読み取り、ファイルを受信します。";
 "NSLocationWhenInUseUsageDescription" = "救助隊があなたを見つけられるよう、SOSアラートに現在地を添付します。";
 "NSLocationAlwaysAndWhenInUseUsageDescription" = "位置情報を常に許可すると、画面が消えているときでも、救助モードがGPS位置情報をメッシュネットワーク経由で中継できます。";
-"NSMicrophoneUsageDescription" = "HearthBitは、緊急時に短い音声メッセージを送信するためにマイクを使用します。";
+"NSMicrophoneUsageDescription" = "HearthBitは、緊急音声メッセージと任意の短距離音響測距にマイクを使用します。";
 "NSLocalNetworkUsageDescription" = "HearthBitは、インターネット接続なしでメッシュネットワークを拡張するため、ローカルWi-Fiネットワーク上の緊急ゲートウェイを検索します。";

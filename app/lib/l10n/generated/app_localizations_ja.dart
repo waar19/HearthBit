@@ -741,6 +741,33 @@ class AppLocalizationsJa extends AppLocalizations {
       '信頼できる範囲を特定できませんでした。よりゆっくり回り、金属や電子機器から離れてください。';
 
   @override
+  String get radarSweepExpired => '方向が変化したか期限切れです。現在地からもう一度スイープしてください。';
+
+  @override
+  String radarMeasuredDistance(String distance) {
+    return '実測：$distance';
+  }
+
+  @override
+  String get radarRadioStart => '無線で距離を測定';
+
+  @override
+  String get radarRadioStop => '無線測距を停止';
+
+  @override
+  String get radarSonarStart => '音響ソナーで測定';
+
+  @override
+  String get radarSonarStop => '音響ソナーを停止';
+
+  @override
+  String get radarSonarMicrophoneRequired => '音響ソナーにはマイクの許可が必要です。';
+
+  @override
+  String get radarSonarTooNoisy =>
+      'チャープ音を測定できませんでした。周囲の騒音を減らし、両方の端末を覆わずに再試行してください。';
+
+  @override
   String get radarSweepEstimateWarning =>
       'BLE で推定できるのは広い範囲だけで、正確な方向ではありません。移動して再度スイープし、確認してください。';
 

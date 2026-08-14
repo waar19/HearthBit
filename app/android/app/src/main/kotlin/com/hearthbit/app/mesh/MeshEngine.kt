@@ -115,6 +115,11 @@ internal class MeshEngine(
     private val outgoingBeaconRequests = ConcurrentHashMap<String, OutgoingBeaconRequest>()
     private val seenBeaconActions = ConcurrentHashMap<String, Long>()
     private val beaconActuator = BeaconActuator(context)
+    private val radioRangingManager = RadioRangingManager(
+        context = context,
+        sendControl = ::sendRangingControl,
+        emit = emit,
+    )
     private val tentativeRadarReads = ConcurrentHashMap<String, String>()
     private val genericPresenceTracker = GenericBlePresenceTracker()
     @Volatile
@@ -252,6 +257,7 @@ internal class MeshEngine(
         scheduleHandshakeCleanup()
         scheduleScanWatchdog()
         scheduleKeepAlive()
+        radioRangingManager.registerCapabilities()
         startAdvertising()
     }
 
@@ -369,6 +375,7 @@ internal class MeshEngine(
         advertiseAttempt = 0
         stopRadar()
         beaconActuator.stop()
+        radioRangingManager.stop()
         pendingBeaconRequests.clear()
         outgoingBeaconRequests.clear()
         seenBeaconActions.clear()
@@ -845,6 +852,25 @@ internal class MeshEngine(
         emit(mapOf("type" to "wiped"))
     }
 
+    fun rangingCapabilities(): Map<String, Any> = radioRangingManager.capabilitiesSnapshot()
+
+    fun startRadioRanging(peerIdHex: String) {
+        val normalized = peerIdHex.lowercase()
+        check(isRadarAllowed(normalized)) {
+            context.getString(R.string.error_radar_consent_required)
+        }
+        radioRangingManager.startInitiator(normalized, bluetoothDeviceForPeer(normalized))
+    }
+
+    fun stopRadioRanging() {
+        radioRangingManager.stop()
+    }
+
+    private fun bluetoothDeviceForPeer(peerId: String): BluetoothDevice? {
+        val address = addressToPeer.entries.firstOrNull { it.value == peerId }?.key ?: return null
+        return knownDevices[address] ?: clientGatts[address]?.device
+    }
+
     /**
      * Radar de rescate: emite lecturas RSSI del peer objetivo. Combina dos
      * fuentes: los anuncios BLE captados por el escaneo (que sigue activo
@@ -1009,6 +1035,27 @@ internal class MeshEngine(
             identity.sign(
                 MeshProtocol.Packet(
                     type = MeshProtocol.TYPE_BEACON_CONTROL,
+                    ttl = 1,
+                    timestamp = System.currentTimeMillis(),
+                    senderId = identity.peerId,
+                    recipientId = recipient,
+                    payload = payload,
+                ),
+            ),
+        )
+    }
+
+    fun sendRangingControl(peerIdHex: String, payload: ByteArray) {
+        check(running) { "La malla no está activa" }
+        require(RangingControlProtocol.decode(payload) != null) {
+            "Invalid ranging control payload"
+        }
+        val recipient = peerIdHex.hexToBytes()
+        require(recipient.size == 8)
+        broadcast(
+            identity.sign(
+                MeshProtocol.Packet(
+                    type = MeshProtocol.TYPE_RANGING_CONTROL,
                     ttl = 1,
                     timestamp = System.currentTimeMillis(),
                     senderId = identity.peerId,
@@ -1294,6 +1341,7 @@ internal class MeshEngine(
         if (localRole.storesDirectedPackets &&
             packet.type != MeshProtocol.TYPE_REQUEST_SYNC &&
             packet.type != MeshProtocol.TYPE_BEACON_CONTROL &&
+            packet.type != MeshProtocol.TYPE_RANGING_CONTROL &&
             packet.recipientId != null &&
             !packet.recipientId.contentEquals(MeshProtocol.broadcastRecipient)
         ) {
@@ -1622,10 +1670,12 @@ internal class MeshEngine(
             MeshProtocol.TYPE_HBT_CAPABILITY -> processHbtCapability(packet, senderHex)
             MeshProtocol.TYPE_NODE_CAPABILITY -> processNodeCapability(packet, senderHex)
             MeshProtocol.TYPE_BEACON_CONTROL -> processBeaconControl(packet, senderHex)
+            MeshProtocol.TYPE_RANGING_CONTROL -> processRangingControl(packet, senderHex)
             MeshProtocol.TYPE_FRAGMENT -> {
                 val reassembled = fragmentReassembler.accept(packet)
                 if (reassembled != null) {
-                    if (reassembled.type == MeshProtocol.TYPE_BEACON_CONTROL &&
+                    if ((reassembled.type == MeshProtocol.TYPE_BEACON_CONTROL ||
+                            reassembled.type == MeshProtocol.TYPE_RANGING_CONTROL) &&
                         packet.ttl != 1.toByte()
                     ) {
                         return
@@ -1636,7 +1686,9 @@ internal class MeshEngine(
                             "sender=${senderHex.take(8)} bytes=${reassembled.payload.size}",
                     )
                     process(
-                        if (reassembled.type == MeshProtocol.TYPE_BEACON_CONTROL) {
+                        if (reassembled.type == MeshProtocol.TYPE_BEACON_CONTROL ||
+                            reassembled.type == MeshProtocol.TYPE_RANGING_CONTROL
+                        ) {
                             reassembled.copy(ttl = 1)
                         } else {
                             reassembled
@@ -1904,6 +1956,47 @@ internal class MeshEngine(
                 }
             }
         }
+    }
+
+    private fun processRangingControl(packet: MeshProtocol.Packet, senderHex: String) {
+        if (packet.ttl != 1.toByte() ||
+            packet.recipientId?.contentEquals(identity.peerId) != true
+        ) {
+            return
+        }
+        val peer = peers[senderHex] ?: return
+        if (!identity.verify(packet, peer.signingPublicKey)) return
+        if (!RangingControlProtocol.hasValidTimestamp(packet.timestamp)) return
+        val control = RangingControlProtocol.decode(packet.payload) ?: return
+        if (control.action == RangingControlProtocol.ACTION_REQUEST &&
+            activeLocalRadarConsentUntil() <= System.currentTimeMillis()
+        ) {
+            return
+        }
+        if (control.action == RangingControlProtocol.ACTION_OOB_DATA) {
+            radioRangingManager.receiveOob(senderHex, control)
+            return
+        }
+        if (control.action == RangingControlProtocol.ACTION_REQUEST &&
+            control.technology != RangingControlProtocol.TECHNOLOGY_ACOUSTIC &&
+            activeLocalRadarConsentUntil() > System.currentTimeMillis()
+        ) {
+            radioRangingManager.acceptRequest(
+                senderHex,
+                control,
+                bluetoothDeviceForPeer(senderHex),
+            )
+        }
+        emit(
+            mapOf(
+                "type" to "rangingControl",
+                "peerId" to senderHex,
+                "action" to control.action.toInt(),
+                "technology" to control.technology.toInt(),
+                "payload" to packet.payload,
+                "at" to packet.timestamp,
+            ),
+        )
     }
 
     private fun processHandshake(packet: MeshProtocol.Packet, senderHex: String) {

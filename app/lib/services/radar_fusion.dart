@@ -4,6 +4,8 @@ import 'radar_signal.dart';
 
 enum RadarDirectionSource { gps, ble, none }
 
+enum RadarPrecisionSource { radio, acoustic }
+
 class RadarFusionResult {
   const RadarFusionResult({
     required this.source,
@@ -15,6 +17,10 @@ class RadarFusionResult {
     required this.adjustedBleConfidence,
     required this.bleSuppressedVeryClose,
     required this.sourcesDisagree,
+    required this.preferredDistanceMeters,
+    required this.distanceErrorMeters,
+    required this.precisionSource,
+    required this.distanceConfidence,
   });
 
   final RadarDirectionSource source;
@@ -26,6 +32,12 @@ class RadarFusionResult {
   final double adjustedBleConfidence;
   final bool bleSuppressedVeryClose;
   final bool sourcesDisagree;
+  final double? preferredDistanceMeters;
+  final double? distanceErrorMeters;
+  final RadarPrecisionSource? precisionSource;
+  final double distanceConfidence;
+
+  bool get hasMeasuredDistance => precisionSource != null;
 }
 
 /// Combina navegación GPS de largo alcance con proximidad y barrido BLE.
@@ -54,6 +66,10 @@ class RadarFusion {
     required double? targetAccuracyMeters,
     required double? gpsDistanceMeters,
     required double? bleApproxDistanceMeters,
+    double? precisionDistanceMeters,
+    double? precisionDistanceErrorMeters,
+    double precisionDistanceConfidence = 0,
+    RadarPrecisionSource? precisionSource,
   }) {
     final hasGpsCoordinates =
         localLatitude != null &&
@@ -130,6 +146,17 @@ class RadarFusion {
       adjustedBleConfidence: adjustedBleConfidence,
       bleSuppressedVeryClose: veryClose && bleEstimate != null,
       sourcesDisagree: sourcesDisagree,
+      preferredDistanceMeters:
+          precisionDistanceMeters ??
+          bleApproxDistanceMeters ??
+          gpsDistanceMeters,
+      distanceErrorMeters: precisionDistanceMeters == null
+          ? null
+          : precisionDistanceErrorMeters,
+      precisionSource: precisionDistanceMeters == null ? null : precisionSource,
+      distanceConfidence: precisionDistanceMeters == null
+          ? 0
+          : precisionDistanceConfidence.clamp(0.0, 1.0),
     );
   }
 

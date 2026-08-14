@@ -769,6 +769,35 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se encontró un sector confiable. Gira más despacio y aléjate de metales o equipos electrónicos.';
 
   @override
+  String get radarSweepExpired =>
+      'La dirección cambió o caducó. Repite el barrido desde tu posición actual.';
+
+  @override
+  String radarMeasuredDistance(String distance) {
+    return 'Medida: $distance';
+  }
+
+  @override
+  String get radarRadioStart => 'Medir distancia por radio';
+
+  @override
+  String get radarRadioStop => 'Detener medición por radio';
+
+  @override
+  String get radarSonarStart => 'Medir con sonar acústico';
+
+  @override
+  String get radarSonarStop => 'Detener sonar acústico';
+
+  @override
+  String get radarSonarMicrophoneRequired =>
+      'El sonar acústico necesita permiso para usar el micrófono.';
+
+  @override
+  String get radarSonarTooNoisy =>
+      'No fue posible medir los chirridos. Reduce el ruido, deja ambos teléfonos descubiertos e inténtalo de nuevo.';
+
+  @override
   String get radarSweepEstimateWarning =>
       'BLE solo permite estimar un sector amplio, no una dirección exacta. Confírmalo moviéndote y repitiendo el barrido.';
 
