@@ -518,6 +518,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get radarSearchingHint => '慢慢地绕大圈行走。雷达接收的是直接的蓝牙信号（数十米范围）。';
 
   @override
+  String get radarNoSignalHint => '尚未读取到直接信号。请在两部手机上保持 HearthBit 打开，并缓慢走动。';
+
+  @override
   String get proximityVeryClose => '非常近';
 
   @override

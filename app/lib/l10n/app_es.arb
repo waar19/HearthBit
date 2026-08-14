@@ -168,6 +168,7 @@
   "radarSignalLostHint": "Vuelve despacio sobre tus pasos hasta recuperar la señal.",
   "radarSearching": "Buscando señal…",
   "radarSearchingHint": "Camina despacio describiendo un círculo amplio. El radar detecta la señal Bluetooth directa (decenas de metros).",
+  "radarNoSignalHint": "Aún sin lectura de señal directa. Mantén HearthBit abierto en ambos teléfonos y camina despacio.",
   "proximityVeryClose": "MUY CERCA",
   "proximityClose": "CERCA",
   "proximityInRange": "EN RANGO",

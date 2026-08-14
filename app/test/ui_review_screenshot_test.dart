@@ -79,7 +79,10 @@ class _ReviewPlatform extends MeshPlatformService {
   }) async => 'sos-1';
 
   @override
-  Future<void> setRadarConsent({required bool enabled, int minutes = 15}) async {}
+  Future<void> setRadarConsent({
+    required bool enabled,
+    int minutes = 15,
+  }) async {}
 
   @override
   Future<void> startLocalBeacon({
@@ -381,7 +384,11 @@ void main() {
       preferences.dispose();
     });
 
-    platform.emit({'type': 'status', 'status': 'active', 'role': 'PHONE_RELAY'});
+    platform.emit({
+      'type': 'status',
+      'status': 'active',
+      'role': 'PHONE_RELAY',
+    });
     platform.emit({
       'type': 'peers',
       'peers': [
@@ -441,10 +448,7 @@ void main() {
 
   testWidgets('home en claro', (tester) async {
     final platform = _ReviewPlatform();
-    final mesh = MeshController(
-      platform: platform,
-      repository: _MemoryRepo(),
-    );
+    final mesh = MeshController(platform: platform, repository: _MemoryRepo());
     final preferences = AppPreferences();
     await tester.runAsync(() async {
       await mesh.initialize();
@@ -463,7 +467,11 @@ void main() {
       mesh.dispose();
       preferences.dispose();
     });
-    platform.emit({'type': 'status', 'status': 'active', 'role': 'PHONE_RELAY'});
+    platform.emit({
+      'type': 'status',
+      'status': 'active',
+      'role': 'PHONE_RELAY',
+    });
     await tester.pump();
 
     await _pumpApp(
@@ -501,7 +509,11 @@ void main() {
       mesh.dispose();
       preferences.dispose();
     });
-    platform.emit({'type': 'status', 'status': 'active', 'role': 'PHONE_RELAY'});
+    platform.emit({
+      'type': 'status',
+      'status': 'active',
+      'role': 'PHONE_RELAY',
+    });
     await tester.pump();
 
     await _pumpApp(
@@ -539,7 +551,11 @@ void main() {
       mesh.dispose();
       preferences.dispose();
     });
-    platform.emit({'type': 'status', 'status': 'active', 'role': 'PHONE_RELAY'});
+    platform.emit({
+      'type': 'status',
+      'status': 'active',
+      'role': 'PHONE_RELAY',
+    });
     await tester.pump();
 
     await _pumpApp(
@@ -598,9 +614,7 @@ void main() {
       tester,
       EmergencyContactsScreen(
         preferences: preferences,
-        countryResolver: EmergencyCountryResolver(
-          platform: _ReviewPlatform(),
-        ),
+        countryResolver: EmergencyCountryResolver(platform: _ReviewPlatform()),
       ),
     );
     await tester.pumpAndSettle();

@@ -168,6 +168,7 @@
   "radarSignalLostHint": "信号が戻るまで、来た道をゆっくり引き返してください。",
   "radarSearching": "信号を探しています…",
   "radarSearchingHint": "大きな円を描くようにゆっくり歩いてください。レーダーは直接の Bluetooth 信号（数十メートル）を検出します。",
+  "radarNoSignalHint": "まだ直接の信号を読み取れていません。両方の端末で HearthBit を開いたまま、ゆっくり歩いてください。",
   "proximityVeryClose": "すぐ近く",
   "proximityClose": "近い",
   "proximityInRange": "範囲内",

@@ -531,6 +531,10 @@ class AppLocalizationsJa extends AppLocalizations {
       '大きな円を描くようにゆっくり歩いてください。レーダーは直接の Bluetooth 信号（数十メートル）を検出します。';
 
   @override
+  String get radarNoSignalHint =>
+      'まだ直接の信号を読み取れていません。両方の端末で HearthBit を開いたまま、ゆっくり歩いてください。';
+
+  @override
   String get proximityVeryClose => 'すぐ近く';
 
   @override

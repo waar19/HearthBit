@@ -150,6 +150,7 @@ internal class MeshEngine(
         emit = emit,
     )
     private val tentativeRadarReads = ConcurrentHashMap<String, String>()
+    private val radarReadPlanner = RadarReadPlanner()
     private val genericPresenceTracker = GenericBlePresenceTracker()
     @Volatile
     private var lanBridge: LinkAdapter? = null
@@ -1061,6 +1062,7 @@ internal class MeshEngine(
             context.getString(R.string.error_radar_consent_required)
         }
         radarPeerId = normalized
+        radarReadPlanner.start(System.currentTimeMillis())
         updatePowerState(batteryLevel, charging, screenOn, systemPowerSave)
         mainHandler.removeCallbacks(radarReadTask)
         cancelRecoveryScanBurst()
@@ -1072,6 +1074,7 @@ internal class MeshEngine(
     fun stopRadar() {
         val wasActive = radarPeerId != null
         radarPeerId = null
+        radarReadPlanner.clear()
         updatePowerState(batteryLevel, charging, screenOn, systemPowerSave)
         mainHandler.removeCallbacks(radarReadTask)
         tentativeRadarReads.clear()
@@ -1090,31 +1093,54 @@ internal class MeshEngine(
                 emit(mapOf("type" to "radarExpired", "peerId" to target))
                 return
             }
+            val now = System.currentTimeMillis()
             val mapped = clientGatts.filterKeys { addressToPeer[it] == target }
-            if (mapped.isNotEmpty()) {
-                mapped.forEach { (address, gatt) ->
-                    tentativeRadarReads.remove(address)
-                    runCatching { gatt.readRemoteRssi() }
+            // iOS no incluye peerId en el anuncio BLE: los enlaces listos y
+            // sin resolver sirven como señal tentativa hasta el mapeo directo.
+            val unresolved = clientGatts.filterKeys { address ->
+                clientReady.contains(address) && !addressToPeer.containsKey(address)
+            }
+            val plan = radarReadPlanner.plan(now, mapped.keys, unresolved.keys)
+            plan.mapped.forEach { address ->
+                tentativeRadarReads.remove(address)
+                val gatt = mapped[address] ?: return@forEach
+                val accepted = runCatching { gatt.readRemoteRssi() }.getOrDefault(false)
+                if (radarReadPlanner.recordReadAttempt(address, accepted, now)) {
+                    Log.w(
+                        LOG_TAG,
+                        "Radar: link ${address.takeLast(5)} not answering RSSI reads; backing off",
+                    )
                 }
-            } else {
-                // iOS no incluye peerId en el anuncio BLE. Si queda una sola
-                // conexión GATT lista y sin resolver, úsala como señal
-                // tentativa hasta recibir el ANNOUNCE directo.
-                val unresolved = clientGatts.filterKeys { address ->
-                    clientReady.contains(address) && !addressToPeer.containsKey(address)
+            }
+            plan.tentative.forEach { address ->
+                val gatt = unresolved[address] ?: return@forEach
+                tentativeRadarReads[address] = target
+                val accepted = runCatching { gatt.readRemoteRssi() }.getOrDefault(false)
+                if (!accepted) tentativeRadarReads.remove(address)
+                if (radarReadPlanner.recordReadAttempt(address, accepted, now)) {
+                    Log.w(
+                        LOG_TAG,
+                        "Radar: tentative link ${address.takeLast(5)} not answering RSSI reads",
+                    )
                 }
-                if (unresolved.size == 1) {
-                    val (address, gatt) = unresolved.entries.single()
-                    tentativeRadarReads[address] = target
-                    val started = runCatching { gatt.readRemoteRssi() }.getOrDefault(false)
-                    if (!started) tentativeRadarReads.remove(address)
-                }
+            }
+            if (radarReadPlanner.diagnosticDue(now)) {
+                Log.w(LOG_TAG, "Radar: no RSSI samples for target ${target.take(8)} yet")
+                emit(
+                    mapOf(
+                        "type" to "radarDiagnostic",
+                        "peerId" to target,
+                        "reason" to "noRssiSamples",
+                        "at" to now,
+                    ),
+                )
             }
             mainHandler.postDelayed(this, RADAR_READ_INTERVAL_MS)
         }
     }
 
     private fun emitRssi(peerIdHex: String, rssi: Int, tentative: Boolean = false) {
+        radarReadPlanner.recordSampleEmitted(System.currentTimeMillis())
         emit(
             mapOf(
                 "type" to "rssi",
@@ -2060,7 +2086,7 @@ internal class MeshEngine(
             MeshProtocol.TYPE_BEACON_CONTROL -> processBeaconControl(packet, senderHex)
             MeshProtocol.TYPE_RANGING_CONTROL -> processRangingControl(packet, senderHex)
             MeshProtocol.TYPE_EMERGENCY_CAPABILITY ->
-                processEmergencyCapability(packet, senderHex)
+                processEmergencyCapability(packet, senderHex, sourceAddress)
             MeshProtocol.TYPE_EMERGENCY_ACK -> processEmergencyAck(packet, senderHex)
             MeshProtocol.TYPE_FRAGMENT -> {
                 val reassembled = fragmentReassembler.accept(packet)
@@ -2182,6 +2208,12 @@ internal class MeshEngine(
         if (!identity.verify(packet, peer.signingPublicKey)) return
         peer.supportsTransfers = true
         peer.hearthbitVerified = true
+        if (packet.ttl == MeshProtocol.TTL) {
+            // Un paquete firmado con TTL intacto solo puede venir del propio
+            // emisor: refresca el mapeo dirección→peer aunque el ANNOUNCE
+            // directo se pierda (el radar depende de este mapa).
+            addressToPeer[sourceAddress] = senderHex
+        }
         if (packet.ttl == MeshProtocol.TTL &&
             hearthbitProvenAddresses.add(sourceAddress)
         ) {
@@ -2194,10 +2226,17 @@ internal class MeshEngine(
         emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
     }
 
-    private fun processEmergencyCapability(packet: MeshProtocol.Packet, senderHex: String) {
+    private fun processEmergencyCapability(
+        packet: MeshProtocol.Packet,
+        senderHex: String,
+        sourceAddress: String,
+    ) {
         val peer = peers[senderHex] ?: return
         if (!MeshProtocol.supportsEmergencyAcknowledgements(packet.payload)) return
         if (!identity.verify(packet, peer.signingPublicKey)) return
+        if (packet.ttl == MeshProtocol.TTL) {
+            addressToPeer[sourceAddress] = senderHex
+        }
         peer.supportsEmergencyAck = true
         peer.lastSeen = System.currentTimeMillis()
         emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
@@ -3787,7 +3826,14 @@ internal class MeshEngine(
         override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
             val address = gatt.device.address
             val tentativeTarget = tentativeRadarReads.remove(address)
-            if (status != BluetoothGatt.GATT_SUCCESS) return
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                Log.w(
+                    LOG_TAG,
+                    "Radar: RSSI read failed on ${address.takeLast(5)} status=$status",
+                )
+                return
+            }
+            radarReadPlanner.recordCallbackSuccess(address)
             val target = radarPeerId ?: return
             if (addressToPeer[address] == target) {
                 emitRssi(target, rssi)

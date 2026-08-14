@@ -168,6 +168,7 @@
   "radarSignalLostHint": "Revenez lentement sur vos pas jusqu'à retrouver le signal.",
   "radarSearching": "Recherche du signal…",
   "radarSearchingHint": "Marchez lentement en décrivant un large cercle. Le radar capte le signal Bluetooth direct (quelques dizaines de mètres).",
+  "radarNoSignalHint": "Pas encore de lecture directe du signal. Gardez HearthBit ouvert sur les deux téléphones et marchez lentement.",
   "proximityVeryClose": "TRÈS PROCHE",
   "proximityClose": "PROCHE",
   "proximityInRange": "À PORTÉE",

@@ -77,6 +77,8 @@ class _RadarScreenState extends State<RadarScreen>
   bool _stale = false;
   bool _permissionExpired = false;
   bool _tentativeSignal = false;
+  bool _noSignalHint = false;
+  final DateTime _searchStartedAt = DateTime.now();
   bool _sweepActive = false;
   bool _compassUnavailable = false;
   bool _compassNeedsCalibration = false;
@@ -220,6 +222,14 @@ class _RadarScreenState extends State<RadarScreen>
       if (mounted) setState(() => _permissionExpired = true);
       return;
     }
+    if (event['type'] == 'radarDiagnostic' &&
+        (event['peerId'] as String?)?.toLowerCase() ==
+            widget.peerId.toLowerCase()) {
+      if (mounted && _reading == null && !_noSignalHint) {
+        setState(() => _noSignalHint = true);
+      }
+      return;
+    }
     if (event['type'] != 'rssi') return;
     if ((event['peerId'] as String?)?.toLowerCase() !=
         widget.peerId.toLowerCase()) {
@@ -251,6 +261,7 @@ class _RadarScreenState extends State<RadarScreen>
     setState(() {
       _reading = reading;
       _stale = false;
+      _noSignalHint = false;
       _tentativeSignal = event['tentative'] as bool? ?? false;
     });
     _pulse.forward(from: 0);
@@ -649,6 +660,12 @@ class _RadarScreenState extends State<RadarScreen>
       setState(() {});
     }
     if (stale != _stale) setState(() => _stale = stale);
+    if (!_noSignalHint &&
+        _reading == null &&
+        DateTime.now().difference(_searchStartedAt) >
+            const Duration(seconds: 12)) {
+      setState(() => _noSignalHint = true);
+    }
     if (!_hasTargetCoordinates &&
         !_sweepActive &&
         _directionEstimate == null &&
@@ -1390,6 +1407,16 @@ class _RadarScreenState extends State<RadarScreen>
             textAlign: TextAlign.center,
             style: const TextStyle(color: dim, fontSize: 11),
           ),
+          if (_noSignalHint) ...[
+            const SizedBox(height: 6),
+            Text(
+              context.l10n.radarNoSignalHint,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.amberAccent, fontSize: 11),
+            ),
+          ],
         ],
       );
     } else {

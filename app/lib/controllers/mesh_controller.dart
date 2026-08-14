@@ -1555,8 +1555,9 @@ class MeshController extends ChangeNotifier {
         }
         break;
       case 'rssi':
-        // Lecturas del radar de rescate: las consume RadarScreen directamente
-        // del stream; evitar redibujar toda la app varias veces por segundo.
+      case 'radarDiagnostic':
+        // Lecturas y avisos del radar de rescate: los consume RadarScreen
+        // directamente del stream; evitar redibujar toda la app.
         return;
       default:
         break;

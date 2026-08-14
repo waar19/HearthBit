@@ -168,6 +168,7 @@
   "radarSignalLostHint": "沿原路慢慢往回走，直到重新收到信号。",
   "radarSearching": "正在搜索信号…",
   "radarSearchingHint": "慢慢地绕大圈行走。雷达接收的是直接的蓝牙信号（数十米范围）。",
+  "radarNoSignalHint": "尚未读取到直接信号。请在两部手机上保持 HearthBit 打开，并缓慢走动。",
   "proximityVeryClose": "非常近",
   "proximityClose": "较近",
   "proximityInRange": "在范围内",

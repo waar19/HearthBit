@@ -1029,6 +1029,12 @@ abstract class AppLocalizations {
   /// **'Walk slowly in a wide circle. The radar picks up the direct Bluetooth signal (tens of meters).'**
   String get radarSearchingHint;
 
+  /// No description provided for @radarNoSignalHint.
+  ///
+  /// In en, this message translates to:
+  /// **'No direct signal reading yet. Keep HearthBit open on both phones and walk slowly.'**
+  String get radarNoSignalHint;
+
   /// No description provided for @proximityVeryClose.
   ///
   /// In en, this message translates to:

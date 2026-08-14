@@ -551,6 +551,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Walk slowly in a wide circle. The radar picks up the direct Bluetooth signal (tens of meters).';
 
   @override
+  String get radarNoSignalHint =>
+      'No direct signal reading yet. Keep HearthBit open on both phones and walk slowly.';
+
+  @override
   String get proximityVeryClose => 'VERY CLOSE';
 
   @override

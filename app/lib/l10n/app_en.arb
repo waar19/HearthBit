@@ -186,6 +186,7 @@
   "radarSignalLostHint": "Walk back slowly along your path until the signal returns.",
   "radarSearching": "Searching for signal…",
   "radarSearchingHint": "Walk slowly in a wide circle. The radar picks up the direct Bluetooth signal (tens of meters).",
+  "radarNoSignalHint": "No direct signal reading yet. Keep HearthBit open on both phones and walk slowly.",
   "proximityVeryClose": "VERY CLOSE",
   "proximityClose": "CLOSE",
   "proximityInRange": "IN RANGE",
