@@ -794,6 +794,15 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get radarActionRadio => 'Radio';
+
+  @override
+  String get radarActionSonar => 'Sonar';
+
+  @override
+  String get radarActionBeacon => 'Beacon';
+
+  @override
   String get radarRadioStart => 'Measure distance by radio';
 
   @override

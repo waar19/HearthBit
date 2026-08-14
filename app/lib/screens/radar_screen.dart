@@ -30,6 +30,7 @@ class RadarScreen extends StatefulWidget {
     this.latitude,
     this.longitude,
     this.platform,
+    this.compassEvents,
     super.key,
   });
 
@@ -42,6 +43,7 @@ class RadarScreen extends StatefulWidget {
   final double? latitude;
   final double? longitude;
   final MeshPlatformService? platform;
+  final Stream<CompassEvent>? compassEvents;
 
   @override
   State<RadarScreen> createState() => _RadarScreenState();
@@ -571,7 +573,7 @@ class _RadarScreenState extends State<RadarScreen>
 
   void _startCompassTracking() {
     if (_compassEvents != null) return;
-    final compassStream = FlutterCompass.events;
+    final compassStream = widget.compassEvents ?? FlutterCompass.events;
     if (compassStream == null) {
       _compassUnavailable = true;
       return;
@@ -974,8 +976,9 @@ class _RadarScreenState extends State<RadarScreen>
         _buildActionRow(),
         const SizedBox(height: 4),
         Text(
-          '${_consentLabel()} · ${context.l10n.radarConsentExpires(_formatExpiry())}',
-          maxLines: 1,
+          '${_consentLabel()}\n'
+          '${context.l10n.radarConsentExpires(_formatExpiry())}',
+          maxLines: 2,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
           style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
@@ -1115,69 +1118,147 @@ class _RadarScreenState extends State<RadarScreen>
         ? context.l10n.radarSweepStart
         : context.l10n.radarSweepRestart;
     final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
-    final directionButton = largeText
-        ? IconButton.outlined(
-            tooltip: directionLabel,
-            onPressed: _compassUnavailable || _sweepActive
-                ? null
-                : _startDirectionSweep,
-            icon: const Icon(Icons.explore_outlined),
-          )
-        : OutlinedButton.icon(
-            onPressed: _compassUnavailable || _sweepActive
-                ? null
-                : _startDirectionSweep,
-            icon: const Icon(Icons.explore_outlined),
-            label: Text(
-              directionLabel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          );
-    return SizedBox(
-      height: 48,
-      child: Row(
-        children: [
-          if (largeText) directionButton else Expanded(child: directionButton),
-          if (_radioRangingAvailable) ...[
-            const SizedBox(width: 6),
-            IconButton.filledTonal(
-              tooltip: _radioRangingActive
-                  ? context.l10n.radarRadioStop
-                  : context.l10n.radarRadioStart,
-              onPressed: _toggleRadioRanging,
-              icon: Icon(
-                _radioRangingActive ? Icons.radar : Icons.social_distance,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compactActions = largeText || constraints.maxWidth < 360;
+        final directionButton = compactActions
+            ? IconButton.outlined(
+                tooltip: directionLabel,
+                onPressed: _compassUnavailable || _sweepActive
+                    ? null
+                    : _startDirectionSweep,
+                icon: const Icon(Icons.explore_outlined),
+              )
+            : OutlinedButton.icon(
+                onPressed: _compassUnavailable || _sweepActive
+                    ? null
+                    : _startDirectionSweep,
+                icon: const Icon(Icons.explore_outlined),
+                label: Text(
+                  directionLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              );
+        return SizedBox(
+          height: compactActions ? 48 : 64,
+          child: Row(
+            children: [
+              if (compactActions)
+                directionButton
+              else
+                Expanded(child: directionButton),
+              if (_radioRangingAvailable) ...[
+                const SizedBox(width: 6),
+                _buildRangingAction(
+                  compact: compactActions,
+                  label: context.l10n.radarActionRadio,
+                  tooltip: _radioRangingActive
+                      ? context.l10n.radarRadioStop
+                      : context.l10n.radarRadioStart,
+                  icon: _radioRangingActive
+                      ? Icons.radar
+                      : Icons.social_distance,
+                  onPressed: _toggleRadioRanging,
+                ),
+              ],
+              const SizedBox(width: 6),
+              _buildRangingAction(
+                compact: compactActions,
+                label: context.l10n.radarActionSonar,
+                tooltip: _acousticActive
+                    ? context.l10n.radarSonarStop
+                    : context.l10n.radarSonarStart,
+                icon: _acousticActive
+                    ? Icons.hearing_disabled
+                    : Icons.graphic_eq,
+                onPressed: _toggleAcousticSonar,
               ),
-            ),
-          ],
-          const SizedBox(width: 6),
-          IconButton.filledTonal(
-            tooltip: _acousticActive
-                ? context.l10n.radarSonarStop
-                : context.l10n.radarSonarStart,
-            onPressed: _toggleAcousticSonar,
-            icon: Icon(
-              _acousticActive ? Icons.hearing_disabled : Icons.graphic_eq,
+              if (_canRequestBeacon || _beaconStatus == 'active') ...[
+                const SizedBox(width: 6),
+                _buildRangingAction(
+                  compact: compactActions,
+                  label: context.l10n.radarActionBeacon,
+                  tooltip: _beaconStatus == 'active'
+                      ? context.l10n.beaconStopRemote
+                      : context.l10n.beaconRequestRemote,
+                  icon: _beaconStatus == 'active'
+                      ? Icons.flashlight_off_outlined
+                      : Icons.flashlight_on_outlined,
+                  onPressed: _requestingBeacon || _beaconStatus == 'requested'
+                      ? null
+                      : _toggleRemoteBeacon,
+                  emphasized: true,
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRangingAction({
+    required bool compact,
+    required String label,
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback? onPressed,
+    bool emphasized = false,
+  }) {
+    if (compact) {
+      return emphasized
+          ? IconButton.filled(
+              tooltip: tooltip,
+              onPressed: onPressed,
+              icon: Icon(icon),
+            )
+          : IconButton.filledTonal(
+              tooltip: tooltip,
+              onPressed: onPressed,
+              icon: Icon(icon),
+            );
+    }
+    final button = emphasized
+        ? IconButton.filled(
+            onPressed: onPressed,
+            icon: Icon(icon),
+            constraints: const BoxConstraints.tightFor(width: 42, height: 40),
+            padding: EdgeInsets.zero,
+          )
+        : IconButton.filledTonal(
+            onPressed: onPressed,
+            icon: Icon(icon),
+            constraints: const BoxConstraints.tightFor(width: 42, height: 40),
+            padding: EdgeInsets.zero,
+          );
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        button: true,
+        enabled: onPressed != null,
+        label: tooltip,
+        child: ExcludeSemantics(
+          child: SizedBox(
+            width: 56,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                button,
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFFCBD5E1),
+                    fontSize: 10,
+                    height: 1,
+                  ),
+                ),
+              ],
             ),
           ),
-          if (_canRequestBeacon || _beaconStatus == 'active') ...[
-            const SizedBox(width: 6),
-            IconButton.filled(
-              tooltip: _beaconStatus == 'active'
-                  ? context.l10n.beaconStopRemote
-                  : context.l10n.beaconRequestRemote,
-              onPressed: _requestingBeacon || _beaconStatus == 'requested'
-                  ? null
-                  : _toggleRemoteBeacon,
-              icon: Icon(
-                _beaconStatus == 'active'
-                    ? Icons.flashlight_off_outlined
-                    : Icons.flashlight_on_outlined,
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -1391,8 +1472,8 @@ class _RadarScreenState extends State<RadarScreen>
         ],
       );
     }
-    return SizedBox(
-      height: height,
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: height),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -1407,13 +1488,25 @@ class _RadarScreenState extends State<RadarScreen>
   }
 
   Widget _statusMetric(IconData icon, String label, Color color) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 15, color: color),
-        const SizedBox(width: 4),
-        Text(label, style: TextStyle(color: color, fontSize: 11)),
-      ],
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width - 72,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: color, fontSize: 11),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1445,7 +1538,7 @@ class _RadarScreenState extends State<RadarScreen>
           '${context.l10n.radarSweepConfidence((fusion.adjustedBleConfidence * 100).round())}';
     }
     if (estimate != null) return context.l10n.radarSweepInconclusive;
-    return null;
+    return context.l10n.radarNotDirection;
   }
 
   String _consentLabel() => widget.consentSource == 'sos'
@@ -1600,6 +1693,25 @@ class _SweepHoldingGuide extends StatelessWidget {
   Widget build(BuildContext context) {
     const green = Color(0xFF4ADE80);
     const dim = Color(0xFF94A3B8);
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+    if (largeText) {
+      return SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              context.l10n.radarSweepHoldTitle,
+              style: const TextStyle(color: green, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              context.l10n.radarSweepInstruction,
+              style: const TextStyle(color: dim, fontSize: 12),
+            ),
+          ],
+        ),
+      );
+    }
     return Row(
       children: [
         SizedBox(
@@ -1853,25 +1965,49 @@ class _RadarPainter extends CustomPainter {
 
     final currentStrength = strength;
     if (currentStrength != null) {
-      // El objetivo se dibuja arriba; su distancia al centro refleja la
-      // fuerza de señal (el BLE no da dirección, solo cercanía).
-      final blipRadius = (1 - currentStrength) * radius * 0.85 + radius * 0.08;
-      final blip = center - Offset(0, blipRadius);
-      final glowRadius = 10 + pulseProgress * 22;
-      canvas.drawCircle(
-        blip,
-        glowRadius,
-        Paint()..color = _green.withValues(alpha: (1 - pulseProgress) * 0.4),
-      );
-      canvas.drawCircle(blip, 8, Paint()..color = _green);
-      canvas.drawCircle(
-        blip,
-        8,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..color = Colors.white,
-      );
+      final targetRadius =
+          (1 - currentStrength) * radius * 0.85 + radius * 0.08;
+      final reliableDirection =
+          estimatedDirectionRadians ?? gpsDirectionRadians;
+      if (reliableDirection == null) {
+        // BLE sin barrido solo mide cercanía. Un anillo concéntrico evita
+        // sugerir que el objetivo está delante, detrás o a un costado.
+        canvas.drawCircle(
+          center,
+          targetRadius,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 3
+            ..color = _green.withValues(alpha: 0.8),
+        );
+        canvas.drawCircle(
+          center,
+          targetRadius + pulseProgress * 12,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2 + (1 - pulseProgress) * 3
+            ..color = _green.withValues(alpha: (1 - pulseProgress) * 0.35),
+        );
+      } else {
+        final angle = reliableDirection - math.pi / 2;
+        final unit = Offset(math.cos(angle), math.sin(angle));
+        final blip = center + unit * targetRadius;
+        final glowRadius = 10 + pulseProgress * 22;
+        canvas.drawCircle(
+          blip,
+          glowRadius,
+          Paint()..color = _green.withValues(alpha: (1 - pulseProgress) * 0.4),
+        );
+        canvas.drawCircle(blip, 8, Paint()..color = _green);
+        canvas.drawCircle(
+          blip,
+          8,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2
+            ..color = Colors.white,
+        );
+      }
     }
   }
 

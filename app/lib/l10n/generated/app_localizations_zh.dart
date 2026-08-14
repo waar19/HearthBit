@@ -755,6 +755,15 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get radarActionRadio => '无线';
+
+  @override
+  String get radarActionSonar => '声纳';
+
+  @override
+  String get radarActionBeacon => '信标';
+
+  @override
   String get radarRadioStart => '通过无线电测距';
 
   @override

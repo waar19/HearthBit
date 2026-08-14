@@ -770,6 +770,15 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get radarActionRadio => '無線';
+
+  @override
+  String get radarActionSonar => 'ソナー';
+
+  @override
+  String get radarActionBeacon => 'ビーコン';
+
+  @override
   String get radarRadioStart => '無線で距離を測定';
 
   @override

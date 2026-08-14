@@ -1425,6 +1425,24 @@ abstract class AppLocalizations {
   /// **'Measured: {distance}'**
   String radarMeasuredDistance(String distance);
 
+  /// No description provided for @radarActionRadio.
+  ///
+  /// In en, this message translates to:
+  /// **'Radio'**
+  String get radarActionRadio;
+
+  /// No description provided for @radarActionSonar.
+  ///
+  /// In en, this message translates to:
+  /// **'Sonar'**
+  String get radarActionSonar;
+
+  /// No description provided for @radarActionBeacon.
+  ///
+  /// In en, this message translates to:
+  /// **'Beacon'**
+  String get radarActionBeacon;
+
   /// No description provided for @radarRadioStart.
   ///
   /// In en, this message translates to:
