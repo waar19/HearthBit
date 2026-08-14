@@ -5422,19 +5422,18 @@ private final class IOSStoreForward {
   }
 
   private func save(_ entries: [(expiry: TimeInterval, encoded: Data)]) {
-    UserDefaults.standard.set(
-      entries.compactMap { entry -> [String: Any]? in
-        guard let sealed = try? AES.GCM.seal(
-          entry.encoded,
-          using: encryptionKey
-        ).combined else { return nil }
-        return [
-          "expiry": entry.expiry,
-          "encoded": sealed.base64EncodedString(),
-        ] as [String: Any]
-      },
-      forKey: key
-    )
+    let persistedEntries: [[String: Any]] = entries.compactMap {
+      entry -> [String: Any]? in
+      guard let sealed = try? AES.GCM.seal(
+        entry.encoded,
+        using: encryptionKey
+      ).combined else { return nil }
+      return [
+        "expiry": entry.expiry,
+        "encoded": sealed.base64EncodedString(),
+      ]
+    }
+    UserDefaults.standard.set(persistedEntries, forKey: key)
   }
 
   private func decrypt(_ value: Data) -> Data? {
