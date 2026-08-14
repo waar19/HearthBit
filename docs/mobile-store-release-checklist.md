@@ -14,9 +14,14 @@ publicado en ninguna tienda ni repositorio.
   secretos protegidos si CI solo prepara artefactos sin publicar.
 - [ ] Probar instalación limpia y actualización desde la versión anterior con
   la misma firma. Una firma distinta impide actualizar Android.
-- [ ] Revisar la política de privacidad y declarar con precisión Bluetooth,
-  ubicación, dispositivos cercanos, notificaciones, cámara, micrófono, red
-  local y almacenamiento según la plataforma.
+- [ ] Publicar una política de privacidad formal en una URL estable antes del
+  envío a tiendas, partiendo de [`docs/transparency.md`](transparency.md) y sus
+  traducciones, y declarar con precisión Bluetooth, ubicación, dispositivos
+  cercanos, notificaciones, cámara, micrófono, red local y almacenamiento
+  según la plataforma.
+- [ ] Verificar que la licencia declarada en cada tienda coincide con
+  [`LICENSE`](../LICENSE) y [`NOTICE.md`](../NOTICE.md); HearthBit es
+  source-available (PolyForm Noncommercial 1.0.0), no open source OSI.
 - [ ] Confirmar que ningún flujo instala aplicaciones automáticamente.
 
 ## Google Play
@@ -42,15 +47,21 @@ publicado en ninguna tienda ni repositorio.
 - [ ] Confirmar que la opción de compartir APK no aparece en iOS y que el método
   nativo responde como no soportado si se invoca.
 
-## F-Droid
+## Distribución directa del APK
 
-- [ ] Confirmar que el proyecto y todas las dependencias cumplen los criterios
-  de software libre y documentar cualquier antifeature aplicable.
-- [ ] Preparar metadatos, licencia, changelog y receta de compilación
-  reproducible sin descargar binarios no verificables durante el build.
-- [ ] Producir o documentar un APK universal completo para distribución directa;
+F-Droid exige licencias de software libre aprobadas; la licencia actual
+(PolyForm Noncommercial 1.0.0) **no cumple** sus criterios de inclusión, así
+que HearthBit no es elegible para el repositorio oficial de F-Droid mientras
+mantenga este modelo. La alternativa es distribución directa (GitHub Releases
+y compartir APK dentro de la app):
+
+- [ ] Producir un APK universal completo firmado para distribución directa;
   no presentar un `base.apk` extraído de una instalación split como universal.
-- [ ] Verificar la estrategia de firma y actualización de F-Droid frente a otros
-  canales. Informar claramente cuando las firmas entre canales sean distintas.
+- [ ] Publicar sumas SHA-256 y la firma esperada junto al APK para que los
+  usuarios puedan verificarlo.
+- [ ] Verificar la estrategia de firma y actualización frente a otros canales.
+  Informar claramente cuando las firmas entre canales sean distintas.
 - [ ] Probar el APK universal sin servicios de Google y con los transportes
   locales disponibles en ese entorno.
+- [ ] Si en el futuro se desea F-Droid, evaluar primero un cambio de licencia o
+  un repositorio F-Droid propio (self-hosted), que sí admite estas licencias.

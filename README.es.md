@@ -96,6 +96,9 @@ compatibles con BitChat. HearthBit no sustituye los canales oficiales de
 emergencia ni garantiza la entrega: BLE y la ejecución en segundo plano están
 limitados por cada sistema operativo.
 
+Referencias de protocolo: [perfil núcleo BitChat fijado](docs/bitchat-core-profile.md)
+y [registro de extensiones HearthBit](docs/extension-registry.md).
+
 ## Transparencia
 
 HearthBit mantiene en el repositorio público sus protocolos, arquitectura,
