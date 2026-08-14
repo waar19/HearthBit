@@ -72,6 +72,14 @@ void main() {
     expect(result.usedFallback, isTrue);
     expect(result.directory.locale, 'en');
     expect(result.directory.countries, hasLength(9));
+
+    final unsupported = await EmergencyDirectoryService(
+      bundle: _StringBundle({
+        'assets/emergency_contacts/emergency_contacts_en.json': english,
+      }),
+    ).load('pt');
+    expect(unsupported.usedFallback, isTrue);
+    expect(unsupported.directory.locale, 'en');
   });
 
   test('country resolution honors override, SIM, region, then fallback', () {

@@ -24,7 +24,8 @@ class EmergencyDirectoryService {
   final AssetBundle _bundle;
 
   Future<EmergencyDirectoryLoadResult> load(String locale) async {
-    final requested = supportedLocales.contains(locale) ? locale : 'en';
+    final normalized = locale.trim().toLowerCase();
+    final requested = supportedLocales.contains(normalized) ? normalized : 'en';
     if (requested != 'en') {
       try {
         return EmergencyDirectoryLoadResult(
@@ -37,7 +38,7 @@ class EmergencyDirectoryService {
     }
     return EmergencyDirectoryLoadResult(
       directory: await _loadValidated('en'),
-      usedFallback: requested != 'en',
+      usedFallback: normalized != 'en',
     );
   }
 

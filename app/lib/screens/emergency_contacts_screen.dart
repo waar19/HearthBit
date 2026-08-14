@@ -161,6 +161,14 @@ class _DirectoryContent extends StatelessWidget {
             .where((country) => country.code != 'INT')
             .toList(growable: false)
           ..sort((a, b) => a.name.compareTo(b.name));
+    final selectedSourceIds = <String>{
+      for (final number in selected.numbers) ...number.sourceIds,
+      for (final organization in selected.organizations)
+        ...organization.sourceIds,
+    };
+    final selectedSources = directory.sources
+        .where((source) => selectedSourceIds.contains(source.id))
+        .toList(growable: false);
     final selectorValue = automaticSelection ? '' : selected.code;
 
     return ListView(
@@ -272,7 +280,7 @@ class _DirectoryContent extends StatelessWidget {
           leading: const Icon(Icons.fact_check_outlined),
           title: Text(l10n.emergencyContactsSources),
           subtitle: Text(l10n.emergencyContactsReviewed(directory.reviewedAt)),
-          children: directory.sources
+          children: selectedSources
               .map(
                 (source) => ListTile(
                   title: Text(source.title),

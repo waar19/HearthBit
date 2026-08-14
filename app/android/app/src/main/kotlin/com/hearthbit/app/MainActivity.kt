@@ -89,11 +89,13 @@ class MainActivity : FlutterActivity() {
                     ),
                 )
                 "getSimCountry" -> {
-                    val country = getSystemService(TelephonyManager::class.java)
-                        ?.networkCountryIso
-                        ?.trim()
-                        ?.uppercase()
-                        ?.takeIf { it.length == 2 }
+                    val country = runCatching {
+                        getSystemService(TelephonyManager::class.java)
+                            ?.networkCountryIso
+                            ?.trim()
+                            ?.uppercase()
+                            ?.takeIf { it.length == 2 }
+                    }.getOrNull()
                     result.success(country)
                 }
                 "getInstalledApkForShare" -> prepareInstalledApk(result)
