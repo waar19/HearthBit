@@ -237,6 +237,7 @@
   "radarSweepInconclusive": "信頼できる範囲を特定できませんでした。よりゆっくり回り、金属や電子機器から離れてください。",
   "radarSweepExpired": "方向が変化したか期限切れです。現在地からもう一度スイープしてください。",
   "radarMeasuredDistance": "実測：{distance}",
+  "radarGpsDistanceMargin": "GPS 約{distance} ±{accuracy}",
   "radarActionRadio": "無線",
   "radarActionSonar": "ソナー",
   "radarActionBeacon": "ビーコン",

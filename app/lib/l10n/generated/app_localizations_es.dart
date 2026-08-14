@@ -802,6 +802,11 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String radarGpsDistanceMargin(String distance, String accuracy) {
+    return '≈$distance ±$accuracy GPS';
+  }
+
+  @override
   String get radarActionRadio => 'Radio';
 
   @override

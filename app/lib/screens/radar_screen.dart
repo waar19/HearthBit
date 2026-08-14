@@ -1365,7 +1365,10 @@ class _RadarScreenState extends State<RadarScreen>
             const SizedBox(height: 8),
             _statusMetric(
               Icons.gps_fixed,
-              _gpsDistanceLabel(_gpsDistanceMeters!),
+              _gpsDistanceLabel(
+                _gpsDistanceMeters!,
+                accuracyMeters: fusion.combinedGpsAccuracyMeters,
+              ),
               dim,
             ),
           ],
@@ -1466,10 +1469,13 @@ class _RadarScreenState extends State<RadarScreen>
                 context.l10n.radarDbm(reading.smoothedRssi.round()),
                 dim,
               ),
-              if (_gpsDistanceMeters != null)
+              if (_gpsDistanceMeters != null && fusion.gpsDistanceInformative)
                 _statusMetric(
                   Icons.gps_fixed,
-                  _gpsDistanceLabel(_gpsDistanceMeters!),
+                  _gpsDistanceLabel(
+                    _gpsDistanceMeters!,
+                    accuracyMeters: fusion.combinedGpsAccuracyMeters,
+                  ),
                   const Color(0xFF60A5FA),
                 ),
             ],
@@ -1525,9 +1531,19 @@ class _RadarScreenState extends State<RadarScreen>
     );
   }
 
-  String _gpsDistanceLabel(double meters) => meters >= 1000
+  String _gpsDistanceLabel(double meters, {double? accuracyMeters}) {
+    if (accuracyMeters != null) {
+      return context.l10n.radarGpsDistanceMargin(
+        _formatGpsDistance(meters),
+        _formatGpsDistance(accuracyMeters),
+      );
+    }
+    return '${_formatGpsDistance(meters)} GPS';
+  }
+
+  String _formatGpsDistance(double meters) => meters >= 1000
       ? '${(meters / 1000).toStringAsFixed(1)} km'
-      : '${meters.round()} m GPS';
+      : '${meters.round()} m';
 
   String _measuredDistanceLabel(RadarFusionResult fusion) {
     final meters = fusion.preferredDistanceMeters!;

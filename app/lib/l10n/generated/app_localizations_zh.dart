@@ -755,6 +755,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String radarGpsDistanceMargin(String distance, String accuracy) {
+    return 'GPS 约$distance ±$accuracy';
+  }
+
+  @override
   String get radarActionRadio => '无线';
 
   @override

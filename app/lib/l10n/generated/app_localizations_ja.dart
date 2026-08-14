@@ -770,6 +770,11 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String radarGpsDistanceMargin(String distance, String accuracy) {
+    return 'GPS 約$distance ±$accuracy';
+  }
+
+  @override
   String get radarActionRadio => '無線';
 
   @override

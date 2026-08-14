@@ -120,6 +120,69 @@ void main() {
     expect(result.distanceErrorMeters, 0.2);
   });
 
+  group('calidad de distancia GPS', () {
+    RadarFusionResult evaluate({
+      required RadarProximity? proximity,
+      required double gpsDistanceMeters,
+      required double localAccuracyMeters,
+      required double targetAccuracyMeters,
+      double? bleApproxDistanceMeters,
+    }) {
+      return RadarFusion.evaluate(
+        proximity: proximity,
+        bleEstimate: null,
+        headingDegrees: null,
+        localLatitude: null,
+        localLongitude: null,
+        localAccuracyMeters: localAccuracyMeters,
+        targetLatitude: null,
+        targetLongitude: null,
+        targetAccuracyMeters: targetAccuracyMeters,
+        gpsDistanceMeters: gpsDistanceMeters,
+        bleApproxDistanceMeters: bleApproxDistanceMeters,
+      );
+    }
+
+    test('oculta GPS incoherente con un dispositivo muy cercano', () {
+      final result = evaluate(
+        proximity: RadarProximity.veryClose,
+        gpsDistanceMeters: 41,
+        localAccuracyMeters: 10,
+        targetAccuracyMeters: 15,
+        bleApproxDistanceMeters: 0.2,
+      );
+
+      expect(result.combinedGpsAccuracyMeters, closeTo(18.03, 0.01));
+      expect(result.gpsRangeConsistent, isFalse);
+      expect(result.gpsDistanceInformative, isFalse);
+    });
+
+    test('mantiene GPS lejano cuando supera claramente su error', () {
+      final result = evaluate(
+        proximity: RadarProximity.far,
+        gpsDistanceMeters: 500,
+        localAccuracyMeters: 5,
+        targetAccuracyMeters: 5,
+        bleApproxDistanceMeters: 80,
+      );
+
+      expect(result.gpsRangeConsistent, isTrue);
+      expect(result.gpsDistanceInformative, isTrue);
+    });
+
+    test('usa GPS como respaldo sin lectura BLE si su calidad alcanza', () {
+      final result = evaluate(
+        proximity: null,
+        gpsDistanceMeters: 80,
+        localAccuracyMeters: 10,
+        targetAccuracyMeters: 10,
+      );
+
+      expect(result.gpsRangeConsistent, isTrue);
+      expect(result.gpsDistanceInformative, isTrue);
+    });
+  });
+
   group('RangingControlProtocol', () {
     test('codifica y decodifica payload con datos OOB', () {
       final nonce = Uint8List.fromList(

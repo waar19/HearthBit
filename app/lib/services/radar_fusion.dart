@@ -13,6 +13,8 @@ class RadarFusionResult {
     required this.gpsRelativeDegrees,
     required this.gpsReliable,
     required this.gpsRangeConsistent,
+    required this.gpsDistanceMeters,
+    required this.combinedGpsAccuracyMeters,
     required this.showBleSector,
     required this.adjustedBleConfidence,
     required this.bleSuppressedVeryClose,
@@ -28,6 +30,8 @@ class RadarFusionResult {
   final double? gpsRelativeDegrees;
   final bool gpsReliable;
   final bool gpsRangeConsistent;
+  final double? gpsDistanceMeters;
+  final double? combinedGpsAccuracyMeters;
   final bool showBleSector;
   final double adjustedBleConfidence;
   final bool bleSuppressedVeryClose;
@@ -38,6 +42,17 @@ class RadarFusionResult {
   final double distanceConfidence;
 
   bool get hasMeasuredDistance => precisionSource != null;
+
+  /// El GPS solo aporta una distancia útil si supera claramente su propio
+  /// margen de error y no contradice el rango observado por BLE.
+  bool get gpsDistanceInformative {
+    final distance = gpsDistanceMeters;
+    final accuracy = combinedGpsAccuracyMeters;
+    return distance != null &&
+        accuracy != null &&
+        gpsRangeConsistent &&
+        distance >= accuracy * 1.5;
+  }
 }
 
 /// Combina navegación GPS de largo alcance con proximidad y barrido BLE.
@@ -142,6 +157,8 @@ class RadarFusion {
       gpsRelativeDegrees: gpsRelative,
       gpsReliable: gpsReliable,
       gpsRangeConsistent: gpsRangeConsistent,
+      gpsDistanceMeters: gpsDistanceMeters,
+      combinedGpsAccuracyMeters: combinedAccuracy,
       showBleSector: source == RadarDirectionSource.ble,
       adjustedBleConfidence: adjustedBleConfidence,
       bleSuppressedVeryClose: veryClose && bleEstimate != null,

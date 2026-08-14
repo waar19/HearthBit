@@ -237,6 +237,7 @@
   "radarSweepInconclusive": "No se encontró un sector confiable. Gira más despacio y aléjate de metales o equipos electrónicos.",
   "radarSweepExpired": "La dirección cambió o caducó. Repite el barrido desde tu posición actual.",
   "radarMeasuredDistance": "Medida: {distance}",
+  "radarGpsDistanceMargin": "≈{distance} ±{accuracy} GPS",
   "radarActionRadio": "Radio",
   "radarActionSonar": "Sonar",
   "radarActionBeacon": "Baliza",

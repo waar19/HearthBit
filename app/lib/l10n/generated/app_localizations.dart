@@ -1425,6 +1425,12 @@ abstract class AppLocalizations {
   /// **'Measured: {distance}'**
   String radarMeasuredDistance(String distance);
 
+  /// No description provided for @radarGpsDistanceMargin.
+  ///
+  /// In en, this message translates to:
+  /// **'≈{distance} ±{accuracy} GPS'**
+  String radarGpsDistanceMargin(String distance, String accuracy);
+
   /// No description provided for @radarActionRadio.
   ///
   /// In en, this message translates to:

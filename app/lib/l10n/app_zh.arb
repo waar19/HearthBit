@@ -237,6 +237,7 @@
   "radarSweepInconclusive": "未找到可靠扇区。请更慢转动，并远离金属或电子设备。",
   "radarSweepExpired": "方向已变化或已过期。请从当前位置重新扫描。",
   "radarMeasuredDistance": "实测：{distance}",
+  "radarGpsDistanceMargin": "GPS 约{distance} ±{accuracy}",
   "radarActionRadio": "无线",
   "radarActionSonar": "声纳",
   "radarActionBeacon": "信标",

@@ -275,6 +275,8 @@
   "radarSweepExpired": "The direction changed or expired. Repeat the sweep from your current position.",
   "radarMeasuredDistance": "Measured: {distance}",
   "@radarMeasuredDistance": {"placeholders": {"distance": {"type": "String"}}},
+  "radarGpsDistanceMargin": "≈{distance} ±{accuracy} GPS",
+  "@radarGpsDistanceMargin": {"placeholders": {"distance": {"type": "String"}, "accuracy": {"type": "String"}}},
   "radarActionRadio": "Radio",
   "radarActionSonar": "Sonar",
   "radarActionBeacon": "Beacon",
