@@ -322,6 +322,8 @@ def test_access_token_comes_from_environment_or_private_file(
 ) -> None:
     token_file = tmp_path / "matrix-token"
     token_file.write_text("file-token\n", encoding="utf-8")
+    # _load_access_token exige 0o600 en POSIX; tmp_path crea archivos con 0o644.
+    token_file.chmod(0o600)
     config = matrix_config(
         access_token_env="TEST_MATRIX_TOKEN",
         access_token_file=str(token_file),
