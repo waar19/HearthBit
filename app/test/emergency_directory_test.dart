@@ -29,6 +29,7 @@ void main() {
 
   test('loads and strictly validates all six localized directories', () async {
     final service = EmergencyDirectoryService();
+    final english = (await service.load('en')).directory;
 
     for (final locale in EmergencyDirectoryService.supportedLocales) {
       final result = await service.load(locale);
@@ -41,6 +42,34 @@ void main() {
       );
       expect(result.directory.country('CO').numbers, isNotEmpty);
       expect(result.directory.sources, isNotEmpty);
+      for (final countryCode in EmergencyDirectory.countryCodes) {
+        expect(
+          result.directory
+              .country(countryCode)
+              .numbers
+              .map((number) => number.id)
+              .toSet(),
+          english
+              .country(countryCode)
+              .numbers
+              .map((number) => number.id)
+              .toSet(),
+          reason: '$locale must contain the same $countryCode numbers',
+        );
+        expect(
+          result.directory
+              .country(countryCode)
+              .organizations
+              .map((organization) => organization.id)
+              .toSet(),
+          english
+              .country(countryCode)
+              .organizations
+              .map((organization) => organization.id)
+              .toSet(),
+          reason: '$locale must contain the same $countryCode organizations',
+        );
+      }
     }
   });
 
