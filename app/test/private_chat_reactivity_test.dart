@@ -143,6 +143,33 @@ void main() {
     };
   }
 
+  testWidgets('tocar la conversación cierra el teclado del canal', (
+    tester,
+  ) async {
+    await pumpHome(tester);
+    platform.emit(snapshot(secure: false, nickname: 'Nearby peer'));
+    await tester.pump();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('Channel'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final composer = find.byType(TextField);
+    await tester.tap(composer);
+    await tester.enterText(composer, 'Draft');
+    final editableText = find.byType(EditableText);
+    expect(tester.widget<EditableText>(editableText).focusNode.hasFocus, isTrue);
+
+    await tester.tap(find.text('No messages yet'));
+    await tester.pump();
+
+    expect(tester.widget<EditableText>(editableText).focusNode.hasFocus, isFalse);
+    expect(find.text('Draft'), findsOneWidget);
+  });
+
   testWidgets('el sheet actualiza peer y canal seguro sin cerrarse', (
     tester,
   ) async {

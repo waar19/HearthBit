@@ -143,11 +143,15 @@ class _HearthBitAppState extends State<HearthBitApp> {
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         debugShowCheckedModeBanner: false,
-        builder: (context, child) => Stack(
-          children: [
-            child ?? const SizedBox.shrink(),
-            _BeaconConsentOverlay(controller: _controller),
-          ],
+        builder: (context, child) => GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+          child: Stack(
+            children: [
+              child ?? const SizedBox.shrink(),
+              _BeaconConsentOverlay(controller: _controller),
+            ],
+          ),
         ),
         theme: buildAppTheme(
           Brightness.light,

@@ -474,6 +474,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 )
               : ListView(
                   controller: _scrollController,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: const EdgeInsets.all(12),
                   children: _messageTimeline(
                     context,
@@ -1621,6 +1623,8 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
                     )
                   : ListView(
                       controller: _scrollController,
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
                       children: _messageTimeline(
                         context,
                         privateMessages,
@@ -1894,6 +1898,8 @@ class _MessageComposer extends StatelessWidget {
                 counterText: '',
                 border: const OutlineInputBorder(),
               ),
+              onTapOutside: (_) =>
+                  FocusManager.instance.primaryFocus?.unfocus(),
               onSubmitted: (_) => onSend(),
             ),
           ),
