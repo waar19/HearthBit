@@ -22,6 +22,8 @@ TYPE_FRAGMENT = 0x20
 TYPE_REQUEST_SYNC = 0x21
 TYPE_HBT_CAPABILITY = 0x24
 TYPE_NODE_CAPABILITY = 0x25
+TYPE_EMERGENCY_CAPABILITY = 0x28
+TYPE_EMERGENCY_ACK = 0x29
 
 # Backward-compatible aliases for callers that imported the old, incorrect
 # semantic names. These wire values are ephemeral capability announcements.
@@ -33,6 +35,7 @@ EPHEMERAL_MESSAGE_TYPES = frozenset(
         TYPE_ANNOUNCE,
         TYPE_HBT_CAPABILITY,
         TYPE_NODE_CAPABILITY,
+        TYPE_EMERGENCY_CAPABILITY,
     }
 )
 

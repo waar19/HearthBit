@@ -8,6 +8,7 @@ import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../services/app_preferences.dart';
 import '../services/beacon_control_protocol.dart';
+import '../services/diagnostics_log.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/message_repository.dart';
 import '../services/peer_location_tracker.dart';
@@ -76,6 +77,9 @@ class MeshController extends ChangeNotifier {
   static const Duration peerReachabilityWindow = Duration(minutes: 4);
   static const int maximumMessagesInMemory = 500;
   static const Duration topologyNotificationInterval = Duration(seconds: 1);
+  static const Duration emergencySosLifetime = Duration(hours: 24);
+  static const Duration emergencyCheckInLifetime = Duration(hours: 12);
+  static const Duration emergencyMaximumBackoff = Duration(minutes: 5);
 
   final MeshPlatformService _platform;
   final MessageRepository _repository;
@@ -86,11 +90,14 @@ class MeshController extends ChangeNotifier {
   final List<GenericBlePresence> _presences = [];
   final Map<String, MeshPeer> _knownPeers = {};
   final List<PendingPrivateMessage> _privateMessageOutbox = [];
+  final List<EmergencyDelivery> _emergencyDeliveries = [];
   final Random _random = Random.secure();
 
   StreamSubscription<Map<Object?, Object?>>? _subscription;
   bool _drainingPrivateMessageOutbox = false;
   bool _privateMessageOutboxDrainRequested = false;
+  bool _drainingEmergencyOutbox = false;
+  bool _emergencyOutboxDrainRequested = false;
   bool _startingRadarLocationSharing = false;
   bool _sendingRadarLocation = false;
   Completer<void>? _privateMessageOutboxDrainCompleter;
@@ -109,11 +116,13 @@ class MeshController extends ChangeNotifier {
   // Modo rescate: reenvía el SOS con ubicación actualizada periódicamente.
   bool rescueMode = false;
   bool activatingEmergency = false;
+  DateTime? rescueStartedAt;
+  DateTime? rescueExpiresAt;
   DateTime? lastRescuePing;
-  Timer? _rescueTimer;
   Timer? _consentTimer;
   Timer? _radarLocationTimer;
   Timer? _topologyNotificationTimer;
+  Timer? _emergencyRetryTimer;
   DateTime? _lastTopologyNotificationAt;
   Position? _latestRadarPosition;
   Position? _lastSharedRadarPosition;
@@ -133,6 +142,8 @@ class MeshController extends ChangeNotifier {
   bool _drillModeEnabled;
 
   List<MeshMessage> get messages => List.unmodifiable(_messages);
+  List<EmergencyDelivery> get emergencyDeliveries =>
+      List.unmodifiable(_emergencyDeliveries);
   bool get drillModeEnabled => _drillModeEnabled;
   List<MeshMessage> get drillMessages => List.unmodifiable(
     _messages.where((message) => message.isDrill).toList().reversed,
@@ -234,9 +245,14 @@ class MeshController extends ChangeNotifier {
           (peer) => MapEntry(peer.id, peer),
         ),
       );
+    await _repository.expirePrivateMessageOutbox(DateTime.now());
     _privateMessageOutbox
       ..clear()
       ..addAll(await _repository.listPendingPrivateMessages());
+    await _repository.expireEmergencyDeliveries(DateTime.now());
+    _emergencyDeliveries
+      ..clear()
+      ..addAll(await _repository.loadEmergencyDeliveries());
     for (final pending in _privateMessageOutbox) {
       if (_messages.every((message) => message.id != pending.localId)) {
         _messages.add(_pendingMessage(pending));
@@ -249,7 +265,11 @@ class MeshController extends ChangeNotifier {
     _subscription = _platform.events.listen(_handleEvent);
     final capabilities = await _platform.getCapabilities();
     supportsBackgroundRelay = capabilities['backgroundRelay'] as bool? ?? false;
+    await _restoreNativeRescueMode();
     await refreshPowerStatus();
+    if (_preferences?.meshDesiredActive == true) {
+      await _restoreRequestedMesh();
+    }
     _consentTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
       var changed = false;
       if (radarConsentUntil != null && !radarConsentActive) {
@@ -264,6 +284,14 @@ class MeshController extends ChangeNotifier {
       if (changed) notifyListeners();
     });
     _requestPrivateMessageOutboxDrain();
+    _requestEmergencyOutboxDrain();
+    DiagnosticsLog.instance.info(
+      'storage.queue.stats',
+      data: {
+        'privateOutbox': _privateMessageOutbox.length,
+        'emergencyOutbox': _emergencyDeliveries.length,
+      },
+    );
     notifyListeners();
   }
 
@@ -324,9 +352,10 @@ class MeshController extends ChangeNotifier {
   }) async {
     if (!enabled) {
       final wasRescueActive = rescueMode;
-      _rescueTimer?.cancel();
-      _rescueTimer = null;
+      await _platform.configureRescueMode(active: false);
       rescueMode = false;
+      rescueStartedAt = null;
+      rescueExpiresAt = null;
       _stopRadarLocationSharing();
       if (wasRescueActive || radarConsentActive) {
         await revokeRadarConsent();
@@ -338,16 +367,23 @@ class MeshController extends ChangeNotifier {
     if (description != null && description.trim().isNotEmpty) {
       _rescueDescription = description.trim();
     }
+    final now = DateTime.now();
     rescueMode = true;
+    rescueStartedAt ??= now;
+    rescueExpiresAt = now.add(const Duration(hours: 24));
     notifyListeners();
     await _platform.setRadarConsent(enabled: true, minutes: 10);
     await ensureAlwaysLocation();
     await _rescuePing();
-    _rescueTimer?.cancel();
-    _rescueTimer = Timer.periodic(
-      interval ?? rescueInterval,
-      (_) => unawaited(_rescuePing()),
+    final state = await _platform.configureRescueMode(
+      active: true,
+      description: _rescueDescription,
+      startedAt: rescueStartedAt,
+      lastPingAt: lastRescuePing,
+      expiresAt: rescueExpiresAt,
+      interval: interval ?? rescueInterval,
     );
+    _applyNativeRescueState(state);
   }
 
   Future<void> _rescuePing() async {
@@ -358,7 +394,56 @@ class MeshController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _restoreNativeRescueMode() async {
+    final state = await _platform.getRescueModeState();
+    final expiresAt = state.expiresAt;
+    if (!state.active ||
+        expiresAt == null ||
+        !expiresAt.isAfter(DateTime.now())) {
+      if (state.active) {
+        await _platform.configureRescueMode(active: false);
+      }
+      return;
+    }
+    _applyNativeRescueState(state);
+  }
+
+  void _applyNativeRescueState(NativeRescueState state) {
+    rescueMode = state.active;
+    if (!state.active) return;
+    DiagnosticsLog.instance.info(
+      'rescue.scheduler.stats',
+      data: {
+        'expectedPings': state.expectedPings,
+        'executedPings': state.executedPings,
+      },
+    );
+    rescueStartedAt = state.startedAt;
+    rescueExpiresAt = state.expiresAt;
+    lastRescuePing = state.lastPingAt;
+    final description = state.description?.trim();
+    if (description != null && description.isNotEmpty) {
+      _rescueDescription = description;
+    }
+  }
+
+  Future<void> _restoreRequestedMesh() async {
+    lastError = null;
+    status = MeshConnectionStatus.starting;
+    notifyListeners();
+    try {
+      await _platform.start();
+      DiagnosticsLog.instance.info('mesh.start.restored');
+    } catch (error) {
+      status = MeshConnectionStatus.error;
+      lastError = error.toString();
+      DiagnosticsLog.instance.error('mesh.start.restore.failed', error: error);
+      notifyListeners();
+    }
+  }
+
   Future<void> start() async {
+    DiagnosticsLog.instance.info('mesh.start.requested');
     lastError = null;
     status = MeshConnectionStatus.starting;
     notifyListeners();
@@ -370,9 +455,18 @@ class MeshController extends ChangeNotifier {
         return;
       }
       await _platform.start();
+      try {
+        await _preferences?.setMeshDesiredActive(true);
+      } catch (error) {
+        DiagnosticsLog.instance.error(
+          'mesh.preference.persist.failed',
+          error: error,
+        );
+      }
     } catch (error) {
       status = MeshConnectionStatus.error;
       lastError = error.toString();
+      DiagnosticsLog.instance.error('mesh.start.failed', error: error);
       notifyListeners();
     }
   }
@@ -380,9 +474,11 @@ class MeshController extends ChangeNotifier {
   Future<void> stop() async {
     await setRescueMode(false);
     _stopRadarLocationSharing();
+    await _preferences?.setMeshDesiredActive(false);
     await _platform.stop();
     status = MeshConnectionStatus.stopped;
     _presences.clear();
+    DiagnosticsLog.instance.info('mesh.stopped');
     notifyListeners();
   }
 
@@ -416,19 +512,15 @@ class MeshController extends ChangeNotifier {
       () => _platform.sendPrivate(currentPeer.id, cleaned, messageId: localId),
     );
     if (messageId == null || messageId.trim().isEmpty) {
-      if (!isPeerOnline(currentPeer.id)) {
-        return _enqueuePrivateMessage(
-          currentPeer.id,
-          cleaned,
-          localId: localId,
-        );
-      }
-      final error = lastError ?? currentL10n.errorUnknown;
-      if (messageId != null) {
-        lastError = error;
-        notifyListeners();
-      }
-      return PrivateMessageSendResult.failed(error);
+      final queued = await _enqueuePrivateMessage(
+        currentPeer.id,
+        cleaned,
+        localId: localId,
+      );
+      if (!isPeerOnline(currentPeer.id)) return queued;
+      return PrivateMessageSendResult.failed(
+        lastError ?? currentL10n.errorUnknown,
+      );
     }
     await _recordSentPrivateMessage(
       id: messageId,
@@ -440,16 +532,33 @@ class MeshController extends ChangeNotifier {
   }
 
   Future<void> sendSos(String description) async {
+    DiagnosticsLog.instance.info('sos.send.started');
     final position = await _currentPosition();
-    await _run(
-      () => _platform.sendSos(
-        content: description.trim().isEmpty
-            ? currentL10n.sosDefaultMessage
-            : description.trim(),
-        latitude: position?.latitude,
-        longitude: position?.longitude,
-      ),
+    final readable = description.trim().isEmpty
+        ? currentL10n.sosDefaultMessage
+        : description.trim();
+    final location = position == null
+        ? '||'
+        : '|${position.latitude}|${position.longitude}';
+    final delivery = await _enqueueEmergency(
+      kind: EmergencyDeliveryKind.sos,
+      content: 'SOS|$readable$location',
+      lifetime: emergencySosLifetime,
     );
+    await _transmitEmergency(delivery, force: true);
+    final accepted = _emergencyDeliveries.any(
+      (item) =>
+          item.localId == delivery.localId &&
+          item.state == EmergencyDeliveryState.relayed,
+    );
+    if (accepted) {
+      DiagnosticsLog.instance.info(
+        'sos.send.accepted_by_mesh',
+        data: {'gpsAttached': position != null},
+      );
+    } else {
+      DiagnosticsLog.instance.warning('sos.send.failed');
+    }
   }
 
   Future<void> sendCheckIn(CheckInStatus status, String readableMessage) async {
@@ -461,7 +570,37 @@ class MeshController extends ChangeNotifier {
       latitude: position?.latitude,
       longitude: position?.longitude,
     );
-    await _run(() => _platform.sendPublic(content, channel: 'checkin'));
+    final delivery = await _enqueueEmergency(
+      kind: EmergencyDeliveryKind.checkIn,
+      content: content,
+      lifetime: emergencyCheckInLifetime,
+    );
+    await _transmitEmergency(delivery, force: true);
+  }
+
+  Future<void> retryEmergency(String localId) async {
+    final existing = _emergencyDeliveries
+        .where((delivery) => delivery.localId == localId)
+        .firstOrNull;
+    if (existing == null) return;
+    if (existing.state == EmergencyDeliveryState.expired) {
+      final replacement = await _enqueueEmergency(
+        kind: existing.kind,
+        content: existing.content,
+        lifetime: existing.kind == EmergencyDeliveryKind.sos
+            ? emergencySosLifetime
+            : emergencyCheckInLifetime,
+      );
+      await _transmitEmergency(replacement, force: true);
+      return;
+    }
+    final retrying = existing.copyWith(
+      state: EmergencyDeliveryState.pending,
+      nextAttemptAt: DateTime.now(),
+      clearLastError: true,
+    );
+    await _replaceEmergencyDelivery(retrying);
+    await _transmitEmergency(retrying, force: true);
   }
 
   Future<void> activateDrill() async {
@@ -505,6 +644,7 @@ class MeshController extends ChangeNotifier {
     if (activatingEmergency || rescueMode) return;
     if (drillModeEnabled) await deactivateDrill();
     activatingEmergency = true;
+    DiagnosticsLog.instance.info('sos.activation.started');
     lastError = null;
     notifyListeners();
     try {
@@ -525,8 +665,10 @@ class MeshController extends ChangeNotifier {
         true,
         description: description ?? currentL10n.sosDefaultMessage,
       );
+      DiagnosticsLog.instance.info('sos.activation.completed');
     } catch (error) {
       lastError = error.toString();
+      DiagnosticsLog.instance.error('sos.activation.failed', error: error);
     } finally {
       activatingEmergency = false;
       notifyListeners();
@@ -551,7 +693,12 @@ class MeshController extends ChangeNotifier {
           ),
         );
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'location.current.unavailable',
+        error: error,
+        stackTrace: stackTrace,
+      );
       return null;
     }
     return null;
@@ -577,10 +724,13 @@ class MeshController extends ChangeNotifier {
   Future<void> setGenericPresenceScanEnabled(bool enabled) async {
     try {
       await _platform.setGenericPresenceScanEnabled(enabled);
-    } catch (error) {
-      if (kDebugMode) {
-        debugPrint('Generic BLE presence scan unavailable: $error');
-      }
+    } catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'mesh.generic_scan.unavailable',
+        error: error,
+        stackTrace: stackTrace,
+        data: {'requestedEnabled': enabled},
+      );
     }
   }
 
@@ -592,9 +742,10 @@ class MeshController extends ChangeNotifier {
         await sendSos(currentL10n.sosDefaultMessage);
         await _platform.setRadarConsent(enabled: true, minutes: 20);
       }
-      _rescueTimer?.cancel();
-      _rescueTimer = null;
+      await _platform.configureRescueMode(active: false);
       rescueMode = false;
+      rescueStartedAt = null;
+      rescueExpiresAt = null;
       await updateNodeRole(MeshNodeRole.phoneBeacon);
     } else {
       await updateNodeRole(MeshNodeRole.phoneRelay);
@@ -680,7 +831,12 @@ class MeshController extends ChangeNotifier {
         _latestRadarPosition = position;
         await _shareRadarLocation(position, force: true);
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'radar.location_sharing.stopped',
+        error: error,
+        stackTrace: stackTrace,
+      );
       _stopRadarLocationSharing();
     } finally {
       _startingRadarLocationSharing = false;
@@ -748,8 +904,13 @@ class MeshController extends ChangeNotifier {
         try {
           await _platform.sendPrivate(peer.id, content);
           delivered = true;
-        } catch (_) {
+        } catch (error, stackTrace) {
           // La ubicación es efímera: nunca se encola para entrega posterior.
+          DiagnosticsLog.instance.warning(
+            'radar.location_update.not_delivered',
+            error: error,
+            stackTrace: stackTrace,
+          );
         }
       }
       if (delivered) {
@@ -769,19 +930,203 @@ class MeshController extends ChangeNotifier {
     _lastRadarLocationShareAt = null;
   }
 
+  Future<EmergencyDelivery> _enqueueEmergency({
+    required EmergencyDeliveryKind kind,
+    required String content,
+    required Duration lifetime,
+  }) async {
+    final now = DateTime.now();
+    final delivery = EmergencyDelivery(
+      localId: _newEmergencyLocalId(),
+      kind: kind,
+      content: content,
+      createdAt: now,
+      expiresAt: now.add(lifetime),
+      nextAttemptAt: now,
+      state: EmergencyDeliveryState.pending,
+    );
+    await _repository.insertEmergencyDelivery(delivery);
+    _emergencyDeliveries.insert(0, delivery);
+    if (_emergencyDeliveries.length > 200) {
+      _emergencyDeliveries.removeRange(200, _emergencyDeliveries.length);
+    }
+    notifyListeners();
+    return delivery;
+  }
+
+  Future<void> _transmitEmergency(
+    EmergencyDelivery requested, {
+    required bool force,
+  }) async {
+    final index = _emergencyDeliveries.indexWhere(
+      (delivery) => delivery.localId == requested.localId,
+    );
+    if (index < 0) return;
+    var delivery = _emergencyDeliveries[index];
+    final now = DateTime.now();
+    if (delivery.state == EmergencyDeliveryState.acknowledged) return;
+    if (!delivery.expiresAt.isAfter(now)) {
+      await _replaceEmergencyDelivery(
+        delivery.copyWith(state: EmergencyDeliveryState.expired),
+      );
+      return;
+    }
+    if (!force && (!canSend || delivery.nextAttemptAt.isAfter(now))) {
+      _scheduleEmergencyRetry();
+      return;
+    }
+
+    final attempt = delivery.attempts + 1;
+    try {
+      String? canonicalHash = delivery.canonicalHash;
+      var transmitted = false;
+      if (canonicalHash != null) {
+        transmitted = await _platform.retryEmergency(canonicalHash);
+      }
+      if (!transmitted) {
+        final result = await _platform.sendEmergency(
+          messageId: delivery.localId,
+          content: delivery.content,
+          channel: delivery.kind == EmergencyDeliveryKind.sos
+              ? 'sos'
+              : 'checkin',
+        );
+        canonicalHash = result.canonicalHash;
+      }
+      delivery = delivery.copyWith(
+        state: EmergencyDeliveryState.relayed,
+        attempts: attempt,
+        lastAttemptAt: now,
+        nextAttemptAt: now.add(_emergencyBackoff(attempt)),
+        canonicalHash: canonicalHash,
+        clearLastError: true,
+      );
+      DiagnosticsLog.instance.info(
+        'emergency.outbox.relayed',
+        data: {'kind': delivery.kind, 'attempt': attempt},
+      );
+    } catch (error, stackTrace) {
+      delivery = delivery.copyWith(
+        state: EmergencyDeliveryState.pending,
+        attempts: attempt,
+        lastAttemptAt: now,
+        nextAttemptAt: now.add(_emergencyBackoff(attempt)),
+        lastError: error.runtimeType.toString(),
+      );
+      DiagnosticsLog.instance.warning(
+        'emergency.outbox.transmit_failed',
+        error: error,
+        stackTrace: stackTrace,
+        data: {'kind': delivery.kind, 'attempt': attempt},
+      );
+    }
+    await _replaceEmergencyDelivery(delivery);
+    _scheduleEmergencyRetry();
+  }
+
+  Duration _emergencyBackoff(int attempts) {
+    final exponent = min(max(attempts - 1, 0), 5);
+    final seconds = min(
+      15 * (1 << exponent),
+      emergencyMaximumBackoff.inSeconds,
+    );
+    return Duration(seconds: seconds);
+  }
+
+  Future<void> _replaceEmergencyDelivery(EmergencyDelivery delivery) async {
+    await _repository.updateEmergencyDelivery(delivery);
+    final index = _emergencyDeliveries.indexWhere(
+      (item) => item.localId == delivery.localId,
+    );
+    if (index >= 0) {
+      _emergencyDeliveries[index] = delivery;
+    } else {
+      _emergencyDeliveries.insert(0, delivery);
+    }
+    notifyListeners();
+  }
+
+  void _requestEmergencyOutboxDrain() {
+    _emergencyOutboxDrainRequested = true;
+    if (_drainingEmergencyOutbox) return;
+    unawaited(_drainEmergencyOutbox());
+  }
+
+  Future<void> _drainEmergencyOutbox() async {
+    _drainingEmergencyOutbox = true;
+    try {
+      while (_emergencyOutboxDrainRequested) {
+        _emergencyOutboxDrainRequested = false;
+        await _repository.expireEmergencyDeliveries(DateTime.now());
+        _emergencyDeliveries
+          ..clear()
+          ..addAll(await _repository.loadEmergencyDeliveries());
+        if (!canSend) break;
+        final now = DateTime.now();
+        final due = _emergencyDeliveries
+            .where(
+              (delivery) =>
+                  !delivery.isTerminal && !delivery.nextAttemptAt.isAfter(now),
+            )
+            .toList(growable: false);
+        for (final delivery in due) {
+          await _transmitEmergency(delivery, force: false);
+        }
+      }
+    } finally {
+      _drainingEmergencyOutbox = false;
+      _scheduleEmergencyRetry();
+    }
+  }
+
+  void _scheduleEmergencyRetry() {
+    _emergencyRetryTimer?.cancel();
+    _emergencyRetryTimer = null;
+    final active = _emergencyDeliveries
+        .where((delivery) => !delivery.isTerminal)
+        .toList(growable: false);
+    if (active.isEmpty) return;
+    active.sort(
+      (first, second) => first.nextAttemptAt.compareTo(second.nextAttemptAt),
+    );
+    final delay = active.first.nextAttemptAt.difference(DateTime.now());
+    _emergencyRetryTimer = Timer(
+      delay.isNegative ? Duration.zero : delay,
+      _requestEmergencyOutboxDrain,
+    );
+  }
+
+  String _newEmergencyLocalId() {
+    final randomPart = List.generate(
+      8,
+      (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+    ).join();
+    return 'EMG-${DateTime.now().microsecondsSinceEpoch}-$randomPart';
+  }
+
   Future<void> panicWipe() async {
     await setRescueMode(false);
-    await _platform.panicWipe();
-    await _repository.clear();
+    await _preferences?.setMeshDesiredActive(false);
+    final freshIdentity = await _platform.panicWipe();
+    await _repository.destroy();
     _messages.clear();
     peerLocations.clear();
     _privateMessageOutbox.clear();
+    _emergencyDeliveries.clear();
+    _emergencyRetryTimer?.cancel();
+    _emergencyRetryTimer = null;
     _peers.clear();
     _knownPeers.clear();
-    status = MeshConnectionStatus.stopped;
-    nickname = '';
-    peerId = '';
-    signingPublicKey = null;
+    _presences.clear();
+    lastError = null;
+    if (freshIdentity.isEmpty) {
+      status = MeshConnectionStatus.stopped;
+      nickname = '';
+      peerId = '';
+      signingPublicKey = null;
+    } else {
+      _applyStatus(freshIdentity);
+    }
     radarConsentUntil = null;
     pendingBeaconRequest = null;
     localBeaconActive = false;
@@ -846,7 +1191,9 @@ class MeshController extends ChangeNotifier {
       isPrivate: true,
       isMine: true,
       timestamp: pending.createdAt,
-      deliveryStatus: MeshMessageDeliveryStatus.pending,
+      deliveryStatus: pending.status == PrivateMessageOutboxStatus.expired
+          ? MeshMessageDeliveryStatus.expired
+          : MeshMessageDeliveryStatus.pending,
     );
   }
 
@@ -917,6 +1264,25 @@ class MeshController extends ChangeNotifier {
     for (final original in List<PendingPrivateMessage>.of(
       _privateMessageOutbox,
     )) {
+      if (original.status == PrivateMessageOutboxStatus.expired) continue;
+      if (original.attempts >= 20 ||
+          original.createdAt.isBefore(
+            DateTime.now().subtract(const Duration(days: 7)),
+          )) {
+        final expired = original.copyWith(
+          status: PrivateMessageOutboxStatus.expired,
+        );
+        _replacePendingOutboxEntry(expired);
+        await _repository.updatePendingPrivateMessage(expired);
+        final messageIndex = _messages.indexWhere(
+          (message) => message.id == expired.localId,
+        );
+        if (messageIndex >= 0) {
+          _messages[messageIndex] = _pendingMessage(expired);
+        }
+        notifyListeners();
+        continue;
+      }
       final peer = peerById(original.recipientPeerId);
       if (peer == null || !peer.secure || !peer.role.canChat) continue;
       var pending = original.copyWith(
@@ -1062,6 +1428,10 @@ class MeshController extends ChangeNotifier {
         break;
       case 'error':
         lastError = event['message'] as String? ?? currentL10n.errorUnknown;
+        DiagnosticsLog.instance.warning(
+          'mesh.native.error',
+          data: {'whileStarting': status == MeshConnectionStatus.starting},
+        );
         if (status == MeshConnectionStatus.starting) {
           status = MeshConnectionStatus.error;
         }
@@ -1072,15 +1442,27 @@ class MeshController extends ChangeNotifier {
         _peers.clear();
         _presences.clear();
         _knownPeers.clear();
-        status = MeshConnectionStatus.stopped;
-        nickname = '';
-        peerId = '';
-        signingPublicKey = null;
+        _applyStatus(event);
         radarConsentUntil = null;
         pendingBeaconRequest = null;
         localBeaconActive = false;
         localBeaconExpiresAt = null;
         _stopRadarLocationSharing();
+        break;
+      case 'emergencyAck':
+        final canonicalHash = event['canonicalHash'] as String?;
+        final acknowledgingPeerId = event['peerId'] as String?;
+        if (canonicalHash != null && acknowledgingPeerId != null) {
+          unawaited(
+            _recordEmergencyAcknowledgement(canonicalHash, acknowledgingPeerId),
+          );
+        }
+        break;
+      case 'rescuePing':
+        final timestamp = (event['timestamp'] as num?)?.toInt();
+        if (timestamp != null && timestamp > 0) {
+          lastRescuePing = DateTime.fromMillisecondsSinceEpoch(timestamp);
+        }
         break;
       case 'rssi':
         // Lecturas del radar de rescate: las consume RadarScreen directamente
@@ -1092,8 +1474,27 @@ class MeshController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _recordEmergencyAcknowledgement(
+    String canonicalHash,
+    String acknowledgingPeerId,
+  ) async {
+    final localId = await _repository.recordEmergencyAcknowledgement(
+      canonicalHash: canonicalHash,
+      peerId: acknowledgingPeerId,
+      acknowledgedAt: DateTime.now(),
+    );
+    if (localId == null) return;
+    _emergencyDeliveries
+      ..clear()
+      ..addAll(await _repository.loadEmergencyDeliveries());
+    _scheduleEmergencyRetry();
+    DiagnosticsLog.instance.info('emergency.outbox.acknowledged');
+    notifyListeners();
+  }
+
   void _applyStatus(Map<Object?, Object?> event) {
     final couldSend = canSend;
+    final previousStatus = status;
     status = switch (event['status'] as String?) {
       'active' => MeshConnectionStatus.active,
       'degraded' => MeshConnectionStatus.degraded,
@@ -1101,6 +1502,12 @@ class MeshController extends ChangeNotifier {
       'error' => MeshConnectionStatus.error,
       _ => MeshConnectionStatus.stopped,
     };
+    if (status != previousStatus) {
+      DiagnosticsLog.instance.info(
+        'mesh.status.changed',
+        data: {'from': previousStatus, 'to': status},
+      );
+    }
     nickname = event['nickname'] as String? ?? nickname;
     peerId = event['peerId'] as String? ?? peerId;
     signingPublicKey = switch (event['signingPublicKey']) {
@@ -1126,9 +1533,24 @@ class MeshController extends ChangeNotifier {
     powerProfile = MeshPowerProfile.fromWire(event['powerProfile']);
     adaptivePowerSaving =
         event['adaptivePowerSaving'] as bool? ?? powerProfile.savesPower;
+    final metrics = event['resourceMetrics'];
+    if (metrics is Map<Object?, Object?>) {
+      DiagnosticsLog.instance.info(
+        'mesh.resource.stats',
+        data: {
+          'bleDutyCyclePercent':
+              (metrics['bleDutyCyclePercent'] as num?)?.toInt() ?? -1,
+          'activeScans': (metrics['activeScans'] as num?)?.toInt() ?? -1,
+          'scanStarts': (metrics['scanStarts'] as num?)?.toInt() ?? -1,
+          'storeForwardEntries':
+              (metrics['storeForwardEntries'] as num?)?.toInt() ?? -1,
+        },
+      );
+    }
     _applyRadarConsent(event);
     if (!couldSend && canSend) {
       _requestPrivateMessageOutboxDrain();
+      _requestEmergencyOutboxDrain();
     }
     _syncRadarLocationSharing();
   }
@@ -1279,14 +1701,15 @@ class MeshController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _rescueTimer?.cancel();
     _consentTimer?.cancel();
     _topologyNotificationTimer?.cancel();
+    _emergencyRetryTimer?.cancel();
     _stopRadarLocationSharing();
     _subscription?.cancel();
     _preferences?.removeListener(_handlePreferencesChanged);
     peerLocations.removeListener(_notifyLocationChanged);
     peerLocations.dispose();
+    unawaited(_repository.close());
     super.dispose();
   }
 }

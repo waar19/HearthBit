@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -13,6 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../controllers/mesh_controller.dart';
 import '../controllers/emergency_gateway_controller.dart';
 import '../controllers/family_controller.dart';
+import '../controllers/lan_gateway_controller.dart';
 import '../controllers/transfer_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
@@ -20,11 +22,18 @@ import '../models/transfer_models.dart';
 import '../models/voice_note.dart';
 import '../services/apk_share_service.dart';
 import '../services/app_preferences.dart';
+import '../services/diagnostics_export_service.dart';
+import '../services/diagnostics_log.dart';
 import '../services/emergency_shortcut_service.dart';
 import '../services/invite_share_service.dart';
 import '../services/photo_profile.dart';
+import '../services/secure_database.dart';
 import '../services/voice_note_audio_controller.dart';
 import '../utils/message_chronology.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/list_section_title.dart';
+import '../widgets/message_composer.dart';
+import '../widgets/nickname_dialog.dart';
 import '../widgets/voice_waveform.dart';
 import 'emergency_screen.dart';
 import 'family_screen.dart';
@@ -46,6 +55,9 @@ class HomeScreen extends StatefulWidget {
     required this.preferences,
     required this.gateway,
     required this.family,
+    this.lanGateway,
+    this.emergencyOpens,
+    this.consumeInitialEmergencyOpen,
     super.key,
   });
 
@@ -54,6 +66,9 @@ class HomeScreen extends StatefulWidget {
   final AppPreferences preferences;
   final EmergencyGatewayController gateway;
   final FamilyController family;
+  final LanGatewayController? lanGateway;
+  final Stream<void>? emergencyOpens;
+  final Future<bool> Function()? consumeInitialEmergencyOpen;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -63,6 +78,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   final _apkShare = ApkShareService();
+  final _diagnosticsExport = DiagnosticsExportService();
   int _tab = 0;
   int _publicMessageCount = 0;
   bool _scrollScheduled = false;
@@ -76,10 +92,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _publicMessageCount = _countPublicMessages();
     widget.controller.addListener(_handleMeshUpdate);
-    _emergencyShortcutSubscription = EmergencyShortcutService.opens.listen(
-      (_) => _openEmergencyTab(),
-    );
-    EmergencyShortcutService.consumeInitialOpen().then((open) {
+    _listenForEmergencyShortcuts();
+    final consumeInitialOpen =
+        widget.consumeInitialEmergencyOpen ??
+        EmergencyShortcutService.consumeInitialOpen;
+    consumeInitialOpen().then((open) {
       if (open) _openEmergencyTab();
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -94,6 +111,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _syncGenericPresenceScan();
   }
 
+  void _listenForEmergencyShortcuts() {
+    final opens = widget.emergencyOpens ?? EmergencyShortcutService.opens;
+    _emergencyShortcutSubscription = opens.listen((_) => _openEmergencyTab());
+  }
+
   void _syncGenericPresenceScan({bool force = false}) {
     final enabled = _appInForeground && _tab == 2;
     if (!force && _genericPresenceScanRequested == enabled) return;
@@ -104,6 +126,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void didUpdateWidget(covariant HomeScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.emergencyOpens != widget.emergencyOpens) {
+      unawaited(_emergencyShortcutSubscription?.cancel());
+      _listenForEmergencyShortcuts();
+    }
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller.removeListener(_handleMeshUpdate);
       unawaited(oldWidget.controller.setGenericPresenceScanEnabled(false));
@@ -217,7 +243,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _startOpticalReceive() {
     return Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => OpticalReceiveScreen(transfers: widget.transfers),
+        builder: (_) => OpticalReceiveScreen(
+          transfers: widget.transfers,
+          mesh: widget.controller,
+        ),
       ),
     );
   }
@@ -489,7 +518,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       children: [
         Expanded(
           child: publicMessages.isEmpty
-              ? _EmptyState(
+              ? EmptyState(
                   icon: Icons.bluetooth_searching,
                   title: context.l10n.emptyChatTitle,
                   description: context.l10n.emptyChatBody,
@@ -507,7 +536,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                 ),
         ),
-        _MessageComposer(
+        MessageComposer(
           controller: _messageController,
           enabled: controller.canSend,
           hint: context.l10n.composerPublicHint,
@@ -538,10 +567,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            child: MeshHealthCard(controller: controller),
+            child: MeshHealthCard(
+              controller: controller,
+              lanGateway: widget.lanGateway,
+            ),
           ),
           Expanded(
-            child: _EmptyState(
+            child: EmptyState(
               icon: Icons.portable_wifi_off,
               title: context.l10n.emptyPeersTitle,
               description: context.l10n.emptyPeersBody,
@@ -560,10 +592,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        MeshHealthCard(controller: controller),
+        MeshHealthCard(controller: controller, lanGateway: widget.lanGateway),
         const SizedBox(height: 8),
         if (conversations.isNotEmpty) ...[
-          _ListSectionTitle(title: context.l10n.recentChatsTitle),
+          ListSectionTitle(title: context.l10n.recentChatsTitle),
           ...conversations.map((conversation) {
             final peer = conversation.peer;
             final message = conversation.lastMessage;
@@ -606,7 +638,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               style: Theme.of(context).textTheme.labelSmall
                                   ?.copyWith(
                                     color: conversation.isOnline
-                                        ? Colors.green
+                                        ? Theme.of(context).colorScheme.primary
                                         : null,
                                   ),
                             ),
@@ -626,57 +658,38 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           }),
         ],
         if (newNearbyPeers.isNotEmpty) ...[
-          _ListSectionTitle(title: context.l10n.nearbyPeopleTitle),
+          ListSectionTitle(title: context.l10n.nearbyPeopleTitle),
           ...newNearbyPeers.map(
-            (peer) => ListTile(
-              leading: CircleAvatar(child: Text(_avatarLetter(peer.nickname))),
-              title: Text(peer.nickname),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            (peer) => Card(
+              child: Column(
                 children: [
-                  Text(
-                    '${peer.id.substring(0, 8)} · '
-                    '${peer.role.canChat ? (peer.secure ? context.l10n.peerSecure : context.l10n.peerTapToEncrypt) : context.l10n.genericPresenceNoChat}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  _peerCapabilityBadges(peer),
-                ],
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    tooltip: peer.radarAllowed
-                        ? context.l10n.tooltipRadar
-                        : context.l10n.radarConsentRequired,
-                    onPressed: peer.radarAllowed
-                        ? () => _openRadar(
-                            peerId: peer.id,
-                            nickname: peer.nickname,
-                            consentExpiresAt: peer.radarAllowedUntil!,
-                            consentSource:
-                                peer.radarConsentSource ?? 'temporary',
-                          )
+                  ListTile(
+                    leading: CircleAvatar(
+                      child: Text(_avatarLetter(peer.nickname)),
+                    ),
+                    title: Text(peer.nickname),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${peer.id.substring(0, 8)} · '
+                          '${peer.role.canChat ? (peer.secure ? context.l10n.peerSecure : context.l10n.peerTapToEncrypt) : context.l10n.genericPresenceNoChat}',
+                        ),
+                        _peerCapabilityBadges(peer),
+                      ],
+                    ),
+                    onTap: peer.role.canChat
+                        ? () => _openPrivateChat(controller, peer)
                         : null,
-                    icon: const Icon(Icons.radar),
                   ),
-                  _peerTransferButton(peer, online: true),
-                  Icon(
-                    peer.role.canChat
-                        ? (peer.secure ? Icons.lock : Icons.lock_open)
-                        : Icons.chat_bubble_outline,
-                  ),
+                  _peerControls(controller, peer, online: true),
                 ],
               ),
-              onTap: peer.role.canChat
-                  ? () => _openPrivateChat(controller, peer)
-                  : null,
             ),
           ),
         ],
         if (genericPresences.isNotEmpty) ...[
-          _ListSectionTitle(title: context.l10n.genericPresenceSectionTitle),
+          ListSectionTitle(title: context.l10n.genericPresenceSectionTitle),
           Card(
             child: ExpansionTile(
               leading: const CircleAvatar(child: Icon(Icons.sensors)),
@@ -762,8 +775,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final secure = online && peer.secure;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
+      child: Wrap(
+        alignment: WrapAlignment.end,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           IconButton(
             tooltip: !online
@@ -884,7 +898,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final value = await showDialog<String>(
       context: context,
       builder: (context) =>
-          _NicknameDialog(initialNickname: controller.nickname),
+          NicknameDialog(initialNickname: controller.nickname),
     );
     if (value != null) await controller.updateNickname(value);
   }
@@ -1009,6 +1023,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               onPressed: () => _shareInvite(buttonContext),
               icon: const Icon(Icons.ios_share),
               label: Text(context.l10n.shareInviteButton),
+            ),
+          ),
+          Builder(
+            builder: (buttonContext) => TextButton.icon(
+              onPressed: () => _shareDiagnostics(buttonContext),
+              icon: const Icon(Icons.bug_report_outlined),
+              label: Text(context.l10n.diagnosticsExportButton),
             ),
           ),
           if (ApkShareService.isSupportedPlatform)
@@ -1185,6 +1206,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _shareDiagnostics(BuildContext anchorContext) async {
+    final anchor = anchorContext.findRenderObject() as RenderBox?;
+    try {
+      DiagnosticsLog.instance.info('diagnostics.export.requested');
+      await _diagnosticsExport.share(
+        anchor: anchor,
+        subject: context.l10n.diagnosticsExportSubject,
+      );
+    } catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'diagnostics.export.failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.diagnosticsExportError)),
+      );
+    }
+  }
+
   Future<void> _openExternal(Uri uri) async {
     var opened = false;
     try {
@@ -1200,26 +1242,76 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _confirmWipe(MeshController controller) async {
+    final confirmationController = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(context.l10n.wipeDialogTitle),
-        content: Text(context.l10n.wipeDialogBody),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(context.l10n.actionCancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(context.l10n.actionWipe),
-          ),
-        ],
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final matches =
+              confirmationController.text.trim().toUpperCase() == 'BORRAR';
+          return AlertDialog(
+            title: Text(context.l10n.wipeDialogTitle),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(context.l10n.wipeDialogBody),
+                const SizedBox(height: 16),
+                Text(context.l10n.wipeDialogInstruction),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: confirmationController,
+                  textCapitalization: TextCapitalization.characters,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.wipeDialogKeyword,
+                  ),
+                  onChanged: (_) => setDialogState(() {}),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(context.l10n.actionCancel),
+              ),
+              FilledButton(
+                onPressed: matches
+                    ? () => Navigator.pop(dialogContext, true)
+                    : null,
+                child: Text(context.l10n.actionWipe),
+              ),
+            ],
+          );
+        },
       ),
     );
-    if (confirmed == true) {
+    confirmationController.dispose();
+    if (confirmed != true || !mounted) return;
+    try {
       await widget.transfers.wipe();
+      await widget.family.panicWipe();
+      await widget.gateway.panicWipe();
+      await widget.lanGateway?.panicWipe();
       await controller.panicWipe();
+      await DiagnosticsLog.instance.clear();
+      await SecureDatabaseKeyStore.destroy();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.wipeDialogComplete)));
+    } catch (error, stackTrace) {
+      DiagnosticsLog.instance.error(
+        'privacy.panic_wipe.failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.wipeDialogError)));
     }
   }
 
@@ -1254,24 +1346,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
     });
   }
-}
-
-class _ListSectionTitle extends StatelessWidget {
-  const _ListSectionTitle({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-    child: Text(
-      title,
-      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-        color: Theme.of(context).colorScheme.primary,
-        fontWeight: FontWeight.bold,
-      ),
-    ),
-  );
 }
 
 class _PrivateChatSheet extends StatefulWidget {
@@ -1373,7 +1447,19 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
       ).showSnackBar(SnackBar(content: Text(context.l10n.voiceUnsupported)));
       return;
     }
-    if (!await _audioRecorder.hasPermission()) return;
+    if (!await _audioRecorder.hasPermission()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.voiceMicrophoneRequired),
+          action: SnackBarAction(
+            label: context.l10n.actionOpenSettings,
+            onPressed: Geolocator.openAppSettings,
+          ),
+        ),
+      );
+      return;
+    }
     await _voiceAudio.stop();
     final directory = await getTemporaryDirectory();
     final path = p.join(
@@ -1661,24 +1747,27 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
                     ),
             ),
             if (_sendError case final error?)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.error_outline,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        context.l10n.privateMessageSendError(error),
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
+              Semantics(
+                liveRegion: true,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          context.l10n.privateMessageSendError(error),
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             if (_recording)
@@ -1740,7 +1829,7 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
                     icon: const Icon(Icons.mic),
                   ),
                   Expanded(
-                    child: _MessageComposer(
+                    child: MessageComposer(
                       controller: _textController,
                       enabled: canQueueText,
                       hint: context.l10n.composerPrivateHint,
@@ -1752,54 +1841,6 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _NicknameDialog extends StatefulWidget {
-  const _NicknameDialog({required this.initialNickname});
-
-  final String initialNickname;
-
-  @override
-  State<_NicknameDialog> createState() => _NicknameDialogState();
-}
-
-class _NicknameDialogState extends State<_NicknameDialog> {
-  late final TextEditingController _textController;
-
-  @override
-  void initState() {
-    super.initState();
-    _textController = TextEditingController(text: widget.initialNickname);
-  }
-
-  @override
-  void dispose() {
-    _textController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(context.l10n.nicknameDialogTitle),
-      content: TextField(
-        controller: _textController,
-        autofocus: true,
-        maxLength: 31,
-        decoration: InputDecoration(hintText: context.l10n.nicknameDialogHint),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(context.l10n.actionCancel),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, _textController.text),
-          child: Text(context.l10n.actionSave),
-        ),
-      ],
     );
   }
 }
@@ -1894,53 +1935,6 @@ class _StatusBanner extends StatelessWidget {
   }
 }
 
-class _MessageComposer extends StatelessWidget {
-  const _MessageComposer({
-    required this.controller,
-    required this.enabled,
-    required this.hint,
-    required this.onSend,
-  });
-
-  final TextEditingController controller;
-  final bool enabled;
-  final String hint;
-  final VoidCallback onSend;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              enabled: enabled,
-              minLines: 1,
-              maxLines: 4,
-              maxLength: 240,
-              decoration: InputDecoration(
-                hintText: hint,
-                counterText: '',
-                border: const OutlineInputBorder(),
-              ),
-              onTapOutside: (_) =>
-                  FocusManager.instance.primaryFocus?.unfocus(),
-              onSubmitted: (_) => onSend(),
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton.filled(
-            onPressed: enabled ? onSend : null,
-            icon: const Icon(Icons.send),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
     required this.message,
@@ -1964,86 +1958,134 @@ class _MessageBubble extends StatelessWidget {
         : message.isMine
         ? Theme.of(context).colorScheme.primaryContainer
         : Theme.of(context).colorScheme.surfaceContainerHighest;
-    return Align(
-      alignment: alignment,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * 0.78,
-        ),
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!message.isMine || message.isPrivate) ...[
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (message.isPrivate) ...[
-                    const Icon(Icons.lock, size: 14),
-                    const SizedBox(width: 4),
-                  ],
-                  if (!message.isMine)
-                    Text(
-                      message.sender,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 4),
-            ],
-            if (message.isVoiceNote)
-              _VoiceNoteContent(
-                message: message,
-                transfers: transfers,
-                voiceAudio: voiceAudio,
-              )
-            else if (message.isDrill)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    context.l10n.drillBadge,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+    final status = message.isPending
+        ? context.l10n.privateMessagePending
+        : message.isExpired
+        ? context.l10n.deliveryExpired
+        : message.isMine
+        ? context.l10n.deliveryRelayed
+        : '';
+    final semanticLabel = [
+      if (!message.isMine) message.sender,
+      message.content.replaceFirst('SOS|', 'SOS: '),
+      if (status.isNotEmpty) status,
+      MaterialLocalizations.of(
+        context,
+      ).formatTimeOfDay(TimeOfDay.fromDateTime(message.timestamp.toLocal())),
+    ].join(', ');
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    return Semantics(
+      container: true,
+      label: semanticLabel,
+      child: ExcludeSemantics(
+        child: Align(
+          alignment: alignment,
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth:
+                  MediaQuery.sizeOf(context).width *
+                  (textScale >= 1.5 ? 0.92 : 0.78),
+            ),
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!message.isMine || message.isPrivate) ...[
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (message.isPrivate) ...[
+                        const Icon(Icons.lock, size: 14),
+                        const SizedBox(width: 4),
+                      ],
+                      if (!message.isMine)
+                        Flexible(
+                          child: Text(
+                            message.sender,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    message.drill?.readableMessage ??
-                        context.l10n.drillInvalidMessage,
-                  ),
                 ],
-              )
-            else
-              Text(message.content.replaceFirst('SOS|', 'SOS: ')),
-            const SizedBox(height: 4),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (message.isPending) ...[
-                    const Icon(Icons.schedule, size: 13),
-                    const SizedBox(width: 3),
-                    Text(
-                      context.l10n.privateMessagePending,
-                      style: Theme.of(context).textTheme.labelSmall,
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                  Text(
-                    MaterialLocalizations.of(context).formatTimeOfDay(
-                      TimeOfDay.fromDateTime(message.timestamp.toLocal()),
-                    ),
-                    style: Theme.of(context).textTheme.labelSmall,
+                if (message.isVoiceNote)
+                  _VoiceNoteContent(
+                    message: message,
+                    transfers: transfers,
+                    voiceAudio: voiceAudio,
+                  )
+                else if (message.isDrill)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.l10n.drillBadge,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        message.drill?.readableMessage ??
+                            context.l10n.drillInvalidMessage,
+                      ),
+                    ],
+                  )
+                else
+                  Text(message.content.replaceFirst('SOS|', 'SOS: ')),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      if (message.isPending) ...[
+                        const Icon(Icons.schedule, size: 13),
+                        const SizedBox(width: 3),
+                        Text(
+                          context.l10n.privateMessagePending,
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      if (message.isExpired) ...[
+                        const Icon(Icons.timer_off_outlined, size: 13),
+                        const SizedBox(width: 3),
+                        Text(
+                          context.l10n.deliveryExpired,
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      if (message.isMine &&
+                          !message.isPending &&
+                          !message.isExpired) ...[
+                        const Icon(Icons.campaign_outlined, size: 13),
+                        const SizedBox(width: 3),
+                        Text(
+                          context.l10n.deliveryRelayed,
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Text(
+                        MaterialLocalizations.of(context).formatTimeOfDay(
+                          TimeOfDay.fromDateTime(message.timestamp.toLocal()),
+                        ),
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -2318,47 +2360,6 @@ class _DateSeparator extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(label, style: Theme.of(context).textTheme.labelMedium),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({
-    required this.icon,
-    required this.title,
-    required this.description,
-    this.action,
-  });
-
-  final IconData icon;
-  final String title;
-  final String description;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: constraints.maxHeight),
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 64),
-                  const SizedBox(height: 16),
-                  Text(title, style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 8),
-                  Text(description, textAlign: TextAlign.center),
-                  if (action != null) ...[const SizedBox(height: 20), action!],
-                ],
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

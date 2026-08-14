@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 import 'package:hearth_bit/controllers/mesh_controller.dart';
 import 'package:hearth_bit/models/mesh_models.dart';
+import 'package:hearth_bit/services/app_preferences.dart';
 import 'package:hearth_bit/services/mesh_platform_service.dart';
 import 'package:hearth_bit/services/message_repository.dart';
 
@@ -29,6 +33,8 @@ class _FakePlatform extends MeshPlatformService {
   Object? startError;
   Object? privateMessageError;
   Completer<String>? privateMessageGate;
+  NativeRescueState rescueState = const NativeRescueState(active: false);
+  final List<bool> rescueConfigurations = [];
 
   void emit(Map<Object?, Object?> event) => _controller.add(event);
 
@@ -53,6 +59,29 @@ class _FakePlatform extends MeshPlatformService {
   @override
   Future<void> stop() async {
     stopCalls += 1;
+  }
+
+  @override
+  Future<NativeRescueState> getRescueModeState() async => rescueState;
+
+  @override
+  Future<NativeRescueState> configureRescueMode({
+    required bool active,
+    String? description,
+    DateTime? startedAt,
+    DateTime? lastPingAt,
+    DateTime? expiresAt,
+    Duration interval = const Duration(minutes: 2),
+  }) async {
+    rescueConfigurations.add(active);
+    rescueState = NativeRescueState(
+      active: active,
+      description: active ? description : null,
+      startedAt: active ? startedAt : null,
+      lastPingAt: active ? lastPingAt : null,
+      expiresAt: active ? expiresAt : null,
+    );
+    return rescueState;
   }
 
   @override
@@ -93,6 +122,26 @@ class _FakePlatform extends MeshPlatformService {
     sosCalls += 1;
     return 'sos-$sosCalls';
   }
+
+  @override
+  Future<EmergencyTransmission> sendEmergency({
+    required String messageId,
+    required String content,
+    required String channel,
+  }) async {
+    if (channel == 'sos') {
+      sosCalls += 1;
+    } else {
+      publicMessages.add((content: content, channel: channel));
+    }
+    return EmergencyTransmission(
+      messageId: messageId,
+      canonicalHash: messageId.hashCode.toRadixString(16).padLeft(64, '0'),
+    );
+  }
+
+  @override
+  Future<bool> retryEmergency(String canonicalHash) async => true;
 
   @override
   Future<Map<Object?, Object?>> getPowerStatus() async => {
@@ -140,8 +189,16 @@ class _FakePlatform extends MeshPlatformService {
   }
 
   @override
-  Future<void> panicWipe() async {
+  Future<Map<Object?, Object?>> panicWipe() async {
     panicWipeCalls += 1;
+    return {
+      'type': 'snapshot',
+      'status': 'stopped',
+      'nickname': 'SOS-NEW1',
+      'peerId': 'fresh-peer-id',
+      'signingPublicKey': Uint8List(32),
+      'role': 'PHONE_RELAY',
+    };
   }
 
   @override
@@ -158,6 +215,7 @@ class _FakeRepository extends MessageRepository {
   final List<MeshMessage> saved = [];
   final List<MeshPeer> knownPeers = [];
   final List<PendingPrivateMessage> outbox = [];
+  final List<EmergencyDelivery> emergencyOutbox = [];
 
   @override
   Future<List<MeshMessage>> load() async => List.of(loaded);
@@ -182,6 +240,9 @@ class _FakeRepository extends MessageRepository {
       List.of(outbox);
 
   @override
+  Future<void> expirePrivateMessageOutbox(DateTime now) async {}
+
+  @override
   Future<void> insertPendingPrivateMessage(
     PendingPrivateMessage message,
   ) async {
@@ -204,10 +265,65 @@ class _FakeRepository extends MessageRepository {
   }
 
   @override
+  Future<void> insertEmergencyDelivery(EmergencyDelivery delivery) async {
+    emergencyOutbox.add(delivery);
+  }
+
+  @override
+  Future<void> updateEmergencyDelivery(EmergencyDelivery delivery) async {
+    final index = emergencyOutbox.indexWhere(
+      (item) => item.localId == delivery.localId,
+    );
+    if (index >= 0) emergencyOutbox[index] = delivery;
+  }
+
+  @override
+  Future<List<EmergencyDelivery>> loadEmergencyDeliveries() async =>
+      List.of(emergencyOutbox.reversed);
+
+  @override
+  Future<void> expireEmergencyDeliveries(DateTime now) async {
+    for (var index = 0; index < emergencyOutbox.length; index++) {
+      final delivery = emergencyOutbox[index];
+      if (!delivery.isTerminal && !delivery.expiresAt.isAfter(now)) {
+        emergencyOutbox[index] = delivery.copyWith(
+          state: EmergencyDeliveryState.expired,
+        );
+      }
+    }
+  }
+
+  @override
+  Future<String?> recordEmergencyAcknowledgement({
+    required String canonicalHash,
+    required String peerId,
+    required DateTime acknowledgedAt,
+  }) async {
+    final index = emergencyOutbox.indexWhere(
+      (item) => item.canonicalHash == canonicalHash,
+    );
+    if (index < 0) return null;
+    final delivery = emergencyOutbox[index];
+    emergencyOutbox[index] = delivery.copyWith(
+      state: EmergencyDeliveryState.acknowledged,
+      acknowledgedBy: {...delivery.acknowledgedBy, peerId},
+    );
+    return delivery.localId;
+  }
+
+  @override
   Future<void> clear() async {
     saved.clear();
     knownPeers.clear();
     outbox.clear();
+    emergencyOutbox.clear();
+  }
+
+  @override
+  Future<void> destroy() async {
+    loaded.clear();
+    emergencyOutbox.clear();
+    await clear();
   }
 }
 
@@ -219,6 +335,8 @@ void main() {
   late MeshController controller;
 
   setUp(() async {
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.empty();
     platform = _FakePlatform();
     repository = _FakeRepository();
     controller = MeshController(platform: platform, repository: repository);
@@ -548,7 +666,7 @@ void main() {
         localId: 'local-persisted',
         recipientPeerId: remoteId,
         content: 'Persistido',
-        createdAt: DateTime.fromMillisecondsSinceEpoch(1000),
+        createdAt: DateTime.now(),
       ),
     );
     controller.dispose();
@@ -638,8 +756,8 @@ void main() {
 
     expect(result.disposition, PrivateMessageSendDisposition.failed);
     expect(result.error, contains('sesión cerrada'));
-    expect(repository.outbox, isEmpty);
-    expect(controller.messages, isEmpty);
+    expect(repository.outbox, hasLength(1));
+    expect(controller.messages.single.isPending, isTrue);
   });
 
   test('un error durante el arranque marca estado de error', () async {
@@ -677,6 +795,32 @@ void main() {
     expect(controller.canSend, isFalse);
   });
 
+  test(
+    'restaura la malla solicitada y conserva una detención explícita',
+    () async {
+      final preferences = AppPreferences();
+      await preferences.initialize();
+      await preferences.setMeshDesiredActive(true);
+      final restoredPlatform = _FakePlatform();
+      final restored = MeshController(
+        platform: restoredPlatform,
+        repository: _FakeRepository(),
+        preferences: preferences,
+      );
+
+      await restored.initialize();
+
+      expect(restoredPlatform.startCalls, 1);
+      expect(restored.status, MeshConnectionStatus.starting);
+
+      await restored.stop();
+      expect(preferences.meshDesiredActive, isFalse);
+
+      restored.dispose();
+      preferences.dispose();
+    },
+  );
+
   test('el estado de energía llega desde el nativo', () async {
     await controller.refreshPowerStatus();
     expect(controller.ignoringBatteryOptimizations, isFalse);
@@ -697,28 +841,50 @@ void main() {
     expect(controller.adaptivePowerSaving, isFalse);
   });
 
-  test('el modo rescate reenvía el SOS y se detiene al apagarse', () async {
-    platform.emit({'type': 'status', 'status': 'active'});
-    await pumpEvents();
+  test(
+    'el modo rescate delega pings al scheduler nativo y se detiene',
+    () async {
+      platform.emit({'type': 'status', 'status': 'active'});
+      await pumpEvents();
 
-    await controller.setRescueMode(
-      true,
-      interval: const Duration(milliseconds: 40),
+      await controller.setRescueMode(
+        true,
+        interval: const Duration(milliseconds: 40),
+      );
+      expect(controller.rescueMode, isTrue);
+      expect(platform.sosCalls, 1);
+      expect(
+        platform.radarConsentCalls,
+        contains((enabled: true, minutes: 10)),
+      );
+      expect(controller.lastRescuePing, isNotNull);
+      expect(platform.rescueConfigurations.last, isTrue);
+
+      await controller.setRescueMode(false);
+      expect(controller.rescueMode, isFalse);
+      expect(platform.radarConsentCalls.last.enabled, isFalse);
+      expect(platform.rescueConfigurations.last, isFalse);
+    },
+  );
+
+  test('restaura modo rescate vigente después de reiniciar Flutter', () async {
+    final now = DateTime.now();
+    platform.rescueState = NativeRescueState(
+      active: true,
+      description: 'Persona lesionada',
+      startedAt: now.subtract(const Duration(minutes: 3)),
+      lastPingAt: now.subtract(const Duration(seconds: 20)),
+      expiresAt: now.add(const Duration(hours: 2)),
     );
+    controller.dispose();
+    controller = MeshController(platform: platform, repository: repository);
+
+    await controller.initialize();
+
     expect(controller.rescueMode, isTrue);
-    expect(platform.sosCalls, 1);
-    expect(platform.radarConsentCalls, contains((enabled: true, minutes: 10)));
+    expect(controller.rescueStartedAt, isNotNull);
     expect(controller.lastRescuePing, isNotNull);
-
-    await Future<void>.delayed(const Duration(milliseconds: 130));
-    expect(platform.sosCalls, greaterThanOrEqualTo(2));
-
-    await controller.setRescueMode(false);
-    expect(controller.rescueMode, isFalse);
-    expect(platform.radarConsentCalls.last.enabled, isFalse);
-    final callsAtStop = platform.sosCalls;
-    await Future<void>.delayed(const Duration(milliseconds: 100));
-    expect(platform.sosCalls, callsAtStop);
+    expect(controller.rescueExpiresAt, platform.rescueState.expiresAt);
   });
 
   test('detener la malla también apaga el modo rescate', () async {
@@ -942,11 +1108,42 @@ void main() {
     expect(controller.peerLocations.latestFor('peer-radar')?.latitude, 4.60971);
   });
 
+  test('SOS pasa de emitido a confirmado con ACK único por peer', () async {
+    platform.emit({
+      'type': 'status',
+      'status': 'active',
+      'role': 'PHONE_RELAY',
+    });
+    await pumpEvents();
+
+    await controller.sendSos('Ayuda');
+    final relayed = controller.emergencyDeliveries.single;
+    expect(relayed.state, EmergencyDeliveryState.relayed);
+    expect(relayed.confirmationCount, 0);
+
+    platform.emit({
+      'type': 'emergencyAck',
+      'canonicalHash': relayed.canonicalHash,
+      'peerId': 'peer-confirming',
+    });
+    await pumpEvents();
+    await pumpEvents();
+
+    final acknowledged = controller.emergencyDeliveries.single;
+    expect(acknowledged.state, EmergencyDeliveryState.acknowledged);
+    expect(acknowledged.confirmationCount, 1);
+  });
+
   test('el borrado de pánico elimina el consentimiento local', () async {
+    final previousPeerId = controller.peerId;
     await controller.allowRadarFor15Minutes();
     await controller.panicWipe();
 
     expect(controller.radarConsentActive, isFalse);
+    expect(controller.peerId, isNot(previousPeerId));
+    expect(controller.peerId, 'fresh-peer-id');
+    expect(repository.loaded, isEmpty);
+    expect(repository.outbox, isEmpty);
     expect(platform.panicWipeCalls, 1);
   });
 }

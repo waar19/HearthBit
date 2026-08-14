@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -8,6 +9,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../controllers/mesh_controller.dart';
 import '../controllers/transfer_controller.dart';
 import '../l10n/l10n.dart';
 import '../services/fountain_code.dart';
@@ -19,9 +21,14 @@ import '../services/transfer_protocol.dart';
 /// el decodificador fountain. No necesita canal de retorno; si hay sesión de
 /// malla con el emisor, envía una confirmación BLE al terminar.
 class OpticalReceiveScreen extends StatefulWidget {
-  const OpticalReceiveScreen({required this.transfers, super.key});
+  const OpticalReceiveScreen({
+    required this.transfers,
+    required this.mesh,
+    super.key,
+  });
 
   final TransferController transfers;
+  final MeshController mesh;
 
   @override
   State<OpticalReceiveScreen> createState() => _OpticalReceiveScreenState();
@@ -38,6 +45,8 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
   String? _savedPath;
   String? _error;
   bool _finishing = false;
+  bool _approvingHeader = false;
+  _OpticalTrust? _trust;
 
   void _onDetect(BarcodeCapture capture) {
     if (_savedPath != null || _finishing) return;
@@ -46,27 +55,123 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
       if (content == null) continue;
       final symbol = OpticalProtocol.decode(content);
       if (symbol is OpticalHeader) {
-        _onHeader(symbol);
+        unawaited(_onHeader(symbol));
       } else if (symbol is OpticalDataSymbol) {
         _onData(symbol);
       }
     }
   }
 
-  void _onHeader(OpticalHeader header) {
-    if (_header != null && _sameId(_header!.transferId, header.transferId)) {
+  Future<void> _onHeader(OpticalHeader header) async {
+    if (_approvingHeader ||
+        (_header != null && _sameId(_header!.transferId, header.transferId))) {
       return;
+    }
+    _approvingHeader = true;
+    final knownPeer =
+        header.senderPeerId.isNotEmpty &&
+        (widget.mesh.peerById(header.senderPeerId) != null ||
+            widget.mesh.knownPeerById(header.senderPeerId) != null);
+    var trust = _OpticalTrust.unverified;
+    if (knownPeer && header.isSigned) {
+      var verified = false;
+      try {
+        verified = await MeshPlatformService().verifyPeerSignature(
+          header.senderPeerId,
+          OpticalProtocol.signingPayload(header),
+          header.signature!,
+        );
+      } catch (_) {
+        verified = false;
+      }
+      if (!verified) {
+        if (mounted) {
+          setState(() {
+            _error = context.l10n.opticalSignatureInvalid;
+            _approvingHeader = false;
+          });
+        }
+        return;
+      }
+      trust = _OpticalTrust.verified;
+    } else {
+      if (!mounted) return;
+      await _scanner.stop();
+      final accepted = await _confirmUnverified(header);
+      if (!mounted) return;
+      if (!accepted) {
+        setState(() => _approvingHeader = false);
+        await _scanner.start();
+        return;
+      }
+      trust = header.isLegacy ? _OpticalTrust.legacy : _OpticalTrust.unverified;
+      await _scanner.start();
     }
     // Cabecera nueva: el emisor reinició la sesión (o es otra transferencia).
     setState(() {
       _header = header;
+      _trust = trust;
       _decoder = FountainDecoder(
         chunkCount: header.chunkCount,
         chunkSize: header.chunkSize,
         seed: header.seed,
       );
       _error = null;
+      _approvingHeader = false;
     });
+  }
+
+  Future<bool> _confirmUnverified(OpticalHeader header) async {
+    final fingerprintSource = header.senderPeerId.isNotEmpty
+        ? utf8.encode(header.senderPeerId)
+        : header.signature ?? OpticalProtocol.signingPayload(header);
+    final fingerprint = sha256
+        .convert(fingerprintSource)
+        .bytes
+        .take(12)
+        .map((value) => value.toRadixString(16).padLeft(2, '0'))
+        .join()
+        .replaceAllMapped(RegExp(r'.{4}'), (match) => '${match.group(0)} ')
+        .trim();
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(context.l10n.opticalUnverifiedTitle),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(context.l10n.opticalUnverifiedBody),
+                  if (header.isLegacy) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      context.l10n.opticalLegacyWarning,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  SelectableText(context.l10n.opticalFingerprint(fingerprint)),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(context.l10n.actionReject),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(context.l10n.opticalAcceptUnverified),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   void _onData(OpticalDataSymbol symbol) {
@@ -183,6 +288,20 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
                         style: const TextStyle(fontWeight: FontWeight.bold),
                         textAlign: TextAlign.center,
                       ),
+                      if (_trust != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          _trust == _OpticalTrust.verified
+                              ? context.l10n.opticalVerifiedSource
+                              : context.l10n.opticalUnverifiedTitle,
+                          style: TextStyle(
+                            color: _trust == _OpticalTrust.verified
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.error,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 8),
                       Text(_savedPath!, textAlign: TextAlign.center),
                       const SizedBox(height: 16),
@@ -244,3 +363,5 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
     );
   }
 }
+
+enum _OpticalTrust { verified, unverified, legacy }

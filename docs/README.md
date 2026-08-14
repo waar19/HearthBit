@@ -36,5 +36,19 @@ meaning. When translations disagree, the English license text in
 - [Security reporting](../SECURITY.md)
 - [Contribution policy](../CONTRIBUTING.md)
 
+## Component guides
+
+- Mobile app: [English](../app/README.md) ·
+  [Español](../app/README.es.md)
+- Linux/Raspberry Pi relay: [English](../relay/README.md) ·
+  [Español](../relay/README.es.md)
+- Anchor firmware: [English](../firmware/README.md) ·
+  [Español](../firmware/README.es.md)
+- Pinned reference dependencies: [English](../vendor/README.md) ·
+  [Español](../vendor/README.es.md)
+- Binary conformance suite:
+  [English](../tests/conformance/README.md) ·
+  [Español](../tests/conformance/README.es.md)
+
 Documentation corrections are welcome under the same license that applies to
 original HearthBit code. Third-party excerpts retain their original terms.

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../controllers/mesh_controller.dart';
@@ -6,6 +8,7 @@ import '../controllers/family_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../services/app_preferences.dart';
+import 'emergency_contacts_screen.dart';
 import 'emergency_gateway_card.dart';
 import 'first_aid_guide_screen.dart';
 import 'map_screen.dart';
@@ -18,6 +21,7 @@ class EmergencyScreen extends StatelessWidget {
     required this.preferences,
     required this.gateway,
     required this.family,
+    this.emergencyHoldDuration = const Duration(seconds: 2),
     super.key,
   });
 
@@ -25,6 +29,7 @@ class EmergencyScreen extends StatelessWidget {
   final AppPreferences preferences;
   final EmergencyGatewayController gateway;
   final FamilyController family;
+  final Duration emergencyHoldDuration;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -56,16 +61,35 @@ class EmergencyScreen extends StatelessWidget {
           child: _HoldSosButton(
             enabled: !controller.activatingEmergency,
             active: controller.rescueMode,
+            holdDuration: emergencyHoldDuration,
             onActivated: () => _activateRealEmergency(context),
           ),
         ),
         const SizedBox(height: 16),
         if (controller.rescueMode)
           FilledButton.tonalIcon(
-            onPressed: () => controller.setRescueMode(false),
+            onPressed: () => _confirmStopRescue(context),
             icon: const Icon(Icons.stop_circle_outlined),
             label: Text(context.l10n.emergencyStopRescue),
           ),
+        if (controller.lastError != null) ...[
+          const SizedBox(height: 8),
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              controller.lastError!,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+        if (controller.emergencyDeliveries.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _EmergencyDeliveryPanel(controller: controller),
+        ],
         const SizedBox(height: 8),
         FilledButton.tonalIcon(
           onPressed: drillMode
@@ -91,7 +115,7 @@ class EmergencyScreen extends StatelessWidget {
           enabled: drillMode,
           canSend: controller.canSend,
           onEnable: () => _confirmEnableDrill(context),
-          onDisable: controller.deactivateDrill,
+          onDisable: () => _confirmDisableDrill(context),
           onSend: () => controller.sendDrillCheckIn(
             CheckInStatus.needsHelp,
             context.l10n.drillPracticeMessage,
@@ -116,6 +140,16 @@ class EmergencyScreen extends StatelessWidget {
           ),
           icon: const Icon(Icons.health_and_safety_outlined),
           label: Text(context.l10n.firstAidOpen),
+        ),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => EmergencyContactsScreen(preferences: preferences),
+            ),
+          ),
+          icon: const Icon(Icons.contact_phone_outlined),
+          label: Text(context.l10n.emergencyContactsOpen),
         ),
         const SizedBox(height: 12),
         FilledButton.tonalIcon(
@@ -221,6 +255,48 @@ class EmergencyScreen extends StatelessWidget {
     if (confirmed == true) await controller.activateDrill();
   }
 
+  Future<void> _confirmDisableDrill(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.drillDisableTitle),
+        content: Text(context.l10n.drillDisableBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.l10n.actionCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.l10n.drillDisableAction),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await controller.deactivateDrill();
+  }
+
+  Future<void> _confirmStopRescue(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.emergencyStopRescue),
+        content: Text(context.l10n.rescueRadarWarning),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.l10n.actionCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.l10n.emergencyStopRescue),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await controller.setRescueMode(false);
+  }
+
   Future<void> _activateRealEmergency(BuildContext context) async {
     if (controller.drillModeEnabled) {
       final confirmed = await showDialog<bool>(
@@ -272,6 +348,75 @@ class EmergencyScreen extends StatelessWidget {
       ),
       icon: const Icon(Icons.radar),
     );
+  }
+}
+
+class _EmergencyDeliveryPanel extends StatelessWidget {
+  const _EmergencyDeliveryPanel({required this.controller});
+
+  final MeshController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final deliveries = controller.emergencyDeliveries.take(5);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              context.l10n.emergencyDeliveryTitle,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            ...deliveries.map(
+              (delivery) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  delivery.state == EmergencyDeliveryState.acknowledged
+                      ? Icons.verified_outlined
+                      : delivery.state == EmergencyDeliveryState.expired
+                      ? Icons.timer_off_outlined
+                      : Icons.cell_tower_outlined,
+                ),
+                title: Text(_deliveryState(context, delivery.state)),
+                subtitle: Text(
+                  '${context.l10n.deliveryAttemptsLabel}: ${delivery.attempts}\n'
+                  '${context.l10n.deliveryConfirmationsLabel}: '
+                  '${delivery.confirmationCount}\n'
+                  '${context.l10n.deliveryLastAttemptLabel}: '
+                  '${delivery.lastAttemptAt == null ? '—' : _formatDateTime(context, delivery.lastAttemptAt!)}\n'
+                  '${context.l10n.deliveryExpiresLabel}: '
+                  '${_formatDateTime(context, delivery.expiresAt)}'
+                  '${delivery.state == EmergencyDeliveryState.relayed && delivery.confirmationCount == 0 ? '\n${context.l10n.deliveryNoHearthBitConfirmation}' : ''}',
+                ),
+                isThreeLine: true,
+                trailing:
+                    delivery.state == EmergencyDeliveryState.expired ||
+                        delivery.state == EmergencyDeliveryState.pending
+                    ? IconButton(
+                        tooltip: context.l10n.deliveryRetry,
+                        onPressed: () =>
+                            controller.retryEmergency(delivery.localId),
+                        icon: const Icon(Icons.refresh),
+                      )
+                    : null,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _deliveryState(BuildContext context, EmergencyDeliveryState state) {
+    return switch (state) {
+      EmergencyDeliveryState.pending => context.l10n.deliveryPending,
+      EmergencyDeliveryState.relayed => context.l10n.deliveryRelayed,
+      EmergencyDeliveryState.acknowledged => context.l10n.deliveryAcknowledged,
+      EmergencyDeliveryState.expired => context.l10n.deliveryExpired,
+    };
   }
 }
 
@@ -392,11 +537,13 @@ class _HoldSosButton extends StatefulWidget {
   const _HoldSosButton({
     required this.enabled,
     required this.active,
+    required this.holdDuration,
     required this.onActivated,
   });
 
   final bool enabled;
   final bool active;
+  final Duration holdDuration;
   final Future<void> Function() onActivated;
 
   @override
@@ -411,14 +558,13 @@ class _HoldSosButtonState extends State<_HoldSosButton>
   @override
   void initState() {
     super.initState();
-    _progress =
-        AnimationController(vsync: this, duration: const Duration(seconds: 2))
-          ..addStatusListener((status) {
-            if (status == AnimationStatus.completed && !_triggered) {
-              _triggered = true;
-              widget.onActivated();
-            }
-          });
+    _progress = AnimationController(vsync: this, duration: widget.holdDuration)
+      ..addStatusListener((status) {
+        if (status == AnimationStatus.completed && !_triggered) {
+          _triggered = true;
+          widget.onActivated();
+        }
+      });
   }
 
   @override
@@ -438,75 +584,90 @@ class _HoldSosButtonState extends State<_HoldSosButton>
     _progress.reverse();
   }
 
+  void _activateAccessible() {
+    if (!widget.enabled || widget.active || _triggered) return;
+    _triggered = true;
+    unawaited(widget.onActivated());
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final dimension = 210.0 + ((textScale - 1).clamp(0, 1) * 50);
     return Semantics(
       button: true,
       enabled: widget.enabled,
+      liveRegion: widget.active,
       label: widget.active
           ? context.l10n.emergencySosActive
           : context.l10n.emergencyHoldSos,
       onLongPress: _start,
-      child: Listener(
-        onPointerDown: (_) => _start(),
-        onPointerUp: (_) => _cancel(),
-        onPointerCancel: (_) => _cancel(),
-        child: AnimatedBuilder(
-          animation: _progress,
-          builder: (context, child) => SizedBox.square(
-            dimension: 210,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox.square(
-                  dimension: 210,
-                  child: CircularProgressIndicator(
-                    value: widget.active ? 1 : _progress.value,
-                    strokeWidth: 12,
-                    color: widget.active ? scheme.primary : scheme.error,
-                    backgroundColor: scheme.errorContainer,
-                  ),
-                ),
-                Material(
-                  color: widget.active ? scheme.primary : scheme.error,
-                  shape: const CircleBorder(),
-                  elevation: 6,
-                  child: SizedBox.square(
-                    dimension: 178,
-                    child: Center(
-                      child: widget.enabled
-                          ? Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  widget.active ? Icons.shield : Icons.sos,
-                                  size: 64,
-                                  color: widget.active
-                                      ? scheme.onPrimary
-                                      : scheme.onError,
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  widget.active
-                                      ? context.l10n.emergencySosActive
-                                      : context.l10n.emergencyHoldSos,
-                                  textAlign: TextAlign.center,
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(
-                                        color: widget.active
-                                            ? scheme.onPrimary
-                                            : scheme.onError,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                ),
-                              ],
-                            )
-                          : CircularProgressIndicator(color: scheme.onError),
+      onTap: widget.enabled && !widget.active ? _activateAccessible : null,
+      child: ExcludeSemantics(
+        child: Listener(
+          key: const Key('emergency-hold-button'),
+          onPointerDown: (_) => _start(),
+          onPointerUp: (_) => _cancel(),
+          onPointerCancel: (_) => _cancel(),
+          child: AnimatedBuilder(
+            animation: _progress,
+            builder: (context, child) => SizedBox.square(
+              dimension: dimension,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox.square(
+                    dimension: dimension,
+                    child: CircularProgressIndicator(
+                      value: widget.active ? 1 : _progress.value,
+                      strokeWidth: 12,
+                      color: widget.active ? scheme.primary : scheme.error,
+                      backgroundColor: scheme.errorContainer,
                     ),
                   ),
-                ),
-              ],
+                  Material(
+                    color: widget.active ? scheme.primary : scheme.error,
+                    shape: const CircleBorder(),
+                    elevation: 6,
+                    child: SizedBox.square(
+                      dimension: dimension - 32,
+                      child: Center(
+                        child: widget.enabled
+                            ? Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    widget.active ? Icons.shield : Icons.sos,
+                                    size: 64,
+                                    color: widget.active
+                                        ? scheme.onPrimary
+                                        : scheme.onError,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    widget.active
+                                        ? context.l10n.emergencySosActive
+                                        : context.l10n.emergencyHoldSos,
+                                    textAlign: TextAlign.center,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(
+                                          color: widget.active
+                                              ? scheme.onPrimary
+                                              : scheme.onError,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                  ),
+                                ],
+                              )
+                            : CircularProgressIndicator(color: scheme.onError),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -590,13 +751,11 @@ class _CheckInTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final (icon, color) = switch (checkIn.status) {
-      CheckInStatus.ok => (Icons.check_circle, Colors.green),
-      CheckInStatus.needsHelp => (Icons.front_hand, Colors.orange),
-      CheckInStatus.injured => (
-        Icons.medical_services,
-        Theme.of(context).colorScheme.error,
-      ),
+      CheckInStatus.ok => (Icons.check_circle, scheme.primary),
+      CheckInStatus.needsHelp => (Icons.front_hand, scheme.tertiary),
+      CheckInStatus.injured => (Icons.medical_services, scheme.error),
     };
     final coordinates = checkIn.latitude != null && checkIn.longitude != null
         ? '\nGPS ${checkIn.latitude!.toStringAsFixed(5)}, '

@@ -1,0 +1,163 @@
+{
+  "schemaVersion": 1,
+  "locale": "ja",
+  "reviewedAt": "2026-08-13",
+  "disclaimer": "表示された国でのみ使用してください。番号や利用条件は変更されることがあります。差し迫った危険では、現地当局とオペレーターの指示に従ってください。行政機関や赤十字の窓口は緊急出動の代わりではありません。",
+  "countries": [
+    {
+      "code": "INT", "name": "国際的な予備情報",
+      "callingNote": "世界共通の緊急番号はありません。112はEU全域、911は米国と一部の国の主要番号です。利用前に現地情報を確認してください。",
+      "numbers": [
+        {"id": "eu-112", "kind": "general", "label": "EU緊急番号", "number": "112", "note": "EU全域で無料。世界中での接続は保証されません。", "sourceIds": ["eu-112"]},
+        {"id": "us-911", "kind": "general", "label": "米国緊急番号", "number": "911", "note": "米国の主要番号。他国での利用可否は異なります。", "sourceIds": ["us-emergency"]}
+      ],
+      "organizations": [
+        {"id": "ifrc", "kind": "red-cross", "name": "国際赤十字・赤新月社連盟", "phone": null, "url": "https://www.ifrc.org/where-we-work", "note": "現在いる国の赤十字社または赤新月社を探せます。", "sourceIds": ["ifrc-directory"]},
+        {"id": "family-links", "kind": "missing-persons", "name": "家族の絆の回復", "phone": null, "url": "https://familylinks.icrc.org/", "note": "紛争、災害、移住により離れた家族向けの国際サービスです。", "sourceIds": ["icrc-family-links"]}
+      ]
+    },
+    {
+      "code": "CO", "name": "コロンビア",
+      "callingNote": "123は24時間無料の全国統一緊急番号です。実際の緊急時のみ使用してください。",
+      "numbers": [
+        {"id": "co-123", "kind": "general", "label": "全国緊急番号", "number": "123", "note": "警察、医療、消防などの第一選択です。", "sourceIds": ["co-123"]},
+        {"id": "co-112", "kind": "police", "label": "警察", "number": "112", "note": "全国短縮番号ですが地域により接続が異なります。123を優先してください。", "sourceIds": ["co-short-codes"]},
+        {"id": "co-119", "kind": "fire", "label": "消防", "number": "119", "note": "全国短縮番号ですが地域により接続が異なります。123を優先してください。", "sourceIds": ["co-short-codes"]},
+        {"id": "co-125", "kind": "medical", "label": "救急車", "number": "125", "note": "全国短縮番号ですが地域により接続が異なります。123を優先してください。", "sourceIds": ["co-short-codes"]},
+        {"id": "co-132", "kind": "general", "label": "コロンビア赤十字緊急番号", "number": "132", "note": "全国割当ですが地域で利用状況が異なります。即時出動は123へ。", "sourceIds": ["co-short-codes"]}
+      ],
+      "organizations": [
+        {"id": "ungrd", "kind": "disaster-management", "name": "Unidad Nacional para la Gestión del Riesgo de Desastres (UNGRD)", "phone": "018000113200", "url": "https://portal.gestiondelriesgo.gov.co/Paginas/Atencion-a-la-Ciudadania.aspx", "note": "平日の災害リスク情報と市民窓口。緊急出動は行いません。", "sourceIds": ["co-ungrd"]},
+        {"id": "crc", "kind": "red-cross", "name": "Cruz Roja Colombiana", "phone": "018005198534", "url": "https://cruzrojacolombiana.org/", "note": "人道支援と情報。差し迫った危険では先に123へ。", "sourceIds": ["co-red-cross"]},
+        {"id": "crc-family", "kind": "missing-persons", "name": "Cruz Roja Colombiana — Protección de Vínculos Familiares", "phone": "+573212139525", "url": "https://www.cruzrojacolombiana.org/cruz-roja-colombiana-despliega-equipo-humanitario-a-venezuela-y-activa-campana-de-recaudo-para-apoyar-a-las-comunidades-afectadas-por-los-sismos/", "note": "人道緊急時に家族との連絡を失った場合のWhatsApp窓口。", "sourceIds": ["co-red-cross-family"]},
+        {"id": "fiscalia-missing", "kind": "missing-persons", "name": "Fiscalía General de la Nación — Mecanismo de Búsqueda Urgente", "phone": "122", "url": "https://www.fiscalia.gov.co/colombia/servicios-de-informacion-al-ciudadano/centro-de-contacto/", "note": "待たずに直ちに届け出てください。固定電話は01 8000 919748。", "sourceIds": ["co-missing"]}
+      ]
+    },
+    {
+      "code": "US", "name": "米国",
+      "callingNote": "911は警察、消防、医療の即時対応用で、地域の指令センターにつながります。",
+      "numbers": [{"id": "us-911", "kind": "general", "label": "緊急サービス", "number": "911", "note": "差し迫った危険時の警察、消防、救急車。", "sourceIds": ["us-emergency"]}],
+      "organizations": [
+        {"id": "fema", "kind": "disaster-management", "name": "Federal Emergency Management Agency (FEMA)", "phone": "18006213362", "url": "https://www.usa.gov/agencies/federal-emergency-management-agency", "note": "災害援助と復旧情報。緊急出動窓口ではありません。", "sourceIds": ["us-fema"]},
+        {"id": "american-red-cross", "kind": "red-cross", "name": "American Red Cross", "phone": "18007332767", "url": "https://www.redcross.org/contact-us.html", "note": "災害援助、避難所情報、赤十字サービス。", "sourceIds": ["us-red-cross"]},
+        {"id": "us-family", "kind": "missing-persons", "name": "全米行方不明・身元不明者システム（NamUs）", "phone": null, "url": "https://www.nij.ojp.gov/namus", "note": "国の公式情報源です。まず911または地元警察へ届け出てください。NamUsには有効な警察届が必要です。", "sourceIds": ["us-family"]}
+      ]
+    },
+    {
+      "code": "MX", "name": "メキシコ",
+      "callingNote": "911は全国統一番号で、警察、医療、消防、市民保護、赤十字に取り次ぎます。",
+      "numbers": [{"id": "mx-911", "kind": "general", "label": "全国緊急番号", "number": "911", "note": "無料、24時間、実際の緊急時のみ。", "sourceIds": ["mx-911"]}],
+      "organizations": [
+        {"id": "cnpc", "kind": "disaster-management", "name": "Coordinación Nacional de Protección Civil", "phone": null, "url": "https://www.gob.mx/sspc/acciones-y-programas/coordinacion-nacional-de-proteccion-civil-357857", "note": "公式の市民保護情報。即時対応は911へ。", "sourceIds": ["mx-cnpc"]},
+        {"id": "crm", "kind": "red-cross", "name": "Cruz Roja Mexicana", "phone": "+525510849000", "url": "https://cruzrojamexicana.org.mx/contacto", "note": "本部の行政窓口で緊急出動はしません。911または地域支部へ。", "sourceIds": ["mx-red-cross"]},
+        {"id": "cnb", "kind": "missing-persons", "name": "Comisión Nacional de Búsqueda", "phone": "8000287783", "url": "https://comisionacionaldebusqueda.segob.gob.mx/reportar-desaparicion/", "note": "失踪は直ちに報告してください。公式回線は24時間対応です。", "sourceIds": ["mx-cnb"]}
+      ]
+    },
+    {
+      "code": "ES", "name": "スペイン",
+      "callingNote": "112は無料でスペイン全域のあらゆる緊急事態に対応します。技術的に可能な場合、ロック端末や無効SIMでも利用できます。",
+      "numbers": [
+        {"id": "es-112", "kind": "general", "label": "統一緊急番号", "number": "112", "note": "スペイン全域の警察、救急車、消防、救助。", "sourceIds": ["es-112"]},
+        {"id": "es-091", "kind": "police", "label": "国家警察", "number": "091", "note": "国家警察の緊急支援。", "sourceIds": ["es-missing"]},
+        {"id": "es-062", "kind": "police", "label": "治安警備隊", "number": "062", "note": "治安警備隊の緊急支援。", "sourceIds": ["es-missing"]}
+      ],
+      "organizations": [
+        {"id": "dgpce", "kind": "disaster-management", "name": "Dirección General de Protección Civil y Emergencias", "phone": "+34915373171", "url": "https://www.proteccioncivil.es/", "note": "行政・市民保護情報。緊急出動窓口ではありません。", "sourceIds": ["es-protection"]},
+        {"id": "cre", "kind": "red-cross", "name": "Cruz Roja Española", "phone": "900221122", "url": "https://www2.cruzroja.es/contacto", "note": "公表時間内の無料情報・支援。差し迫った危険では112へ。", "sourceIds": ["es-red-cross"]},
+        {"id": "cndes", "kind": "missing-persons", "name": "Centro Nacional de Desaparecidos (CNDES)", "phone": null, "url": "https://cndes-web.ses.mir.es/publico/Desaparecidos/Primeros-Pasos", "note": "091、062または窓口へ直ちに届け出てください。24時間待つ必要はありません。", "sourceIds": ["es-missing"]}
+      ]
+    },
+    {
+      "code": "DE", "name": "ドイツ",
+      "callingNote": "112は消防・救急、110は警察です。どちらも無料です。",
+      "numbers": [
+        {"id": "de-112", "kind": "medical", "label": "消防・救急", "number": "112", "note": "生命に関わる医療、火災、救助。", "sourceIds": ["de-emergency"]},
+        {"id": "de-110", "kind": "police", "label": "警察", "number": "110", "note": "警察の即時支援。", "sourceIds": ["de-emergency"]}
+      ],
+      "organizations": [
+        {"id": "bbk", "kind": "disaster-management", "name": "Bundesamt für Bevölkerungsschutz und Katastrophenhilfe (BBK)", "phone": null, "url": "https://www.bbk.bund.de/EN/Home/home_node.html", "note": "連邦の市民保護・災害準備情報。", "sourceIds": ["de-bbk"]},
+        {"id": "drk", "kind": "red-cross", "name": "Deutsches Rotes Kreuz (DRK)", "phone": null, "url": "https://www.drk.de/en/", "note": "ドイツ赤十字の人道サービス。差し迫った危険では112へ。", "sourceIds": ["de-drk"]},
+        {"id": "drk-tracing", "kind": "missing-persons", "name": "DRK-Suchdienst", "phone": "+493085404300", "url": "https://www.drk-suchdienst.de/wie-wir-helfen/suchen/internationale-suche/faqs-zur-internationalen-suche", "note": "紛争、移住、災害で離れた家族の捜索サービス。", "sourceIds": ["de-tracing"]}
+      ]
+    },
+    {
+      "code": "FR", "name": "フランス",
+      "callingNote": "112はあらゆる緊急事態を取り次ぎます。サービス別の国内番号もあります。",
+      "numbers": [
+        {"id": "fr-112", "kind": "general", "label": "欧州緊急番号", "number": "112", "note": "適切な緊急サービスへ取り次ぎます。", "sourceIds": ["fr-emergency"]},
+        {"id": "fr-15", "kind": "medical", "label": "SAMU医療救急", "number": "15", "note": "緊急医療支援。", "sourceIds": ["fr-emergency"]},
+        {"id": "fr-17", "kind": "police", "label": "警察", "number": "17", "note": "警察または憲兵隊の即時支援。", "sourceIds": ["fr-emergency"]},
+        {"id": "fr-18", "kind": "fire", "label": "消防・救助", "number": "18", "note": "消防と救助サービス。", "sourceIds": ["fr-emergency"]},
+        {"id": "fr-116000", "kind": "general", "label": "行方不明児童", "number": "116000", "note": "欧州ホットライン。差し迫った危険では17または112へ。", "sourceIds": ["fr-emergency"]}
+      ],
+      "organizations": [
+        {"id": "dgscgc", "kind": "disaster-management", "name": "Direction générale de la sécurité civile et de la gestion des crises", "phone": null, "url": "https://www.securite-civile.interieur.gouv.fr/", "note": "公式の市民保護情報。全国出動電話は公表されていません。", "sourceIds": ["fr-civil"]},
+        {"id": "crf", "kind": "red-cross", "name": "Croix-Rouge française", "phone": "+33144431300", "url": "https://www.croix-rouge.fr/annuaire", "note": "全国行政窓口で緊急出動はしません。危険時は112、15、17、18へ。", "sourceIds": ["fr-red-cross"]},
+        {"id": "fr-missing", "kind": "missing-persons", "name": "116 000 Enfants Disparus", "phone": "116000", "url": "https://www.116000enfantsdisparus.fr/", "note": "行方不明児童の家族向けの公認支援。", "sourceIds": ["fr-emergency"]}
+      ]
+    },
+    {
+      "code": "CN", "name": "中国",
+      "callingNote": "中国本土はサービス別番号を使用し、全国共通の911/112はありません。",
+      "numbers": [
+        {"id": "cn-110", "kind": "police", "label": "警察", "number": "110", "note": "犯罪、人身の危険、緊急の警察支援。", "sourceIds": ["cn-emergency"]},
+        {"id": "cn-119", "kind": "fire", "label": "消防・救助", "number": "119", "note": "火災と救助。", "sourceIds": ["cn-emergency"]},
+        {"id": "cn-120", "kind": "medical", "label": "医療救急", "number": "120", "note": "医療緊急事態と救急車。", "sourceIds": ["cn-emergency"]}
+      ],
+      "organizations": [
+        {"id": "mem", "kind": "disaster-management", "name": "中华人民共和国应急管理部（中国応急管理部）", "phone": null, "url": "https://www.mem.gov.cn/", "note": "国家の緊急管理情報。即時支援は上記番号へ。", "sourceIds": ["cn-mem"]},
+        {"id": "rccs", "kind": "red-cross", "name": "中国红十字会总会（中国紅十字会）", "phone": "+861084025890", "url": "https://www.redcross.org.cn/", "note": "平日の行政問い合わせ窓口で、緊急出動はしません。", "sourceIds": ["cn-red-cross"]}
+      ]
+    },
+    {
+      "code": "JP", "name": "日本",
+      "callingNote": "110は警察、119は消防・救急車で、日本全国から利用できます。",
+      "numbers": [
+        {"id": "jp-110", "kind": "police", "label": "警察", "number": "110", "note": "犯罪、交通事故、警察の即時支援。", "sourceIds": ["jp-emergency"]},
+        {"id": "jp-119", "kind": "medical", "label": "消防・救急車", "number": "119", "note": "火事か救急かを伝えてください。", "sourceIds": ["jp-emergency"]}
+      ],
+      "organizations": [
+        {"id": "cao", "kind": "disaster-management", "name": "内閣府 防災情報", "phone": "+81352532111", "url": "https://www.bousai.go.jp/index-e.html", "note": "国の防災情報と多言語資料。緊急出動窓口ではありません。", "sourceIds": ["jp-disaster"]},
+        {"id": "jrcs", "kind": "red-cross", "name": "日本赤十字社", "phone": "+81334381311", "url": "https://www.jrc.or.jp/english/", "note": "本社の一般窓口と人道情報。差し迫った危険では110または119へ。", "sourceIds": ["jp-red-cross"]},
+        {"id": "jp-family", "kind": "missing-persons", "name": "日本赤十字社 — 災害後の家族連絡", "phone": null, "url": "https://www.jrc.or.jp/english/relief/2024NotoPeninsulaEarthquake.html", "note": "都道府県や自治体の窓口を案内します。緊急の失踪は警察110へ。", "sourceIds": ["jp-family"]}
+      ]
+    }
+  ],
+  "sources": [
+    {"id": "eu-112", "title": "112 — EU緊急番号", "publisher": "欧州委員会", "url": "https://digital-strategy.ec.europa.eu/en/policies/112", "accessed": "2026-08-13"},
+    {"id": "us-emergency", "title": "911への通報", "publisher": "米国National 911 Program", "url": "https://www.911.gov/calling-911", "accessed": "2026-08-13"},
+    {"id": "ifrc-directory", "title": "活動地域", "publisher": "IFRC", "url": "https://www.ifrc.org/where-we-work", "accessed": "2026-08-13"},
+    {"id": "icrc-family-links", "title": "家族の絆の回復", "publisher": "ICRC", "url": "https://familylinks.icrc.org/", "accessed": "2026-08-13"},
+    {"id": "co-123", "title": "コロンビア全国緊急番号123", "publisher": "Función Pública de Colombia", "url": "https://www1.funcionpublica.gov.co/preguntas-frecuentes/-/asset_publisher/sqxafjubsrEu/content/linea-unica-de-emergencias-nacional-123/28585938", "accessed": "2026-08-13"},
+    {"id": "co-short-codes", "title": "全国1XYサービス番号", "publisher": "Comisión de Regulación de Comunicaciones", "url": "https://normograma.crcom.gov.co/crc/compilacion/docs/resolucion_crc_4901_2016.htm", "accessed": "2026-08-13"},
+    {"id": "co-ungrd", "title": "市民窓口", "publisher": "UNGRD", "url": "https://portal.gestiondelriesgo.gov.co/Paginas/Atencion-a-la-Ciudadania.aspx", "accessed": "2026-08-13"},
+    {"id": "co-red-cross", "title": "コロンビア赤十字", "publisher": "Cruz Roja Colombiana", "url": "https://cruzrojacolombiana.org/", "accessed": "2026-08-13"},
+    {"id": "co-red-cross-family", "title": "家族の絆の保護", "publisher": "Cruz Roja Colombiana", "url": "https://www.cruzrojacolombiana.org/cruz-roja-colombiana-despliega-equipo-humanitario-a-venezuela-y-activa-campana-de-recaudo-para-apoyar-a-las-comunidades-afectadas-por-los-sismos/", "accessed": "2026-08-13"},
+    {"id": "co-missing", "title": "連絡センター", "publisher": "Fiscalía General de la Nación", "url": "https://www.fiscalia.gov.co/colombia/servicios-de-informacion-al-ciudadano/centro-de-contacto/", "accessed": "2026-08-13"},
+    {"id": "us-fema", "title": "連邦緊急事態管理庁", "publisher": "USAGov", "url": "https://www.usa.gov/agencies/federal-emergency-management-agency", "accessed": "2026-08-13"},
+    {"id": "us-red-cross", "title": "連絡先", "publisher": "American Red Cross", "url": "https://www.redcross.org/contact-us.html", "accessed": "2026-08-13"},
+    {"id": "us-family", "title": "全米行方不明・身元不明者システム", "publisher": "米国国立司法研究所", "url": "https://www.nij.ojp.gov/namus", "accessed": "2026-08-13"},
+    {"id": "mx-911", "title": "911", "publisher": "メキシコ政府", "url": "https://www.gob.mx/911", "accessed": "2026-08-13"},
+    {"id": "mx-cnpc", "title": "国家市民保護調整機関", "publisher": "メキシコ政府", "url": "https://www.gob.mx/sspc/acciones-y-programas/coordinacion-nacional-de-proteccion-civil-357857", "accessed": "2026-08-13"},
+    {"id": "mx-red-cross", "title": "連絡先", "publisher": "Cruz Roja Mexicana", "url": "https://cruzrojamexicana.org.mx/contacto", "accessed": "2026-08-13"},
+    {"id": "mx-cnb", "title": "失踪届", "publisher": "Comisión Nacional de Búsqueda", "url": "https://comisionacionaldebusqueda.segob.gob.mx/reportar-desaparicion/", "accessed": "2026-08-13"},
+    {"id": "es-112", "title": "スペインの112サービス", "publisher": "スペイン政府", "url": "https://administracion.gob.es/pag_Home/Tu-espacio-europeo/derechos-obligaciones/ciudadanos/asistencia-sanitaria/numeros-urgencia", "accessed": "2026-08-13"},
+    {"id": "es-protection", "title": "市民保護・緊急事態総局", "publisher": "スペイン政府", "url": "https://administracion.gob.es/pagFront/espanaAdmon/directorioOrganigrama/fichaUnidadOrganica.htm?codigoUnidad=E00129002", "accessed": "2026-08-13"},
+    {"id": "es-red-cross", "title": "連絡先", "publisher": "Cruz Roja Española", "url": "https://www2.cruzroja.es/contacto", "accessed": "2026-08-13"},
+    {"id": "es-missing", "title": "行方不明時の最初の手順", "publisher": "スペイン内務省", "url": "https://cndes-web.ses.mir.es/publico/Desaparecidos/Primeros-Pasos", "accessed": "2026-08-13"},
+    {"id": "de-emergency", "title": "緊急番号", "publisher": "ドイツ連邦保健省", "url": "https://gesund.bund.de/en/notfallnummern", "accessed": "2026-08-13"},
+    {"id": "de-bbk", "title": "市民保護・災害援助庁", "publisher": "BBK", "url": "https://www.bbk.bund.de/EN/Home/home_node.html", "accessed": "2026-08-13"},
+    {"id": "de-drk", "title": "ドイツ赤十字", "publisher": "DRK", "url": "https://www.drk.de/en/", "accessed": "2026-08-13"},
+    {"id": "de-tracing", "title": "国際捜索サービス", "publisher": "DRK-Suchdienst", "url": "https://www.drk-suchdienst.de/wie-wir-helfen/suchen/internationale-suche/faqs-zur-internationalen-suche", "accessed": "2026-08-13"},
+    {"id": "fr-emergency", "title": "フランス緊急番号", "publisher": "Service-Public.fr", "url": "https://lannuaire.service-public.fr/", "accessed": "2026-08-13"},
+    {"id": "fr-civil", "title": "市民保護", "publisher": "フランス内務省", "url": "https://www.securite-civile.interieur.gouv.fr/", "accessed": "2026-08-13"},
+    {"id": "fr-red-cross", "title": "施設一覧", "publisher": "Croix-Rouge française", "url": "https://www.croix-rouge.fr/annuaire", "accessed": "2026-08-13"},
+    {"id": "cn-emergency", "title": "常用緊急番号", "publisher": "中国中央人民政府", "url": "https://www.gov.cn/ztzl/yjzn/content_562406.htm", "accessed": "2026-08-13"},
+    {"id": "cn-mem", "title": "応急管理部", "publisher": "中国政府", "url": "https://www.mem.gov.cn/", "accessed": "2026-08-13"},
+    {"id": "cn-red-cross", "title": "中国紅十字会", "publisher": "中国紅十字会", "url": "https://www.redcross.org.cn/", "accessed": "2026-08-13"},
+    {"id": "jp-emergency", "title": "緊急通報", "publisher": "出入国在留管理庁", "url": "https://www.moj.go.jp/isa/content/001453712.pdf", "accessed": "2026-08-13"},
+    {"id": "jp-disaster", "title": "防災情報", "publisher": "内閣府", "url": "https://www.bousai.go.jp/index-e.html", "accessed": "2026-08-13"},
+    {"id": "jp-red-cross", "title": "日本赤十字社", "publisher": "日本赤十字社", "url": "https://www.jrc.or.jp/english/about/glance/", "accessed": "2026-08-13"},
+    {"id": "jp-family", "title": "家族との連絡を失った方への情報", "publisher": "日本赤十字社", "url": "https://www.jrc.or.jp/english/relief/2024NotoPeninsulaEarthquake.html", "accessed": "2026-08-13"}
+  ]
+}

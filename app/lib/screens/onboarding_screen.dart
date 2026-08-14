@@ -23,6 +23,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final _nicknameController = TextEditingController();
   var _page = 0;
   var _busy = false;
+  var _prepared = false;
 
   @override
   void dispose() {
@@ -61,9 +62,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (nickname.isNotEmpty && nickname != widget.controller.nickname) {
       await widget.controller.updateNickname(nickname);
     }
-    await widget.controller.ensureAlwaysLocation();
-    if (!widget.controller.ignoringBatteryOptimizations) {
-      await widget.controller.requestDisableBatteryOptimizations();
+    if (!_prepared) {
+      await widget.controller.ensureAlwaysLocation();
+      if (!widget.controller.ignoringBatteryOptimizations) {
+        await widget.controller.requestDisableBatteryOptimizations();
+      }
+      if (!mounted) return;
+      setState(() {
+        _prepared = true;
+        _busy = false;
+      });
+      return;
     }
     await widget.onFinished();
   }
@@ -116,15 +125,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     icon: Icons.shield_outlined,
                     title: context.l10n.onboardingReadyTitle,
                     body: context.l10n.onboardingReadyBody,
-                    child: TextField(
-                      controller: _nicknameController,
-                      maxLength: 31,
-                      textInputAction: TextInputAction.done,
-                      decoration: InputDecoration(
-                        labelText: context.l10n.onboardingNicknameLabel,
-                        hintText: context.l10n.nicknameDialogHint,
-                        border: const OutlineInputBorder(),
-                      ),
+                    child: Column(
+                      children: [
+                        TextField(
+                          controller: _nicknameController,
+                          maxLength: 31,
+                          textInputAction: TextInputAction.done,
+                          decoration: InputDecoration(
+                            labelText: context.l10n.onboardingNicknameLabel,
+                            hintText: context.l10n.nicknameDialogHint,
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                        _PermissionChecklist(controller: widget.controller),
+                      ],
                     ),
                   ),
                 ],
@@ -163,7 +177,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       child: Text(switch (_page) {
                         0 => context.l10n.onboardingNext,
                         1 => context.l10n.onboardingAllowMesh,
-                        _ => context.l10n.onboardingFinish,
+                        _ =>
+                          _prepared
+                              ? context.l10n.onboardingFinish
+                              : context.l10n.onboardingAllowLocation,
                       }, textAlign: TextAlign.center),
                     ),
                   ),
@@ -184,6 +201,70 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _PermissionChecklist extends StatelessWidget {
+  const _PermissionChecklist({required this.controller});
+
+  final MeshController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _PermissionStatus(
+          granted: controller.canSend,
+          title: context.l10n.onboardingAllowMesh,
+          detail: controller.canSend
+              ? context.l10n.adaptivePowerNormal
+              : controller.lastError ?? context.l10n.errorPermissions,
+        ),
+        _PermissionStatus(
+          granted: controller.backgroundLocationGranted,
+          title: context.l10n.onboardingAllowLocation,
+          detail: controller.backgroundLocationGranted
+              ? context.l10n.powerLocationAndroid
+              : context.l10n.rescueModeNoBackgroundLocation,
+        ),
+        _PermissionStatus(
+          granted: controller.ignoringBatteryOptimizations,
+          title: context.l10n.powerBatteryOptimization,
+          detail: controller.ignoringBatteryOptimizations
+              ? context.l10n.adaptivePowerNormal
+              : context.l10n.powerSaverAndroid,
+        ),
+      ],
+    );
+  }
+}
+
+class _PermissionStatus extends StatelessWidget {
+  const _PermissionStatus({
+    required this.granted,
+    required this.title,
+    required this.detail,
+  });
+
+  final bool granted;
+  final String title;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      liveRegion: true,
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(
+          granted ? Icons.check_circle : Icons.info_outline,
+          color: granted ? scheme.primary : scheme.error,
+        ),
+        title: Text(title),
+        subtitle: Text(detail),
       ),
     );
   }

@@ -266,6 +266,20 @@ class AppLocalizationsFr extends AppLocalizations {
       'Les clés, l\'historique et les messages en attente seront supprimés. Cette action est irréversible.';
 
   @override
+  String get wipeDialogInstruction => 'Pour confirmer, saisissez BORRAR.';
+
+  @override
+  String get wipeDialogKeyword => 'Saisissez BORRAR';
+
+  @override
+  String get wipeDialogComplete =>
+      'L\'identité et les données sensibles ont été effacées.';
+
+  @override
+  String get wipeDialogError =>
+      'L\'effacement n\'a pas abouti. Réessayez avant de confier l\'appareil.';
+
+  @override
   String get actionWipe => 'TOUT EFFACER';
 
   @override
@@ -566,6 +580,16 @@ class AppLocalizationsFr extends AppLocalizations {
   String get shareInviteError => 'Impossible d\'ouvrir les options de partage';
 
   @override
+  String get diagnosticsExportButton => 'Exporter le diagnostic';
+
+  @override
+  String get diagnosticsExportSubject => 'Diagnostic HearthBit';
+
+  @override
+  String get diagnosticsExportError =>
+      'Impossible d\'exporter le rapport de diagnostic';
+
+  @override
   String get openLinkError => 'Impossible d\'ouvrir le lien';
 
   @override
@@ -776,6 +800,24 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String get radarActionRadio => 'Radio';
+
+  @override
+  String get radarActionSonar => 'Sonar';
+
+  @override
+  String get radarActionBeacon => 'Balise';
+
+  @override
+  String get radarActionDirection => 'Direction';
+
+  @override
+  String get radarActionSweeping => 'Balayage';
+
+  @override
+  String get radarActionWaiting => 'En attente';
+
+  @override
   String get radarRadioStart => 'Mesurer la distance par radio';
 
   @override
@@ -884,6 +926,40 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get emergencyStopRescue => 'Arrêter le mode secours';
+
+  @override
+  String get emergencyDeliveryTitle => 'État des alertes diffusées';
+
+  @override
+  String get deliveryPending => 'Diffusion en attente';
+
+  @override
+  String get deliveryRelayed => 'Diffusée sur le maillage';
+
+  @override
+  String get deliveryAcknowledged => 'Confirmée par HearthBit';
+
+  @override
+  String get deliveryExpired => 'Expirée sans confirmation';
+
+  @override
+  String get deliveryAttemptsLabel => 'Tentatives';
+
+  @override
+  String get deliveryConfirmationsLabel => 'Confirmations';
+
+  @override
+  String get deliveryLastAttemptLabel => 'Dernière tentative';
+
+  @override
+  String get deliveryExpiresLabel => 'Expire';
+
+  @override
+  String get deliveryNoHearthBitConfirmation =>
+      'Aucune confirmation d’un autre HearthBit ; un nœud BitChat a néanmoins pu la recevoir.';
+
+  @override
+  String get deliveryRetry => 'Réessayer l’alerte';
 
   @override
   String get errorEmergencyMeshUnavailable =>
@@ -1454,4 +1530,158 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get drillSendRealSos => 'TERMINER L’EXERCICE ET ENVOYER SOS';
+
+  @override
+  String get drillDisableTitle => 'Terminer le mode exercice ?';
+
+  @override
+  String get drillDisableBody =>
+      'Les messages d’exercice s’arrêteront et HearthBit reviendra au fonctionnement d’urgence réel.';
+
+  @override
+  String get drillDisableAction => 'TERMINER L’EXERCICE';
+
+  @override
+  String get mapNoLocationTitle => 'Aucune position disponible';
+
+  @override
+  String get mapNoLocationBody =>
+      'Activez la localisation ou attendez qu’un nœud partage une position de secours valide. La carte n’utilisera jamais (0,0) par défaut.';
+
+  @override
+  String get voiceMicrophoneRequired =>
+      'L’accès au microphone est requis pour enregistrer un message vocal.';
+
+  @override
+  String get actionOpenSettings => 'OUVRIR LES RÉGLAGES';
+
+  @override
+  String get opticalUnverifiedTitle => 'Origine non vérifiée';
+
+  @override
+  String get opticalUnverifiedBody =>
+      'HearthBit ne peut pas associer ce transfert à une identité déjà authentifiée. Comparez l’empreinte avec l’expéditeur avant d’accepter.';
+
+  @override
+  String get opticalLegacyWarning =>
+      'Cet expéditeur utilise l’ancien format optique non signé.';
+
+  @override
+  String opticalFingerprint(String fingerprint) {
+    return 'Empreinte : $fingerprint';
+  }
+
+  @override
+  String get opticalAcceptUnverified => 'ACCEPTER SANS VÉRIFICATION';
+
+  @override
+  String get opticalSignatureInvalid =>
+      'La signature du manifeste optique ne correspond pas à l’expéditeur connu. Le fichier a été refusé.';
+
+  @override
+  String get opticalVerifiedSource => 'Expéditeur vérifié';
+
+  @override
+  String get gatewayPrivacyConfirm =>
+      'Cette option envoie les messages d’urgence, les informations de l’expéditeur et toute position de secours incluse au service Internet configuré. Activez-la uniquement avec le consentement des personnes concernées.';
+
+  @override
+  String get gatewayEnableAction => 'ACTIVER LA PASSERELLE';
+
+  @override
+  String get gatewayTlsRequired =>
+      'Obligatoire pour les données d’urgence ; les connexions non sécurisées sont bloquées.';
+
+  @override
+  String get locationExportConfirmTitle =>
+      'Exporter les positions de secours ?';
+
+  @override
+  String get locationExportConfirmBody =>
+      'Le CSV peut contenir des positions précises et des détails d’urgence. Partagez-le uniquement avec des secouristes de confiance et protégez le fichier.';
+
+  @override
+  String get locationExportConfirmAction => 'EXPORTER LES POSITIONS';
+
+  @override
+  String get lanGatewayConnected => 'Relais LAN connecté';
+
+  @override
+  String get lanGatewaySearching => 'Relais LAN activé · recherche locale';
+
+  @override
+  String get lanGatewayDisabled => 'Relais LAN désactivé';
+
+  @override
+  String get lanGatewayConfigure => 'CONFIGURER LE RELAIS LAN';
+
+  @override
+  String get lanGatewayDisable => 'DÉSACTIVER LE RELAIS LAN';
+
+  @override
+  String get lanGatewayPrivacy =>
+      'Activation volontaire uniquement. La clé partagée doit correspondre à votre relais HearthBit Raspberry Pi de confiance. Les trames sont authentifiées et chiffrées sur le réseau local.';
+
+  @override
+  String get lanGatewayPsk => 'Clé d’appairage de 32 octets (base64)';
+
+  @override
+  String get lanGatewayGeneratePsk => 'GÉNÉRER UNE CLÉ';
+
+  @override
+  String get lanGatewayInvalidPsk =>
+      'Saisissez une clé base64 valide de 32 octets.';
+
+  @override
+  String get emergencyContactsOpen => 'Numéros et liens officiels d’urgence';
+
+  @override
+  String get emergencyContactsTitle => 'Annuaire d’urgence';
+
+  @override
+  String get emergencyContactsSafetyNotice =>
+      'Les numéros peuvent fonctionner sans données mobiles, mais nécessitent une couverture vocale. Les sites officiels nécessitent Internet.';
+
+  @override
+  String get emergencyContactsCountry => 'Pays ou territoire';
+
+  @override
+  String emergencyContactsAutomatic(String country) {
+    return 'Automatique ($country)';
+  }
+
+  @override
+  String get emergencyContactsNumbers => 'Numéros d’urgence';
+
+  @override
+  String get emergencyContactsOrganizations => 'Organismes officiels';
+
+  @override
+  String get emergencyContactsCall => 'APPELER';
+
+  @override
+  String get emergencyContactsWebsite => 'SITE WEB';
+
+  @override
+  String get emergencyContactsSources => 'Sources et vérification';
+
+  @override
+  String emergencyContactsReviewed(String date) {
+    return 'Vérifié le $date';
+  }
+
+  @override
+  String get emergencyContactsFallback =>
+      'Cette traduction n’était pas disponible ; l’annuaire anglais vérifié est affiché.';
+
+  @override
+  String get emergencyContactsLoadError =>
+      'Impossible de charger l’annuaire d’urgence hors ligne.';
+
+  @override
+  String get emergencyContactsOpenError =>
+      'Ce téléphone n’a pas pu ouvrir ce numéro ou ce lien.';
+
+  @override
+  String get emergencyContactsRetry => 'RÉESSAYER';
 }

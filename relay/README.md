@@ -1,39 +1,36 @@
-# HearthBit Relay para Linux
+# HearthBit Relay for Linux
 
-Relay BLE para Linux y Raspberry Pi que usa BlueZ por D-Bus y conserva el
-paquete binario HearthBit/BitChat v1/v2. Opera a la vez como periférico GATT
-(teléfonos y nodos se conectan al relay) y como central (el relay descubre
-otros dispositivos llamados `Bitle Relay`).
+[Español](README.es.md)
 
-## Funciones
+BLE relay for Linux and Raspberry Pi using BlueZ over D-Bus while preserving
+the HearthBit/BitChat v1/v2 binary packet. It operates both as a GATT
+peripheral, accepting phones and nodes, and as a central that discovers other
+devices exposing the compatible service.
 
-- Servicio y característica compatibles:
+## Features
+
+- Compatible service and characteristic:
   - `F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C`
   - `A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D`
-- Decodificación estricta v1/v2, rutas de origen, enteros big-endian y padding.
-- Relay con decremento de TTL sin modificar los bytes firmados.
-- Identidad persistente X25519/Ed25519, ANNOUNCE firmado y rol de infraestructura.
-- Deduplicación persistente mediante BLAKE2s sobre el paquete sin TTL ni
-  padding.
-- Store-and-forward acotado en SQLite, con expiración, límite de registros,
-  límite total de bytes y registro de entregas por enlace.
-- Gateway TCP Wi-Fi/LAN opt-in con PSK, AES-256-GCM, discovery mDNS
-  `_hearthbit._tcp.local` y anti-loop fuera del frame BitChat.
-- Bridge MQTT 5 opt-in para mensajes públicos firmados, con TLS obligatorio,
-  QoS 1, expiración, prueba ANNOUNCE y anti-loop. No transporta datos privados.
-- Bridge Matrix opt-in para mensajes públicos y SOS firmados, con rooms y
-  emisores explícitos, HTTPS, expiración, prueba ANNOUNCE y anti-loop. No hace
-  autojoin ni transporta privados.
-- Servicio systemd, contenedor y add-on local de Home Assistant.
+- Strict v1/v2 decoding, source routes, big-endian integers, and padding.
+- TTL-decrementing relay that does not modify signed bytes.
+- Persistent X25519/Ed25519 identity, signed ANNOUNCE, and infrastructure role.
+- Persistent BLAKE2s deduplication over packets without TTL or padding.
+- Bounded SQLite store-and-forward with expiry, quotas, and per-link delivery.
+- Opt-in Wi-Fi/LAN TCP gateway with PSK, AES-256-GCM, mDNS
+  `_hearthbit._tcp.local`, and loop prevention outside the BitChat frame.
+- Opt-in MQTT 5 and Matrix bridges for signed public messages; neither carries
+  private data.
+- systemd service, container, and local Home Assistant add-on.
 
-Las reglas de relay coinciden con el firmware ancla: no se reenvían paquetes
-con TTL menor o igual a uno, `REQUEST_SYNC` (`0x21`) ni handshakes Noise
-(`0x10`) sin destinatario.
+Relay rules match the anchor firmware: packets are not forwarded when TTL is
+one or less, nor are `REQUEST_SYNC` (`0x21`) or undirected Noise handshakes
+(`0x10`).
 
-## Instalación en Raspberry Pi OS/Debian
+## Raspberry Pi OS/Debian installation
 
-Requiere Python 3.11 o posterior, BlueZ y un adaptador que permita
-advertising BLE:
+Python 3.11 or later, BlueZ, and a BLE adapter that supports advertising are
+required:
 
 ```bash
 sudo apt update
@@ -49,93 +46,79 @@ sudo systemctl enable --now hearthbit-relay
 sudo journalctl -u hearthbit-relay -f
 ```
 
-El servicio se ejecuta como root para que la política del D-Bus de BlueZ
-permita registrar GATT y advertising. Su filesystem queda restringido por
-systemd y solo `/var/lib/hearthbit-relay` es escribible.
+The service runs as root so that the BlueZ D-Bus policy permits GATT and
+advertising registration. systemd restricts its filesystem; only
+`/var/lib/hearthbit-relay` is writable.
 
-Antes de desplegar, confirme:
+Check the adapter before deployment:
 
 ```bash
 bluetoothctl show hci0
 busctl tree org.bluez
 ```
 
-`Powered: yes` debe estar disponible. Algunos adaptadores USB baratos no
-soportan central y periférico simultáneamente.
+`Powered: yes` must be available. Some inexpensive USB adapters cannot operate
+as central and peripheral simultaneously.
 
-## Configuración
+## Configuration
 
-`config.example.json` contiene todos los campos. Los valores operativos más
-importantes son:
+`config.example.json` contains every field. The main operational values are:
 
-- `adapter`: adaptador BlueZ, normalmente `hci0`.
-- `local_name`: nombre BLE visible; el discovery usa el UUID de servicio y no
-  depende de que otros dispositivos tengan un nombre concreto.
-- `nickname`: nombre publicado dentro del ANNOUNCE firmado.
-- `identity_path`: archivo privado persistente de identidad; el relay fuerza
-  permisos `0600` y directorio `0700`.
-- `node_role`: `INFRA_RELAY` o `INFRA_DATA_ANCHOR`.
-- `announce_interval_seconds`: renovación periódica del ANNOUNCE y capacidad.
-- `central_enabled`: además de aceptar teléfonos, busca y conecta otros relays.
-- `max_central_links`: máximo de conexiones centrales (4 por defecto);
-  reduzca el valor si el adaptador o controlador BlueZ tiene menos recursos.
-- `max_packet_size`: límite previo a decodificar; 2048 cubre los tamaños
-  normalizados del protocolo.
-- `lan`: gateway local desactivado por defecto. Requiere `psk_base64` de al
-  menos 32 bytes cuando `enabled` es verdadero. El protocolo y la activación
-  móvil se documentan en `docs/lan-mesh-gateway.md`.
-- `mqtt`: bridge de comunidad desactivado por defecto. Las credenciales solo
-  se leen de variables de entorno o `secrets_file`; TLS no se puede
-  desactivar. La política, ACL y frontera de confianza están en
-  `docs/mqtt-bridge.md`.
-- `matrix`: bridge desactivado por defecto. El token solo se lee de entorno o
-  archivo privado; requiere HTTPS, IDs exactos de rooms y allowlist de
-  emisores. La frontera de confianza y moderación están en
-  `docs/matrix-bridge.md`.
-- `store.max_bytes` y `store.max_packets`: límites duros de disco.
-- `store.packet_ttl_seconds`: retención local máxima.
-- `store.require_signature`: exige que el flag de firma esté presente antes
-  de persistir.
-- `store.message_types`: tipos elegibles para persistencia. Por defecto guarda
-  mensajes públicos y CourierEnvelope. ANNOUNCE y capacidades `0x24/0x25`
-  nunca se persisten. El transporte Noise `0x11` no se guarda porque depende
-  de una sesión viva.
+- `adapter`: BlueZ adapter, usually `hci0`.
+- `local_name`: visible BLE name; discovery uses the service UUID.
+- `nickname`: name published in the signed ANNOUNCE.
+- `identity_path`: persistent private identity with forced `0600` file and
+  `0700` directory permissions.
+- `node_role`: `INFRA_RELAY` or `INFRA_DATA_ANCHOR`.
+- `announce_interval_seconds`: ANNOUNCE and capability refresh interval.
+- `central_enabled`: discovers and connects to relays in addition to accepting
+  phones.
+- `max_central_links`: maximum central connections.
+- `max_packet_size`: pre-decode input limit.
+- `lan`: local gateway, disabled by default; requires a `psk_base64` of at
+  least 32 bytes. See
+  [`../docs/lan-mesh-gateway.md`](../docs/lan-mesh-gateway.md).
+- `mqtt`: disabled bridge, secrets outside the configuration, mandatory TLS.
+  See [`../docs/mqtt-bridge.md`](../docs/mqtt-bridge.md).
+- `matrix`: disabled bridge requiring HTTPS and a sender allowlist. See
+  [`../docs/matrix-bridge.md`](../docs/matrix-bridge.md).
+- `store.max_bytes`, `store.max_packets`, and `store.packet_ttl_seconds`: hard
+  persistence limits.
+- `store.require_signature`: requires the signature flag before persistence.
+- `store.message_types`: eligible types. ANNOUNCE, capabilities, and Noise are
+  never persisted.
 
-La expiración TLV de un `CourierEnvelope` siempre reduce, nunca amplía, la
-retención configurada.
+A `CourierEnvelope` expiry TLV can only reduce, never extend, configured
+retention.
 
-## Contenedor
+## Container
 
-El contenedor usa el daemon BlueZ del host. No ejecute un segundo `bluetoothd`
-dentro del contenedor.
+The container uses the host BlueZ daemon. Do not run a second `bluetoothd`
+inside it.
 
 ```bash
 cd relay
 docker compose up -d --build
 ```
 
-`compose.yaml` monta el socket D-Bus del sistema y usa red del host. Revise
-`config.example.json` antes de iniciarlo. Montar el D-Bus del host concede al
-contenedor control sobre servicios del sistema; use solamente una imagen
-construida desde código revisado.
+`compose.yaml` mounts the system D-Bus socket and uses host networking.
+Mounting D-Bus grants control over host services; use only an image built from
+reviewed source.
 
-## Add-on local de Home Assistant
+## Local Home Assistant add-on
 
-El directorio `relay/` es también un add-on autocontenido:
+1. Copy `relay/` to `/addons/hearthbit_relay` on Home Assistant OS.
+2. In **Settings > Add-ons > Add-on store**, reload local add-ons.
+3. Install **HearthBit Relay**, review its options, and start it.
 
-1. Copie todo `relay/` a `/addons/hearthbit_relay` en Home Assistant OS.
-2. En **Ajustes > Add-ons > Tienda de add-ons**, recargue los add-ons locales.
-3. Instale **HearthBit Relay**, revise sus opciones e inícielo.
+The add-on uses `host_dbus` and host networking. It runs without AppArmor
+because BlueZ GATT and advertising registration require broad host access; use
+it only on dedicated or trusted hosts. The image supports `aarch64`, `amd64`,
+and `armv7`.
 
-El add-on usa `host_dbus` y red del host. Se declara sin AppArmor porque
-necesita registrar un servicio GATT y un anuncio en BlueZ; esto amplía el
-impacto de una vulnerabilidad y debe reservarse para hosts dedicados o de
-confianza. La base del contenedor es multi-arquitectura y cubre `aarch64`,
-`amd64` y `armv7`.
+## Development and tests
 
-## Desarrollo y pruebas
-
-Las pruebas no necesitan hardware Bluetooth:
+Automated tests do not require Bluetooth hardware:
 
 ```bash
 cd relay
@@ -145,32 +128,29 @@ python -m pip install -e ".[test]"
 pytest
 ```
 
-En Windows use `.venv\Scripts\activate` en lugar de `source`; la ejecución
-real del transporte requiere Linux porque BlueZ expone el D-Bus del sistema.
+On Windows use `.venv\Scripts\activate`. The real transport requires Linux and
+BlueZ.
 
-## Modelo de store-and-forward
+## Store-and-forward model
 
-El relay persiste únicamente bytes opacos y metadatos mínimos: fingerprint,
-tipo, sender ID, tiempos y entregas. Al aparecer un enlace nuevo reenvía un
-lote cronológico y registra la entrega. La cuota se aplica eliminando primero
-el paquete local más antiguo; las expiraciones se purgan antes.
+The relay persists opaque bytes and minimal metadata: fingerprint, type,
+sender ID, timestamps, and deliveries. When a new link appears, it forwards a
+chronological batch and records delivery. Quota enforcement purges expired
+packets first, then the oldest local packet.
 
-Esto proporciona transporte diferido, no convierte al proceso en un endpoint
-de chat. El relay no descifra payloads ni participa en Noise.
+This provides delayed transport. The relay does not decrypt payloads or
+participate in Noise.
 
-## Limitaciones de esta fase
+## Current limitations
 
-- Tiene identidad propia y valida criptográficamente ANNOUNCE, pero todavía no
-  participa como endpoint en handshakes Noise. `require_signature` comprueba
-  presencia y formato para los demás paquetes almacenables, no su autenticidad.
-- No calcula los tags HMAC diarios de Courier ni conoce cuándo está presente
-  el destinatario. Los sobres siguen cifrados y se difunden a enlaces futuros;
-  el receptor deduplica por ciphertext.
-- La API GATT de BlueZ emite una notificación a todos los centrales suscritos;
-  no permite seleccionar uno desde `StartNotify`. Los ecos se neutralizan con
-  deduplicación.
-- El tamaño efectivo de una escritura BLE depende del ATT MTU negociado. Los
-  clientes deben usar la fragmentación `0x20` para paquetes que no quepan.
-- Las pruebas automatizadas cubren protocolo, políticas, deduplicación,
-  cuotas y replay. El advertising, conexión dual-role y convivencia Wi-Fi/BLE
-  requieren validación física en cada modelo de adaptador.
+- It validates ANNOUNCE but is not a Noise handshake endpoint.
+  `require_signature` checks presence and format, not authenticity, for other
+  storable packets.
+- It does not calculate daily Courier HMAC tags or know recipient presence.
+  Envelopes remain encrypted and recipients deduplicate them.
+- BlueZ notifies every subscribed central; deduplication neutralizes echoes.
+- Effective write size depends on ATT MTU. Clients must use `0x20`
+  fragmentation when needed.
+- Automated tests cover protocol and policies. Advertising, dual-role
+  operation, and Wi-Fi/BLE coexistence require physical validation for each
+  adapter model.

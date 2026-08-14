@@ -255,6 +255,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get wipeDialogBody => '鍵、履歴、送信待ちメッセージが削除されます。この操作は元に戻せません。';
 
   @override
+  String get wipeDialogInstruction => '確認するには BORRAR と入力してください。';
+
+  @override
+  String get wipeDialogKeyword => 'BORRAR と入力';
+
+  @override
+  String get wipeDialogComplete => 'ID と機密データを消去しました。';
+
+  @override
+  String get wipeDialogError => '消去を完了できませんでした。端末を他人に渡す前にもう一度お試しください。';
+
+  @override
   String get actionWipe => 'すべて消去';
 
   @override
@@ -550,6 +562,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get shareInviteError => '共有オプションを開けませんでした';
 
   @override
+  String get diagnosticsExportButton => '診断情報をエクスポート';
+
+  @override
+  String get diagnosticsExportSubject => 'HearthBit 診断情報';
+
+  @override
+  String get diagnosticsExportError => '診断レポートをエクスポートできませんでした';
+
+  @override
   String get openLinkError => 'リンクを開けませんでした';
 
   @override
@@ -749,6 +770,24 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get radarActionRadio => '無線';
+
+  @override
+  String get radarActionSonar => 'ソナー';
+
+  @override
+  String get radarActionBeacon => 'ビーコン';
+
+  @override
+  String get radarActionDirection => '方向';
+
+  @override
+  String get radarActionSweeping => '探索中';
+
+  @override
+  String get radarActionWaiting => '待機中';
+
+  @override
   String get radarRadioStart => '無線で距離を測定';
 
   @override
@@ -854,6 +893,40 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get emergencyStopRescue => '救助モードを停止';
+
+  @override
+  String get emergencyDeliveryTitle => '送信した警報の状態';
+
+  @override
+  String get deliveryPending => '送信待ち';
+
+  @override
+  String get deliveryRelayed => 'メッシュへ送信済み';
+
+  @override
+  String get deliveryAcknowledged => 'HearthBit が確認';
+
+  @override
+  String get deliveryExpired => '確認なしで期限切れ';
+
+  @override
+  String get deliveryAttemptsLabel => '試行回数';
+
+  @override
+  String get deliveryConfirmationsLabel => '確認数';
+
+  @override
+  String get deliveryLastAttemptLabel => '最終試行';
+
+  @override
+  String get deliveryExpiresLabel => '期限';
+
+  @override
+  String get deliveryNoHearthBitConfirmation =>
+      '別の HearthBit からの確認はありませんが、BitChat ノードが受信した可能性はあります。';
+
+  @override
+  String get deliveryRetry => '警報を再送';
 
   @override
   String get errorEmergencyMeshUnavailable =>
@@ -1396,4 +1469,149 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get drillSendRealSos => '訓練を終了してSOSを送信';
+
+  @override
+  String get drillDisableTitle => '訓練モードを終了しますか？';
+
+  @override
+  String get drillDisableBody => '訓練メッセージを停止し、HearthBitを実際の緊急時の動作に戻します。';
+
+  @override
+  String get drillDisableAction => '訓練を終了';
+
+  @override
+  String get mapNoLocationTitle => '位置情報がありません';
+
+  @override
+  String get mapNoLocationBody =>
+      '位置情報を有効にするか、ノードが有効な救助位置を共有するまで待ってください。地図は(0,0)を代替位置として使用しません。';
+
+  @override
+  String get voiceMicrophoneRequired => '音声メモの録音にはマイクへのアクセスが必要です。';
+
+  @override
+  String get actionOpenSettings => '設定を開く';
+
+  @override
+  String get opticalUnverifiedTitle => '未確認の送信元';
+
+  @override
+  String get opticalUnverifiedBody =>
+      'この転送を以前に認証したIDと照合できません。受け入れる前に送信者とフィンガープリントを確認してください。';
+
+  @override
+  String get opticalLegacyWarning => 'この送信者は署名のない旧式の光学形式を使用しています。';
+
+  @override
+  String opticalFingerprint(String fingerprint) {
+    return 'フィンガープリント: $fingerprint';
+  }
+
+  @override
+  String get opticalAcceptUnverified => '未確認のまま受け入れる';
+
+  @override
+  String get opticalSignatureInvalid =>
+      '光学マニフェストの署名が既知の送信者と一致しません。ファイルを拒否しました。';
+
+  @override
+  String get opticalVerifiedSource => '確認済みの送信者';
+
+  @override
+  String get gatewayPrivacyConfirm =>
+      '緊急メッセージ、送信者情報、含まれる救助位置を設定したインターネットサービスへ送信します。関係者の同意がある場合のみ有効にしてください。';
+
+  @override
+  String get gatewayEnableAction => 'ゲートウェイを有効化';
+
+  @override
+  String get gatewayTlsRequired => '緊急データには必須です。安全でない接続は拒否されます。';
+
+  @override
+  String get locationExportConfirmTitle => '救助位置をエクスポートしますか？';
+
+  @override
+  String get locationExportConfirmBody =>
+      'CSVには正確な位置と緊急情報が含まれる場合があります。信頼できる救助者とのみ共有し、ファイルを保護してください。';
+
+  @override
+  String get locationExportConfirmAction => '位置をエクスポート';
+
+  @override
+  String get lanGatewayConnected => 'LANリレー接続済み';
+
+  @override
+  String get lanGatewaySearching => 'LANリレー有効・ローカル検索中';
+
+  @override
+  String get lanGatewayDisabled => 'LANリレー無効';
+
+  @override
+  String get lanGatewayConfigure => 'LANリレーを設定';
+
+  @override
+  String get lanGatewayDisable => 'LANリレーを無効化';
+
+  @override
+  String get lanGatewayPrivacy =>
+      '明示的に有効化した場合のみ動作します。共有鍵は信頼できるHearthBit Raspberry Piリレーと一致させてください。メッシュフレームはローカルネットワーク上で認証・暗号化されます。';
+
+  @override
+  String get lanGatewayPsk => '32バイトのペアリング鍵（base64）';
+
+  @override
+  String get lanGatewayGeneratePsk => '鍵を生成';
+
+  @override
+  String get lanGatewayInvalidPsk => '有効な32バイトのbase64鍵を入力してください。';
+
+  @override
+  String get emergencyContactsOpen => '緊急番号と公式リンク';
+
+  @override
+  String get emergencyContactsTitle => '緊急連絡先';
+
+  @override
+  String get emergencyContactsSafetyNotice =>
+      '緊急番号はモバイルデータなしでも利用できる場合がありますが、携帯電話の音声回線が必要です。公式サイトにはインターネットが必要です。';
+
+  @override
+  String get emergencyContactsCountry => '国または地域';
+
+  @override
+  String emergencyContactsAutomatic(String country) {
+    return '自動（$country）';
+  }
+
+  @override
+  String get emergencyContactsNumbers => '緊急電話番号';
+
+  @override
+  String get emergencyContactsOrganizations => '公式機関';
+
+  @override
+  String get emergencyContactsCall => '電話する';
+
+  @override
+  String get emergencyContactsWebsite => 'ウェブサイト';
+
+  @override
+  String get emergencyContactsSources => '情報源と確認';
+
+  @override
+  String emergencyContactsReviewed(String date) {
+    return '確認日：$date';
+  }
+
+  @override
+  String get emergencyContactsFallback => 'この翻訳を利用できないため、確認済みの英語版を表示しています。';
+
+  @override
+  String get emergencyContactsLoadError => 'オフライン緊急連絡先を読み込めませんでした。';
+
+  @override
+  String get emergencyContactsOpenError => 'この端末では番号またはリンクを開けませんでした。';
+
+  @override
+  String get emergencyContactsRetry => '再試行';
 }

@@ -4,6 +4,52 @@ import 'package:flutter/services.dart';
 
 import 'beacon_control_protocol.dart';
 
+class EmergencyTransmission {
+  const EmergencyTransmission({required this.messageId, this.canonicalHash});
+
+  final String messageId;
+  final String? canonicalHash;
+}
+
+class NativeRescueState {
+  const NativeRescueState({
+    required this.active,
+    this.description,
+    this.startedAt,
+    this.lastPingAt,
+    this.expiresAt,
+    this.expectedPings = 0,
+    this.executedPings = 0,
+  });
+
+  factory NativeRescueState.fromMap(Map<Object?, Object?>? map) {
+    DateTime? date(String key) {
+      final value = map?[key];
+      return value is int && value > 0
+          ? DateTime.fromMillisecondsSinceEpoch(value)
+          : null;
+    }
+
+    return NativeRescueState(
+      active: map?['active'] == true,
+      description: map?['description'] as String?,
+      startedAt: date('startedAt'),
+      lastPingAt: date('lastPingAt'),
+      expiresAt: date('expiresAt'),
+      expectedPings: (map?['expectedPings'] as num?)?.toInt() ?? 0,
+      executedPings: (map?['executedPings'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final bool active;
+  final String? description;
+  final DateTime? startedAt;
+  final DateTime? lastPingAt;
+  final DateTime? expiresAt;
+  final int expectedPings;
+  final int executedPings;
+}
+
 class MeshPlatformService {
   static const _methods = MethodChannel('com.hearthbit.mesh/methods');
   static const _events = EventChannel('com.hearthbit.mesh/events');
@@ -31,9 +77,58 @@ class MeshPlatformService {
     return await _methods.invokeMethod<bool>('requestPermissions') ?? false;
   }
 
+  /// Returns the current mobile-network country on Android when available.
+  /// iOS intentionally returns null because its carrier-country API is
+  /// deprecated; callers must fall back to the system region.
+  Future<String?> getSimCountry() async {
+    try {
+      final country = await _methods.invokeMethod<String>('getSimCountry');
+      final normalized = country?.trim().toUpperCase();
+      return normalized == null || normalized.isEmpty ? null : normalized;
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+  }
+
   Future<void> start() => _methods.invokeMethod<void>('startMesh');
 
   Future<void> stop() => _methods.invokeMethod<void>('stopMesh');
+
+  Future<NativeRescueState> configureRescueMode({
+    required bool active,
+    String? description,
+    DateTime? startedAt,
+    DateTime? lastPingAt,
+    DateTime? expiresAt,
+    Duration interval = const Duration(minutes: 2),
+  }) async {
+    try {
+      final result = await _methods
+          .invokeMapMethod<Object?, Object?>('configureRescueMode', {
+            'active': active,
+            'description': description,
+            'startedAt': startedAt?.millisecondsSinceEpoch,
+            'lastPingAt': lastPingAt?.millisecondsSinceEpoch,
+            'expiresAt': expiresAt?.millisecondsSinceEpoch,
+            'intervalMs': interval.inMilliseconds,
+          });
+      return NativeRescueState.fromMap(result);
+    } on MissingPluginException {
+      return NativeRescueState(active: active);
+    }
+  }
+
+  Future<NativeRescueState> getRescueModeState() async {
+    try {
+      return NativeRescueState.fromMap(
+        await _methods.invokeMapMethod<Object?, Object?>('getRescueModeState'),
+      );
+    } catch (_) {
+      return const NativeRescueState(active: false);
+    }
+  }
 
   /// Habilita el puente de frames completos para el cliente LAN opt-in.
   ///
@@ -115,6 +210,47 @@ class MeshPlatformService {
     }))!;
   }
 
+  Future<EmergencyTransmission> sendEmergency({
+    required String messageId,
+    required String content,
+    required String channel,
+  }) async {
+    try {
+      final result = await _methods.invokeMapMethod<Object?, Object?>(
+        'sendEmergency',
+        {'messageId': messageId, 'content': content, 'channel': channel},
+      );
+      final returnedId = result?['messageId'] as String? ?? messageId;
+      return EmergencyTransmission(
+        messageId: returnedId,
+        canonicalHash: (result?['canonicalHash'] as String?)?.toLowerCase(),
+      );
+    } on MissingPluginException {
+      return EmergencyTransmission(
+        messageId: await sendPublic(content, channel: channel),
+      );
+    } on PlatformException catch (error) {
+      if (error.code != 'not_implemented') rethrow;
+      return EmergencyTransmission(
+        messageId: await sendPublic(content, channel: channel),
+      );
+    }
+  }
+
+  Future<bool> retryEmergency(String canonicalHash) async {
+    try {
+      return await _methods.invokeMethod<bool>('retryEmergency', {
+            'canonicalHash': canonicalHash,
+          }) ??
+          false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException catch (error) {
+      if (error.code == 'not_implemented') return false;
+      rethrow;
+    }
+  }
+
   Future<void> setNickname(String nickname) {
     return _methods.invokeMethod<void>('setNickname', {'nickname': nickname});
   }
@@ -129,7 +265,10 @@ class MeshPlatformService {
         const [];
   }
 
-  Future<void> panicWipe() => _methods.invokeMethod<void>('panicWipe');
+  Future<Map<Object?, Object?>> panicWipe() async {
+    return await _methods.invokeMapMethod<Object?, Object?>('panicWipe') ??
+        const {};
+  }
 
   /// Estado de energía/ubicación del sistema:
   /// {ignoringBatteryOptimizations, lowPowerMode, backgroundLocation}.

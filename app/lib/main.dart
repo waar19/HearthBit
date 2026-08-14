@@ -1,18 +1,52 @@
+import 'dart:async';
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import 'controllers/mesh_controller.dart';
 import 'controllers/emergency_gateway_controller.dart';
 import 'controllers/family_controller.dart';
+import 'controllers/lan_gateway_controller.dart';
 import 'controllers/transfer_controller.dart';
 import 'l10n/l10n.dart';
 import 'screens/home_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'services/app_preferences.dart';
+import 'services/diagnostics_log.dart';
 import 'services/mesh_platform_service.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  runApp(const HearthBitApp());
+  runZonedGuarded(
+    () {
+      WidgetsFlutterBinding.ensureInitialized();
+      final diagnostics = DiagnosticsLog.instance;
+      FlutterError.onError = (details) {
+        FlutterError.presentError(details);
+        diagnostics.error(
+          'flutter.framework.uncaught',
+          error: details.exception,
+          stackTrace: details.stack,
+        );
+      };
+      PlatformDispatcher.instance.onError = (error, stackTrace) {
+        diagnostics.error(
+          'flutter.platform.uncaught',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        return true;
+      };
+      unawaited(diagnostics.initialize());
+      runApp(const HearthBitApp());
+    },
+    (error, stackTrace) {
+      DiagnosticsLog.instance.error(
+        'dart.zone.uncaught',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    },
+  );
 }
 
 TextTheme scaleDefinedTextTheme(TextTheme theme, double factor) {
@@ -102,6 +136,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
   late final AppPreferences _preferences;
   late final EmergencyGatewayController _gateway;
   late final FamilyController _family;
+  late final LanGatewayController _lanGateway;
   late final Future<void> _initialization;
 
   @override
@@ -116,18 +151,26 @@ class _HearthBitAppState extends State<HearthBitApp> {
       preferences: _preferences,
     );
     _family = FamilyController(mesh: _controller);
-    _initialization = Future.wait([
-      _controller.initialize(),
-      _transfers.initialize(),
-      _preferences.initialize(),
-      _gateway.initialize(),
-    ]).then((_) => _family.initialize());
+    _lanGateway = LanGatewayController();
+    _initialization = _initialize();
+  }
+
+  Future<void> _initialize() async {
+    // SQLCipher serializa parte de su arranque nativo. Abrir varias bases en
+    // paralelo puede dejar una conexión a medio cerrar tras un kill/reinicio.
+    await _preferences.initialize();
+    await _controller.initialize();
+    await _transfers.initialize();
+    await _gateway.initialize();
+    await _lanGateway.initialize();
+    await _family.initialize();
   }
 
   @override
   void dispose() {
     _gateway.dispose();
     _family.dispose();
+    _lanGateway.dispose();
     _transfers.dispose();
     _controller.dispose();
     _preferences.dispose();
@@ -137,7 +180,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge([_preferences, _controller]),
+      animation: Listenable.merge([_preferences, _controller, _lanGateway]),
       builder: (context, _) => MaterialApp(
         onGenerateTitle: (context) => context.l10n.appTitle,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -197,6 +240,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
               preferences: _preferences,
               gateway: _gateway,
               family: _family,
+              lanGateway: _lanGateway,
             );
           },
         ),

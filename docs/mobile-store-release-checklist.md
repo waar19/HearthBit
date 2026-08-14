@@ -24,6 +24,47 @@ publicado en ninguna tienda ni repositorio.
   source-available (PolyForm Noncommercial 1.0.0), no open source OSI.
 - [ ] Confirmar que ningún flujo instala aplicaciones automáticamente.
 
+## Firma Android
+
+El build local y el CI siguen pudiendo compilar sin secretos; si
+`app/android/key.properties` no existe, Gradle usa la clave de depuración y
+muestra una advertencia. Ese artefacto **no es publicable ni actualizable como
+release oficial**.
+
+1. Crear y custodiar un keystore fuera del repositorio, por ejemplo en Windows:
+
+   ```powershell
+   keytool -genkeypair -v -keystore C:\secure\hearthbit-upload.jks `
+     -alias hearthbit-upload -keyalg RSA -keysize 4096 -validity 10000
+   ```
+
+2. Copiar `app/android/key.properties.example` como
+   `app/android/key.properties`, usar rutas con `/` y completar sus cuatro
+   valores. El archivo real y los formatos `*.jks`/`*.keystore` están ignorados
+   por Git.
+3. Generar el AAB con `flutter build appbundle --release`.
+4. Verificar el certificado antes de subirlo:
+
+   ```powershell
+   jarsigner -verify -verbose -certs build\app\outputs\bundle\release\app-release.aab
+   ```
+
+   Si la versión instalada anteriormente usó otra firma, Android no permitirá
+   actualizarla: será necesaria una desinstalación o conservar la firma previa.
+
+El workflow `.github/workflows/release.yml` exige estos secretos protegidos y
+falla de forma explícita si falta cualquiera:
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_STORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+
+Un tag `v*` ejecuta pruebas, genera AAB y APK universal firmados, SBOM
+CycloneDX, `SHA256SUMS.txt` y un GitHub Release. Configure aprobación manual del
+environment de publicación y no exponga estos secretos a pull requests de
+forks.
+
 ## Google Play
 
 - [ ] Crear un Android App Bundle de release firmado con la clave de carga.

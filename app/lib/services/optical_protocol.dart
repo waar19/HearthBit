@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-/// Framing de los símbolos ópticos HearthBit (HBQ v1).
+/// Framing de los símbolos ópticos HearthBit (HBQ v1/v2).
 ///
 /// Cada QR contiene un símbolo en base64: o bien la cabecera (metadatos y
 /// parámetros del código fountain, repetida periódicamente para que el
@@ -9,16 +9,41 @@ import 'dart:typed_data';
 /// datos (índice + payload XOR). El `transferId` de 16 bytes coincide con el
 /// formato HBT para poder confirmar por el backchannel BLE.
 class OpticalProtocol {
-  static const int version = 1;
-  static const List<int> magic = [0x48, 0x42, 0x51, version]; // "HBQ" + v1
+  static const int legacyVersion = 1;
+  static const int version = 2;
+  static const List<int> magicPrefix = [0x48, 0x42, 0x51]; // "HBQ"
+  static const List<int> magic = [...magicPrefix, version];
   static const int typeHeader = 0x00;
   static const int typeData = 0x01;
   static const int transferIdLength = 16;
   static const int sha256Length = 32;
+  static const int signatureLength = 64;
 
   static String encodeHeader(OpticalHeader header) {
+    final signature = header.signature;
+    if (signature == null) return encodeLegacyHeader(header);
+    if (signature.length != signatureLength) {
+      throw ArgumentError.value(signature.length, 'signature');
+    }
+    return base64Encode(
+      Uint8List.fromList([...signingPayload(header), ...signature]),
+    );
+  }
+
+  static String encodeLegacyHeader(OpticalHeader header) {
+    return base64Encode(_headerBytes(header, protocolVersion: legacyVersion));
+  }
+
+  /// Bytes canónicos que firma Ed25519 en HBQ v2.
+  static Uint8List signingPayload(OpticalHeader header) =>
+      _headerBytes(header, protocolVersion: version);
+
+  static Uint8List _headerBytes(
+    OpticalHeader header, {
+    required int protocolVersion,
+  }) {
     final builder = BytesBuilder(copy: false)
-      ..add(magic)
+      ..add([...magicPrefix, protocolVersion])
       ..addByte(typeHeader)
       ..add(header.transferId)
       ..add(_u32(header.seed))
@@ -34,7 +59,7 @@ class OpticalProtocol {
     builder
       ..addByte(peer.length)
       ..add(peer);
-    return base64Encode(builder.takeBytes());
+    return builder.takeBytes();
   }
 
   static String encodeData({
@@ -61,8 +86,12 @@ class OpticalProtocol {
       return null;
     }
     if (bytes.length < magic.length + 1 + transferIdLength) return null;
-    for (var i = 0; i < magic.length; i++) {
-      if (bytes[i] != magic[i]) return null;
+    for (var i = 0; i < magicPrefix.length; i++) {
+      if (bytes[i] != magicPrefix[i]) return null;
+    }
+    final protocolVersion = bytes[magicPrefix.length];
+    if (protocolVersion != legacyVersion && protocolVersion != version) {
+      return null;
     }
     final type = bytes[magic.length];
     var offset = magic.length + 1;
@@ -74,8 +103,16 @@ class OpticalProtocol {
     offset += transferIdLength;
     switch (type) {
       case typeHeader:
-        return _decodeHeader(bytes, offset, transferId);
+        return _decodeHeader(
+          bytes,
+          offset,
+          transferId,
+          protocolVersion: protocolVersion,
+        );
       case typeData:
+        if (protocolVersion != version && protocolVersion != legacyVersion) {
+          return null;
+        }
         if (bytes.length < offset + 4 + 1) return null;
         final view = ByteData.sublistView(bytes);
         final symbolIndex = view.getUint32(offset);
@@ -93,8 +130,9 @@ class OpticalProtocol {
   static OpticalHeader? _decodeHeader(
     Uint8List bytes,
     int offset,
-    Uint8List transferId,
-  ) {
+    Uint8List transferId, {
+    required int protocolVersion,
+  }) {
     // seed(4) + fileSize(8) + chunkSize(2) + chunkCount(4) + sha(32) + len(1)
     if (bytes.length < offset + 4 + 8 + 2 + 4 + sha256Length + 2) return null;
     final view = ByteData.sublistView(bytes);
@@ -125,6 +163,16 @@ class OpticalProtocol {
       Uint8List.sublistView(bytes, offset, offset + peerLength),
       allowInvalid: true,
     );
+    offset += peerLength;
+    Uint8List? signature;
+    if (protocolVersion == version) {
+      if (bytes.length != offset + signatureLength) return null;
+      signature = Uint8List.fromList(
+        Uint8List.sublistView(bytes, offset, offset + signatureLength),
+      );
+    } else if (bytes.length != offset) {
+      return null;
+    }
     if (chunkSize == 0 || chunkCount == 0 || fileSize <= 0) return null;
     return OpticalHeader(
       transferId: Uint8List.fromList(transferId),
@@ -135,6 +183,8 @@ class OpticalProtocol {
       sha256: sha256,
       fileName: fileName,
       senderPeerId: senderPeerId,
+      protocolVersion: protocolVersion,
+      signature: signature,
     );
   }
 
@@ -166,6 +216,8 @@ class OpticalHeader {
     required this.sha256,
     required this.fileName,
     this.senderPeerId = '',
+    this.protocolVersion = OpticalProtocol.legacyVersion,
+    this.signature,
   });
 
   final Uint8List transferId;
@@ -178,6 +230,11 @@ class OpticalHeader {
 
   /// Peer ID de malla del emisor (hex); vacío si no ofrece backchannel BLE.
   final String senderPeerId;
+  final int protocolVersion;
+  final Uint8List? signature;
+
+  bool get isLegacy => protocolVersion == OpticalProtocol.legacyVersion;
+  bool get isSigned => signature?.length == OpticalProtocol.signatureLength;
 }
 
 class OpticalDataSymbol {

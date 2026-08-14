@@ -252,6 +252,150 @@ class RadarLocationUpdate {
   }
 }
 
+enum EmergencyDeliveryKind {
+  sos('sos'),
+  checkIn('checkIn');
+
+  const EmergencyDeliveryKind(this.wireName);
+
+  final String wireName;
+
+  static EmergencyDeliveryKind fromWire(Object? value) => value == 'checkIn'
+      ? EmergencyDeliveryKind.checkIn
+      : EmergencyDeliveryKind.sos;
+}
+
+enum EmergencyDeliveryState {
+  pending('pending'),
+  relayed('relayed'),
+  acknowledged('acknowledged'),
+  expired('expired');
+
+  const EmergencyDeliveryState(this.wireName);
+
+  final String wireName;
+
+  static EmergencyDeliveryState fromWire(Object? value) {
+    return switch (value) {
+      'relayed' => EmergencyDeliveryState.relayed,
+      'acknowledged' => EmergencyDeliveryState.acknowledged,
+      'expired' => EmergencyDeliveryState.expired,
+      _ => EmergencyDeliveryState.pending,
+    };
+  }
+}
+
+class EmergencyDelivery {
+  const EmergencyDelivery({
+    required this.localId,
+    required this.kind,
+    required this.content,
+    required this.createdAt,
+    required this.expiresAt,
+    required this.nextAttemptAt,
+    required this.state,
+    this.attempts = 0,
+    this.lastAttemptAt,
+    this.canonicalHash,
+    this.lastError,
+    this.acknowledgedBy = const {},
+  });
+
+  factory EmergencyDelivery.fromDatabase(
+    Map<String, Object?> row, {
+    Set<String> acknowledgedBy = const {},
+  }) {
+    DateTime? optionalDate(String key) {
+      final value = row[key] as int?;
+      return value == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(value, isUtc: true).toLocal();
+    }
+
+    return EmergencyDelivery(
+      localId: row['local_id']! as String,
+      kind: EmergencyDeliveryKind.fromWire(row['kind']),
+      content: row['content']! as String,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(
+        row['created_at']! as int,
+        isUtc: true,
+      ).toLocal(),
+      expiresAt: DateTime.fromMillisecondsSinceEpoch(
+        row['expires_at']! as int,
+        isUtc: true,
+      ).toLocal(),
+      nextAttemptAt: DateTime.fromMillisecondsSinceEpoch(
+        row['next_attempt_at']! as int,
+        isUtc: true,
+      ).toLocal(),
+      state: EmergencyDeliveryState.fromWire(row['state']),
+      attempts: row['attempts']! as int,
+      lastAttemptAt: optionalDate('last_attempt_at'),
+      canonicalHash: row['canonical_hash'] as String?,
+      lastError: row['last_error'] as String?,
+      acknowledgedBy: Set.unmodifiable(acknowledgedBy),
+    );
+  }
+
+  final String localId;
+  final EmergencyDeliveryKind kind;
+  final String content;
+  final DateTime createdAt;
+  final DateTime expiresAt;
+  final DateTime nextAttemptAt;
+  final EmergencyDeliveryState state;
+  final int attempts;
+  final DateTime? lastAttemptAt;
+  final String? canonicalHash;
+  final String? lastError;
+  final Set<String> acknowledgedBy;
+
+  int get confirmationCount => acknowledgedBy.length;
+  bool get isTerminal =>
+      state == EmergencyDeliveryState.acknowledged ||
+      state == EmergencyDeliveryState.expired;
+
+  Map<String, Object?> toDatabase() => {
+    'local_id': localId,
+    'kind': kind.wireName,
+    'content': content,
+    'created_at': createdAt.toUtc().millisecondsSinceEpoch,
+    'expires_at': expiresAt.toUtc().millisecondsSinceEpoch,
+    'next_attempt_at': nextAttemptAt.toUtc().millisecondsSinceEpoch,
+    'state': state.wireName,
+    'attempts': attempts,
+    'last_attempt_at': lastAttemptAt?.toUtc().millisecondsSinceEpoch,
+    'canonical_hash': canonicalHash,
+    'last_error': lastError,
+  };
+
+  EmergencyDelivery copyWith({
+    EmergencyDeliveryState? state,
+    int? attempts,
+    DateTime? nextAttemptAt,
+    DateTime? lastAttemptAt,
+    String? canonicalHash,
+    String? lastError,
+    Set<String>? acknowledgedBy,
+    bool clearLastError = false,
+  }) {
+    return EmergencyDelivery(
+      localId: localId,
+      kind: kind,
+      content: content,
+      createdAt: createdAt,
+      expiresAt: expiresAt,
+      nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
+      state: state ?? this.state,
+      attempts: attempts ?? this.attempts,
+      lastAttemptAt: lastAttemptAt ?? this.lastAttemptAt,
+      canonicalHash: canonicalHash ?? this.canonicalHash,
+      lastError: clearLastError ? null : lastError ?? this.lastError,
+      acknowledgedBy: acknowledgedBy ?? this.acknowledgedBy,
+    );
+  }
+}
+
 class MeshPeer {
   const MeshPeer({
     required this.id,
@@ -260,6 +404,7 @@ class MeshPeer {
     required this.secure,
     this.online = true,
     this.supportsTransfers = false,
+    this.supportsEmergencyAck = false,
     this.role = MeshNodeRole.phoneRelay,
     this.hasLongRangeTrunk = false,
     this.radarAllowedUntil,
@@ -276,6 +421,7 @@ class MeshPeer {
       secure: online && (map['secure'] as bool? ?? false),
       online: online,
       supportsTransfers: map['supportsTransfers'] as bool? ?? false,
+      supportsEmergencyAck: map['supportsEmergencyAck'] as bool? ?? false,
       role: MeshNodeRole.fromWire(map['role']),
       hasLongRangeTrunk: map['hasLongRangeTrunk'] as bool? ?? false,
       radarAllowedUntil: switch (map['radarAllowedUntil']) {
@@ -301,6 +447,7 @@ class MeshPeer {
   final bool secure;
   final bool online;
   final bool supportsTransfers;
+  final bool supportsEmergencyAck;
   final MeshNodeRole role;
   final bool hasLongRangeTrunk;
   final DateTime? radarAllowedUntil;
@@ -367,7 +514,7 @@ class GenericBlePresence {
 bool canOfferFileToPeer(MeshPeer peer, {required bool isOnline}) =>
     isOnline && peer.supportsTransfers;
 
-enum MeshMessageDeliveryStatus { sent, pending }
+enum MeshMessageDeliveryStatus { transmitted, pending, expired }
 
 class MeshMessage {
   const MeshMessage({
@@ -379,7 +526,7 @@ class MeshMessage {
     required this.isMine,
     required this.timestamp,
     this.channel,
-    this.deliveryStatus = MeshMessageDeliveryStatus.sent,
+    this.deliveryStatus = MeshMessageDeliveryStatus.transmitted,
   });
 
   factory MeshMessage.fromMap(Map<Object?, Object?> map) {
@@ -431,6 +578,8 @@ class MeshMessage {
       !isDrill && (channel == 'sos' || content.startsWith('SOS|'));
 
   bool get isPending => deliveryStatus == MeshMessageDeliveryStatus.pending;
+
+  bool get isExpired => deliveryStatus == MeshMessageDeliveryStatus.expired;
 
   bool get isCheckIn =>
       !isDrill &&

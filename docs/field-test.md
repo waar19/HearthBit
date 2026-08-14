@@ -3,6 +3,40 @@
 La radio BLE no se valida con emuladores. Use teléfonos físicos y desactive
 Wi-Fi y datos móviles durante la prueba.
 
+## Gates P0 de publicación
+
+Estos casos bloquean la declaración «lista para emergencias reales». Su estado
+inicial es `PENDING`; solo una ejecución física con evidencia saneada puede
+cambiarlo a `PASS`, `FAIL` o `BLOCKED`.
+
+- `P0-SOS-NO-AUDIENCE`: enviar SOS sin pares, reiniciar la app y comprobar que
+  el outbox conserva, reintenta y vence sin afirmar entrega.
+- `P0-SOS-ACK`: confirmar estados pendiente, emitido, ACK único, ACK duplicado
+  y receptor BitChat sin capacidad ACK.
+- `P0-STORE-REBOOT`: receptor fuera de línea, relay intermedio reiniciado y
+  entrega posterior exactamente una vez.
+- `P0-RESCUE-KILL-DOZE`: cerrar proceso, bloquear pantalla y entrar en Doze;
+  verificar pings nativos esperados/ejecutados y GPS fresco durante el TTL.
+- `P0-PRIVATE-NOISE`: privado HearthBit↔HearthBit y HearthBit↔BitChat,
+  desconexión, rekey y drenaje del outbox sin duplicados.
+- `P0-FOUR-NODE-TWO-HOP`: cuatro nodos, extremos sin enlace directo, controles
+  negativos con relays apagados y entrega en ambos sentidos.
+- `P0-LAN-PI`: móvil↔mDNS↔relay Raspberry Pi con PSK correcta, rechazo con PSK
+  incorrecta, reconexión y ausencia de bucles.
+- `P0-RADAR-10M`: sesión de diez minutos con acercamiento, alejamiento,
+  calibración, pérdida de señal y texto al 200 % sin colapso de layout.
+- `P0-BATTERY-24H`: malla activa 24 horas en Android e iOS, registrando batería,
+  memoria, duty-cycle BLE y estabilidad sin contenido ni identificadores.
+- `P0-PANIC-WIPE`: borrar sin matar el proceso y verificar identidad nueva,
+  bases, colas, grupos, claves, gateways y diagnósticos vacíos.
+- `P0-OPTICAL-TRUST`: firma válida conocida, firma alterada rechazada, emisor
+  desconocido con confirmación de huella y formato legado advertido.
+
+Para cada caso registre commit, versión, alias de equipos, sistema operativo,
+inicio/fin UTC, resultado, primer criterio incumplido y hashes SHA-256 de la
+evidencia. No agregue coordenadas, seriales, MAC, peer IDs, claves ni mensajes
+reales.
+
 ## Matriz mínima
 
 1. Instale HearthBit en dos Android.

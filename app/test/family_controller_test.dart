@@ -37,6 +37,15 @@ class _Messages extends MessageRepository {
       const [];
 
   @override
+  Future<void> expirePrivateMessageOutbox(DateTime now) async {}
+
+  @override
+  Future<List<EmergencyDelivery>> loadEmergencyDeliveries() async => const [];
+
+  @override
+  Future<void> expireEmergencyDeliveries(DateTime now) async {}
+
+  @override
   Future<void> save(MeshMessage message) async {}
 
   @override

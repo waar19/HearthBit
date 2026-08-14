@@ -247,6 +247,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get wipeDialogBody => '将删除密钥、历史记录和待发送的消息。此操作无法撤销。';
 
   @override
+  String get wipeDialogInstruction => '输入 BORRAR 以确认。';
+
+  @override
+  String get wipeDialogKeyword => '输入 BORRAR';
+
+  @override
+  String get wipeDialogComplete => '身份信息和敏感数据已抹除。';
+
+  @override
+  String get wipeDialogError => '抹除未完成。将设备交给他人前请重试。';
+
+  @override
   String get actionWipe => '全部抹除';
 
   @override
@@ -538,6 +550,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shareInviteError => '无法打开分享选项';
 
   @override
+  String get diagnosticsExportButton => '导出诊断信息';
+
+  @override
+  String get diagnosticsExportSubject => 'HearthBit 诊断信息';
+
+  @override
+  String get diagnosticsExportError => '无法导出诊断报告';
+
+  @override
   String get openLinkError => '无法打开链接';
 
   @override
@@ -734,6 +755,24 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get radarActionRadio => '无线';
+
+  @override
+  String get radarActionSonar => '声纳';
+
+  @override
+  String get radarActionBeacon => '信标';
+
+  @override
+  String get radarActionDirection => '方向';
+
+  @override
+  String get radarActionSweeping => '扫描中';
+
+  @override
+  String get radarActionWaiting => '等待中';
+
+  @override
   String get radarRadioStart => '通过无线电测距';
 
   @override
@@ -835,6 +874,40 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get emergencyStopRescue => '停止救援模式';
+
+  @override
+  String get emergencyDeliveryTitle => '已广播警报状态';
+
+  @override
+  String get deliveryPending => '等待广播';
+
+  @override
+  String get deliveryRelayed => '已广播到网状网络';
+
+  @override
+  String get deliveryAcknowledged => '已由 HearthBit 确认';
+
+  @override
+  String get deliveryExpired => '未确认且已过期';
+
+  @override
+  String get deliveryAttemptsLabel => '尝试次数';
+
+  @override
+  String get deliveryConfirmationsLabel => '确认数';
+
+  @override
+  String get deliveryLastAttemptLabel => '上次尝试';
+
+  @override
+  String get deliveryExpiresLabel => '过期时间';
+
+  @override
+  String get deliveryNoHearthBitConfirmation =>
+      '尚无其他 HearthBit 确认；BitChat 节点仍可能已收到。';
+
+  @override
+  String get deliveryRetry => '重试警报';
 
   @override
   String get errorEmergencyMeshUnavailable => '无法启动蓝牙网状网络。请检查权限后重试。';
@@ -1370,4 +1443,147 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get drillSendRealSos => '结束演练并发送 SOS';
+
+  @override
+  String get drillDisableTitle => '结束演练模式？';
+
+  @override
+  String get drillDisableBody => '演练消息将停止，HearthBit 将恢复真实紧急情况的运行方式。';
+
+  @override
+  String get drillDisableAction => '结束演练';
+
+  @override
+  String get mapNoLocationTitle => '没有可用位置';
+
+  @override
+  String get mapNoLocationBody => '请开启定位，或等待节点共享有效的救援位置。地图绝不会使用 (0,0) 作为后备位置。';
+
+  @override
+  String get voiceMicrophoneRequired => '录制语音消息需要麦克风权限。';
+
+  @override
+  String get actionOpenSettings => '打开设置';
+
+  @override
+  String get opticalUnverifiedTitle => '来源未验证';
+
+  @override
+  String get opticalUnverifiedBody =>
+      'HearthBit 无法将此传输与先前验证的身份匹配。接受文件前，请与发送者核对指纹。';
+
+  @override
+  String get opticalLegacyWarning => '此发送者使用未签名的旧版光学格式。';
+
+  @override
+  String opticalFingerprint(String fingerprint) {
+    return '指纹：$fingerprint';
+  }
+
+  @override
+  String get opticalAcceptUnverified => '接受未验证文件';
+
+  @override
+  String get opticalSignatureInvalid => '光学清单签名与已知发送者不匹配。文件已被拒绝。';
+
+  @override
+  String get opticalVerifiedSource => '发送者已验证';
+
+  @override
+  String get gatewayPrivacyConfirm =>
+      '这会将紧急消息、发送者信息以及其中包含的救援位置发送到配置的互联网服务。仅在相关人员同意后启用。';
+
+  @override
+  String get gatewayEnableAction => '启用网关';
+
+  @override
+  String get gatewayTlsRequired => '紧急数据必须使用；不安全连接将被阻止。';
+
+  @override
+  String get locationExportConfirmTitle => '导出救援位置？';
+
+  @override
+  String get locationExportConfirmBody =>
+      'CSV 可能包含精确位置和紧急详情。仅与可信救援人员共享并妥善保护文件。';
+
+  @override
+  String get locationExportConfirmAction => '导出位置';
+
+  @override
+  String get lanGatewayConnected => 'LAN 中继已连接';
+
+  @override
+  String get lanGatewaySearching => 'LAN 中继已启用 · 正在本地搜索';
+
+  @override
+  String get lanGatewayDisabled => 'LAN 中继已禁用';
+
+  @override
+  String get lanGatewayConfigure => '配置 LAN 中继';
+
+  @override
+  String get lanGatewayDisable => '禁用 LAN 中继';
+
+  @override
+  String get lanGatewayPrivacy =>
+      '仅在主动选择后启用。共享密钥必须与可信的 HearthBit Raspberry Pi 中继一致。网状帧会在本地网络上进行认证和加密。';
+
+  @override
+  String get lanGatewayPsk => '32 字节配对密钥（base64）';
+
+  @override
+  String get lanGatewayGeneratePsk => '生成密钥';
+
+  @override
+  String get lanGatewayInvalidPsk => '请输入有效的 32 字节 base64 密钥。';
+
+  @override
+  String get emergencyContactsOpen => '紧急电话号码与官方链接';
+
+  @override
+  String get emergencyContactsTitle => '紧急联系目录';
+
+  @override
+  String get emergencyContactsSafetyNotice =>
+      '紧急电话可能无需移动数据，但仍需蜂窝语音信号。官方网站需要互联网。';
+
+  @override
+  String get emergencyContactsCountry => '国家或地区';
+
+  @override
+  String emergencyContactsAutomatic(String country) {
+    return '自动（$country）';
+  }
+
+  @override
+  String get emergencyContactsNumbers => '紧急电话号码';
+
+  @override
+  String get emergencyContactsOrganizations => '官方机构';
+
+  @override
+  String get emergencyContactsCall => '拨打';
+
+  @override
+  String get emergencyContactsWebsite => '网站';
+
+  @override
+  String get emergencyContactsSources => '来源与审核';
+
+  @override
+  String emergencyContactsReviewed(String date) {
+    return '审核日期：$date';
+  }
+
+  @override
+  String get emergencyContactsFallback => '此翻译不可用，现显示已验证的英文目录。';
+
+  @override
+  String get emergencyContactsLoadError => '无法加载离线紧急联系目录。';
+
+  @override
+  String get emergencyContactsOpenError => '此手机无法打开该号码或链接。';
+
+  @override
+  String get emergencyContactsRetry => '重试';
 }

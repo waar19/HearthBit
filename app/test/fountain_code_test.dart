@@ -103,6 +103,47 @@ void main() {
       expect(result.sha256, header.sha256);
       expect(result.fileName, header.fileName);
       expect(result.senderPeerId, header.senderPeerId);
+      expect(result.isLegacy, isTrue);
+      expect(result.signature, isNull);
+    });
+
+    test('v2 conserva firma y bytes canónicos separados', () {
+      final unsigned = OpticalHeader(
+        transferId: Uint8List.fromList(List.generate(16, (i) => i)),
+        seed: 42,
+        fileSize: 900,
+        chunkSize: 200,
+        chunkCount: 5,
+        sha256: Uint8List.fromList(List.filled(32, 4)),
+        fileName: 'reporte.txt',
+        senderPeerId: '0011223344556677',
+        protocolVersion: OpticalProtocol.version,
+      );
+      final signature = Uint8List.fromList(List.generate(64, (i) => i));
+      final signed = OpticalHeader(
+        transferId: unsigned.transferId,
+        seed: unsigned.seed,
+        fileSize: unsigned.fileSize,
+        chunkSize: unsigned.chunkSize,
+        chunkCount: unsigned.chunkCount,
+        sha256: unsigned.sha256,
+        fileName: unsigned.fileName,
+        senderPeerId: unsigned.senderPeerId,
+        protocolVersion: OpticalProtocol.version,
+        signature: signature,
+      );
+
+      final decoded =
+          OpticalProtocol.decode(OpticalProtocol.encodeHeader(signed))
+              as OpticalHeader;
+
+      expect(decoded.isLegacy, isFalse);
+      expect(decoded.isSigned, isTrue);
+      expect(decoded.signature, signature);
+      expect(
+        OpticalProtocol.signingPayload(decoded),
+        OpticalProtocol.signingPayload(unsigned),
+      );
     });
 
     test('el símbolo de datos sobrevive al viaje de ida y vuelta', () {

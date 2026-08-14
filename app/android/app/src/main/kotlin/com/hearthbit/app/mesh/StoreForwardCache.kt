@@ -2,18 +2,44 @@ package com.hearthbit.app.mesh
 
 import android.content.Context
 import android.util.Base64
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 
 internal class StoreForwardCache(context: Context) {
-    private val preferences = context.getSharedPreferences(
-        "hearthbit_store_forward",
+    private val legacyPreferences = context.getSharedPreferences(
+        LEGACY_PREFERENCES,
         Context.MODE_PRIVATE,
     )
+    private val preferences = EncryptedSharedPreferences.create(
+        context,
+        ENCRYPTED_PREFERENCES,
+        MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build(),
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+    )
+
+    init {
+        val legacyEntries = legacyPreferences.getStringSet(KEY_ENTRIES, emptySet()).orEmpty()
+        if (legacyEntries.isNotEmpty() &&
+            preferences.getStringSet(KEY_ENTRIES, emptySet()).isNullOrEmpty()
+        ) {
+            preferences.edit().putStringSet(KEY_ENTRIES, legacyEntries).commit()
+        }
+        legacyPreferences.edit().clear().commit()
+    }
 
     @Synchronized
     fun put(packet: MeshProtocol.Packet) {
         if (!isReplaySafe(packet)) return
-        val recipient = packet.recipientId ?: return
-        if (recipient.contentEquals(MeshProtocol.broadcastRecipient)) return
+        val emergency = MeshProtocol.isEmergencyPublicPacket(packet)
+        val recipient = packet.recipientId
+        if (!emergency &&
+            (recipient == null || recipient.contentEquals(MeshProtocol.broadcastRecipient))
+        ) {
+            return
+        }
         val now = System.currentTimeMillis()
         val entries = readValid(now).toMutableList()
         val encoded = Base64.encodeToString(
@@ -21,9 +47,17 @@ internal class StoreForwardCache(context: Context) {
             Base64.NO_WRAP,
         )
         if (entries.none { it.encoded == encoded }) {
-            entries += Entry(now + LIFETIME_MS, encoded)
+            entries += Entry(
+                now + if (emergency) EMERGENCY_LIFETIME_MS else LIFETIME_MS,
+                encoded,
+            )
         }
-        write(entries.takeLast(MAX_ENTRIES))
+        write(
+            entries.sortedWith(
+                compareBy<Entry> { entry -> isEmergency(entry) }
+                    .thenBy(Entry::expiry),
+            ).takeLast(MAX_ENTRIES),
+        )
     }
 
     @Synchronized
@@ -60,8 +94,24 @@ internal class StoreForwardCache(context: Context) {
             .toSet()
     }
 
+    @Synchronized
+    fun emergencyBroadcasts(now: Long = System.currentTimeMillis()): List<MeshProtocol.Packet> =
+        readValid(now).mapNotNull(::decode).filter(MeshProtocol::isEmergencyPublicPacket)
+
+    @Synchronized
+    fun emergencyByHash(canonicalHash: String): MeshProtocol.Packet? {
+        val normalized = canonicalHash.lowercase()
+        return emergencyBroadcasts().firstOrNull {
+            MeshProtocol.hex(MeshProtocol.emergencyCanonicalHash(it)) == normalized
+        }
+    }
+
+    @Synchronized
+    fun entryCount(now: Long = System.currentTimeMillis()): Int = readValid(now).size
+
     fun clear() {
-        preferences.edit().clear().apply()
+        preferences.edit().clear().commit()
+        legacyPreferences.edit().clear().commit()
     }
 
     private fun readValid(now: Long): List<Entry> = preferences
@@ -85,14 +135,25 @@ internal class StoreForwardCache(context: Context) {
 
     private data class Entry(val expiry: Long, val encoded: String)
 
+    private fun decode(entry: Entry): MeshProtocol.Packet? =
+        runCatching { Base64.decode(entry.encoded, Base64.NO_WRAP) }
+            .getOrNull()
+            ?.let(MeshProtocol::decode)
+
+    private fun isEmergency(entry: Entry): Boolean =
+        decode(entry)?.let(MeshProtocol::isEmergencyPublicPacket) == true
+
     private fun isReplaySafe(packet: MeshProtocol.Packet): Boolean =
         packet.type != MeshProtocol.TYPE_NOISE_HANDSHAKE &&
             packet.type != MeshProtocol.TYPE_NOISE_ENCRYPTED &&
             packet.type != MeshProtocol.TYPE_BEACON_CONTROL
 
     private companion object {
+        const val LEGACY_PREFERENCES = "hearthbit_store_forward"
+        const val ENCRYPTED_PREFERENCES = "hearthbit_store_forward_encrypted"
         const val KEY_ENTRIES = "packets"
         const val MAX_ENTRIES = 100
         const val LIFETIME_MS = 12 * 60 * 60 * 1_000L
+        const val EMERGENCY_LIFETIME_MS = 24 * 60 * 60 * 1_000L
     }
 }

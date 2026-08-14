@@ -69,13 +69,15 @@ internal object AdaptivePowerPolicy {
         screenOn: Boolean,
         systemPowerSave: Boolean,
         survivalMode: Boolean,
+        highPerformanceRequested: Boolean = false,
     ): PowerProfile {
         val battery = batteryPercent.coerceIn(0, 100)
         return when {
             survivalMode -> PowerProfile.SURVIVAL
             battery <= 10 -> PowerProfile.CRITICAL
             !screenOn || systemPowerSave -> PowerProfile.POWER_SAVER
-            isCharging -> PowerProfile.PERFORMANCE
+            isCharging && highPerformanceRequested -> PowerProfile.PERFORMANCE
+            isCharging -> PowerProfile.BALANCED
             battery <= 40 -> PowerProfile.POWER_SAVER
             else -> PowerProfile.BALANCED
         }

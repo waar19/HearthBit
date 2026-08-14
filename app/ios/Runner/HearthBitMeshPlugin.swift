@@ -7,6 +7,13 @@ import Foundation
 import Security
 import UIKit
 import UserNotifications
+import zlib
+
+private func hearthBitDebugLog(_ format: String, _ arguments: CVarArg...) {
+  #if DEBUG
+  withVaList(arguments) { Foundation.NSLogv(format, $0) }
+  #endif
+}
 
 private enum IOSPowerProfile: String {
   case performance
@@ -48,13 +55,15 @@ private enum IOSPowerProfile: String {
     charging: Bool,
     foreground: Bool,
     lowPowerMode: Bool,
-    survivalMode: Bool
+    survivalMode: Bool,
+    highPerformanceRequested: Bool
   ) -> IOSPowerProfile {
     let battery = min(max(batteryLevel, 0), 100)
     if survivalMode { return .survival }
     if battery <= 10 { return .critical }
     if lowPowerMode || !foreground { return .powerSaver }
-    if charging { return .performance }
+    if charging && highPerformanceRequested { return .performance }
+    if charging { return .balanced }
     if battery <= 40 { return .powerSaver }
     return .balanced
   }
@@ -128,6 +137,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var identity = IOSMeshIdentity()
   private var localRole = IOSMeshNodeRole.load()
   private let storeForward = IOSStoreForward()
+  private let emergencyFingerprints = IOSEmergencyFingerprintCache()
   private var central: CBCentralManager?
   private var peripheralManager: CBPeripheralManager?
   private var localCharacteristic: CBMutableCharacteristic?
@@ -281,6 +291,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         ])
       case "getInstalledApkForShare":
         result(["status": "unsupported"])
+      case "getSimCountry":
+        // Carrier-country APIs are deprecated on iOS. Flutter falls back to
+        // the system region or a country explicitly selected by the user.
+        result(nil)
       case "requestPermissions":
         result(true)
       case "requestFamilyNotificationPermission":
@@ -315,6 +329,27 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       case "stopMesh":
         stop()
         result(nil)
+      case "getRescueModeState":
+        let state = IOSRescueModeStore.load()
+        configureRescueLocationUpdates(for: state)
+        result(state.asMap)
+      case "configureRescueMode":
+        let active = arguments["active"] as? Bool ?? false
+        let state: IOSRescueModeState
+        if active {
+          state = IOSRescueModeStore.configure(
+            description: arguments["description"] as? String ?? "",
+            startedAt: (arguments["startedAt"] as? NSNumber)?.int64Value ?? 0,
+            lastPingAt: (arguments["lastPingAt"] as? NSNumber)?.int64Value ?? 0,
+            expiresAt: (arguments["expiresAt"] as? NSNumber)?.int64Value ?? 0,
+            intervalMs: (arguments["intervalMs"] as? NSNumber)?.int64Value ?? 120_000
+          )
+        } else {
+          IOSRescueModeStore.clear()
+          state = IOSRescueModeStore.load()
+        }
+        configureRescueLocationUpdates(for: state)
+        result(state.asMap)
       case "setLanDiscoveryEnabled":
         // Network.framework/Dart owns Bonjour. The method keeps the native
         // bridge API symmetric with Android, where a MulticastLock is needed.
@@ -377,6 +412,34 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         let location = latitude != nil && longitude != nil
           ? "|\(latitude!)|\(longitude!)" : "||"
         result(try sendPublic(content: "SOS|\(description)\(location)", channel: "sos"))
+      case "sendEmergency":
+        let messageID = arguments["messageId"] as? String ?? ""
+        let content = arguments["content"] as? String ?? ""
+        let channel = arguments["channel"] as? String ?? ""
+        guard channel == "sos" || channel == "checkin" else {
+          throw IOSMeshError.invalidPayload
+        }
+        guard content.hasPrefix("SOS|") || content.contains("[HB-CHECKIN|") else {
+          throw IOSMeshError.invalidPayload
+        }
+        let transmitted = try transmitPublic(
+          messageID: String(messageID.prefix(255)),
+          content: content,
+          channel: channel
+        )
+        result([
+          "messageId": transmitted.id,
+          "canonicalHash": IOSMeshProtocol
+            .emergencyCanonicalHash(transmitted.packet).hex,
+        ])
+      case "retryEmergency":
+        let canonicalHash = arguments["canonicalHash"] as? String ?? ""
+        guard let packet = storeForward.emergency(hash: canonicalHash) else {
+          result(false)
+          return
+        }
+        broadcast(packet)
+        result(true)
       case "setNickname":
         identity.nickname = String((arguments["nickname"] as? String ?? "").prefix(31))
         sendAnnouncement()
@@ -438,22 +501,47 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         } ?? false
         result(verified)
       case "panicWipe":
-        stop()
+        // Limpiar también si Flutter cree que la malla ya estaba detenida.
+        stopInternal(notify: true)
         beaconActuator.stop()
         activeBeaconRequest = nil
         IOSMeshIdentity.clear()
         identity = IOSMeshIdentity()
         storeForward.clear()
+        emergencyFingerprints.clear()
+        IOSRescueModeStore.clear()
+        locationManager.stopUpdatingLocation()
         peers.removeAll()
         sessions.removeAll()
         responderCandidates.removeAll()
+        securePeerIDs.removeAll()
+        privateChatPeerIDs.removeAll()
+        pendingPrivate.removeAll()
+        pendingFrames.removeAll()
+        pendingCourier.removeAll()
+        seen.removeAll()
         syncPackets.removeAll()
+        syncResponseTimes.removeAll()
+        lastSyncRequestBySource.removeAll()
         remoteRadarConsents.removeAll()
         pendingBeaconRequests.removeAll()
         outgoingBeaconRequests.removeAll()
         seenBeaconActions.removeAll()
-        result(nil)
-        emit(["type": "wiped"])
+        fragmentReassembler.clear()
+        genericPresenceTracker.clear()
+        let wipedState: [String: Any] = [
+          "type": "wiped",
+          "status": "stopped",
+          "peerId": identity.peerIDHex,
+          "nickname": identity.nickname,
+          "signingPublicKey": FlutterStandardTypedData(
+            bytes: identity.signingPrivateKey.publicKey.rawRepresentation
+          ),
+          "role": localRole.rawValue,
+          "peers": [],
+        ]
+        emit(wipedState)
+        result(wipedState)
       case "getPowerStatus":
         UIDevice.current.isBatteryMonitoringEnabled = true
         refreshPowerState(emitEvent: false)
@@ -559,6 +647,44 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     return CLLocationManager.authorizationStatus()
   }
 
+  private func configureRescueLocationUpdates(for state: IOSRescueModeState) {
+    guard state.active else {
+      if radarPeerID == nil { locationManager.stopUpdatingLocation() }
+      return
+    }
+    locationManager.delegate = self
+    locationManager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+    locationManager.distanceFilter = 25
+    locationManager.pausesLocationUpdatesAutomatically = false
+    locationManager.allowsBackgroundLocationUpdates = true
+    locationManager.showsBackgroundLocationIndicator = true
+    locationManager.startUpdatingLocation()
+  }
+
+  private func handleRescueLocation(_ location: CLLocation) {
+    let state = IOSRescueModeStore.load()
+    guard state.active else {
+      configureRescueLocationUpdates(for: state)
+      return
+    }
+    let now = Int64(Date().timeIntervalSince1970 * 1000)
+    guard state.lastPingAt <= 0 || now - state.lastPingAt >= state.intervalMs else {
+      return
+    }
+    if !running { start() }
+    let locationSuffix = "|\(location.coordinate.latitude)|\(location.coordinate.longitude)"
+    do {
+      _ = try sendPublic(
+        content: "SOS|\(state.description)\(locationSuffix)",
+        channel: "sos"
+      )
+      IOSRescueModeStore.recordPing(now)
+      emit(["type": "rescuePing", "timestamp": now])
+    } catch {
+      emit(["type": "error", "message": error.localizedDescription])
+    }
+  }
+
   private func start() {
     // Reinicio real: liberar recursos previos permite reintentar tras un fallo.
     if running { stopInternal(notify: false) }
@@ -613,6 +739,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         ) { [weak self] _ in self?.refreshPowerState() },
       ]
     }
+    configureRescueLocationUpdates(for: IOSRescueModeStore.load())
   }
 
   private func stop() {
@@ -691,6 +818,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       throw IOSMeshError.radarConsentRequired
     }
     radarPeerID = peerID
+    refreshPowerState()
     restartScan()
     radarTimer?.invalidate()
     radarTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
@@ -709,6 +837,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
 
   private func stopRadar() {
     radarPeerID = nil
+    refreshPowerState()
     radarTimer?.invalidate()
     radarTimer = nil
     restartScan()
@@ -1248,7 +1377,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       charging: charging,
       foreground: UIApplication.shared.applicationState == .active,
       lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled,
-      survivalMode: localRole == .phoneBeacon
+      survivalMode: localRole == .phoneBeacon,
+      highPerformanceRequested: radarPeerID != nil || IOSRescueModeStore.load().active
     )
     let changed = nextProfile != powerProfile
     batteryLevel = level
@@ -1278,9 +1408,21 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
 
   @discardableResult
   private func sendPublic(content: String, channel: String?) throws -> String {
+    try transmitPublic(
+      messageID: UUID().uuidString.uppercased(),
+      content: content,
+      channel: channel
+    ).id
+  }
+
+  private func transmitPublic(
+    messageID: String,
+    content: String,
+    channel: String?
+  ) throws -> (id: String, packet: IOSMeshPacket) {
     guard running else { throw IOSMeshError.notRunning }
     guard localRole.canChat else { throw IOSMeshError.roleCannotChat }
-    let id = UUID().uuidString.uppercased()
+    let id = messageID.isEmpty ? UUID().uuidString.uppercased() : messageID
     let payload = Data(String(content.prefix(2000)).utf8)
     let packet = identity.sign(
       IOSMeshPacket(
@@ -1302,7 +1444,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       timestamp: packet.timestamp,
       channel: channel
     )
-    return id
+    return (id, packet)
   }
 
   private func ensurePrivateChannel(peerID: String) throws {
@@ -1333,12 +1475,11 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     } else {
       id = UUID().uuidString.uppercased()
     }
-    if let session = sessions[peerID], session.established {
-      try sendEncryptedPrivate(peerID: peerID, id: id, content: content)
-    } else {
-      pendingPrivate[peerID, default: []].append((id, content))
+    guard let session = sessions[peerID], session.established else {
       try initiateHandshake(peerID: peerID)
+      throw IOSMeshError.peerUnavailable
     }
+    try sendEncryptedPrivate(peerID: peerID, id: id, content: content)
     emitMessage(
       id: id,
       sender: identity.nickname,
@@ -1515,7 +1656,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       decryptFailures[peerID] = failures
       return
     }
-    NSLog(
+    hearthBitDebugLog(
       "HearthBitMesh: Noise session with %@ stale after %d decrypt failures",
       String(peerID.prefix(8)),
       failures
@@ -1620,6 +1761,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       )
     )
     broadcastHbtCapability()
+    broadcastEmergencyCapability()
     broadcastNodeCapability()
     if activeLocalRadarConsentUntil() > currentMilliseconds() {
       broadcastRadarConsent(grant: true)
@@ -1636,6 +1778,21 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           timestamp: currentMilliseconds(),
           senderID: identity.peerID,
           payload: Data([IOSMeshProtocol.hbtVersion])
+        )
+      )
+    )
+  }
+
+  private func broadcastEmergencyCapability() {
+    guard running else { return }
+    broadcast(
+      identity.sign(
+        IOSMeshPacket(
+          type: IOSMeshProtocol.emergencyCapability,
+          ttl: IOSMeshProtocol.defaultTTL,
+          timestamp: currentMilliseconds(),
+          senderID: identity.peerID,
+          payload: IOSMeshProtocol.emergencyCapabilityPayload()
         )
       )
     )
@@ -1720,11 +1877,14 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func broadcast(_ packet: IOSMeshPacket, excluding: UUID? = nil) {
     rememberSyncPacket(packet)
     let bytes = IOSMeshProtocol.encodeForBLE(packet)
-    if localRole.storesDirectedPackets,
+    let emergency = IOSMeshProtocol.isEmergency(packet)
+    let directed = packet.recipientID.map {
+      $0 != Data(repeating: 0xff, count: 8)
+    } ?? false
+    if (localRole.storesDirectedPackets || emergency && localRole.relaysPackets),
        packet.type != IOSMeshProtocol.beaconControl,
        packet.type != IOSMeshProtocol.rangingControl,
-       let recipient = packet.recipientID,
-       recipient != Data(repeating: 0xff, count: 8) {
+       directed || emergency {
       storeForward.put(packet)
     }
     if let characteristic = localCharacteristic, let manager = peripheralManager {
@@ -1737,7 +1897,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
             maximumValueLength: central.maximumUpdateValueLength
           )
         else {
-          NSLog(
+          hearthBitDebugLog(
             "HearthBitMesh: dropping %d-byte notification for %@ (limit=%d)",
             bytes.count,
             central.identifier.uuidString,
@@ -1765,7 +1925,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           maximumValueLength: maximum
         )
       else {
-        NSLog(
+        hearthBitDebugLog(
           "HearthBitMesh: dropping %d-byte central write for %@ (limit=%d)",
           bytes.count,
           identifier.uuidString,
@@ -1920,7 +2080,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let identifier = peripheral.identifier
     var queue = centralWriteQueues[identifier, default: []]
     guard queue.count + frames.count <= Self.maximumPendingBLEFrames else {
-      NSLog("HearthBitMesh: central write queue full for %@", identifier.uuidString)
+      hearthBitDebugLog("HearthBitMesh: central write queue full for %@", identifier.uuidString)
       return
     }
     queue.append(contentsOf: frames.map {
@@ -1958,7 +2118,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let identifier = central.identifier
     var queue = peripheralNotifyQueues[identifier, default: []]
     guard queue.count + frames.count <= Self.maximumPendingBLEFrames else {
-      NSLog("HearthBitMesh: notification queue full for %@", identifier.uuidString)
+      hearthBitDebugLog("HearthBitMesh: notification queue full for %@", identifier.uuidString)
       return
     }
     queue.append(contentsOf: frames)
@@ -2053,7 +2213,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         now: now
       )
       if requiresTransportRekey {
-        NSLog(
+        hearthBitDebugLog(
           "HearthBitMesh: ANNOUNCE after reachability gap from %@; resetting Noise epoch",
           String(senderID.prefix(8))
         )
@@ -2066,6 +2226,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         signingPublicKey: announcement.signingPublicKey,
         supportsTransfers: announcement.supportsTransfers ||
           (previousPeer?.supportsTransfers ?? false),
+        supportsEmergencyAck: previousPeer?.supportsEmergencyAck ?? false,
         isInfrastructure: announcement.isInfrastructure ||
           (previousPeer?.isInfrastructure ?? false),
         role: previousPeer?.role ?? .phoneRelay,
@@ -2085,6 +2246,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       for stored in storeForward.packets(for: packet.senderID) {
         broadcast(stored)
       }
+      for emergency in storeForward.emergencyPackets() {
+        broadcast(emergency)
+      }
       if requiresTransportRekey {
         if shouldAutoHandshake(peerID: senderID) {
           scheduleAutoHandshake(peerID: senderID, force: true, delay: 0.5)
@@ -2101,6 +2265,17 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         let peer = peers[senderID],
         IOSMeshIdentity.verify(packet, key: peer.signingPublicKey)
       else { return }
+      let emergency = IOSMeshProtocol.isEmergency(packet)
+      let emergencyHash = emergency
+        ? IOSMeshProtocol.emergencyCanonicalHash(packet).hex
+        : nil
+      let duplicateEmergency = emergencyHash.map {
+        emergencyFingerprints.seenOrRemember($0)
+      } ?? false
+      if emergency && peer.supportsEmergencyAck {
+        sendEmergencyAcknowledgement(for: packet)
+      }
+      if duplicateEmergency { return }
       let message = IOSMeshProtocol.decodePublicMessage(packet.payload) ??
         IOSMeshProtocol.PublicMessage(
           id: IOSMeshProtocol.fingerprint(packet).uppercased(),
@@ -2148,6 +2323,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       processBeaconControl(packet, senderID: senderID)
     case IOSMeshProtocol.rangingControl:
       processRangingControl(packet, senderID: senderID)
+    case IOSMeshProtocol.emergencyCapability:
+      processEmergencyCapability(packet, senderID: senderID)
+    case IOSMeshProtocol.emergencyAck:
+      processEmergencyAcknowledgement(packet, senderID: senderID)
     case IOSMeshProtocol.fragment:
       if let reassembled = fragmentReassembler.accept(packet) {
         if (reassembled.type == IOSMeshProtocol.beaconControl ||
@@ -2184,6 +2363,58 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     peer.lastSeen = Date()
     peers[senderID] = peer
     emit(["type": "peers", "peers": peerMaps()])
+  }
+
+  private func processEmergencyCapability(_ packet: IOSMeshPacket, senderID: String) {
+    guard
+      var peer = peers[senderID],
+      IOSMeshProtocol.supportsEmergencyAcknowledgements(packet.payload),
+      IOSMeshIdentity.verify(packet, key: peer.signingPublicKey)
+    else { return }
+    peer.supportsEmergencyAck = true
+    peer.lastSeen = Date()
+    peers[senderID] = peer
+    emit(["type": "peers", "peers": peerMaps()])
+  }
+
+  private func processEmergencyAcknowledgement(
+    _ packet: IOSMeshPacket,
+    senderID: String
+  ) {
+    let now = currentMilliseconds()
+    let age = packet.timestamp > now
+      ? packet.timestamp - now
+      : now - packet.timestamp
+    guard
+      packet.recipientID == identity.peerID,
+      let peer = peers[senderID],
+      peer.supportsEmergencyAck,
+      IOSMeshIdentity.verify(packet, key: peer.signingPublicKey),
+      age <= 48 * 60 * 60 * 1_000,
+      let hash = IOSMeshProtocol.decodeEmergencyAcknowledgement(packet.payload)
+    else { return }
+    emit([
+      "type": "emergencyAck",
+      "canonicalHash": hash.hex,
+      "peerId": senderID,
+      "at": now,
+    ])
+  }
+
+  private func sendEmergencyAcknowledgement(for packet: IOSMeshPacket) {
+    let acknowledgement = identity.sign(
+      IOSMeshPacket(
+        type: IOSMeshProtocol.emergencyAck,
+        ttl: IOSMeshProtocol.defaultTTL,
+        timestamp: currentMilliseconds(),
+        senderID: identity.peerID,
+        recipientID: packet.senderID,
+        payload: IOSMeshProtocol.emergencyAcknowledgementPayload(
+          hash: IOSMeshProtocol.emergencyCanonicalHash(packet)
+        )
+      )
+    )
+    broadcast(acknowledgement)
   }
 
   private func processNodeCapability(_ packet: IOSMeshPacket, senderID: String) {
@@ -2488,7 +2719,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       if let meshError = error as? IOSMeshError, case .identityMismatch = meshError {
         emitError(HearthBitL10n.string("identity_rejected"))
       } else {
-        NSLog(
+        hearthBitDebugLog(
           "HearthBitMesh: Noise handshake state/protocol failure from %@: %@",
           String(senderID.prefix(8)),
           error.localizedDescription
@@ -2706,6 +2937,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         "secure": online && (sessions[peer.id]?.established ?? false),
         "signingPublicKey": FlutterStandardTypedData(bytes: peer.signingPublicKey),
         "supportsTransfers": peer.supportsTransfers,
+        "supportsEmergencyAck": peer.supportsEmergencyAck,
         "role": peer.role.rawValue,
         "hasLongRangeTrunk": peer.hasLongRangeTrunk,
         "radarAllowedUntil": consent?.expiresAt ?? 0,
@@ -2957,6 +3189,23 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 }
 
+extension HearthBitMeshPlugin: CLLocationManagerDelegate {
+  func locationManager(
+    _ manager: CLLocationManager,
+    didUpdateLocations locations: [CLLocation]
+  ) {
+    guard let location = locations.last else { return }
+    handleRescueLocation(location)
+  }
+
+  func locationManager(
+    _ manager: CLLocationManager,
+    didFailWithError error: Error
+  ) {
+    emit(["type": "error", "message": error.localizedDescription])
+  }
+}
+
 extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
   func centralManagerDidUpdateState(_ central: CBCentralManager) {
     guard
@@ -3154,7 +3403,7 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
       centralWriteQueues.removeValue(forKey: identifier)
     }
     if let error {
-      NSLog(
+      hearthBitDebugLog(
         "HearthBitMesh: central write failed for %@: %@",
         identifier.uuidString,
         error.localizedDescription
@@ -3620,6 +3869,7 @@ private struct IOSMeshPeer {
   let noisePublicKey: Data
   let signingPublicKey: Data
   var supportsTransfers: Bool
+  var supportsEmergencyAck: Bool
   var isInfrastructure: Bool
   var role: IOSMeshNodeRole
   var hasLongRangeTrunk: Bool
@@ -3901,6 +4151,9 @@ enum IOSMeshProtocol {
   static let nodeCapability: UInt8 = 0x25
   static let beaconControl: UInt8 = 0x26
   static let rangingControl: UInt8 = 0x27
+  static let emergencyCapability: UInt8 = 0x28
+  static let emergencyAck: UInt8 = 0x29
+  static let emergencyVersion: UInt8 = 0x01
   static let hbtVersion: UInt8 = 0x01
   static let noisePrivate: UInt8 = 0x01
   /// Trama HBT (HearthBit Transfer) encapsulada dentro de la sesión Noise.
@@ -3941,6 +4194,40 @@ enum IOSMeshProtocol {
     let expiry: UInt64
     let ciphertext: Data
     let copies: UInt8
+  }
+
+  static func emergencyCanonicalHash(_ packet: IOSMeshPacket) -> Data {
+    var normalized = packet
+    normalized.ttl = 0
+    normalized.isRSR = false
+    return Data(SHA256.hash(data: encode(normalized, padded: false)))
+  }
+
+  static func isEmergency(_ packet: IOSMeshPacket) -> Bool {
+    guard packet.type == message,
+          let content = String(data: packet.payload, encoding: .utf8)
+    else { return false }
+    return content.hasPrefix("SOS|") || content.contains("[HB-CHECKIN|")
+  }
+
+  static func emergencyCapabilityPayload() -> Data {
+    Data([emergencyVersion, 0x01])
+  }
+
+  static func supportsEmergencyAcknowledgements(_ payload: Data) -> Bool {
+    payload.count == 2 &&
+      payload[0] == emergencyVersion &&
+      payload[1] & 0x01 != 0
+  }
+
+  static func emergencyAcknowledgementPayload(hash: Data) -> Data {
+    guard hash.count == 32 else { return Data() }
+    return Data([emergencyVersion]) + hash
+  }
+
+  static func decodeEmergencyAcknowledgement(_ payload: Data) -> Data? {
+    guard payload.count == 33, payload[0] == emergencyVersion else { return nil }
+    return payload.subdata(in: 1..<33)
   }
 
   struct FragmentPayload {
@@ -4560,46 +4847,32 @@ enum IOSMeshProtocol {
     originalSize: Int
   ) -> Data? {
     guard !data.isEmpty else { return nil }
-    let placeholder = UnsafeMutablePointer<UInt8>.allocate(capacity: 1)
-    defer { placeholder.deallocate() }
-    var stream = compression_stream(
-      dst_ptr: placeholder,
-      dst_size: 0,
-      src_ptr: UnsafePointer(placeholder),
-      src_size: 0,
-      state: nil
-    )
-    guard compression_stream_init(
+    var stream = z_stream()
+    guard inflateInit2_(
       &stream,
-      COMPRESSION_STREAM_DECODE,
-      COMPRESSION_ZLIB
-    ) != COMPRESSION_STATUS_ERROR else { return nil }
-    defer { compression_stream_destroy(&stream) }
+      -MAX_WBITS,
+      ZLIB_VERSION,
+      Int32(MemoryLayout<z_stream>.size)
+    ) == Z_OK else { return nil }
+    defer { inflateEnd(&stream) }
 
-    let outputCapacity = originalSize + 1
-    var output = Data(count: outputCapacity)
+    var output = Data(count: originalSize)
     let valid = output.withUnsafeMutableBytes { destination in
       data.withUnsafeBytes { source in
         guard
           let destinationBase = destination.bindMemory(to: UInt8.self).baseAddress,
           let sourceBase = source.bindMemory(to: UInt8.self).baseAddress
         else { return false }
-        stream.src_ptr = sourceBase
-        stream.src_size = data.count
-        stream.dst_ptr = destinationBase
-        stream.dst_size = outputCapacity
-        let status = compression_stream_process(
-          &stream,
-          Int32(COMPRESSION_STREAM_FINALIZE.rawValue)
-        )
-        return status == COMPRESSION_STATUS_END &&
-          stream.src_size == 0 &&
-          stream.dst_size == 1
+        stream.next_in = UnsafeMutablePointer(mutating: sourceBase)
+        stream.avail_in = uInt(data.count)
+        stream.next_out = destinationBase
+        stream.avail_out = uInt(originalSize)
+        return inflate(&stream, Z_FINISH) == Z_STREAM_END &&
+          stream.avail_in == 0 &&
+          stream.avail_out == 0
       }
     }
-    guard valid else { return nil }
-    output.removeLast()
-    return output
+    return valid ? output : nil
   }
 
   private static func looksLikeZlib(_ data: Data) -> Bool {
@@ -4658,8 +4931,8 @@ final class IOSMeshPacketFragmenter {
   ) -> [Data]? {
     let linkLimit = min(maximumValueLength, Self.maximumGATTValueLength)
     guard linkLimit > 0 else { return nil }
-    if encoded.count <= linkLimit { return [encoded] }
     guard packet.type != IOSMeshProtocol.fragment else { return nil }
+    if encoded.count <= linkLimit { return [encoded] }
 
     let originalData = IOSMeshProtocol.removeBLETransportPadding(packet, encoded: encoded)
     guard originalData.count <= Self.maximumReassembledBytes else { return nil }
@@ -4880,18 +5153,217 @@ enum IOSNoiseReplayPolicy {
   }
 }
 
+private final class IOSEmergencyFingerprintCache {
+  private let key = "hearthbit.emergency_fingerprints"
+  private let lifetime: UInt64 = 24 * 60 * 60 * 1_000
+  private let maximum = 512
+
+  func seenOrRemember(_ fingerprint: String, now: UInt64? = nil) -> Bool {
+    let timestamp = now ?? UInt64(Date().timeIntervalSince1970 * 1000)
+    let normalized = fingerprint.lowercased()
+    var entries = validEntries(now: timestamp)
+    let duplicate = entries.contains { $0.fingerprint == normalized }
+    if !duplicate {
+      entries.append((timestamp, normalized))
+    }
+    UserDefaults.standard.set(
+      entries.suffix(maximum).map {
+        ["at": $0.at, "fingerprint": $0.fingerprint]
+      },
+      forKey: key
+    )
+    return duplicate
+  }
+
+  func clear() {
+    UserDefaults.standard.removeObject(forKey: key)
+  }
+
+  private func validEntries(
+    now: UInt64
+  ) -> [(at: UInt64, fingerprint: String)] {
+    let values = UserDefaults.standard.array(forKey: key) as? [[String: Any]] ?? []
+    return values.compactMap {
+      guard
+        let number = $0["at"] as? NSNumber,
+        let fingerprint = $0["fingerprint"] as? String,
+        fingerprint.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil
+      else { return nil }
+      let timestamp = number.uint64Value
+      guard timestamp <= now, now - timestamp <= lifetime else { return nil }
+      return (timestamp, fingerprint)
+    }.sorted { $0.at < $1.at }
+  }
+}
+
+private struct IOSRescueModeState: Codable {
+  let active: Bool
+  let description: String
+  let startedAt: Int64
+  let lastPingAt: Int64
+  let expiresAt: Int64
+  let intervalMs: Int64
+  let pingCount: Int64?
+
+  var asMap: [String: Any] {
+    let now = Int64(Date().timeIntervalSince1970 * 1000)
+    let expected = active && startedAt > 0
+      ? max(0, min(now, expiresAt) - startedAt) / intervalMs + 1
+      : 0
+    return [
+      "active": active,
+      "description": description,
+      "startedAt": startedAt,
+      "lastPingAt": lastPingAt,
+      "expiresAt": expiresAt,
+      "intervalMs": intervalMs,
+      "expectedPings": expected,
+      "executedPings": pingCount ?? 0,
+    ]
+  }
+}
+
+private enum IOSRescueModeStore {
+  private static let service = "HearthBit.RescueMode"
+  private static let account = "state.v1"
+  private static let minimumInterval: Int64 = 30_000
+  private static let maximumInterval: Int64 = 15 * 60_000
+  private static let maximumLifetime: Int64 = 24 * 60 * 60_000
+
+  static func load(now: Int64 = Int64(Date().timeIntervalSince1970 * 1000))
+    -> IOSRescueModeState
+  {
+    guard
+      let data = read(),
+      var state = try? JSONDecoder().decode(IOSRescueModeState.self, from: data)
+    else {
+      return IOSRescueModeState(
+        active: false,
+        description: "",
+        startedAt: 0,
+        lastPingAt: 0,
+        expiresAt: 0,
+        intervalMs: 120_000,
+        pingCount: 0
+      )
+    }
+    if state.active && state.expiresAt <= now {
+      clear()
+      state = IOSRescueModeState(
+        active: false,
+        description: "",
+        startedAt: 0,
+        lastPingAt: state.lastPingAt,
+        expiresAt: 0,
+        intervalMs: state.intervalMs,
+        pingCount: state.pingCount
+      )
+    }
+    return state
+  }
+
+  static func configure(
+    description: String,
+    startedAt: Int64,
+    lastPingAt: Int64,
+    expiresAt: Int64,
+    intervalMs: Int64,
+    now: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
+  ) -> IOSRescueModeState {
+    let safeStart = startedAt > 0 && startedAt <= now ? startedAt : now
+    let requestedExpiry = expiresAt > now ? expiresAt : safeStart + maximumLifetime
+    let state = IOSRescueModeState(
+      active: true,
+      description: String(description.trimmingCharacters(in: .whitespacesAndNewlines).prefix(500)),
+      startedAt: safeStart,
+      lastPingAt: max(lastPingAt, 0),
+      expiresAt: min(requestedExpiry, safeStart + maximumLifetime),
+      intervalMs: min(max(intervalMs, minimumInterval), maximumInterval),
+      pingCount: lastPingAt > 0 ? 1 : 0
+    )
+    if let data = try? JSONEncoder().encode(state) { write(data) }
+    return state
+  }
+
+  static func recordPing(_ timestamp: Int64) {
+    let current = load()
+    guard current.active else { return }
+    let updated = IOSRescueModeState(
+      active: true,
+      description: current.description,
+      startedAt: current.startedAt,
+      lastPingAt: timestamp,
+      expiresAt: current.expiresAt,
+      intervalMs: current.intervalMs,
+      pingCount: (current.pingCount ?? 0) + 1
+    )
+    if let data = try? JSONEncoder().encode(updated) { write(data) }
+  }
+
+  static func clear() {
+    SecItemDelete([
+      kSecClass: kSecClassGenericPassword,
+      kSecAttrService: service,
+      kSecAttrAccount: account,
+    ] as CFDictionary)
+  }
+
+  private static func read() -> Data? {
+    let query: [CFString: Any] = [
+      kSecClass: kSecClassGenericPassword,
+      kSecAttrService: service,
+      kSecAttrAccount: account,
+      kSecReturnData: true,
+      kSecMatchLimit: kSecMatchLimitOne,
+    ]
+    var result: CFTypeRef?
+    guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess else {
+      return nil
+    }
+    return result as? Data
+  }
+
+  private static func write(_ data: Data) {
+    clear()
+    SecItemAdd([
+      kSecClass: kSecClassGenericPassword,
+      kSecAttrService: service,
+      kSecAttrAccount: account,
+      kSecValueData: data,
+      kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+    ] as CFDictionary, nil)
+  }
+}
+
 private final class IOSStoreForward {
   private let key = "hearthbit.store_forward"
   private let lifetime: TimeInterval = 12 * 60 * 60
+  private let emergencyLifetime: TimeInterval = 24 * 60 * 60
   private let maximum = 100
+  private var encryptionKey: SymmetricKey
+
+  init() {
+    encryptionKey = Self.loadOrCreateKey()
+  }
 
   func put(_ packet: IOSMeshPacket) {
     guard IOSNoiseReplayPolicy.isStoreForwardSafe(packet) else { return }
     let now = Date().timeIntervalSince1970
     var entries = validEntries(now: now)
-    let encoded = IOSMeshProtocol.encode(packet, padded: false).base64EncodedString()
+    let encoded = IOSMeshProtocol.encode(packet, padded: false)
     if !entries.contains(where: { $0.encoded == encoded }) {
-      entries.append((now + lifetime, encoded))
+      entries.append((
+        now + (IOSMeshProtocol.isEmergency(packet) ? emergencyLifetime : lifetime),
+        encoded
+      ))
+    }
+    entries.sort {
+      let firstPriority = IOSMeshProtocol.decode($0.encoded)
+        .map(IOSMeshProtocol.isEmergency) ?? false
+      let secondPriority = IOSMeshProtocol.decode($1.encoded)
+        .map(IOSMeshProtocol.isEmergency) ?? false
+      if firstPriority != secondPriority { return !firstPriority }
+      return $0.expiry < $1.expiry
     }
     save(Array(entries.suffix(maximum)))
   }
@@ -4901,38 +5373,112 @@ private final class IOSStoreForward {
     save(entries)
     return entries.compactMap {
       guard
-        let data = Data(base64Encoded: $0.encoded),
-        let packet = IOSMeshProtocol.decode(data),
+        let packet = IOSMeshProtocol.decode($0.encoded),
         packet.recipientID == recipient
       else { return nil }
       return packet
     }
   }
 
-  func clear() {
-    UserDefaults.standard.removeObject(forKey: key)
+  func emergencyPackets() -> [IOSMeshPacket] {
+    let entries = validEntries(now: Date().timeIntervalSince1970)
+    save(entries)
+    return entries.compactMap {
+      IOSMeshProtocol.decode($0.encoded)
+    }.filter(IOSMeshProtocol.isEmergency)
   }
 
-  private func validEntries(now: TimeInterval) -> [(expiry: TimeInterval, encoded: String)] {
+  func emergency(hash: String) -> IOSMeshPacket? {
+    let normalized = hash.lowercased()
+    return emergencyPackets().first {
+      IOSMeshProtocol.emergencyCanonicalHash($0).hex == normalized
+    }
+  }
+
+  func clear() {
+    UserDefaults.standard.removeObject(forKey: key)
+    Self.deleteKey()
+    encryptionKey = Self.createAndPersistKey()
+  }
+
+  private func validEntries(now: TimeInterval) -> [(expiry: TimeInterval, encoded: Data)] {
     let stored = UserDefaults.standard.array(forKey: key) as? [[String: Any]] ?? []
     return stored.compactMap {
       guard
         let expiry = $0["expiry"] as? TimeInterval,
-        let encoded = $0["encoded"] as? String,
+        let storedValue = $0["encoded"] as? String,
         expiry > now,
-        let data = Data(base64Encoded: encoded),
+        let persisted = Data(base64Encoded: storedValue)
+      else { return nil }
+      // Compatibilidad de migración: una entrada antigua era el paquete en
+      // Base64 sin cifrar. La siguiente escritura siempre la cifra.
+      let data = decrypt(persisted) ?? persisted
+      guard
         let packet = IOSMeshProtocol.decode(data),
         IOSNoiseReplayPolicy.isStoreForwardSafe(packet)
       else { return nil }
-      return (expiry, encoded)
+      return (expiry, data)
     }.sorted { $0.expiry < $1.expiry }
   }
 
-  private func save(_ entries: [(expiry: TimeInterval, encoded: String)]) {
-    UserDefaults.standard.set(
-      entries.map { ["expiry": $0.expiry, "encoded": $0.encoded] },
-      forKey: key
-    )
+  private func save(_ entries: [(expiry: TimeInterval, encoded: Data)]) {
+    let persistedEntries: [[String: Any]] = entries.compactMap {
+      entry -> [String: Any]? in
+      guard let sealed = try? AES.GCM.seal(
+        entry.encoded,
+        using: encryptionKey
+      ).combined else { return nil }
+      return [
+        "expiry": entry.expiry,
+        "encoded": sealed.base64EncodedString(),
+      ]
+    }
+    UserDefaults.standard.set(persistedEntries, forKey: key)
+  }
+
+  private func decrypt(_ value: Data) -> Data? {
+    guard let sealed = try? AES.GCM.SealedBox(combined: value) else { return nil }
+    return try? AES.GCM.open(sealed, using: encryptionKey)
+  }
+
+  private static func loadOrCreateKey() -> SymmetricKey {
+    let query: [CFString: Any] = [
+      kSecClass: kSecClassGenericPassword,
+      kSecAttrService: "HearthBit.StoreForward",
+      kSecAttrAccount: "encryption",
+      kSecReturnData: true,
+      kSecMatchLimit: kSecMatchLimitOne,
+    ]
+    var value: CFTypeRef?
+    if SecItemCopyMatching(query as CFDictionary, &value) == errSecSuccess,
+       let data = value as? Data,
+       data.count == 32 {
+      return SymmetricKey(data: data)
+    }
+    return createAndPersistKey()
+  }
+
+  private static func createAndPersistKey() -> SymmetricKey {
+    let key = SymmetricKey(size: .bits256)
+    let data = key.withUnsafeBytes { Data($0) }
+    let item: [CFString: Any] = [
+      kSecClass: kSecClassGenericPassword,
+      kSecAttrService: "HearthBit.StoreForward",
+      kSecAttrAccount: "encryption",
+      kSecValueData: data,
+      kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+    ]
+    deleteKey()
+    SecItemAdd(item as CFDictionary, nil)
+    return key
+  }
+
+  private static func deleteKey() {
+    SecItemDelete([
+      kSecClass: kSecClassGenericPassword,
+      kSecAttrService: "HearthBit.StoreForward",
+      kSecAttrAccount: "encryption",
+    ] as CFDictionary)
   }
 }
 

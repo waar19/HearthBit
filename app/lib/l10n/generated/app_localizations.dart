@@ -550,6 +550,30 @@ abstract class AppLocalizations {
   /// **'Keys, history and pending messages will be deleted. This cannot be undone.'**
   String get wipeDialogBody;
 
+  /// No description provided for @wipeDialogInstruction.
+  ///
+  /// In en, this message translates to:
+  /// **'To confirm, type BORRAR.'**
+  String get wipeDialogInstruction;
+
+  /// No description provided for @wipeDialogKeyword.
+  ///
+  /// In en, this message translates to:
+  /// **'Type BORRAR'**
+  String get wipeDialogKeyword;
+
+  /// No description provided for @wipeDialogComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Identity and sensitive data were erased.'**
+  String get wipeDialogComplete;
+
+  /// No description provided for @wipeDialogError.
+  ///
+  /// In en, this message translates to:
+  /// **'The erase did not complete. Try again before handing over the device.'**
+  String get wipeDialogError;
+
   /// No description provided for @actionWipe.
   ///
   /// In en, this message translates to:
@@ -1053,6 +1077,24 @@ abstract class AppLocalizations {
   /// **'Could not open the sharing options'**
   String get shareInviteError;
 
+  /// No description provided for @diagnosticsExportButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Export diagnostics'**
+  String get diagnosticsExportButton;
+
+  /// No description provided for @diagnosticsExportSubject.
+  ///
+  /// In en, this message translates to:
+  /// **'HearthBit diagnostics'**
+  String get diagnosticsExportSubject;
+
+  /// No description provided for @diagnosticsExportError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not export the diagnostic report'**
+  String get diagnosticsExportError;
+
   /// No description provided for @openLinkError.
   ///
   /// In en, this message translates to:
@@ -1383,6 +1425,42 @@ abstract class AppLocalizations {
   /// **'Measured: {distance}'**
   String radarMeasuredDistance(String distance);
 
+  /// No description provided for @radarActionRadio.
+  ///
+  /// In en, this message translates to:
+  /// **'Radio'**
+  String get radarActionRadio;
+
+  /// No description provided for @radarActionSonar.
+  ///
+  /// In en, this message translates to:
+  /// **'Sonar'**
+  String get radarActionSonar;
+
+  /// No description provided for @radarActionBeacon.
+  ///
+  /// In en, this message translates to:
+  /// **'Beacon'**
+  String get radarActionBeacon;
+
+  /// No description provided for @radarActionDirection.
+  ///
+  /// In en, this message translates to:
+  /// **'Direction'**
+  String get radarActionDirection;
+
+  /// No description provided for @radarActionSweeping.
+  ///
+  /// In en, this message translates to:
+  /// **'Sweeping'**
+  String get radarActionSweeping;
+
+  /// No description provided for @radarActionWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting'**
+  String get radarActionWaiting;
+
   /// No description provided for @radarRadioStart.
   ///
   /// In en, this message translates to:
@@ -1574,6 +1652,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Stop rescue mode'**
   String get emergencyStopRescue;
+
+  /// No description provided for @emergencyDeliveryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Broadcast alert status'**
+  String get emergencyDeliveryTitle;
+
+  /// No description provided for @deliveryPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending broadcast'**
+  String get deliveryPending;
+
+  /// No description provided for @deliveryRelayed.
+  ///
+  /// In en, this message translates to:
+  /// **'Broadcast to the mesh'**
+  String get deliveryRelayed;
+
+  /// No description provided for @deliveryAcknowledged.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirmed by HearthBit'**
+  String get deliveryAcknowledged;
+
+  /// No description provided for @deliveryExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Expired without confirmation'**
+  String get deliveryExpired;
+
+  /// No description provided for @deliveryAttemptsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Attempts'**
+  String get deliveryAttemptsLabel;
+
+  /// No description provided for @deliveryConfirmationsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirmations'**
+  String get deliveryConfirmationsLabel;
+
+  /// No description provided for @deliveryLastAttemptLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Last attempt'**
+  String get deliveryLastAttemptLabel;
+
+  /// No description provided for @deliveryExpiresLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Expires'**
+  String get deliveryExpiresLabel;
+
+  /// No description provided for @deliveryNoHearthBitConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'No confirmation from another HearthBit; a BitChat node may still have received it.'**
+  String get deliveryNoHearthBitConfirmation;
+
+  /// No description provided for @deliveryRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry alert'**
+  String get deliveryRetry;
 
   /// No description provided for @errorEmergencyMeshUnavailable.
   ///
@@ -2546,6 +2690,270 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'END DRILL AND SEND SOS'**
   String get drillSendRealSos;
+
+  /// No description provided for @drillDisableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'End drill mode?'**
+  String get drillDisableTitle;
+
+  /// No description provided for @drillDisableBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Practice messages will stop and HearthBit will return to real emergency operation.'**
+  String get drillDisableBody;
+
+  /// No description provided for @drillDisableAction.
+  ///
+  /// In en, this message translates to:
+  /// **'END DRILL'**
+  String get drillDisableAction;
+
+  /// No description provided for @mapNoLocationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No location available'**
+  String get mapNoLocationTitle;
+
+  /// No description provided for @mapNoLocationBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on location or wait for a peer to share a valid rescue position. The map will never use (0,0) as a fallback.'**
+  String get mapNoLocationBody;
+
+  /// No description provided for @voiceMicrophoneRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone permission is required to record a voice note.'**
+  String get voiceMicrophoneRequired;
+
+  /// No description provided for @actionOpenSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'OPEN SETTINGS'**
+  String get actionOpenSettings;
+
+  /// No description provided for @opticalUnverifiedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Unverified source'**
+  String get opticalUnverifiedTitle;
+
+  /// No description provided for @opticalUnverifiedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'HearthBit cannot match this transfer to a previously authenticated identity. Confirm the fingerprint with the sender before accepting the file.'**
+  String get opticalUnverifiedBody;
+
+  /// No description provided for @opticalLegacyWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'This sender uses the legacy unsigned optical format.'**
+  String get opticalLegacyWarning;
+
+  /// No description provided for @opticalFingerprint.
+  ///
+  /// In en, this message translates to:
+  /// **'Fingerprint: {fingerprint}'**
+  String opticalFingerprint(String fingerprint);
+
+  /// No description provided for @opticalAcceptUnverified.
+  ///
+  /// In en, this message translates to:
+  /// **'ACCEPT UNVERIFIED'**
+  String get opticalAcceptUnverified;
+
+  /// No description provided for @opticalSignatureInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'The optical manifest signature does not match the known sender. The file was rejected.'**
+  String get opticalSignatureInvalid;
+
+  /// No description provided for @opticalVerifiedSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified sender'**
+  String get opticalVerifiedSource;
+
+  /// No description provided for @gatewayPrivacyConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'This sends emergency messages, sender details and any included rescue location to the configured internet service. Enable it only with the consent of affected people.'**
+  String get gatewayPrivacyConfirm;
+
+  /// No description provided for @gatewayEnableAction.
+  ///
+  /// In en, this message translates to:
+  /// **'ENABLE GATEWAY'**
+  String get gatewayEnableAction;
+
+  /// No description provided for @gatewayTlsRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Required for emergency data; insecure connections are blocked.'**
+  String get gatewayTlsRequired;
+
+  /// No description provided for @locationExportConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Export rescue locations?'**
+  String get locationExportConfirmTitle;
+
+  /// No description provided for @locationExportConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The CSV can contain precise locations and emergency details. Share it only with trusted responders and protect the exported file.'**
+  String get locationExportConfirmBody;
+
+  /// No description provided for @locationExportConfirmAction.
+  ///
+  /// In en, this message translates to:
+  /// **'EXPORT LOCATIONS'**
+  String get locationExportConfirmAction;
+
+  /// No description provided for @lanGatewayConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'LAN relay connected'**
+  String get lanGatewayConnected;
+
+  /// No description provided for @lanGatewaySearching.
+  ///
+  /// In en, this message translates to:
+  /// **'LAN relay enabled · searching locally'**
+  String get lanGatewaySearching;
+
+  /// No description provided for @lanGatewayDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'LAN relay disabled'**
+  String get lanGatewayDisabled;
+
+  /// No description provided for @lanGatewayConfigure.
+  ///
+  /// In en, this message translates to:
+  /// **'CONFIGURE LAN RELAY'**
+  String get lanGatewayConfigure;
+
+  /// No description provided for @lanGatewayDisable.
+  ///
+  /// In en, this message translates to:
+  /// **'DISABLE LAN RELAY'**
+  String get lanGatewayDisable;
+
+  /// No description provided for @lanGatewayPrivacy.
+  ///
+  /// In en, this message translates to:
+  /// **'Opt-in only. The shared key must match your trusted HearthBit Raspberry Pi relay. Mesh frames are authenticated and encrypted on the local network.'**
+  String get lanGatewayPrivacy;
+
+  /// No description provided for @lanGatewayPsk.
+  ///
+  /// In en, this message translates to:
+  /// **'32-byte pairing key (base64)'**
+  String get lanGatewayPsk;
+
+  /// No description provided for @lanGatewayGeneratePsk.
+  ///
+  /// In en, this message translates to:
+  /// **'GENERATE KEY'**
+  String get lanGatewayGeneratePsk;
+
+  /// No description provided for @lanGatewayInvalidPsk.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid 32-byte base64 key.'**
+  String get lanGatewayInvalidPsk;
+
+  /// No description provided for @emergencyContactsOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency numbers and official links'**
+  String get emergencyContactsOpen;
+
+  /// No description provided for @emergencyContactsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency directory'**
+  String get emergencyContactsTitle;
+
+  /// No description provided for @emergencyContactsSafetyNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Call numbers may work without mobile data, but they still require cellular voice coverage. Official websites require internet.'**
+  String get emergencyContactsSafetyNotice;
+
+  /// No description provided for @emergencyContactsCountry.
+  ///
+  /// In en, this message translates to:
+  /// **'Country or territory'**
+  String get emergencyContactsCountry;
+
+  /// No description provided for @emergencyContactsAutomatic.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic ({country})'**
+  String emergencyContactsAutomatic(String country);
+
+  /// No description provided for @emergencyContactsNumbers.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency numbers'**
+  String get emergencyContactsNumbers;
+
+  /// No description provided for @emergencyContactsOrganizations.
+  ///
+  /// In en, this message translates to:
+  /// **'Official organizations'**
+  String get emergencyContactsOrganizations;
+
+  /// No description provided for @emergencyContactsCall.
+  ///
+  /// In en, this message translates to:
+  /// **'CALL'**
+  String get emergencyContactsCall;
+
+  /// No description provided for @emergencyContactsWebsite.
+  ///
+  /// In en, this message translates to:
+  /// **'WEBSITE'**
+  String get emergencyContactsWebsite;
+
+  /// No description provided for @emergencyContactsSources.
+  ///
+  /// In en, this message translates to:
+  /// **'Sources and review'**
+  String get emergencyContactsSources;
+
+  /// No description provided for @emergencyContactsReviewed.
+  ///
+  /// In en, this message translates to:
+  /// **'Reviewed {date}'**
+  String emergencyContactsReviewed(String date);
+
+  /// No description provided for @emergencyContactsFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'This translation was unavailable, so the verified English directory is shown.'**
+  String get emergencyContactsFallback;
+
+  /// No description provided for @emergencyContactsLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'The offline emergency directory could not be loaded.'**
+  String get emergencyContactsLoadError;
+
+  /// No description provided for @emergencyContactsOpenError.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone could not open that number or link.'**
+  String get emergencyContactsOpenError;
+
+  /// No description provided for @emergencyContactsRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'RETRY'**
+  String get emergencyContactsRetry;
 }
 
 class _AppLocalizationsDelegate

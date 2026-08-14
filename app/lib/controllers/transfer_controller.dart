@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../models/transfer_models.dart';
+import '../services/diagnostics_log.dart';
 import '../services/lan_transport.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/transfer_crypto.dart';
@@ -25,6 +26,7 @@ class TransferController extends ChangeNotifier {
     this._mesh, {
     TransferPlatformService? platform,
     TransferRepository? repository,
+    this.offerLifetime = defaultOfferLifetime,
   }) : _platform = platform ?? TransferPlatformService(),
        _repository = repository ?? TransferRepository();
 
@@ -34,7 +36,7 @@ class TransferController extends ChangeNotifier {
   static const int defaultChunkSize = 64 * 1024;
   static const int maxFileBytes = 512 * 1024 * 1024;
   static const int maximumTransfersInMemory = 200;
-  static const Duration offerLifetime = Duration(minutes: 10);
+  static const Duration defaultOfferLifetime = Duration(minutes: 10);
   static const Duration priorityHold = Duration(seconds: 20);
   static const String voiceNoteMimeType = 'audio/x-hearthbit-voice';
   static const String androidPackageMimeType =
@@ -61,6 +63,7 @@ class TransferController extends ChangeNotifier {
   final MeshPlatformService _mesh;
   final TransferPlatformService _platform;
   final TransferRepository _repository;
+  final Duration offerLifetime;
 
   final List<TransferRecord> _transfers = [];
   final Map<String, _TransferSession> _sessions = {};
@@ -153,6 +156,10 @@ class TransferController extends ChangeNotifier {
     );
     final session = _TransferSession(keyPair: keyPair);
     session.expiryTimer = Timer(offerLifetime, () {
+      DiagnosticsLog.instance.warning(
+        'transfer.offer.expired',
+        data: {'direction': record.direction},
+      );
       _fail(
         record,
         peer.supportsTransfers
@@ -164,6 +171,15 @@ class TransferController extends ChangeNotifier {
     _transfers.insert(0, record);
     _trimTransfersInMemory();
     await _repository.save(record);
+    DiagnosticsLog.instance.info(
+      'transfer.offer.sent',
+      data: {
+        'bytes': fileSize,
+        'bleAllowed': allowsBle,
+        'nearbyAvailable': nearbySupported,
+        'wifiAwareAvailable': wifiAwareSupported,
+      },
+    );
     notifyListeners();
 
     final frame = TransferFrame(TransferProtocol.typeOffer)
@@ -212,9 +228,14 @@ class TransferController extends ChangeNotifier {
     record.state = TransferState.connecting;
     record.transport = _chooseTransport(record, session);
     if (record.transport == null) {
+      DiagnosticsLog.instance.warning('transfer.accept.no_transport');
       _fail(record, currentL10n.terrNoTransport);
       return;
     }
+    DiagnosticsLog.instance.info(
+      'transfer.offer.accepted',
+      data: {'transport': record.transport!},
+    );
     await _repository.save(record);
     notifyListeners();
 
@@ -243,6 +264,7 @@ class TransferController extends ChangeNotifier {
     if (reason != null) frame.setUtf8(TransferProtocol.tagReason, reason);
     await _sendFrame(record.peerId, frame, record);
     record.state = TransferState.rejected;
+    DiagnosticsLog.instance.info('transfer.offer.rejected');
     await _finishSession(record);
   }
 
@@ -253,10 +275,16 @@ class TransferController extends ChangeNotifier {
       ..setBytes(TransferProtocol.tagTransferId, _fromHex(transferId));
     try {
       await _sendFrame(record.peerId, frame, record);
-    } catch (_) {
+    } catch (error, stackTrace) {
       // El peer puede haber desaparecido; se cancela localmente igual.
+      DiagnosticsLog.instance.warning(
+        'transfer.cancel.remote_unreachable',
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
     record.state = TransferState.cancelled;
+    DiagnosticsLog.instance.info('transfer.cancelled');
     await _finishSession(record);
   }
 
@@ -311,7 +339,7 @@ class TransferController extends ChangeNotifier {
       }
     }
     _transfers.clear();
-    await _repository.clear();
+    await _repository.destroy();
     final directory = await _transfersDirectory();
     if (await directory.exists()) {
       await directory.delete(recursive: true);
@@ -642,6 +670,10 @@ class TransferController extends ChangeNotifier {
         break;
       case 'nearbyError':
       case 'wifiAwareError':
+        DiagnosticsLog.instance.warning(
+          'transfer.transport.failed',
+          data: {'transportEvent': event['type'] as String? ?? 'unknown'},
+        );
         final message =
             event['message'] as String? ?? currentL10n.terrTransport;
         final session = _sessions[transferId];
@@ -695,8 +727,13 @@ class TransferController extends ChangeNotifier {
       }
       // Si no llegó completo, el receptor decide el fallback y este lado
       // recibirá un nuevo ACCEPT o un CANCEL.
-    } catch (_) {
+    } catch (error, stackTrace) {
       // El receptor pedirá otro transporte si su conexión falló.
+      DiagnosticsLog.instance.warning(
+        'transfer.lan.sender_failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 
@@ -880,7 +917,13 @@ class TransferController extends ChangeNotifier {
         ..setUtf8(TransferProtocol.tagReason, reason);
       try {
         await _sendFrame(record.peerId, frame, record);
-      } catch (_) {}
+      } catch (error, stackTrace) {
+        DiagnosticsLog.instance.warning(
+          'transfer.fallback.cancel_not_delivered',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
       return;
     }
     record.transport = next;
@@ -919,8 +962,13 @@ class TransferController extends ChangeNotifier {
       ..setBytes(TransferProtocol.tagTransferId, _fromHex(record.id));
     try {
       await _sendFrame(record.peerId, frame, record);
-    } catch (_) {
+    } catch (error, stackTrace) {
       // Aunque el peer no reciba el COMPLETE, el archivo local es válido.
+      DiagnosticsLog.instance.warning(
+        'transfer.complete.not_acknowledged',
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
     await _finishSession(record);
   }
@@ -1072,6 +1120,14 @@ class TransferController extends ChangeNotifier {
     record.state = TransferState.failed;
     record.error = message;
     lastError = message;
+    DiagnosticsLog.instance.warning(
+      'transfer.failed',
+      data: {
+        'direction': record.direction,
+        if (record.transport != null) 'transport': record.transport!,
+        'state': record.state,
+      },
+    );
     unawaited(_finishSession(record));
   }
 
@@ -1180,6 +1236,14 @@ class TransferController extends ChangeNotifier {
   void dispose() {
     _meshSubscription?.cancel();
     _platformSubscription?.cancel();
+    for (final session in _sessions.values) {
+      session.expiryTimer?.cancel();
+      session.connectTimer?.cancel();
+      unawaited(session.lanSender?.close());
+      unawaited(session.ackController.close());
+    }
+    _sessions.clear();
+    unawaited(_repository.close());
     super.dispose();
   }
 }

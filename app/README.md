@@ -1,8 +1,10 @@
-# Aplicación HearthBit
+# HearthBit application
 
-UI Flutter con radios nativas Kotlin/CoreBluetooth.
+[Español](README.es.md)
 
-## Desarrollo en Windows
+Flutter UI with native Kotlin/CoreBluetooth radios.
+
+## Development on Windows
 
 ```powershell
 flutter pub get
@@ -11,29 +13,29 @@ flutter test
 flutter run -d <android-device-id>
 ```
 
-La compilación local de iOS no está disponible en Windows. El workflow
-`mobile-ci.yml` compila iOS sin firma en un runner macOS. Para distribución se
-requiere configurar un equipo de Apple Developer y los certificados fuera del
-repositorio.
+Local iOS builds are not available on Windows. The `mobile-ci.yml` workflow
+builds iOS without signing on a macOS runner. Distribution requires an Apple
+Developer team and certificates configured outside the repository.
 
-## Permisos
+## Permissions
 
-- Android: Bluetooth scan/connect/advertise, notificaciones y ubicación para SOS.
-- iOS: Bluetooth central/peripheral en segundo plano y ubicación mientras la app
-  está visible para SOS.
+- Android: Bluetooth scan/connect/advertise, notifications, and location for SOS.
+- iOS: background Bluetooth central/peripheral and location while the app is
+  visible for SOS.
 
-No use un emulador para validar BLE. Consulte `../docs/field-test.md`.
+Do not use an emulator to validate BLE. See
+[`../docs/field-test.md`](../docs/field-test.md).
 
-## Mapas y uso sin conexión
+## Maps and offline use
 
-Por defecto, la aplicación usa las teselas públicas de OpenStreetMap solo para
-visualización interactiva. Las teselas que el usuario ve se conservan en una
-caché pasiva respetando `Cache-Control`/`Expires` (o durante al menos siete días
-si el servidor no envía esos encabezados). La
-[política oficial de OSM](https://operations.osmfoundation.org/policies/tiles/)
-prohíbe descargar o precargar regiones desde `tile.openstreetmap.org`.
+By default, the application uses public OpenStreetMap tiles only for
+interactive viewing. Tiles that the user sees are kept in a passive cache that
+honors `Cache-Control`/`Expires` (or for at least seven days if the server sends
+neither header). The
+[official OSM tile policy](https://operations.osmfoundation.org/policies/tiles/)
+prohibits downloading or preloading regions from `tile.openstreetmap.org`.
 
-Una fuente propia o autorizada puede configurarse durante la compilación:
+A self-hosted or authorized source can be configured at build time:
 
 ```powershell
 flutter run `
@@ -43,8 +45,15 @@ flutter run `
   --dart-define=MAP_TILE_ALLOWS_BULK_DOWNLOAD=true
 ```
 
-La descarga regional aparece únicamente cuando
-`MAP_TILE_ALLOWS_BULK_DOWNLOAD=true`. Ese permiso siempre se ignora para
-`tile.openstreetmap.org`, incluso ante una configuración incorrecta. Antes de
-habilitarlo, confirme expresamente que los términos de la fuente permiten
-prefetch y uso sin conexión.
+Regional download appears only when
+`MAP_TILE_ALLOWS_BULK_DOWNLOAD=true`. This permission is always ignored for
+`tile.openstreetmap.org`, even if configured incorrectly. Before enabling it,
+explicitly confirm that the source terms permit prefetching and offline use.
+
+## Offline emergency directory
+
+Country-specific emergency numbers and official links live in
+`assets/emergency_contacts/`. Every translation is strictly validated and a
+broken translation falls back to the complete English directory. When updating
+the data, review every source and the `reviewedAt` date; an administrative line
+must never be presented as emergency dispatch.

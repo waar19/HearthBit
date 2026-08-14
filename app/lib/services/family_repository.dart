@@ -1,9 +1,10 @@
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as path;
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_sqlcipher/sqflite.dart';
 
 import '../models/family_models.dart';
+import 'secure_database.dart';
 
 DatabaseFactory _defaultDatabaseFactory() => databaseFactory;
 
@@ -17,24 +18,25 @@ class FamilyRepository {
 
   Future<Database> get _db async {
     final factory = databaseFactory ?? _defaultDatabaseFactory();
-    final resolvedPath =
-        databasePath ??
-        path.join(await factory.getDatabasesPath(), 'hearth_bit_family.db');
-    return _database ??= await factory.openDatabase(
-      resolvedPath,
-      options: OpenDatabaseOptions(
-        version: 2,
-        onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
-        onCreate: (database, version) async {
-          await _createFamilyTables(database);
-          await _createMetadataTable(database);
-        },
-        onUpgrade: (database, oldVersion, newVersion) async {
-          if (oldVersion < 2) await _createMetadataTable(database);
-        },
-      ),
+    final resolvedPath = await _resolveDatabasePath(factory);
+    return _database ??= await SecureDatabase.open(
+      databasePath: resolvedPath,
+      version: 2,
+      testFactory: databaseFactory,
+      onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
+      onCreate: (database, version) async {
+        await _createFamilyTables(database);
+        await _createMetadataTable(database);
+      },
+      onUpgrade: (database, oldVersion, newVersion) async {
+        if (oldVersion < 2) await _createMetadataTable(database);
+      },
     );
   }
+
+  Future<String> _resolveDatabasePath(DatabaseFactory factory) async =>
+      databasePath ??
+      path.join(await factory.getDatabasesPath(), 'hearth_bit_family.db');
 
   static Future<void> _createFamilyTables(Database database) async {
     await database.execute('''
@@ -209,6 +211,16 @@ class FamilyRepository {
     final database = _database;
     _database = null;
     await database?.close();
+  }
+
+  Future<void> destroy() async {
+    final factory = databaseFactory ?? _defaultDatabaseFactory();
+    final resolvedPath = await _resolveDatabasePath(factory);
+    await close();
+    await SecureDatabase.destroy(
+      databasePath: resolvedPath,
+      testFactory: databaseFactory,
+    );
   }
 
   static String _validateName(String value) {

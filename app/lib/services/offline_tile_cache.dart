@@ -11,6 +11,8 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'diagnostics_log.dart';
+
 const osmTileUrlTemplate = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const osmAttribution = '© OpenStreetMap contributors';
 const osmAttributionUrl = 'https://www.openstreetmap.org/copyright';
@@ -277,6 +279,13 @@ class TileDownloadPlanner {
 
 typedef TileDownloadProgress = void Function(int completed, int total);
 
+class OfflineTileCacheStats {
+  const OfflineTileCacheStats({required this.tileCount, required this.bytes});
+
+  final int tileCount;
+  final int bytes;
+}
+
 class OfflineTileCache {
   OfflineTileCache._({
     required this._root,
@@ -295,6 +304,9 @@ class OfflineTileCache {
   final DateTime Function() _now;
   final MapTileSource source;
   final Map<OfflineTileCoordinate, Future<Uint8List>> _loads = {};
+  DateTime? _lastPassiveTrimAt;
+  int _writesSinceTrim = 0;
+  bool _trimming = false;
 
   static Future<OfflineTileCache> create({
     http.Client? client,
@@ -446,6 +458,7 @@ class OfflineTileCache {
           lastModified: response.headers[HttpHeaders.lastModifiedHeader],
         ),
       );
+      _schedulePassiveTrim();
       return bytes;
     } catch (_) {
       if (staleBytes != null) return staleBytes;
@@ -479,21 +492,79 @@ class OfflineTileCache {
     if (!await _root.exists()) return;
     final files = <({File file, int length, DateTime modified})>[];
     var total = 0;
-    await for (final entity in _root.list(recursive: true)) {
-      if (entity is! File || !entity.path.endsWith('.png')) continue;
-      final stat = await entity.stat();
-      total += stat.size;
-      files.add((file: entity, length: stat.size, modified: stat.modified));
+    try {
+      await for (final entity in _root.list(recursive: true)) {
+        if (entity is! File || !entity.path.endsWith('.png')) continue;
+        final stat = await entity.stat();
+        total += stat.size;
+        files.add((file: entity, length: stat.size, modified: stat.modified));
+      }
+    } on FileSystemException {
+      // El borrado de pánico (o un tearDown de test) puede eliminar el
+      // directorio mientras el trim pasivo aún lista archivos; en ese caso ya
+      // no queda nada que recortar.
+      return;
     }
     if (total <= maximumCacheBytes) return;
     files.sort((a, b) => a.modified.compareTo(b.modified));
     for (final entry in files) {
-      await entry.file.delete();
-      final metadata = File('${entry.file.path}.json');
-      if (await metadata.exists()) await metadata.delete();
+      try {
+        await entry.file.delete();
+        final metadata = File('${entry.file.path}.json');
+        if (await metadata.exists()) await metadata.delete();
+      } on FileSystemException {
+        // Si otro proceso borró la entrada primero, el espacio ya quedó libre.
+      }
       total -= entry.length;
       if (total <= maximumCacheBytes) break;
     }
+  }
+
+  Future<OfflineTileCacheStats> stats() async {
+    if (!await _root.exists()) {
+      return const OfflineTileCacheStats(tileCount: 0, bytes: 0);
+    }
+    var count = 0;
+    var bytes = 0;
+    await for (final entity in _root.list(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.png')) continue;
+      final stat = await entity.stat();
+      count += 1;
+      bytes += stat.size;
+    }
+    return OfflineTileCacheStats(tileCount: count, bytes: bytes);
+  }
+
+  void _schedulePassiveTrim() {
+    _writesSinceTrim += 1;
+    final now = _now();
+    if (_lastPassiveTrimAt == null) {
+      // La primera escritura establece la ventana. Recortar inmediatamente
+      // duplica I/O y puede sobrevivir al cierre rápido de una pantalla/test.
+      _lastPassiveTrimAt = now;
+      return;
+    }
+    final dueByTime =
+        now.difference(_lastPassiveTrimAt!) >= const Duration(minutes: 5);
+    if (_trimming || (_writesSinceTrim < 50 && !dueByTime)) return;
+    _trimming = true;
+    _writesSinceTrim = 0;
+    _lastPassiveTrimAt = now;
+    unawaited(
+      trim().whenComplete(() {
+        _trimming = false;
+      }),
+    );
+  }
+
+  Future<void> close() async {
+    await trim();
+    final current = await stats();
+    DiagnosticsLog.instance.info(
+      'map.cache.stats',
+      data: {'tileCount': current.tileCount, 'bytes': current.bytes},
+    );
+    dispose();
   }
 
   void dispose() {
@@ -656,7 +727,7 @@ class OfflineTileImageProvider extends ImageProvider<OfflineTileImageProvider> {
     try {
       final bytes = await key.cache.load(key.tile);
       final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-      return decode(buffer);
+      return await decode(buffer);
     } catch (_) {
       scheduleMicrotask(() => PaintingBinding.instance.imageCache.evict(key));
       rethrow;

@@ -12,8 +12,11 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.location.Location
+import android.location.LocationManager
 import android.os.BatteryManager
 import android.os.Build
+import android.os.CancellationSignal
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -31,6 +34,10 @@ class MeshForegroundService : Service() {
     private var pendingNotificationState: MeshNotificationState? = null
     private var notificationUpdateRunnable: Runnable? = null
     private var lastNotificationUpdateAt = 0L
+    private val rescueStore by lazy { RescueModeStore(this) }
+    private var rescueRunnable: Runnable? = null
+    private var rescueLocationCancellation: CancellationSignal? = null
+    private var rescuePingInProgress = false
 
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -135,6 +142,9 @@ class MeshForegroundService : Service() {
             lastNotificationUpdateAt = SystemClock.elapsedRealtime()
             return START_STICKY
         }
+        if (intent?.action == ACTION_RESCUE_CHANGED) {
+            scheduleRescueMode()
+        }
         runCatching { MeshRuntime.engine(this).ensureStarted() }.onFailure {
             val message = it.message ?: getString(R.string.error_ble_start)
             MeshRuntime.eventListener?.invoke(
@@ -154,6 +164,7 @@ class MeshForegroundService : Service() {
                 ),
             )
         }
+        scheduleRescueMode()
         return START_STICKY
     }
 
@@ -164,6 +175,10 @@ class MeshForegroundService : Service() {
         }
         notificationUpdateRunnable?.let(mainHandler::removeCallbacks)
         notificationUpdateRunnable = null
+        rescueRunnable?.let(mainHandler::removeCallbacks)
+        rescueRunnable = null
+        rescueLocationCancellation?.cancel()
+        rescueLocationCancellation = null
         MeshRuntime.destroy()
         super.onDestroy()
     }
@@ -238,11 +253,108 @@ class MeshForegroundService : Service() {
             .build()
     }
 
+    private fun scheduleRescueMode() {
+        rescueRunnable?.let(mainHandler::removeCallbacks)
+        rescueRunnable = null
+        val state = rescueStore.read()
+        if (!state.active || rescuePingInProgress) return
+        val now = System.currentTimeMillis()
+        val nextAt = if (state.lastPingAt > 0L) {
+            state.lastPingAt + state.intervalMs
+        } else {
+            now
+        }
+        rescueRunnable = Runnable {
+            rescueRunnable = null
+            runRescuePing()
+        }.also { mainHandler.postDelayed(it, (nextAt - now).coerceAtLeast(0L)) }
+    }
+
+    private fun runRescuePing() {
+        if (rescuePingInProgress) return
+        val state = rescueStore.read()
+        if (!state.active) return
+        rescuePingInProgress = true
+        currentRescueLocation { location ->
+            val timestamp = System.currentTimeMillis()
+            runCatching {
+                val engine = MeshRuntime.engine(this)
+                engine.ensureStarted()
+                engine.setRadarConsent(enabled = true, durationMs = 10 * 60_000L)
+                engine.sendSos(state.description, location?.latitude, location?.longitude)
+            }.onSuccess {
+                rescueStore.recordPing(timestamp)
+                MeshRuntime.eventListener?.invoke(
+                    mapOf("type" to "rescuePing", "timestamp" to timestamp),
+                )
+            }.onFailure {
+                MeshRuntime.eventListener?.invoke(
+                    mapOf(
+                        "type" to "error",
+                        "message" to (it.message ?: getString(R.string.error_ble_start)),
+                    ),
+                )
+            }
+            rescuePingInProgress = false
+            scheduleRescueMode()
+        }
+    }
+
+    private fun currentRescueLocation(onResult: (Location?) -> Unit) {
+        val fine = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        val coarse = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!fine && !coarse) {
+            onResult(null)
+            return
+        }
+        val manager = getSystemService(LocationManager::class.java)
+        val fallback = listOf(
+            LocationManager.GPS_PROVIDER,
+            LocationManager.NETWORK_PROVIDER,
+        ).mapNotNull { provider ->
+            runCatching { manager?.getLastKnownLocation(provider) }.getOrNull()
+        }.maxByOrNull(Location::getTime)
+        if (Build.VERSION.SDK_INT < 30 || !fine) {
+            onResult(fallback)
+            return
+        }
+        val cancellation = CancellationSignal()
+        rescueLocationCancellation?.cancel()
+        rescueLocationCancellation = cancellation
+        var completed = false
+        fun complete(location: Location?) {
+            if (completed) return
+            completed = true
+            rescueLocationCancellation = null
+            onResult(location ?: fallback)
+        }
+        mainHandler.postDelayed({
+            cancellation.cancel()
+            complete(null)
+        }, RESCUE_LOCATION_TIMEOUT_MS)
+        runCatching {
+            manager?.getCurrentLocation(
+                LocationManager.GPS_PROVIDER,
+                cancellation,
+                mainExecutor,
+                ::complete,
+            ) ?: complete(null)
+        }.onFailure { complete(null) }
+    }
+
     companion object {
         const val ACTION_STOP = "com.hearthbit.app.STOP_MESH"
         const val ACTION_RENOTIFY = "com.hearthbit.app.RENOTIFY_MESH"
+        const val ACTION_RESCUE_CHANGED = "com.hearthbit.app.RESCUE_CHANGED"
         private const val CHANNEL_ID = "emergency_mesh"
         private const val NOTIFICATION_ID = 7401
         private const val MIN_NOTIFICATION_UPDATE_INTERVAL_MS = 2_000L
+        private const val RESCUE_LOCATION_TIMEOUT_MS = 10_000L
     }
 }

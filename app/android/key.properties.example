@@ -1,0 +1,6 @@
+# Copy this file to key.properties and keep the real values outside Git.
+# On Windows use forward slashes in the keystore path.
+storeFile=C:/secure/hearthbit-upload.jks
+storePassword=replace-with-secure-password
+keyAlias=hearthbit-upload
+keyPassword=replace-with-secure-password

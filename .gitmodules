@@ -3,4 +3,4 @@
 	url = https://github.com/permissionlesstech/bitchat-android.git
 [submodule "firmware/anchor-node"]
 	path = firmware/anchor-node
-	url = https://github.com/bitleproject/bitle.git
+	url = https://github.com/waar19/bitle.git

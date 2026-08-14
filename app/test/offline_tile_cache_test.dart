@@ -154,6 +154,25 @@ void main() {
       );
       expect(await cache.fileFor(tile).exists(), isFalse);
     });
+
+    test('expone cantidad y bytes sin datos de ubicación', () async {
+      final cache = OfflineTileCache.forTesting(
+        root: temporaryDirectory,
+        client: MockClient(
+          (_) async => http.Response.bytes(
+            pngBytes,
+            HttpStatus.ok,
+            headers: const {HttpHeaders.cacheControlHeader: 'max-age=3600'},
+          ),
+        ),
+      );
+
+      await cache.load(tile);
+      final stats = await cache.stats();
+
+      expect(stats.tileCount, 1);
+      expect(stats.bytes, pngBytes.length);
+    });
   });
 
   group('caducidad de caché pasiva', () {

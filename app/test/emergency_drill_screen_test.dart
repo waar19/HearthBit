@@ -76,10 +76,40 @@ class _DrillMessages extends MessageRepository {
       const [];
 
   @override
+  Future<void> expirePrivateMessageOutbox(DateTime now) async {}
+
+  @override
+  Future<List<EmergencyDelivery>> loadEmergencyDeliveries() async => const [];
+
+  @override
+  Future<void> expireEmergencyDeliveries(DateTime now) async {}
+
+  @override
   Future<void> save(MeshMessage message) async {}
 
   @override
   Future<void> saveKnownPeers(Iterable<MeshPeer> peers) async {}
+}
+
+class _EmergencyActionController extends MeshController {
+  _EmergencyActionController({
+    required this.testPlatform,
+    required MessageRepository repository,
+    required AppPreferences preferences,
+  }) : super(
+         platform: testPlatform,
+         repository: repository,
+         preferences: preferences,
+       );
+
+  final _DrillPlatform testPlatform;
+  var emergencyActivations = 0;
+
+  @override
+  Future<void> activateEmergency({String? description}) async {
+    emergencyActivations += 1;
+    await testPlatform.sendSos(content: description ?? 'real emergency');
+  }
 }
 
 void main() {
@@ -87,7 +117,7 @@ void main() {
 
   late _DrillPlatform platform;
   late AppPreferences preferences;
-  late MeshController mesh;
+  late _EmergencyActionController mesh;
   late EmergencyGatewayController gateway;
   late FamilyController family;
 
@@ -97,8 +127,8 @@ void main() {
     platform = _DrillPlatform();
     preferences = AppPreferences();
     await preferences.initialize();
-    mesh = MeshController(
-      platform: platform,
+    mesh = _EmergencyActionController(
+      testPlatform: platform,
       repository: _DrillMessages(),
       preferences: preferences,
     );
@@ -121,7 +151,7 @@ void main() {
     await platform.eventsController.close();
   });
 
-  Future<void> pumpScreen(WidgetTester tester) async {
+  Future<void> pumpScreen(WidgetTester tester, {double textScale = 1}) async {
     await tester.binding.setSurfaceSize(const Size(500, 1100));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
@@ -129,6 +159,12 @@ void main() {
         locale: const Locale('es'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
         home: Scaffold(
           body: AnimatedBuilder(
             animation: mesh,
@@ -137,6 +173,7 @@ void main() {
               preferences: preferences,
               gateway: gateway,
               family: family,
+              emergencyHoldDuration: const Duration(milliseconds: 20),
             ),
           ),
         ),
@@ -154,6 +191,51 @@ void main() {
     final drillTop = tester.getTopLeft(find.text('Modo simulacro')).dy;
 
     expect(sosTop, lessThan(drillTop));
+  });
+
+  testWidgets('mantener el botón real ejecuta la acción de SOS', (
+    tester,
+  ) async {
+    await pumpScreen(tester);
+    final holdButton = find.byKey(const Key('emergency-hold-button'));
+    await tester.ensureVisible(holdButton);
+
+    final semantics = tester.widget<Semantics>(
+      find.ancestor(of: holdButton, matching: find.byType(Semantics)).first,
+    );
+    semantics.properties.onLongPress!();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+
+    expect(platform.sosCalls, 1);
+    expect(mesh.emergencyActivations, 1);
+    expect(platform.publicMessages, isEmpty);
+  });
+
+  testWidgets('la acción accesible activa el SOS sin gesto mantenido', (
+    tester,
+  ) async {
+    await pumpScreen(tester);
+    final holdButton = find.byKey(const Key('emergency-hold-button'));
+    final semantics = tester.widget<Semantics>(
+      find.ancestor(of: holdButton, matching: find.byType(Semantics)).first,
+    );
+
+    semantics.properties.onTap!();
+    await tester.pump();
+
+    expect(mesh.emergencyActivations, 1);
+    expect(platform.sosCalls, 1);
+  });
+
+  testWidgets('no desborda la pantalla crítica con texto al 200 por ciento', (
+    tester,
+  ) async {
+    await pumpScreen(tester, textScale: 2);
+
+    expect(find.byKey(const Key('emergency-hold-button')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('confirmación activa banner y envío aislado de simulacro', (
@@ -195,6 +277,29 @@ void main() {
     expect(platform.sosCalls, 0);
     expect(platform.radarCalls, 0);
     expect(platform.beaconCalls, 0);
+  });
+
+  testWidgets('salir del simulacro requiere confirmación', (tester) async {
+    await pumpScreen(tester);
+    await tester.ensureVisible(find.byKey(const Key('drill-mode-switch')));
+    tester
+        .widget<SwitchListTile>(find.byKey(const Key('drill-mode-switch')))
+        .onChanged!(true);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ACTIVAR SIMULACRO'));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(const Key('drill-mode-switch')));
+    tester
+        .widget<SwitchListTile>(find.byKey(const Key('drill-mode-switch')))
+        .onChanged!(false);
+    await tester.pumpAndSettle();
+
+    expect(find.text('¿Finalizar el modo simulacro?'), findsOneWidget);
+    expect(mesh.drillModeEnabled, isTrue);
+    await tester.tap(find.text('FINALIZAR SIMULACRO'));
+    await tester.pumpAndSettle();
+    expect(mesh.drillModeEnabled, isFalse);
   });
 
   testWidgets('mensaje drill aparece separado y no como SOS', (tester) async {

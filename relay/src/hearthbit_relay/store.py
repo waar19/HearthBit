@@ -40,6 +40,7 @@ class PacketStore:
                 sender_id BLOB NOT NULL,
                 created_at_ms INTEGER NOT NULL,
                 expires_at_ms INTEGER NOT NULL,
+                priority INTEGER NOT NULL DEFAULT 0,
                 size INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS packet_expiry ON packets(expires_at_ms);
@@ -54,6 +55,13 @@ class PacketStore:
             );
             """
         )
+        packet_columns = {
+            str(row[1]) for row in self._db.execute("PRAGMA table_info(packets)")
+        }
+        if "priority" not in packet_columns:
+            self._db.execute(
+                "ALTER TABLE packets ADD COLUMN priority INTEGER NOT NULL DEFAULT 0"
+            )
         self._remove_ephemeral_packets()
         self._operations = 0
 
@@ -85,6 +93,7 @@ class PacketStore:
         message_type: int,
         sender_id: bytes,
         expires_at_ms: int,
+        priority: int = 0,
         now_ms: int | None = None,
     ) -> bool:
         now = _now_ms() if now_ms is None else now_ms
@@ -94,8 +103,8 @@ class PacketStore:
             """
             INSERT OR IGNORE INTO packets(
                 fingerprint, packet, message_type, sender_id,
-                created_at_ms, expires_at_ms, size
-            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                created_at_ms, expires_at_ms, priority, size
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 fingerprint,
@@ -104,6 +113,7 @@ class PacketStore:
                 sender_id,
                 now,
                 expires_at_ms,
+                max(0, min(priority, 100)),
                 len(packet),
             ),
         )
@@ -122,7 +132,7 @@ class PacketStore:
             LEFT JOIN deliveries AS d
               ON d.fingerprint = p.fingerprint AND d.link_id = ?
             WHERE p.expires_at_ms > ? AND d.fingerprint IS NULL
-            ORDER BY p.created_at_ms ASC
+            ORDER BY p.priority DESC, p.created_at_ms ASC
             LIMIT ?
             """,
             (link_id, now, limit),
@@ -183,7 +193,7 @@ class PacketStore:
                 DELETE FROM packets
                 WHERE fingerprint = (
                     SELECT fingerprint FROM packets
-                    ORDER BY created_at_ms ASC LIMIT 1
+                    ORDER BY priority ASC, created_at_ms ASC LIMIT 1
                 )
                 """
             )
