@@ -1,4 +1,5 @@
 import CoreBluetooth
+import CryptoKit
 import Flutter
 import Foundation
 import UIKit
@@ -469,6 +470,7 @@ class RunnerTests: XCTestCase {
 
 final class ConformanceFixtureTests: XCTestCase {
   private let fixtures = ConformanceFixtures.shared
+  private let sender = Data([1, 2, 3, 4, 5, 6, 7, 8])
 
   func testPacketFramesV1V2CompressionAndMalformedInputs() throws {
     let v1 = try XCTUnwrap(IOSMeshProtocol.decode(fixtures.bytes("packet.v1.message")))

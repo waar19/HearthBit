@@ -7,6 +7,7 @@ import Foundation
 import Security
 import UIKit
 import UserNotifications
+import zlib
 
 private func hearthBitDebugLog(_ format: String, _ arguments: CVarArg...) {
   #if DEBUG
@@ -4846,46 +4847,32 @@ enum IOSMeshProtocol {
     originalSize: Int
   ) -> Data? {
     guard !data.isEmpty else { return nil }
-    let placeholder = UnsafeMutablePointer<UInt8>.allocate(capacity: 1)
-    defer { placeholder.deallocate() }
-    var stream = compression_stream(
-      dst_ptr: placeholder,
-      dst_size: 0,
-      src_ptr: UnsafePointer(placeholder),
-      src_size: 0,
-      state: nil
-    )
-    guard compression_stream_init(
+    var stream = z_stream()
+    guard inflateInit2_(
       &stream,
-      COMPRESSION_STREAM_DECODE,
-      COMPRESSION_ZLIB
-    ) != COMPRESSION_STATUS_ERROR else { return nil }
-    defer { compression_stream_destroy(&stream) }
+      -MAX_WBITS,
+      ZLIB_VERSION,
+      Int32(MemoryLayout<z_stream>.size)
+    ) == Z_OK else { return nil }
+    defer { inflateEnd(&stream) }
 
-    let outputCapacity = originalSize + 1
-    var output = Data(count: outputCapacity)
+    var output = Data(count: originalSize)
     let valid = output.withUnsafeMutableBytes { destination in
       data.withUnsafeBytes { source in
         guard
           let destinationBase = destination.bindMemory(to: UInt8.self).baseAddress,
           let sourceBase = source.bindMemory(to: UInt8.self).baseAddress
         else { return false }
-        stream.src_ptr = sourceBase
-        stream.src_size = data.count
-        stream.dst_ptr = destinationBase
-        stream.dst_size = outputCapacity
-        let status = compression_stream_process(
-          &stream,
-          Int32(COMPRESSION_STREAM_FINALIZE.rawValue)
-        )
-        return status == COMPRESSION_STATUS_END &&
-          stream.src_size == 0 &&
-          stream.dst_size == 1
+        stream.next_in = UnsafeMutablePointer(mutating: sourceBase)
+        stream.avail_in = uInt(data.count)
+        stream.next_out = destinationBase
+        stream.avail_out = uInt(originalSize)
+        return inflate(&stream, Z_FINISH) == Z_STREAM_END &&
+          stream.avail_in == 0 &&
+          stream.avail_out == 0
       }
     }
-    guard valid else { return nil }
-    output.removeLast()
-    return output
+    return valid ? output : nil
   }
 
   private static func looksLikeZlib(_ data: Data) -> Bool {
@@ -4944,8 +4931,8 @@ final class IOSMeshPacketFragmenter {
   ) -> [Data]? {
     let linkLimit = min(maximumValueLength, Self.maximumGATTValueLength)
     guard linkLimit > 0 else { return nil }
-    if encoded.count <= linkLimit { return [encoded] }
     guard packet.type != IOSMeshProtocol.fragment else { return nil }
+    if encoded.count <= linkLimit { return [encoded] }
 
     let originalData = IOSMeshProtocol.removeBLETransportPadding(packet, encoded: encoded)
     guard originalData.count <= Self.maximumReassembledBytes else { return nil }
@@ -5436,7 +5423,7 @@ private final class IOSStoreForward {
 
   private func save(_ entries: [(expiry: TimeInterval, encoded: Data)]) {
     UserDefaults.standard.set(
-      entries.compactMap { entry in
+      entries.compactMap { entry -> [String: Any]? in
         guard let sealed = try? AES.GCM.seal(
           entry.encoded,
           using: encryptionKey

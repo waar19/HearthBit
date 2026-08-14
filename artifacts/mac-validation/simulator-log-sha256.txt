@@ -1,0 +1,1 @@
+1bf0f4786df439e888d9fb7d693462885b7371a0d5c726bf6ac7fe9b5954d7eb  artifacts/mac-validation/xcodebuild-simulator.log

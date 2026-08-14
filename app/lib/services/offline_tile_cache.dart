@@ -727,7 +727,7 @@ class OfflineTileImageProvider extends ImageProvider<OfflineTileImageProvider> {
     try {
       final bytes = await key.cache.load(key.tile);
       final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-      return decode(buffer);
+      return await decode(buffer);
     } catch (_) {
       scheduleMicrotask(() => PaintingBinding.instance.imageCache.evict(key));
       rethrow;
