@@ -1008,7 +1008,7 @@ abstract class AppLocalizations {
   /// No description provided for @aboutBody.
   ///
   /// In en, this message translates to:
-  /// **'HearthBit is an open-source emergency communication project. Your support helps fund device testing and resilient relay hardware.'**
+  /// **'HearthBit is a source-available emergency communication project, public for privacy and security review. Noncommercial use is licensed; commercial use requires permission.'**
   String get aboutBody;
 
   /// No description provided for @aboutVersion.
@@ -1038,7 +1038,7 @@ abstract class AppLocalizations {
   /// No description provided for @shareInviteMessage.
   ///
   /// In en, this message translates to:
-  /// **'Join HearthBit, an open-source emergency mesh that works without internet. Download it or contribute at {url}'**
+  /// **'Join HearthBit, a publicly auditable emergency mesh that works without internet. Download it or contribute at {url}'**
   String shareInviteMessage(String url);
 
   /// No description provided for @tooltipShare.
@@ -1370,6 +1370,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No reliable sector was found. Turn more slowly and move away from metal or electronic equipment.'**
   String get radarSweepInconclusive;
+
+  /// No description provided for @radarSweepExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'The direction changed or expired. Repeat the sweep from your current position.'**
+  String get radarSweepExpired;
+
+  /// No description provided for @radarMeasuredDistance.
+  ///
+  /// In en, this message translates to:
+  /// **'Measured: {distance}'**
+  String radarMeasuredDistance(String distance);
+
+  /// No description provided for @radarRadioStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Measure distance by radio'**
+  String get radarRadioStart;
+
+  /// No description provided for @radarRadioStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop radio distance measurement'**
+  String get radarRadioStop;
+
+  /// No description provided for @radarSonarStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Measure with acoustic sonar'**
+  String get radarSonarStart;
+
+  /// No description provided for @radarSonarStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop acoustic sonar'**
+  String get radarSonarStop;
+
+  /// No description provided for @radarSonarMicrophoneRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone permission is required for acoustic sonar.'**
+  String get radarSonarMicrophoneRequired;
+
+  /// No description provided for @radarSonarTooNoisy.
+  ///
+  /// In en, this message translates to:
+  /// **'The chirps could not be measured. Reduce noise, keep both phones uncovered, and try again.'**
+  String get radarSonarTooNoisy;
 
   /// No description provided for @radarSweepEstimateWarning.
   ///

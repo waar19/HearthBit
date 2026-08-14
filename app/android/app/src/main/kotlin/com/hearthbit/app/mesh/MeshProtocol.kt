@@ -23,6 +23,7 @@ internal object MeshProtocol {
     const val TYPE_HBT_CAPABILITY: Byte = 0x24
     const val TYPE_NODE_CAPABILITY: Byte = 0x25
     const val TYPE_BEACON_CONTROL: Byte = 0x26
+    const val TYPE_RANGING_CONTROL: Byte = 0x27
     const val TTL: Byte = 7
     const val HBT_VERSION: Byte = 0x01
 

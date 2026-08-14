@@ -8,10 +8,14 @@ import 'package:geolocator/geolocator.dart';
 
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
+import '../services/acoustic_sonar.dart';
 import '../services/beacon_control_protocol.dart';
+import '../services/compass_calibration_gate.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/radar_fusion.dart';
 import '../services/radar_signal.dart';
+import '../services/radar_ui_state.dart';
+import '../services/ranging_control_protocol.dart';
 
 /// Radar de rescate estilo AirTag: mide la intensidad de la señal BLE del
 /// dispositivo objetivo y guía a la persona con proximidad, tendencia
@@ -24,6 +28,7 @@ class RadarScreen extends StatefulWidget {
     required this.consentSource,
     this.latitude,
     this.longitude,
+    this.platform,
     super.key,
   });
 
@@ -35,6 +40,7 @@ class RadarScreen extends StatefulWidget {
   /// Última posición GPS conocida del objetivo (de su alerta SOS), si existe.
   final double? latitude;
   final double? longitude;
+  final MeshPlatformService? platform;
 
   @override
   State<RadarScreen> createState() => _RadarScreenState();
@@ -42,14 +48,18 @@ class RadarScreen extends StatefulWidget {
 
 class _RadarScreenState extends State<RadarScreen>
     with TickerProviderStateMixin {
-  final _platform = MeshPlatformService();
+  late final _platform = widget.platform ?? MeshPlatformService();
   final _processor = RadarSignalProcessor();
   final _sweepEstimator = SweepEstimator();
+  final _calibrationGate = CompassCalibrationGate();
+  final _headingFilter = CircularHeadingFilter();
+  final _acousticCapture = AcousticSonarCapture();
 
   StreamSubscription<Map<Object?, Object?>>? _events;
   StreamSubscription<Position>? _positions;
   StreamSubscription<CompassEvent>? _compassEvents;
   Timer? _ticker;
+  Timer? _acousticTimeout;
 
   late final AnimationController _sweep = AnimationController(
     vsync: this,
@@ -66,22 +76,37 @@ class _RadarScreenState extends State<RadarScreen>
   bool _tentativeSignal = false;
   bool _sweepActive = false;
   bool _compassUnavailable = false;
+  bool _compassNeedsCalibration = false;
+  bool _sweepExpired = false;
   String? _startError;
   double? _gpsDistanceMeters;
   double? _headingDegrees;
-  double? _compassAccuracyDegrees;
   Position? _localPosition;
   double? _targetLatitude;
   double? _targetLongitude;
   double? _targetAccuracyMeters;
   DateTime? _targetPositionAt;
   SweepEstimate? _directionEstimate;
+  RadarSweepAnchor? _directionAnchor;
+  DateTime _lastCompassUiAt = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime _lastHaptic = DateTime.fromMillisecondsSinceEpoch(0);
   String? _beaconRequestId;
   String? _beaconStatus;
-  String? _beaconError;
   DateTime? _beaconRequestExpiresAt;
   bool _requestingBeacon = false;
+  bool _radioRangingAvailable = false;
+  bool _radioRangingActive = false;
+  bool _acousticActive = false;
+  bool _acousticInitiator = false;
+  Uint8List? _acousticNonce;
+  int _acousticRound = 0;
+  AcousticRoundObservation? _localAcousticObservation;
+  AcousticRoundObservation? _remoteAcousticObservation;
+  final List<AcousticDistanceMeasurement> _acousticMeasurements = [];
+  double? _precisionDistanceMeters;
+  double? _precisionDistanceErrorMeters;
+  double _precisionDistanceConfidence = 0;
+  RadarPrecisionSource? _precisionSource;
 
   @override
   void initState() {
@@ -93,6 +118,7 @@ class _RadarScreenState extends State<RadarScreen>
     _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) => _tick());
     _startCompassTracking();
     _watchGps();
+    unawaited(_loadRangingCapabilities());
   }
 
   Future<void> _startRadar() async {
@@ -104,7 +130,58 @@ class _RadarScreenState extends State<RadarScreen>
     }
   }
 
+  Future<void> _loadRangingCapabilities() async {
+    try {
+      final capabilities = await _platform.getRangingCapabilities();
+      if (!mounted) return;
+      setState(() {
+        _radioRangingAvailable = capabilities['available'] == true;
+      });
+    } catch (_) {
+      // El radar BLE y el sonar acústico siguen disponibles.
+    }
+  }
+
   void _onEvent(Map<Object?, Object?> event) {
+    if (event['type'] == 'rangingMeasurement' &&
+        (event['peerId'] as String?)?.toLowerCase() ==
+            widget.peerId.toLowerCase()) {
+      final meters = (event['meters'] as num?)?.toDouble();
+      if (!mounted || meters == null || !meters.isFinite || meters < 0) return;
+      setState(() {
+        _radioRangingActive = true;
+        _precisionDistanceMeters = meters;
+        _precisionDistanceErrorMeters = (event['errorMeters'] as num?)
+            ?.toDouble();
+        _precisionDistanceConfidence =
+            ((event['confidence'] as num?)?.toDouble() ?? 0)
+                .clamp(0, 1)
+                .toDouble();
+        _precisionSource = RadarPrecisionSource.radio;
+      });
+      return;
+    }
+    if (event['type'] == 'radioRangingState') {
+      final state = event['state'] as String?;
+      if (!mounted) return;
+      setState(
+        () => _radioRangingActive = state == 'active' || state == 'opened',
+      );
+      return;
+    }
+    if (event['type'] == 'rangingControl' &&
+        (event['peerId'] as String?)?.toLowerCase() ==
+            widget.peerId.toLowerCase()) {
+      final raw = event['payload'];
+      if (raw is Uint8List) {
+        final control = RangingControlProtocol.decode(raw);
+        if (control != null &&
+            control.technology == RangingTechnology.acoustic) {
+          unawaited(_handleAcousticControl(control));
+        }
+      }
+      return;
+    }
     if (event['type'] == 'beaconState' &&
         event['scope'] == 'remote' &&
         (event['peerId'] as String?)?.toLowerCase() ==
@@ -117,7 +194,6 @@ class _RadarScreenState extends State<RadarScreen>
         _beaconRequestExpiresAt = expiresAt > 0
             ? DateTime.fromMillisecondsSinceEpoch(expiresAt)
             : null;
-        _beaconError = null;
         _requestingBeacon = false;
       });
       return;
@@ -154,6 +230,12 @@ class _RadarScreenState extends State<RadarScreen>
       if (_sweepEstimator.isComplete) {
         _sweepActive = false;
         _directionEstimate = _sweepEstimator.estimate;
+        _directionAnchor = RadarSweepAnchor(
+          capturedAt: DateTime.now(),
+          latitude: _localPosition?.latitude,
+          longitude: _localPosition?.longitude,
+        );
+        _sweepExpired = false;
       }
     }
     if (!mounted) return;
@@ -174,6 +256,251 @@ class _RadarScreenState extends State<RadarScreen>
     setState(() {
       _sweepActive = true;
       _directionEstimate = null;
+      _directionAnchor = null;
+      _sweepExpired = false;
+    });
+  }
+
+  Future<void> _toggleRadioRanging() async {
+    try {
+      if (_radioRangingActive) {
+        await _platform.stopRadioRanging();
+        if (mounted) setState(() => _radioRangingActive = false);
+      } else {
+        await _platform.startRadioRanging(widget.peerId);
+        if (mounted) setState(() => _radioRangingActive = true);
+      }
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message ?? error.code)));
+    }
+  }
+
+  Future<void> _toggleAcousticSonar() async {
+    if (_acousticActive) {
+      await _stopAcousticSonar(notifyPeer: true);
+      return;
+    }
+    final nonce = RangingControlProtocol.randomNonce();
+    _acousticNonce = nonce;
+    _acousticInitiator = true;
+    _acousticRound = 0;
+    _acousticMeasurements.clear();
+    _localAcousticObservation = null;
+    _remoteAcousticObservation = null;
+    if (!await _acousticCapture.start()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.radarSonarMicrophoneRequired)),
+      );
+      return;
+    }
+    if (mounted) setState(() => _acousticActive = true);
+    _armAcousticTimeout();
+    await _sendAcoustic(RangingControlAction.request);
+  }
+
+  Future<void> _handleAcousticControl(RangingControlMessage control) async {
+    _armAcousticTimeout();
+    if (control.action == RangingControlAction.request) {
+      await _acousticCapture.cancel();
+      _acousticNonce = control.sessionNonce;
+      _acousticInitiator = false;
+      _acousticRound = control.round;
+      _localAcousticObservation = null;
+      _remoteAcousticObservation = null;
+      if (!await _acousticCapture.start()) {
+        await _sendAcoustic(RangingControlAction.error);
+        return;
+      }
+      if (mounted) setState(() => _acousticActive = true);
+      await _sendAcoustic(RangingControlAction.accept);
+      return;
+    }
+    final nonce = _acousticNonce;
+    if (nonce == null || !_bytesEqual(nonce, control.sessionNonce)) return;
+    if (control.action == RangingControlAction.accept && _acousticInitiator) {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      if (!_acousticActive) return;
+      await _acousticCapture.emitChirp();
+      await _sendAcoustic(RangingControlAction.acousticChirp, value: 0);
+      return;
+    }
+    if (control.action == RangingControlAction.acousticChirp &&
+        control.value == 0 &&
+        !_acousticInitiator) {
+      await Future<void>.delayed(const Duration(milliseconds: 450));
+      if (!_acousticActive) return;
+      await _acousticCapture.emitChirp();
+      await _sendAcoustic(RangingControlAction.acousticChirp, value: 1);
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await _finishAcousticCapture(selfChirpFirst: false);
+      return;
+    }
+    if (control.action == RangingControlAction.acousticChirp &&
+        control.value == 1 &&
+        _acousticInitiator) {
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await _finishAcousticCapture(selfChirpFirst: true);
+      return;
+    }
+    if (control.action == RangingControlAction.acousticObservation) {
+      _remoteAcousticObservation = AcousticRoundObservation(
+        selfChirpSample: 0,
+        remoteChirpSample: control.value.round(),
+        confidence: control.confidence,
+      );
+      await _tryFinalizeAcousticRound();
+      return;
+    }
+    if (control.action == RangingControlAction.result) {
+      if (!mounted) return;
+      setState(() {
+        _precisionDistanceMeters = control.value;
+        _precisionDistanceErrorMeters = control.errorMeters;
+        _precisionDistanceConfidence = control.confidence;
+        _precisionSource = RadarPrecisionSource.acoustic;
+        _acousticActive = false;
+      });
+      _acousticTimeout?.cancel();
+      await _acousticCapture.cancel();
+      return;
+    }
+    if (control.action == RangingControlAction.stop ||
+        control.action == RangingControlAction.error) {
+      await _stopAcousticSonar(notifyPeer: false);
+    }
+  }
+
+  Future<void> _finishAcousticCapture({required bool selfChirpFirst}) async {
+    final detections = await _acousticCapture.stopAndAnalyze();
+    if (detections.length < 2) {
+      await _sendAcoustic(RangingControlAction.error);
+      await _stopAcousticSonar(notifyPeer: false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.radarSonarTooNoisy)),
+        );
+      }
+      return;
+    }
+    final first = detections[0];
+    final second = detections[1];
+    _localAcousticObservation = AcousticRoundObservation(
+      selfChirpSample: selfChirpFirst ? first.sampleIndex : second.sampleIndex,
+      remoteChirpSample: selfChirpFirst
+          ? second.sampleIndex
+          : first.sampleIndex,
+      confidence: math.min(first.confidence, second.confidence),
+    );
+    await _sendAcoustic(
+      RangingControlAction.acousticObservation,
+      value: _localAcousticObservation!.signedDeltaSamples.toDouble(),
+      confidence: _localAcousticObservation!.confidence,
+    );
+    await _tryFinalizeAcousticRound();
+  }
+
+  Future<void> _tryFinalizeAcousticRound() async {
+    final local = _localAcousticObservation;
+    final remote = _remoteAcousticObservation;
+    if (local == null || remote == null) return;
+    final measurement = AcousticSonarDsp.combineRound(
+      local: local,
+      remote: remote,
+    );
+    if (measurement == null) {
+      await _sendAcoustic(RangingControlAction.error);
+      await _stopAcousticSonar(notifyPeer: false);
+      return;
+    }
+    _acousticMeasurements.add(measurement);
+    if (_acousticInitiator && _acousticRound < 2) {
+      _acousticRound += 1;
+      _localAcousticObservation = null;
+      _remoteAcousticObservation = null;
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      if (!await _acousticCapture.start()) {
+        await _stopAcousticSonar(notifyPeer: true);
+        return;
+      }
+      await _sendAcoustic(RangingControlAction.request);
+      return;
+    }
+    if (!_acousticInitiator) return;
+    final aggregate = AcousticSonarDsp.aggregate(_acousticMeasurements)!;
+    await _sendAcoustic(
+      RangingControlAction.result,
+      value: aggregate.distanceMeters,
+      errorMeters: aggregate.errorMeters,
+      confidence: aggregate.confidence,
+    );
+    _acousticTimeout?.cancel();
+    if (!mounted) return;
+    setState(() {
+      _precisionDistanceMeters = aggregate.distanceMeters;
+      _precisionDistanceErrorMeters = aggregate.errorMeters;
+      _precisionDistanceConfidence = aggregate.confidence;
+      _precisionSource = RadarPrecisionSource.acoustic;
+      _acousticActive = false;
+    });
+  }
+
+  Future<void> _sendAcoustic(
+    RangingControlAction action, {
+    double value = 0,
+    double errorMeters = 0,
+    double confidence = 0,
+  }) async {
+    final nonce = _acousticNonce;
+    if (nonce == null) return;
+    await _platform.sendRangingControl(
+      widget.peerId,
+      RangingControlProtocol.encode(
+        action: action,
+        technology: RangingTechnology.acoustic,
+        sessionNonce: nonce,
+        round: _acousticRound,
+        value: value,
+        errorMeters: errorMeters,
+        confidence: confidence,
+      ),
+    );
+  }
+
+  Future<void> _stopAcousticSonar({required bool notifyPeer}) async {
+    if (notifyPeer && _acousticNonce != null) {
+      await _sendAcoustic(RangingControlAction.stop);
+    }
+    await _acousticCapture.cancel();
+    _acousticTimeout?.cancel();
+    _acousticTimeout = null;
+    _acousticNonce = null;
+    _localAcousticObservation = null;
+    _remoteAcousticObservation = null;
+    if (mounted) setState(() => _acousticActive = false);
+  }
+
+  bool _bytesEqual(Uint8List first, Uint8List second) {
+    if (first.length != second.length) return false;
+    for (var index = 0; index < first.length; index++) {
+      if (first[index] != second[index]) return false;
+    }
+    return true;
+  }
+
+  void _armAcousticTimeout() {
+    _acousticTimeout?.cancel();
+    _acousticTimeout = Timer(const Duration(seconds: 15), () {
+      if (!_acousticActive) return;
+      unawaited(_stopAcousticSonar(notifyPeer: true));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.radarSonarTooNoisy)),
+        );
+      }
     });
   }
 
@@ -208,7 +535,12 @@ class _RadarScreenState extends State<RadarScreen>
         }
       }
     } on PlatformException catch (error) {
-      if (mounted) setState(() => _beaconError = error.message ?? error.code);
+      if (mounted) {
+        final message = error.message ?? error.code;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
     } finally {
       if (mounted) setState(() => _requestingBeacon = false);
     }
@@ -223,12 +555,36 @@ class _RadarScreenState extends State<RadarScreen>
     _compassEvents = compassStream.listen(
       (event) {
         if (!mounted) return;
-        final heading = event.heading;
-        setState(() {
-          _headingDegrees = heading;
-          _compassAccuracyDegrees = event.accuracy;
-          _compassUnavailable = heading == null;
-        });
+        final rawHeading = event.heading;
+        final heading = rawHeading == null || !rawHeading.isFinite
+            ? null
+            : _headingFilter.add(rawHeading);
+        final rawAccuracy = event.accuracy;
+        final accuracy =
+            rawAccuracy == null || rawAccuracy < 0 || !rawAccuracy.isFinite
+            ? null
+            : rawAccuracy;
+        final now = DateTime.now();
+        final calibration = _calibrationGate.update(accuracy, now);
+        final unavailable = heading == null;
+        final previousHeading = _headingDegrees;
+        final headingChanged =
+            previousHeading == null ||
+            heading == null ||
+            RadarFusion.angularDistance(previousHeading, heading) >= 2;
+        final stateChanged =
+            calibration != _compassNeedsCalibration ||
+            unavailable != _compassUnavailable;
+        _headingDegrees = heading;
+        _compassNeedsCalibration = calibration;
+        _compassUnavailable = unavailable;
+        if (stateChanged ||
+            (headingChanged &&
+                now.difference(_lastCompassUiAt) >=
+                    const Duration(milliseconds: 100))) {
+          _lastCompassUiAt = now;
+          setState(() {});
+        }
       },
       onError: (_) {
         if (mounted) setState(() => _compassUnavailable = true);
@@ -246,6 +602,19 @@ class _RadarScreenState extends State<RadarScreen>
       return;
     }
     final stale = _processor.isStale(DateTime.now());
+    final anchor = _directionAnchor;
+    if (_directionEstimate != null &&
+        anchor != null &&
+        !anchor.isFresh(
+          now: DateTime.now(),
+          currentLatitude: _localPosition?.latitude,
+          currentLongitude: _localPosition?.longitude,
+        )) {
+      _directionEstimate = null;
+      _directionAnchor = null;
+      _sweepExpired = true;
+      setState(() {});
+    }
     if (_beaconStatus == 'requested' &&
         _beaconRequestExpiresAt?.isAfter(DateTime.now()) == false) {
       _beaconStatus = null;
@@ -404,10 +773,13 @@ class _RadarScreenState extends State<RadarScreen>
   @override
   void dispose() {
     unawaited(_platform.stopRadar());
+    unawaited(_platform.stopRadioRanging());
+    unawaited(_acousticCapture.dispose());
     _events?.cancel();
     _positions?.cancel();
     _compassEvents?.cancel();
     _ticker?.cancel();
+    _acousticTimeout?.cancel();
     _sweep.dispose();
     _pulse.dispose();
     super.dispose();
@@ -415,7 +787,6 @@ class _RadarScreenState extends State<RadarScreen>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final reading = _reading;
     final searching = reading == null;
     final fusion = _fusionResult();
@@ -429,70 +800,21 @@ class _RadarScreenState extends State<RadarScreen>
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final radarSide = math.min(
-              420.0,
-              math.max(0.0, constraints.maxWidth - 32),
+            final content = _buildRadarColumn(
+              reading: reading,
+              searching: searching,
+              fusion: fusion,
+              compact: constraints.maxHeight < 700,
             );
+            if (constraints.maxHeight >= 520) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: content,
+              );
+            }
             return SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-              child: Column(
-                children: [
-                  SizedBox(
-                    width: radarSide,
-                    height: radarSide,
-                    child: AnimatedBuilder(
-                      animation: Listenable.merge([_sweep, _pulse]),
-                      builder: (context, _) => CustomPaint(
-                        painter: _RadarPainter(
-                          sweepProgress: _sweep.value,
-                          pulseProgress: _pulse.value,
-                          strength: _stale ? null : reading?.strength,
-                          directionSweepSectors: _sweepEstimator.sectorCoverage,
-                          estimatedDirectionRadians: _bleDirectionRadians(
-                            fusion,
-                          ),
-                          gpsDirectionRadians: _gpsDirectionRadians(fusion),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildPanel(theme, reading, searching, fusion),
-                  if (_canRequestBeacon || _beaconStatus == 'active') ...[
-                    const SizedBox(height: 10),
-                    FilledButton.icon(
-                      onPressed:
-                          _requestingBeacon || _beaconStatus == 'requested'
-                          ? null
-                          : _toggleRemoteBeacon,
-                      icon: Icon(
-                        _beaconStatus == 'active'
-                            ? Icons.flashlight_off_outlined
-                            : Icons.flashlight_on_outlined,
-                      ),
-                      label: Text(
-                        _beaconStatus == 'active'
-                            ? context.l10n.beaconStopRemote
-                            : context.l10n.beaconRequestRemote,
-                      ),
-                    ),
-                    if (_beaconError != null)
-                      Text(
-                        _beaconError!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.amber),
-                      ),
-                  ],
-                  const SizedBox(height: 10),
-                  _buildDirectionSweep(fusion),
-                  const SizedBox(height: 10),
-                  Text(
-                    '${_consentLabel()}\n${context.l10n.radarConsentExpires(_formatExpiry())}\n${context.l10n.radarNotDirection}',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Color(0xFF94A3B8)),
-                  ),
-                ],
-              ),
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: SizedBox(height: 520, child: content),
             );
           },
         ),
@@ -500,147 +822,247 @@ class _RadarScreenState extends State<RadarScreen>
     );
   }
 
-  Widget _buildDirectionSweep(RadarFusionResult fusion) {
-    const green = Color(0xFF4ADE80);
-    const dim = Color(0xFF94A3B8);
-    final estimate = _directionEstimate;
-    final showHoldingGuide =
-        !_compassUnavailable && (_sweepActive || estimate == null);
-    return _panelCard(
+  Widget _buildRadarColumn({
+    required RadarReading? reading,
+    required bool searching,
+    required RadarFusionResult fusion,
+    required bool compact,
+  }) {
+    return Column(
       children: [
-        if (showHoldingGuide) ...[
-          _SweepHoldingGuide(animation: _sweep, active: _sweepActive),
-          const SizedBox(height: 10),
-        ],
-        if (_compassNeedsCalibration) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.amber.withValues(alpha: .08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.amber.withValues(alpha: .35)),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.screen_rotation_alt_outlined,
-                  color: Colors.amber,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    context.l10n.radarCompassCalibration,
-                    textAlign: TextAlign.left,
-                    style: const TextStyle(color: Colors.amber, fontSize: 11),
+        _buildBannerSlot(fusion),
+        const SizedBox(height: 6),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final radarSide = math.min(
+                420.0,
+                math.min(constraints.maxWidth, constraints.maxHeight),
+              );
+              return Center(
+                child: SizedBox.square(
+                  key: const ValueKey('radar-canvas'),
+                  dimension: radarSide,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _AnimatedRadarCanvas(
+                        sweep: _sweep,
+                        pulse: _pulse,
+                        strength: _stale ? null : reading?.strength,
+                        directionSweepSectors: _sweepEstimator.sectorCoverage,
+                        estimatedDirectionRadians: _bleDirectionRadians(fusion),
+                        gpsDirectionRadians: _gpsDirectionRadians(fusion),
+                      ),
+                      if (_sweepActive) _buildSweepOverlay(),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              );
+            },
           ),
-          const SizedBox(height: 8),
-        ],
-        if (_compassUnavailable) ...[
-          const Icon(Icons.explore_off_outlined, color: dim),
-          const SizedBox(height: 6),
-          Text(
-            context.l10n.radarCompassUnavailable,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: dim),
-          ),
-        ] else if (_sweepActive) ...[
-          LinearProgressIndicator(
-            value: _sweepEstimator.progress,
-            color: green,
-            backgroundColor: Colors.white12,
-          ),
-          const SizedBox(height: 6),
-          Text(
-            context.l10n.radarSweepProgress(
-              (_sweepEstimator.progress * 100).round(),
-            ),
-            style: const TextStyle(color: dim, fontSize: 12),
-          ),
-        ] else if (estimate != null) ...[
-          if (fusion.bleSuppressedVeryClose) ...[
-            const Icon(Icons.vibration, color: Colors.amber),
-            const SizedBox(height: 6),
-            Text(
-              context.l10n.radarDirectionVeryClose,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white),
-            ),
-          ] else if (fusion.sourcesDisagree) ...[
-            const Icon(Icons.compare_arrows, color: Colors.amber),
-            const SizedBox(height: 6),
-            Text(
-              context.l10n.radarSourcesDisagree,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white),
-            ),
-          ] else if (fusion.gpsReliable) ...[
-            const Icon(Icons.navigation_outlined, color: Color(0xFF60A5FA)),
-            const SizedBox(height: 6),
-            Text(
-              context.l10n.radarDirectionGps,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white),
-            ),
-          ] else if (fusion.adjustedBleConfidence >=
-              SweepEstimate.minimumDirectionalConfidence) ...[
-            Text(
-              context.l10n.radarSweepResult(estimate.headingDegrees.round()),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ] else ...[
-            const Icon(Icons.explore_off_outlined, color: dim),
-            const SizedBox(height: 6),
-            Text(
-              context.l10n.radarSweepInconclusive,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white),
-            ),
-          ],
-          if (!fusion.gpsReliable) ...[
-            const SizedBox(height: 6),
-            Text(
-              context.l10n.radarSweepConfidence(
-                (fusion.adjustedBleConfidence * 100).round(),
-              ),
-              style: TextStyle(
-                color:
-                    fusion.adjustedBleConfidence >=
-                        SweepEstimate.minimumDirectionalConfidence
-                    ? green
-                    : dim,
-              ),
-            ),
-          ],
-          const SizedBox(height: 4),
-          Text(
-            context.l10n.radarSweepEstimateWarning,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: dim, fontSize: 12),
-          ),
-        ],
-        if (!_sweepActive) ...[
-          if (estimate != null || _compassUnavailable)
-            const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: _startDirectionSweep,
-            icon: const Icon(Icons.explore_outlined),
-            label: Text(
-              estimate == null
-                  ? context.l10n.radarSweepStart
-                  : context.l10n.radarSweepRestart,
-            ),
-          ),
-        ],
+        ),
+        const SizedBox(height: 6),
+        _buildPanel(reading, searching, fusion, compact: compact),
+        const SizedBox(height: 6),
+        _buildActionRow(),
+        const SizedBox(height: 4),
+        Text(
+          '${_consentLabel()} · ${context.l10n.radarConsentExpires(_formatExpiry())}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+        ),
       ],
+    );
+  }
+
+  Widget _buildBannerSlot(RadarFusionResult fusion) {
+    final kind = resolveRadarBanner(
+      permissionExpired: _permissionExpired,
+      hasStartError: _startError != null,
+      signalLost: _stale,
+      compassNeedsCalibration: _compassNeedsCalibration,
+      sourcesDisagree: fusion.sourcesDisagree,
+      sweepExpired: _sweepExpired,
+      tentativeSignal: _tentativeSignal,
+    );
+    final (icon, color, message) = switch (kind) {
+      RadarBannerKind.permissionExpired => (
+        Icons.lock_clock_outlined,
+        const Color(0xFFF87171),
+        context.l10n.radarPermissionExpired,
+      ),
+      RadarBannerKind.startError => (
+        Icons.error_outline,
+        const Color(0xFFF87171),
+        _startError!,
+      ),
+      RadarBannerKind.signalLost => (
+        Icons.wifi_off,
+        const Color(0xFFF87171),
+        context.l10n.radarSignalLostHint,
+      ),
+      RadarBannerKind.compassCalibration => (
+        Icons.screen_rotation_alt_outlined,
+        const Color(0xFFFBBF24),
+        context.l10n.radarCompassCalibration,
+      ),
+      RadarBannerKind.sourcesDisagree => (
+        Icons.compare_arrows,
+        const Color(0xFFFBBF24),
+        context.l10n.radarSourcesDisagree,
+      ),
+      RadarBannerKind.sweepExpired => (
+        Icons.refresh,
+        const Color(0xFFFBBF24),
+        context.l10n.radarSweepExpired,
+      ),
+      RadarBannerKind.tentativeSignal => (
+        Icons.bluetooth_searching,
+        const Color(0xFF94A3B8),
+        context.l10n.radarTentativeSignal,
+      ),
+      null => (Icons.info_outline, Colors.transparent, ''),
+    };
+    return SizedBox(
+      key: const ValueKey('radar-banner-slot'),
+      height: 58,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        child: kind == null
+            ? const SizedBox.expand(key: ValueKey('empty-radar-banner'))
+            : Container(
+                key: ValueKey(kind),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: .1),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: color.withValues(alpha: .4)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(icon, color: color, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        message,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: color, fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildSweepOverlay() {
+    const green = Color(0xFF4ADE80);
+    return Padding(
+      padding: const EdgeInsets.all(18),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xFF07120D).withValues(alpha: .9),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: green.withValues(alpha: .5)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(
+                child: _SweepHoldingGuide(animation: _sweep, active: true),
+              ),
+              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                value: _sweepEstimator.progress,
+                color: green,
+                backgroundColor: Colors.white12,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                context.l10n.radarSweepProgress(
+                  (_sweepEstimator.progress * 100).round(),
+                ),
+                style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionRow() {
+    final estimate = _directionEstimate;
+    final directionButton = OutlinedButton.icon(
+      onPressed: _compassUnavailable || _sweepActive
+          ? null
+          : _startDirectionSweep,
+      icon: const Icon(Icons.explore_outlined),
+      label: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          estimate == null
+              ? context.l10n.radarSweepStart
+              : context.l10n.radarSweepRestart,
+        ),
+      ),
+    );
+    return SizedBox(
+      height: 44,
+      child: Row(
+        children: [
+          Expanded(child: directionButton),
+          if (_radioRangingAvailable) ...[
+            const SizedBox(width: 6),
+            IconButton.filledTonal(
+              tooltip: _radioRangingActive
+                  ? context.l10n.radarRadioStop
+                  : context.l10n.radarRadioStart,
+              onPressed: _toggleRadioRanging,
+              icon: Icon(
+                _radioRangingActive ? Icons.radar : Icons.social_distance,
+              ),
+            ),
+          ],
+          const SizedBox(width: 6),
+          IconButton.filledTonal(
+            tooltip: _acousticActive
+                ? context.l10n.radarSonarStop
+                : context.l10n.radarSonarStart,
+            onPressed: _toggleAcousticSonar,
+            icon: Icon(
+              _acousticActive ? Icons.hearing_disabled : Icons.graphic_eq,
+            ),
+          ),
+          if (_canRequestBeacon || _beaconStatus == 'active') ...[
+            const SizedBox(width: 6),
+            IconButton.filled(
+              tooltip: _beaconStatus == 'active'
+                  ? context.l10n.beaconStopRemote
+                  : context.l10n.beaconRequestRemote,
+              onPressed: _requestingBeacon || _beaconStatus == 'requested'
+                  ? null
+                  : _toggleRemoteBeacon,
+              icon: Icon(
+                _beaconStatus == 'active'
+                    ? Icons.flashlight_off_outlined
+                    : Icons.flashlight_on_outlined,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -660,12 +1082,11 @@ class _RadarScreenState extends State<RadarScreen>
       targetAccuracyMeters: _targetAccuracyMeters,
       gpsDistanceMeters: _gpsDistanceMeters,
       bleApproxDistanceMeters: _stale ? null : _reading?.approxDistanceMeters,
+      precisionDistanceMeters: _precisionDistanceMeters,
+      precisionDistanceErrorMeters: _precisionDistanceErrorMeters,
+      precisionDistanceConfidence: _precisionDistanceConfidence,
+      precisionSource: _precisionSource,
     );
-  }
-
-  bool get _compassNeedsCalibration {
-    final accuracy = _compassAccuracyDegrees;
-    return accuracy != null && accuracy > 20;
   }
 
   double? _bleDirectionRadians(RadarFusionResult fusion) {
@@ -688,141 +1109,225 @@ class _RadarScreenState extends State<RadarScreen>
   }
 
   Widget _buildPanel(
-    ThemeData theme,
     RadarReading? reading,
     bool searching,
-    RadarFusionResult fusion,
-  ) {
+    RadarFusionResult fusion, {
+    required bool compact,
+  }) {
     const green = Color(0xFF4ADE80);
     const red = Color(0xFFF87171);
     const dim = Color(0xFF94A3B8);
+    final height = compact ? 142.0 : 170.0;
+    Widget content;
     if (_permissionExpired || _startError != null) {
-      return _panelCard(
+      content = Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.lock_clock_outlined, color: red, size: 40),
-          const SizedBox(height: 8),
-          Text(
-            context.l10n.radarPermissionExpired,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: red, fontSize: 18),
+          const Icon(Icons.lock_clock_outlined, color: red, size: 28),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              context.l10n.radarPermissionExpired,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: red, fontSize: 16),
+            ),
           ),
         ],
       );
-    }
-    if (_stale) {
-      return _panelCard(
+    } else if (_stale) {
+      content = Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.wifi_off, color: red, size: 40),
-          const SizedBox(height: 8),
           Text(
             context.l10n.radarSignalLost,
             style: const TextStyle(
               color: red,
-              fontSize: 24,
+              fontSize: 20,
               fontWeight: FontWeight.bold,
-              letterSpacing: 2,
+              letterSpacing: 1.5,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            context.l10n.radarSignalLostHint,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: dim),
-          ),
-          if (_gpsDistanceMeters != null) _gpsRow(dim),
-          if (fusion.source != RadarDirectionSource.none)
-            _directionSourceRow(fusion),
-        ],
-      );
-    }
-    if (searching) {
-      return _panelCard(
-        children: [
-          const SizedBox(
-            width: 32,
-            height: 32,
-            child: CircularProgressIndicator(strokeWidth: 3, color: green),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            context.l10n.radarSearching,
-            style: const TextStyle(color: Colors.white, fontSize: 20),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            context.l10n.radarSearchingHint,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: dim),
-          ),
-          if (_gpsDistanceMeters != null) _gpsRow(dim),
-          if (fusion.source != RadarDirectionSource.none)
-            _directionSourceRow(fusion),
-        ],
-      );
-    }
-    final (trendIcon, trendColor) = switch (reading!.trend) {
-      RadarTrend.approaching => (Icons.trending_up, green),
-      RadarTrend.receding => (Icons.trending_down, red),
-      RadarTrend.steady => (Icons.trending_flat, dim),
-      RadarTrend.unknown => (Icons.more_horiz, dim),
-    };
-    return _panelCard(
-      children: [
-        Text(
-          _proximityLabel(context.l10n, reading.proximity),
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 32,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 3,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          _distanceLabel(context.l10n, reading.approxDistanceMeters),
-          style: const TextStyle(color: dim, fontSize: 16),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(trendIcon, color: trendColor),
-            const SizedBox(width: 8),
-            Text(
-              _trendLabel(context.l10n, reading.trend),
-              style: TextStyle(color: trendColor, fontSize: 18),
+          if (_gpsDistanceMeters != null) ...[
+            const SizedBox(height: 8),
+            _statusMetric(
+              Icons.gps_fixed,
+              _gpsDistanceLabel(_gpsDistanceMeters!),
+              dim,
             ),
           ],
-        ),
-        const SizedBox(height: 12),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: LinearProgressIndicator(
-            value: reading.strength,
-            minHeight: 8,
-            backgroundColor: Colors.white12,
-            color: Color.lerp(red, green, reading.strength),
+        ],
+      );
+    } else if (searching) {
+      content = Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(
+            width: 26,
+            height: 26,
+            child: CircularProgressIndicator(strokeWidth: 3, color: green),
           ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          context.l10n.radarDbm(reading.smoothedRssi.round()),
-          style: const TextStyle(color: dim, fontSize: 12),
-        ),
-        if (fusion.source != RadarDirectionSource.none ||
-            fusion.bleSuppressedVeryClose)
-          _directionSourceRow(fusion),
-        if (_tentativeSignal) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Text(
-            context.l10n.radarTentativeSignal,
+            context.l10n.radarSearching,
+            style: const TextStyle(color: Colors.white, fontSize: 18),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            context.l10n.radarSearchingHint,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: dim, fontSize: 12),
+            style: const TextStyle(color: dim, fontSize: 11),
           ),
         ],
-        if (_gpsDistanceMeters != null) _gpsRow(dim),
+      );
+    } else {
+      final (trendIcon, trendColor) = switch (reading!.trend) {
+        RadarTrend.approaching => (Icons.trending_up, green),
+        RadarTrend.receding => (Icons.trending_down, red),
+        RadarTrend.steady => (Icons.trending_flat, dim),
+        RadarTrend.unknown => (Icons.more_horiz, dim),
+      };
+      content = Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _proximityLabel(context.l10n, reading.proximity),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 23,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ),
+              Text(
+                fusion.hasMeasuredDistance
+                    ? _measuredDistanceLabel(fusion)
+                    : _distanceLabel(
+                        context.l10n,
+                        fusion.preferredDistanceMeters ??
+                            reading.approxDistanceMeters,
+                      ),
+                style: TextStyle(
+                  color: fusion.hasMeasuredDistance
+                      ? const Color(0xFF60A5FA)
+                      : dim,
+                  fontSize: 14,
+                  fontWeight: fusion.hasMeasuredDistance
+                      ? FontWeight.bold
+                      : FontWeight.normal,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: reading.strength,
+              minHeight: 7,
+              backgroundColor: Colors.white12,
+              color: Color.lerp(red, green, reading.strength),
+            ),
+          ),
+          const SizedBox(height: 7),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 14,
+            runSpacing: 5,
+            children: [
+              _statusMetric(
+                trendIcon,
+                _trendLabel(context.l10n, reading.trend),
+                trendColor,
+              ),
+              _statusMetric(
+                Icons.bluetooth,
+                context.l10n.radarDbm(reading.smoothedRssi.round()),
+                dim,
+              ),
+              if (_gpsDistanceMeters != null)
+                _statusMetric(
+                  Icons.gps_fixed,
+                  _gpsDistanceLabel(_gpsDistanceMeters!),
+                  const Color(0xFF60A5FA),
+                ),
+            ],
+          ),
+          if (_directionSummary(fusion) case final summary?) ...[
+            const SizedBox(height: 5),
+            Text(
+              summary,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: dim, fontSize: 11),
+            ),
+          ],
+        ],
+      );
+    }
+    return SizedBox(
+      height: height,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: content,
+      ),
+    );
+  }
+
+  Widget _statusMetric(IconData icon, String label, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 15, color: color),
+        const SizedBox(width: 4),
+        Text(label, style: TextStyle(color: color, fontSize: 11)),
       ],
     );
+  }
+
+  String _gpsDistanceLabel(double meters) => meters >= 1000
+      ? '${(meters / 1000).toStringAsFixed(1)} km'
+      : '${meters.round()} m GPS';
+
+  String _measuredDistanceLabel(RadarFusionResult fusion) {
+    final meters = fusion.preferredDistanceMeters!;
+    final error = fusion.distanceErrorMeters;
+    final value = meters < 10
+        ? meters.toStringAsFixed(1)
+        : meters.round().toString();
+    final margin = error == null ? '' : ' ±${error.toStringAsFixed(1)}';
+    return context.l10n.radarMeasuredDistance('$value$margin m');
+  }
+
+  String? _directionSummary(RadarFusionResult fusion) {
+    final estimate = _directionEstimate;
+    if (_compassUnavailable) return context.l10n.radarCompassUnavailable;
+    if (fusion.bleSuppressedVeryClose) {
+      return context.l10n.radarDirectionVeryClose;
+    }
+    if (fusion.source == RadarDirectionSource.gps) {
+      return context.l10n.radarDirectionGps;
+    }
+    if (fusion.source == RadarDirectionSource.ble && estimate != null) {
+      return '${context.l10n.radarSweepResult(estimate.headingDegrees.round())} · '
+          '${context.l10n.radarSweepConfidence((fusion.adjustedBleConfidence * 100).round())}';
+    }
+    if (estimate != null) return context.l10n.radarSweepInconclusive;
+    return null;
   }
 
   String _consentLabel() => widget.consentSource == 'sos'
@@ -856,78 +1361,113 @@ class _RadarScreenState extends State<RadarScreen>
     if (meters < 15) return l10n.distanceApprox((meters / 5).round() * 5);
     return l10n.distanceFar;
   }
+}
 
-  Widget _gpsRow(Color color) {
-    final meters = _gpsDistanceMeters!;
-    final label = meters >= 1000
-        ? '${(meters / 1000).toStringAsFixed(1)} km'
-        : '${meters.round()} m';
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.gps_fixed, size: 16, color: color),
-          const SizedBox(width: 6),
-          Text(
-            context.l10n.radarGpsDistance(label),
-            style: TextStyle(color: color, fontSize: 13),
-          ),
-        ],
-      ),
-    );
+class _AnimatedRadarCanvas extends StatefulWidget {
+  const _AnimatedRadarCanvas({
+    required this.sweep,
+    required this.pulse,
+    required this.strength,
+    required this.directionSweepSectors,
+    required this.estimatedDirectionRadians,
+    required this.gpsDirectionRadians,
+  });
+
+  final Animation<double> sweep;
+  final Animation<double> pulse;
+  final double? strength;
+  final List<bool> directionSweepSectors;
+  final double? estimatedDirectionRadians;
+  final double? gpsDirectionRadians;
+
+  @override
+  State<_AnimatedRadarCanvas> createState() => _AnimatedRadarCanvasState();
+}
+
+class _AnimatedRadarCanvasState extends State<_AnimatedRadarCanvas>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _directionController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 280),
+  );
+  Tween<double>? _bleTween;
+  Tween<double>? _gpsTween;
+  double? _bleAngle;
+  double? _gpsAngle;
+
+  @override
+  void initState() {
+    super.initState();
+    _bleAngle = widget.estimatedDirectionRadians;
+    _gpsAngle = widget.gpsDirectionRadians;
   }
 
-  Widget _directionSourceRow(RadarFusionResult fusion) {
-    const blue = Color(0xFF60A5FA);
-    const green = Color(0xFF4ADE80);
-    const amber = Color(0xFFFBBF24);
-    final (icon, color, label) = switch (fusion.source) {
-      RadarDirectionSource.gps => (
-        Icons.navigation_outlined,
-        blue,
-        context.l10n.radarDirectionGps,
-      ),
-      RadarDirectionSource.ble => (
-        Icons.bluetooth_searching,
-        green,
-        context.l10n.radarDirectionBle,
-      ),
-      RadarDirectionSource.none => (
-        Icons.vibration,
-        amber,
-        context.l10n.radarDirectionVeryClose,
-      ),
-    };
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: color, fontSize: 12),
-            ),
-          ),
-        ],
-      ),
-    );
+  @override
+  void didUpdateWidget(covariant _AnimatedRadarCanvas oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    var changed = false;
+    if (widget.estimatedDirectionRadians !=
+        oldWidget.estimatedDirectionRadians) {
+      _bleTween = _angularTween(
+        _current(_bleTween, _bleAngle),
+        widget.estimatedDirectionRadians,
+      );
+      _bleAngle = widget.estimatedDirectionRadians;
+      changed = true;
+    }
+    if (widget.gpsDirectionRadians != oldWidget.gpsDirectionRadians) {
+      _gpsTween = _angularTween(
+        _current(_gpsTween, _gpsAngle),
+        widget.gpsDirectionRadians,
+      );
+      _gpsAngle = widget.gpsDirectionRadians;
+      changed = true;
+    }
+    if (changed) _directionController.forward(from: 0);
   }
 
-  Widget _panelCard({required List<Widget> children}) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white12),
+  double? _current(Tween<double>? tween, double? fallback) {
+    if (tween == null || !_directionController.isAnimating) return fallback;
+    return tween.transform(_directionController.value);
+  }
+
+  Tween<double>? _angularTween(double? from, double? to) {
+    if (to == null) return null;
+    final begin = from ?? to;
+    final delta = ((to - begin + math.pi * 3) % (math.pi * 2)) - math.pi;
+    return Tween<double>(begin: begin, end: begin + delta);
+  }
+
+  @override
+  void dispose() {
+    _directionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        widget.sweep,
+        widget.pulse,
+        _directionController,
+      ]),
+      builder: (context, _) => CustomPaint(
+        painter: _RadarPainter(
+          sweepProgress: widget.sweep.value,
+          pulseProgress: widget.pulse.value,
+          strength: widget.strength,
+          directionSweepSectors: widget.directionSweepSectors,
+          estimatedDirectionRadians: widget.estimatedDirectionRadians == null
+              ? null
+              : (_bleTween?.transform(_directionController.value) ??
+                    widget.estimatedDirectionRadians),
+          gpsDirectionRadians: widget.gpsDirectionRadians == null
+              ? null
+              : (_gpsTween?.transform(_directionController.value) ??
+                    widget.gpsDirectionRadians),
+        ),
       ),
-      child: Column(mainAxisSize: MainAxisSize.min, children: children),
     );
   }
 }
@@ -945,8 +1485,8 @@ class _SweepHoldingGuide extends StatelessWidget {
     return Row(
       children: [
         SizedBox(
-          width: 92,
-          height: 92,
+          width: 68,
+          height: 68,
           child: AnimatedBuilder(
             animation: animation,
             builder: (context, _) => CustomPaint(
@@ -971,6 +1511,8 @@ class _SweepHoldingGuide extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 context.l10n.radarSweepInstruction,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: dim, fontSize: 12),
               ),
             ],

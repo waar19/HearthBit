@@ -540,7 +540,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get aboutBody =>
-      'HearthBit ist ein quelloffenes Projekt für Notfallkommunikation. Deine Unterstützung finanziert Gerätetests und robuste Relais-Hardware.';
+      'HearthBit ist ein source-available Notfallprojekt, dessen Code zur Datenschutz- und Sicherheitsprüfung einsehbar ist. Nichtkommerzielle Nutzung ist lizenziert; kommerzielle Nutzung erfordert eine Genehmigung.';
 
   @override
   String aboutVersion(String version) {
@@ -558,7 +558,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String shareInviteMessage(String url) {
-    return 'Mach bei HearthBit mit, einem quelloffenen Notfallnetz, das ohne Internet funktioniert. Lade es herunter oder hilf mit unter $url';
+    return 'Mach bei HearthBit mit, einem öffentlich prüfbaren Notfallnetz ohne Internet. Lade es herunter oder hilf mit unter $url';
   }
 
   @override
@@ -766,6 +766,35 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get radarSweepInconclusive =>
       'Kein zuverlässiger Bereich gefunden. Drehe dich langsamer und entferne dich von Metall oder Elektronik.';
+
+  @override
+  String get radarSweepExpired =>
+      'Die Richtung hat sich geändert oder ist abgelaufen. Wiederhole den Rundblick an deiner aktuellen Position.';
+
+  @override
+  String radarMeasuredDistance(String distance) {
+    return 'Gemessen: $distance';
+  }
+
+  @override
+  String get radarRadioStart => 'Entfernung per Funk messen';
+
+  @override
+  String get radarRadioStop => 'Funkmessung beenden';
+
+  @override
+  String get radarSonarStart => 'Mit akustischem Sonar messen';
+
+  @override
+  String get radarSonarStop => 'Akustisches Sonar beenden';
+
+  @override
+  String get radarSonarMicrophoneRequired =>
+      'Das akustische Sonar benötigt Mikrofonzugriff.';
+
+  @override
+  String get radarSonarTooNoisy =>
+      'Die Signaltöne konnten nicht gemessen werden. Reduziere Geräusche, decke die Telefone nicht ab und versuche es erneut.';
 
   @override
   String get radarSweepEstimateWarning =>

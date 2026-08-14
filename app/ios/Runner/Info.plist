@@ -46,7 +46,7 @@
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Always-on location access lets rescue mode relay your GPS position over the mesh even when the screen is off.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>HearthBit uses the microphone to send short voice messages during an emergency.</string>
+	<string>HearthBit uses the microphone for emergency voice messages and optional short-range acoustic distance measurement.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>HearthBit finds emergency gateways on your local Wi-Fi network to extend the mesh without internet access.</string>
 	<key>NSBonjourServices</key>

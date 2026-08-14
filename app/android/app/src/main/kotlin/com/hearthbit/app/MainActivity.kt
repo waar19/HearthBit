@@ -77,6 +77,8 @@ class MainActivity : FlutterActivity() {
                         "platform" to "android",
                         "backgroundRelay" to true,
                         "peripheralMode" to true,
+                        "acousticSonar" to true,
+                        "radioRanging" to (Build.VERSION.SDK_INT >= 36),
                         "nodeRoles" to listOf(
                             "PHONE_RELAY",
                             "PHONE_BEACON",
@@ -184,6 +186,13 @@ class MainActivity : FlutterActivity() {
                     )
                     null
                 }
+                "sendRangingControl" -> runMethod(result) {
+                    MeshRuntime.engine(this).sendRangingControl(
+                        requireNotNull(call.argument<String>("peerId")),
+                        requireNotNull(call.argument<ByteArray>("payload")),
+                    )
+                    null
+                }
                 "signPayload" -> runMethod(result) {
                     MeshRuntime.engine(this).signPayload(
                         requireNotNull(call.argument<ByteArray>("data")),
@@ -205,6 +214,19 @@ class MainActivity : FlutterActivity() {
                     MeshRuntime.engine(this).startRadar(
                         requireNotNull(call.argument<String>("peerId")),
                     )
+                    null
+                }
+                "getRangingCapabilities" -> runMethod(result) {
+                    MeshRuntime.engine(this).rangingCapabilities()
+                }
+                "startRadioRanging" -> runMethod(result) {
+                    MeshRuntime.engine(this).startRadioRanging(
+                        requireNotNull(call.argument<String>("peerId")),
+                    )
+                    null
+                }
+                "stopRadioRanging" -> runMethod(result) {
+                    MeshRuntime.engine(this).stopRadioRanging()
                     null
                 }
                 "stopRadar" -> runMethod(result) {
@@ -618,6 +640,9 @@ class MainActivity : FlutterActivity() {
             if (Build.VERSION.SDK_INT >= 33) {
                 add(Manifest.permission.POST_NOTIFICATIONS)
                 add(Manifest.permission.NEARBY_WIFI_DEVICES)
+            }
+            if (Build.VERSION.SDK_INT >= 36) {
+                add(Manifest.permission.RANGING)
             }
         }.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED

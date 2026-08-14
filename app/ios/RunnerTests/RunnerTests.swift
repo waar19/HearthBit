@@ -667,6 +667,26 @@ final class ConformanceFixtureTests: XCTestCase {
     XCTAssertFalse(IOSNoiseReplayPolicy.isStoreForwardSafe(encrypted))
     XCTAssertTrue(IOSNoiseReplayPolicy.isStoreForwardSafe(message))
   }
+
+  func testRangingControlProtocolDecodesValidEnvelope() {
+    var payload = Data(repeating: 0, count: IOSRangingControlProtocol.fixedSize)
+    payload[0] = IOSRangingControlProtocol.version
+    payload[1] = 7
+    payload[2] = 4
+    payload[3] = 2
+    for index in 0..<IOSRangingControlProtocol.nonceSize {
+      payload[4 + index] = UInt8(index)
+    }
+
+    let control = IOSRangingControlProtocol.decode(payload)
+
+    XCTAssertEqual(control?.action, 7)
+    XCTAssertEqual(control?.technology, 4)
+    XCTAssertEqual(control?.sessionNonce, Data((0..<16).map(UInt8.init)))
+    XCTAssertNil(IOSRangingControlProtocol.decode(payload.dropLast()))
+    XCTAssertTrue(IOSRangingControlProtocol.hasValidTimestamp(1_000, now: 1_000))
+    XCTAssertFalse(IOSRangingControlProtocol.hasValidTimestamp(1, now: 200_000))
+  }
 }
 
 private final class ConformanceFixtures {

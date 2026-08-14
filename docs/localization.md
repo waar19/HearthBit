@@ -6,8 +6,8 @@ Android, `zh-Hans` en el bundle iOS) y japonés
 (`ja`). La app sigue el idioma del sistema y cae a inglés cuando el idioma no
 está soportado.
 
-Las cadenas visibles viven en cuatro capas; para añadir o corregir un idioma
-hay que tocar las cuatro:
+Las cadenas visibles viven en cinco capas; para añadir o corregir un idioma
+hay que revisar las cinco:
 
 ## 1. UI Flutter (la mayoría de las cadenas)
 
@@ -68,7 +68,21 @@ group y actualizar `CFBundleLocalizations` y `knownRegions`.
    soportado, confirme el fallback monolingüe en inglés. Esta revisión requiere
    Xcode/iOS y no se considera ejecutada desde Windows.
 
-## 4. Cadenas internas (no traducibles)
+## 4. Documentación pública
+
+- Los README y documentos centrales de transparencia se publican en `en`, `es`,
+  `de`, `fr`, `zh` y `ja`. [`docs/README.md`](README.md) mantiene el índice.
+- El documento sin sufijo es inglés cuando se crea documentación nueva. Los
+  archivos localizados usan `.<código>.md`; algunos documentos históricos
+  conservan español sin sufijo para no romper enlaces existentes.
+- Los identificadores de protocolo, estructuras binarias, comandos y símbolos
+  de código no se traducen.
+- La licencia jurídica en [`LICENSE`](../LICENSE) permanece en su texto oficial
+  inglés. Las traducciones solo pueden resumirla y deben enlazar al original.
+- Cambios de seguridad, privacidad, limitaciones o licencia deben reflejarse en
+  los seis idiomas centrales antes de publicar una versión.
+
+## 5. Cadenas internas (no traducibles)
 
 Los mensajes de diagnóstico de protocolo (p. ej. `"Repeated Noise nonce"`,
 `"TLV ... exceeds 65535 bytes"`, errores de socket LAN) están en inglés a
@@ -81,7 +95,7 @@ dentro de un error ya localizado.
   comprensible en cualquier idioma.
 - Los términos técnicos con nombre propio (Noise, BLE, Wi-Fi Aware, Nearby
   Connections, SHA-256) no se traducen.
-- Mantener las traducciones de las cuatro capas coherentes entre sí; la
+- Mantener las traducciones de las cinco capas coherentes entre sí; la
   fuente de verdad del tono y el vocabulario es `app_en.arb`.
 
 ---
@@ -89,7 +103,7 @@ dentro de un error ya localizado.
 # English summary
 
 HearthBit ships in English (template), Spanish, German, French, Simplified
-Chinese and Japanese. Strings live in four layers:
+Chinese and Japanese. User-facing content lives in five layers:
 
 1. **Flutter UI**: ARB files in `app/lib/l10n/`, generated via
    `flutter gen-l10n`, accessed with `context.l10n` (widgets) or
@@ -101,7 +115,10 @@ Chinese and Japanese. Strings live in four layers:
    `en`, `es`, `de`, `fr`, `zh-Hans` and `ja`; `Info.plist` retains the English
    fallback. Validate each language with the Xcode scheme or the device system
    language and reset permissions between checks.
-4. **Internal diagnostics** stay in English by design; they only surface as
+4. **Public documentation**: core READMEs and transparency documents ship in
+   all six languages and are indexed by `docs/README.md`. The authoritative
+   license text remains in official English.
+5. **Internal diagnostics** stay in English by design; they only surface as
    detail inside an already-localized error message.
 
 To add a language: copy `app_en.arb`, translate it, run `flutter gen-l10n`,

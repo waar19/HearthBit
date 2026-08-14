@@ -35,14 +35,16 @@ class RadarReading {
 class RadarSignalProcessor {
   RadarSignalProcessor({
     this.smoothingFactor = 0.25,
+    this.medianWindowSize = 5,
     this.trendWindow = const Duration(seconds: 4),
     this.trendThresholdDb = 2.0,
     this.staleAfter = const Duration(seconds: 5),
     this.txPowerAtOneMeter = -59.0,
     this.pathLossExponent = 2.4,
-  });
+  }) : assert(medianWindowSize > 0);
 
   final double smoothingFactor;
+  final int medianWindowSize;
 
   /// Contra qué momento del pasado se compara la señal para la tendencia.
   final Duration trendWindow;
@@ -60,6 +62,7 @@ class RadarSignalProcessor {
   final double pathLossExponent;
 
   final List<({DateTime at, double rssi})> _history = [];
+  final List<double> _rawWindow = [];
   double? _smoothed;
   DateTime? _lastSampleAt;
 
@@ -70,10 +73,15 @@ class RadarSignalProcessor {
 
   /// Procesa una muestra cruda y devuelve la lectura suavizada.
   RadarReading addSample(int rssi, DateTime at) {
+    _rawWindow.add(rssi.toDouble());
+    if (_rawWindow.length > medianWindowSize) {
+      _rawWindow.removeAt(0);
+    }
+    final filteredRssi = _median(_rawWindow);
     final previous = _smoothed;
     final smoothed = previous == null
-        ? rssi.toDouble()
-        : previous + smoothingFactor * (rssi - previous);
+        ? filteredRssi
+        : previous + smoothingFactor * (filteredRssi - previous);
     _smoothed = smoothed;
     _lastSampleAt = at;
     _history.add((at: at, rssi: smoothed));
@@ -99,6 +107,7 @@ class RadarSignalProcessor {
 
   void reset() {
     _history.clear();
+    _rawWindow.clear();
     _smoothed = null;
     _lastSampleAt = null;
     _lastReading = null;
@@ -135,6 +144,13 @@ class RadarSignalProcessor {
   double _distance(double rssi) => math
       .pow(10, (txPowerAtOneMeter - rssi) / (10 * pathLossExponent))
       .toDouble();
+
+  static double _median(Iterable<double> values) {
+    final sorted = values.toList(growable: false)..sort();
+    final middle = sorted.length ~/ 2;
+    if (sorted.length.isOdd) return sorted[middle];
+    return (sorted[middle - 1] + sorted[middle]) / 2;
+  }
 }
 
 class SweepEstimate {

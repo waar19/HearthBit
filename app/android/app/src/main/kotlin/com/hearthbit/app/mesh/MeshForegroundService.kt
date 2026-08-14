@@ -120,6 +120,21 @@ class MeshForegroundService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_RENOTIFY) {
+            val runtimeStatus = MeshRuntime.stateSnapshot()?.get("status") as? String
+            if (runtimeStatus == null || runtimeStatus == "stopped") {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            val state = pendingNotificationState
+                ?: displayedNotificationState
+                ?: MeshNotificationState(status = "starting", nearbyPeerCount = 0)
+            getSystemService(NotificationManager::class.java)
+                .notify(NOTIFICATION_ID, notification(state))
+            displayedNotificationState = state
+            lastNotificationUpdateAt = SystemClock.elapsedRealtime()
+            return START_STICKY
+        }
         runCatching { MeshRuntime.engine(this).ensureStarted() }.onFailure {
             val message = it.message ?: getString(R.string.error_ble_start)
             MeshRuntime.eventListener?.invoke(
@@ -196,6 +211,12 @@ class MeshForegroundService : Service() {
             openIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+        val deleteIntent = PendingIntent.getService(
+            this,
+            1,
+            Intent(this, MeshForegroundService::class.java).setAction(ACTION_RENOTIFY),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
         val contentText = when (MeshNotificationStateReducer.contentFor(state)) {
             MeshNotificationContent.STARTING -> getString(R.string.notification_status_starting)
             MeshNotificationContent.ACTIVE -> resources.getQuantityString(
@@ -210,13 +231,16 @@ class MeshForegroundService : Service() {
             .setContentTitle(getString(R.string.notification_title))
             .setContentText(contentText)
             .setContentIntent(pendingIntent)
+            .setDeleteIntent(deleteIntent)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
     }
 
     companion object {
         const val ACTION_STOP = "com.hearthbit.app.STOP_MESH"
+        const val ACTION_RENOTIFY = "com.hearthbit.app.RENOTIFY_MESH"
         private const val CHANNEL_ID = "emergency_mesh"
         private const val NOTIFICATION_ID = 7401
         private const val MIN_NOTIFICATION_UPDATE_INTERVAL_MS = 2_000L

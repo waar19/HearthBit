@@ -2,7 +2,8 @@
 
 <img src="app/assets/icon/hearthbit.png" alt="HearthBit app icon" width="160">
 
-**English** · [Español](README.es.md)
+**English** · [Español](README.es.md) · [Deutsch](README.de.md) ·
+[Français](README.fr.md) · [简体中文](README.zh.md) · [日本語](README.ja.md)
 
 HearthBit ("the network that keeps beating") is a mobile emergency
 communication app that works without internet. Phones form a Bluetooth Low
@@ -32,10 +33,18 @@ up as you approach, and straight-line GPS distance if the alert carried
 coordinates. The victim's **rescue mode** re-broadcasts their SOS with fresh
 GPS every 5 minutes.
 
+The professional radar keeps its search circle stable while warnings change,
+filters RSSI spikes, expires stale sweeps and fuses BLE, compass and GPS.
+Supported Android 16 devices can use the system Ranging API; Android and iPhone
+can also refine short-range distance with an optional three-round acoustic
+measurement. These aids are estimates, not certified life-safety instruments.
+
 ## Support the project
 
-HearthBit is open source and community-supported. Donations help fund physical
-device testing, emergency-field trials and relay-node hardware.
+HearthBit is **source-available** and community-supported. Its source is public
+for privacy, security and interoperability review, but it is not OSI-approved
+open source. Noncommercial use is licensed under PolyForm Noncommercial 1.0.0;
+commercial use requires a separate agreement.
 
 [![Support HearthBit on Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-support_HearthBit-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/wilmeralzal)
 
@@ -87,21 +96,43 @@ BitChat. HearthBit does not replace official emergency channels and does not
 guarantee delivery: BLE and background execution are constrained by each
 operating system.
 
+## Transparency
+
+HearthBit keeps protocol, architecture, privacy boundaries, limitations and
+validation procedures in the public repository. Start with
+[NOTICE.md](NOTICE.md), [docs/transparency.md](docs/transparency.md),
+[docs/architecture.md](docs/architecture.md) and
+[docs/radar-ranging-validation.md](docs/radar-ranging-validation.md).
+
+Source visibility does not mean every component has the same license. Vendored
+code and Git submodules keep their original terms. Security reports should
+avoid publishing live identities, precise locations or emergency messages and
+must follow [SECURITY.md](SECURITY.md). Contributions follow
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 Protocol references: [pinned BitChat core profile](docs/bitchat-core-profile.md)
 and [HearthBit extension registry](docs/extension-registry.md).
 
-## Licenses
+## Licensing
 
-Our own code is distributed under MIT. BitChat is published under the
-Unlicense. The Bitle firmware is distributed under MIT and keeps its
-attribution in the corresponding submodule.
+Original HearthBit code is available under the
+[PolyForm Noncommercial License 1.0.0](LICENSE). It can be inspected, used,
+modified and redistributed for permitted noncommercial purposes. Commercial
+use requires a separate written license; see
+[COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md).
 
-Direct app dependencies and their licenses: `cryptography`, `sqflite`,
-`geolocator`, `path_provider`, `file_selector`, `qr`, `mobile_scanner`,
-`image` and `crypto` use compatible MIT/BSD/Apache-2.0 licenses. Google Play
-Services Nearby (Android only) is used under the standard Google Play Services
-terms. The LT fountain codes of the optical mode are our own implementation
-(MIT), with no third-party RaptorQ dependencies.
+This prospective change does not revoke the MIT license from versions already
+published under MIT. `vendor/bitchat-android/` retains its upstream GPL-3.0
+license, while the Bitle firmware submodule retains its MIT and per-file
+licenses. See [NOTICE.md](NOTICE.md) for the exact scope and third-party
+boundaries.
+
+Direct dependencies such as `cryptography`, `sqflite`, `geolocator`,
+`path_provider`, `file_selector`, `qr`, `mobile_scanner`, `image` and `crypto`
+retain their MIT/BSD/Apache-2.0 terms. Google Play Services Nearby (Android
+only) is governed by the Google Play Services terms. The LT fountain-code
+implementation is original HearthBit code and follows HearthBit's current
+license. No third-party RaptorQ implementation is included.
 
 ## Before publishing
 

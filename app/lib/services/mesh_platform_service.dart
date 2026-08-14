@@ -181,6 +181,21 @@ class MeshPlatformService {
 
   Future<void> stopRadar() => _methods.invokeMethod<void>('stopRadar');
 
+  Future<Map<Object?, Object?>> getRangingCapabilities() async {
+    final result = await _methods.invokeMapMethod<Object?, Object?>(
+      'getRangingCapabilities',
+    );
+    return result ?? const {};
+  }
+
+  Future<void> startRadioRanging(String peerId) {
+    return _methods.invokeMethod<void>('startRadioRanging', {'peerId': peerId});
+  }
+
+  Future<void> stopRadioRanging() {
+    return _methods.invokeMethod<void>('stopRadioRanging');
+  }
+
   Future<void> setRadarConsent({required bool enabled, int minutes = 15}) {
     return _methods.invokeMethod<void>('setRadarConsent', {
       'enabled': enabled,
@@ -231,6 +246,13 @@ class MeshPlatformService {
     return _methods.invokeMethod<void>('stopRemoteBeacon', {
       'peerId': peerId,
       'requestId': requestId,
+    });
+  }
+
+  Future<void> sendRangingControl(String peerId, Uint8List payload) {
+    return _methods.invokeMethod<void>('sendRangingControl', {
+      'peerId': peerId,
+      'payload': payload,
     });
   }
 

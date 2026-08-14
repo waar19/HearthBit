@@ -538,7 +538,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aboutBody =>
-      'HearthBit is an open-source emergency communication project. Your support helps fund device testing and resilient relay hardware.';
+      'HearthBit is a source-available emergency communication project, public for privacy and security review. Noncommercial use is licensed; commercial use requires permission.';
 
   @override
   String aboutVersion(String version) {
@@ -556,7 +556,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String shareInviteMessage(String url) {
-    return 'Join HearthBit, an open-source emergency mesh that works without internet. Download it or contribute at $url';
+    return 'Join HearthBit, a publicly auditable emergency mesh that works without internet. Download it or contribute at $url';
   }
 
   @override
@@ -761,6 +761,35 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get radarSweepInconclusive =>
       'No reliable sector was found. Turn more slowly and move away from metal or electronic equipment.';
+
+  @override
+  String get radarSweepExpired =>
+      'The direction changed or expired. Repeat the sweep from your current position.';
+
+  @override
+  String radarMeasuredDistance(String distance) {
+    return 'Measured: $distance';
+  }
+
+  @override
+  String get radarRadioStart => 'Measure distance by radio';
+
+  @override
+  String get radarRadioStop => 'Stop radio distance measurement';
+
+  @override
+  String get radarSonarStart => 'Measure with acoustic sonar';
+
+  @override
+  String get radarSonarStop => 'Stop acoustic sonar';
+
+  @override
+  String get radarSonarMicrophoneRequired =>
+      'Microphone permission is required for acoustic sonar.';
+
+  @override
+  String get radarSonarTooNoisy =>
+      'The chirps could not be measured. Reduce noise, keep both phones uncovered, and try again.';
 
   @override
   String get radarSweepEstimateWarning =>

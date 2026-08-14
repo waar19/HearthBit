@@ -275,6 +275,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           "platform": "ios",
           "backgroundRelay": true,
           "peripheralMode": true,
+          "acousticSonar": true,
+          "radioRanging": false,
           "nodeRoles": IOSMeshNodeRole.allCases.map(\.rawValue),
         ])
       case "getInstalledApkForShare":
@@ -410,6 +412,13 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         else { throw IOSMeshError.peerUnavailable }
         try sendTransferFrame(peerID: peerID, frame: frame.data)
         result(nil)
+      case "sendRangingControl":
+        guard
+          let peerID = arguments["peerId"] as? String,
+          let payload = arguments["payload"] as? FlutterStandardTypedData
+        else { throw IOSMeshError.peerUnavailable }
+        try sendRangingControl(peerID: peerID.lowercased(), payload: payload.data)
+        result(nil)
       case "signPayload":
         guard let data = arguments["data"] as? FlutterStandardTypedData
         else { throw IOSMeshError.peerUnavailable }
@@ -474,6 +483,17 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           throw IOSMeshError.peerUnavailable
         }
         try startRadar(peerID: peerID.lowercased())
+        result(nil)
+      case "getRangingCapabilities":
+        result([
+          "available": false,
+          "bluetoothChannelSounding": false,
+          "wifiNanRtt": false,
+          "bleRssi": false,
+        ])
+      case "startRadioRanging":
+        throw IOSMeshError.invalidPayload
+      case "stopRadioRanging":
         result(nil)
       case "stopRadar":
         stopRadar()
@@ -896,6 +916,24 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let packet = identity.sign(
       IOSMeshPacket(
         type: IOSMeshProtocol.beaconControl,
+        ttl: 1,
+        timestamp: currentMilliseconds(),
+        senderID: identity.peerID,
+        recipientID: try Data(hex: peerID),
+        payload: payload
+      )
+    )
+    broadcast(packet)
+  }
+
+  private func sendRangingControl(peerID: String, payload: Data) throws {
+    guard running else { throw IOSMeshError.notRunning }
+    guard IOSRangingControlProtocol.decode(payload) != nil else {
+      throw IOSMeshError.invalidPayload
+    }
+    let packet = identity.sign(
+      IOSMeshPacket(
+        type: IOSMeshProtocol.rangingControl,
         ttl: 1,
         timestamp: currentMilliseconds(),
         senderID: identity.peerID,
@@ -1684,6 +1722,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let bytes = IOSMeshProtocol.encodeForBLE(packet)
     if localRole.storesDirectedPackets,
        packet.type != IOSMeshProtocol.beaconControl,
+       packet.type != IOSMeshProtocol.rangingControl,
        let recipient = packet.recipientID,
        recipient != Data(repeating: 0xff, count: 8) {
       storeForward.put(packet)
@@ -1990,6 +2029,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
        fragmentOriginalType == IOSMeshProtocol.noiseEncrypted)
     if localRole.relaysPackets &&
        packet.type != IOSMeshProtocol.beaconControl &&
+       packet.type != IOSMeshProtocol.rangingControl &&
        packet.ttl > 1 &&
        !controlForUs {
       var relayed = packet
@@ -2106,9 +2146,13 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       processNodeCapability(packet, senderID: senderID)
     case IOSMeshProtocol.beaconControl:
       processBeaconControl(packet, senderID: senderID)
+    case IOSMeshProtocol.rangingControl:
+      processRangingControl(packet, senderID: senderID)
     case IOSMeshProtocol.fragment:
       if let reassembled = fragmentReassembler.accept(packet) {
-        if reassembled.type == IOSMeshProtocol.beaconControl, packet.ttl != 1 {
+        if (reassembled.type == IOSMeshProtocol.beaconControl ||
+            reassembled.type == IOSMeshProtocol.rangingControl),
+           packet.ttl != 1 {
           return
         }
         if
@@ -2119,7 +2163,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           peripheralPeers[source] = senderID
         }
         var accepted = reassembled
-        if accepted.type == IOSMeshProtocol.beaconControl {
+        if accepted.type == IOSMeshProtocol.beaconControl ||
+           accepted.type == IOSMeshProtocol.rangingControl {
           accepted.ttl = 1
         }
         process(accepted, senderID: senderID, source: source)
@@ -2303,6 +2348,31 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     default:
       break
     }
+  }
+
+  private func processRangingControl(_ packet: IOSMeshPacket, senderID: String) {
+    guard
+      packet.ttl == 1,
+      packet.recipientID == identity.peerID,
+      let peer = peers[senderID],
+      IOSMeshIdentity.verify(packet, key: peer.signingPublicKey),
+      IOSRangingControlProtocol.hasValidTimestamp(
+        packet.timestamp,
+        now: currentMilliseconds()
+      ),
+      let control = IOSRangingControlProtocol.decode(packet.payload)
+    else { return }
+    if control.action == 2, activeLocalRadarConsentUntil() <= currentMilliseconds() {
+      return
+    }
+    emit([
+      "type": "rangingControl",
+      "peerId": senderID,
+      "action": Int(control.action),
+      "technology": Int(control.technology),
+      "payload": FlutterStandardTypedData(bytes: packet.payload),
+      "at": Int64(packet.timestamp),
+    ])
   }
 
   private func processHandshake(_ packet: IOSMeshPacket, senderID: String) {
@@ -3686,6 +3756,46 @@ enum IOSBeaconControlProtocol {
   }
 }
 
+enum IOSRangingControlProtocol {
+  static let version: UInt8 = 1
+  static let nonceSize = 16
+  static let fixedSize = 38
+  static let maximumOpaqueBytes = 1024
+  static let clockSkewMilliseconds: UInt64 = 2 * 60 * 1000
+  static let maximumAction: UInt8 = 10
+  static let maximumTechnology: UInt8 = 4
+
+  struct Control {
+    let action: UInt8
+    let technology: UInt8
+    let sessionNonce: Data
+  }
+
+  static func decode(_ payload: Data) -> Control? {
+    guard payload.count >= fixedSize else { return nil }
+    var reader = DataReader(payload)
+    guard
+      reader.byte() == version,
+      let action = reader.byte(),
+      action > 0 && action <= maximumAction,
+      let technology = reader.byte(),
+      technology <= maximumTechnology,
+      reader.byte() != nil,
+      let nonce = reader.data(count: nonceSize),
+      reader.skip(16),
+      let opaqueLength: UInt16 = reader.integer(),
+      Int(opaqueLength) <= maximumOpaqueBytes,
+      payload.count == fixedSize + Int(opaqueLength)
+    else { return nil }
+    return Control(action: action, technology: technology, sessionNonce: nonce)
+  }
+
+  static func hasValidTimestamp(_ timestamp: UInt64, now: UInt64) -> Bool {
+    let earliest = now > clockSkewMilliseconds ? now - clockSkewMilliseconds : 0
+    return timestamp >= earliest && timestamp <= now + clockSkewMilliseconds
+  }
+}
+
 enum IOSRadarConsentProtocol {
   static let localConsentKey = "hearthbit.radar_consent_until"
   static let version: UInt8 = 1
@@ -3790,6 +3900,7 @@ enum IOSMeshProtocol {
   static let hbtCapability: UInt8 = 0x24
   static let nodeCapability: UInt8 = 0x25
   static let beaconControl: UInt8 = 0x26
+  static let rangingControl: UInt8 = 0x27
   static let hbtVersion: UInt8 = 0x01
   static let noisePrivate: UInt8 = 0x01
   /// Trama HBT (HearthBit Transfer) encapsulada dentro de la sesión Noise.

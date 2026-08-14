@@ -539,7 +539,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get aboutBody =>
-      'HearthBit es un proyecto de comunicación de emergencia de código abierto. Tu apoyo ayuda a financiar pruebas con dispositivos y hardware repetidor resistente.';
+      'HearthBit es un proyecto de emergencia con código fuente visible para auditar privacidad y seguridad. El uso no comercial está licenciado; el comercial requiere autorización.';
 
   @override
   String aboutVersion(String version) {
@@ -557,7 +557,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String shareInviteMessage(String url) {
-    return 'Únete a HearthBit, una malla de emergencia de código abierto que funciona sin internet. Descárgala o contribuye en $url';
+    return 'Únete a HearthBit, una malla de emergencia auditable públicamente que funciona sin internet. Descárgala o contribuye en $url';
   }
 
   @override
@@ -767,6 +767,35 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get radarSweepInconclusive =>
       'No se encontró un sector confiable. Gira más despacio y aléjate de metales o equipos electrónicos.';
+
+  @override
+  String get radarSweepExpired =>
+      'La dirección cambió o caducó. Repite el barrido desde tu posición actual.';
+
+  @override
+  String radarMeasuredDistance(String distance) {
+    return 'Medida: $distance';
+  }
+
+  @override
+  String get radarRadioStart => 'Medir distancia por radio';
+
+  @override
+  String get radarRadioStop => 'Detener medición por radio';
+
+  @override
+  String get radarSonarStart => 'Medir con sonar acústico';
+
+  @override
+  String get radarSonarStop => 'Detener sonar acústico';
+
+  @override
+  String get radarSonarMicrophoneRequired =>
+      'El sonar acústico necesita permiso para usar el micrófono.';
+
+  @override
+  String get radarSonarTooNoisy =>
+      'No fue posible medir los chirridos. Reduce el ruido, deja ambos teléfonos descubiertos e inténtalo de nuevo.';
 
   @override
   String get radarSweepEstimateWarning =>
