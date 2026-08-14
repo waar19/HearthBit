@@ -22,11 +22,7 @@
       "name": "Colombia",
       "callingNote": "123 is Colombia's free national single emergency line, available around the clock. Use it for real emergencies only.",
       "numbers": [
-        {"id": "co-123", "kind": "general", "label": "National emergency line", "number": "123", "note": "Primary option for police, medical, fire and other state emergency services.", "sourceIds": ["co-123"]},
-        {"id": "co-112", "kind": "police", "label": "Police", "number": "112", "note": "National short code; territorial routing can vary. Prefer 123 when available.", "sourceIds": ["co-short-codes"]},
-        {"id": "co-119", "kind": "fire", "label": "Fire service", "number": "119", "note": "National short code; territorial routing can vary. Prefer 123 when available.", "sourceIds": ["co-short-codes"]},
-        {"id": "co-125", "kind": "medical", "label": "Ambulance", "number": "125", "note": "National short code; territorial routing can vary. Prefer 123 when available.", "sourceIds": ["co-short-codes"]},
-        {"id": "co-132", "kind": "general", "label": "Colombian Red Cross emergency line", "number": "132", "note": "National allocation; operational availability can vary by territory. Use 123 for immediate dispatch.", "sourceIds": ["co-short-codes"]}
+        {"id": "co-123", "kind": "general", "label": "National emergency line", "number": "123", "note": "Police, medical, fire and other state emergency services.", "sourceIds": ["co-123"]}
       ],
       "organizations": [
         {"id": "ungrd", "kind": "disaster-management", "name": "Unidad Nacional para la Gestión del Riesgo de Desastres (UNGRD)", "phone": "018000113200", "url": "https://portal.gestiondelriesgo.gov.co/Paginas/Atencion-a-la-Ciudadania.aspx", "note": "National disaster-risk information and citizen service, Monday to Friday; not an emergency dispatch line.", "sourceIds": ["co-ungrd"]},
