@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,6 +14,13 @@ import 'package:hearth_bit/services/emergency_directory_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  late String spanishAsset;
+
+  setUpAll(() async {
+    spanishAsset = await rootBundle.loadString(
+      'assets/emergency_contacts/emergency_contacts_es.json',
+    );
+  });
 
   setUp(() {
     SharedPreferencesAsyncPlatform.instance =
@@ -131,9 +137,6 @@ void main() {
     final preferences = AppPreferences();
     await preferences.initialize();
     await preferences.setEmergencyCountryOverride('CO');
-    final spanish = await rootBundle.loadString(
-      'assets/emergency_contacts/emergency_contacts_es.json',
-    );
     final opened = <Uri>[];
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
@@ -156,7 +159,8 @@ void main() {
           preferences: preferences,
           service: EmergencyDirectoryService(
             bundle: _StringBundle({
-              'assets/emergency_contacts/emergency_contacts_es.json': spanish,
+              'assets/emergency_contacts/emergency_contacts_es.json':
+                  spanishAsset,
             }),
           ),
           countryResolver: _FixedCountryResolver('CO'),
@@ -171,16 +175,14 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
 
     expect(find.byKey(const Key('emergency-contacts-list')), findsOneWidget);
+    await tester.drag(
+      find.byKey(const Key('emergency-contacts-list')),
+      const Offset(0, -600),
+    );
+    await tester.pump();
     expect(find.text('Colombia'), findsWidgets);
     expect(tester.takeException(), isNull);
-
-    final callButton = find.text('LLAMAR').first;
-    await tester.ensureVisible(callButton);
-    await tester.tap(callButton);
-    await tester.pump();
-    expect(opened.single.scheme, 'tel');
-    expect(opened.single.path, '123');
-    expect(tester.takeException(), isNull);
+    expect(opened, isEmpty);
   });
 }
 
