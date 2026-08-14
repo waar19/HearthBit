@@ -10,6 +10,7 @@ class AppPreferences extends ChangeNotifier {
   static const _highContrastKey = 'appearance.highContrast';
   static const _gatewayOptInKey = 'gateway.optIn';
   static const _drillModeKey = 'emergency.drillModeEnabled.v1';
+  static const _emergencyCountryKey = 'emergency.countryOverride.v1';
 
   final SharedPreferencesAsync _preferences;
 
@@ -19,6 +20,7 @@ class AppPreferences extends ChangeNotifier {
   bool highContrast = false;
   bool gatewayOptIn = false;
   bool drillModeEnabled = false;
+  String? emergencyCountryOverride;
 
   Future<void> initialize() async {
     onboardingComplete = await _preferences.getBool(_onboardingKey) ?? false;
@@ -26,6 +28,9 @@ class AppPreferences extends ChangeNotifier {
     highContrast = await _preferences.getBool(_highContrastKey) ?? false;
     gatewayOptIn = await _preferences.getBool(_gatewayOptInKey) ?? false;
     drillModeEnabled = await _preferences.getBool(_drillModeKey) ?? false;
+    emergencyCountryOverride = await _preferences.getString(
+      _emergencyCountryKey,
+    );
     initialized = true;
     notifyListeners();
   }
@@ -58,6 +63,19 @@ class AppPreferences extends ChangeNotifier {
     if (drillModeEnabled == enabled) return;
     drillModeEnabled = enabled;
     await _preferences.setBool(_drillModeKey, enabled);
+    notifyListeners();
+  }
+
+  Future<void> setEmergencyCountryOverride(String? countryCode) async {
+    final normalized = countryCode?.trim().toUpperCase();
+    final value = normalized == null || normalized.isEmpty ? null : normalized;
+    if (emergencyCountryOverride == value) return;
+    emergencyCountryOverride = value;
+    if (value == null) {
+      await _preferences.remove(_emergencyCountryKey);
+    } else {
+      await _preferences.setString(_emergencyCountryKey, value);
+    }
     notifyListeners();
   }
 }

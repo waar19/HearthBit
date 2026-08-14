@@ -2546,6 +2546,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'END DRILL AND SEND SOS'**
   String get drillSendRealSos;
+
+  /// No description provided for @emergencyContactsOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency numbers and official links'**
+  String get emergencyContactsOpen;
+
+  /// No description provided for @emergencyContactsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency directory'**
+  String get emergencyContactsTitle;
+
+  /// No description provided for @emergencyContactsSafetyNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Call numbers may work without mobile data, but they still require cellular voice coverage. Official websites require internet.'**
+  String get emergencyContactsSafetyNotice;
+
+  /// No description provided for @emergencyContactsCountry.
+  ///
+  /// In en, this message translates to:
+  /// **'Country or territory'**
+  String get emergencyContactsCountry;
+
+  /// No description provided for @emergencyContactsAutomatic.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic ({country})'**
+  String emergencyContactsAutomatic(String country);
+
+  /// No description provided for @emergencyContactsNumbers.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency numbers'**
+  String get emergencyContactsNumbers;
+
+  /// No description provided for @emergencyContactsOrganizations.
+  ///
+  /// In en, this message translates to:
+  /// **'Official organizations'**
+  String get emergencyContactsOrganizations;
+
+  /// No description provided for @emergencyContactsCall.
+  ///
+  /// In en, this message translates to:
+  /// **'CALL'**
+  String get emergencyContactsCall;
+
+  /// No description provided for @emergencyContactsWebsite.
+  ///
+  /// In en, this message translates to:
+  /// **'WEBSITE'**
+  String get emergencyContactsWebsite;
+
+  /// No description provided for @emergencyContactsSources.
+  ///
+  /// In en, this message translates to:
+  /// **'Sources and review'**
+  String get emergencyContactsSources;
+
+  /// No description provided for @emergencyContactsReviewed.
+  ///
+  /// In en, this message translates to:
+  /// **'Reviewed {date}'**
+  String emergencyContactsReviewed(String date);
+
+  /// No description provided for @emergencyContactsFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'This translation was unavailable, so the verified English directory is shown.'**
+  String get emergencyContactsFallback;
+
+  /// No description provided for @emergencyContactsLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'The offline emergency directory could not be loaded.'**
+  String get emergencyContactsLoadError;
+
+  /// No description provided for @emergencyContactsOpenError.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone could not open that number or link.'**
+  String get emergencyContactsOpenError;
+
+  /// No description provided for @emergencyContactsRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'RETRY'**
+  String get emergencyContactsRetry;
 }
 
 class _AppLocalizationsDelegate

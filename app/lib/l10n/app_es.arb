@@ -436,5 +436,20 @@
   "drillCheckInBody": "Estas actualizaciones permanecen en el canal de simulacro y no aparecen en alertas, mapas ni exportaciones de rescate.",
   "drillExitForRealTitle": "¿Enviar un SOS real?",
   "drillExitForRealBody": "Esto finalizará el simulacro y activará una solicitud real de rescate con ubicación y alertas SOS repetidas.",
-  "drillSendRealSos": "FINALIZAR SIMULACRO Y ENVIAR SOS"
+  "drillSendRealSos": "FINALIZAR SIMULACRO Y ENVIAR SOS",
+  "emergencyContactsOpen": "Números y enlaces oficiales de emergencia",
+  "emergencyContactsTitle": "Directorio de emergencias",
+  "emergencyContactsSafetyNotice": "Los números pueden funcionar sin datos móviles, pero necesitan cobertura celular de voz. Los sitios oficiales requieren internet.",
+  "emergencyContactsCountry": "País o territorio",
+  "emergencyContactsAutomatic": "Automático ({country})",
+  "emergencyContactsNumbers": "Números de emergencia",
+  "emergencyContactsOrganizations": "Organismos oficiales",
+  "emergencyContactsCall": "LLAMAR",
+  "emergencyContactsWebsite": "SITIO WEB",
+  "emergencyContactsSources": "Fuentes y revisión",
+  "emergencyContactsReviewed": "Revisado el {date}",
+  "emergencyContactsFallback": "Esta traducción no estaba disponible; se muestra el directorio verificado en inglés.",
+  "emergencyContactsLoadError": "No se pudo cargar el directorio de emergencias sin conexión.",
+  "emergencyContactsOpenError": "El teléfono no pudo abrir ese número o enlace.",
+  "emergencyContactsRetry": "REINTENTAR"
 }

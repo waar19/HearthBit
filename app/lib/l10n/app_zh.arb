@@ -436,5 +436,20 @@
   "drillCheckInBody": "这些更新仅保留在演练频道，不会出现在救援警报、地图或导出中。",
   "drillExitForRealTitle": "发送真实 SOS？",
   "drillExitForRealBody": "这将结束演练，并启动包含位置共享和重复 SOS 警报的真实救援请求。",
-  "drillSendRealSos": "结束演练并发送 SOS"
+  "drillSendRealSos": "结束演练并发送 SOS",
+  "emergencyContactsOpen": "紧急电话号码与官方链接",
+  "emergencyContactsTitle": "紧急联系目录",
+  "emergencyContactsSafetyNotice": "紧急电话可能无需移动数据，但仍需蜂窝语音信号。官方网站需要互联网。",
+  "emergencyContactsCountry": "国家或地区",
+  "emergencyContactsAutomatic": "自动（{country}）",
+  "emergencyContactsNumbers": "紧急电话号码",
+  "emergencyContactsOrganizations": "官方机构",
+  "emergencyContactsCall": "拨打",
+  "emergencyContactsWebsite": "网站",
+  "emergencyContactsSources": "来源与审核",
+  "emergencyContactsReviewed": "审核日期：{date}",
+  "emergencyContactsFallback": "此翻译不可用，现显示已验证的英文目录。",
+  "emergencyContactsLoadError": "无法加载离线紧急联系目录。",
+  "emergencyContactsOpenError": "此手机无法打开该号码或链接。",
+  "emergencyContactsRetry": "重试"
 }

@@ -6,6 +6,7 @@ import '../controllers/family_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../services/app_preferences.dart';
+import 'emergency_contacts_screen.dart';
 import 'emergency_gateway_card.dart';
 import 'first_aid_guide_screen.dart';
 import 'map_screen.dart';
@@ -116,6 +117,16 @@ class EmergencyScreen extends StatelessWidget {
           ),
           icon: const Icon(Icons.health_and_safety_outlined),
           label: Text(context.l10n.firstAidOpen),
+        ),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => EmergencyContactsScreen(preferences: preferences),
+            ),
+          ),
+          icon: const Icon(Icons.contact_phone_outlined),
+          label: Text(context.l10n.emergencyContactsOpen),
         ),
         const SizedBox(height: 12),
         FilledButton.tonalIcon(

@@ -484,5 +484,22 @@
   "drillCheckInBody": "These updates remain in the drill channel and are excluded from rescue alerts, maps and exports.",
   "drillExitForRealTitle": "Send a real SOS?",
   "drillExitForRealBody": "This will end the drill and activate a real rescue request with location sharing and repeated SOS alerts.",
-  "drillSendRealSos": "END DRILL AND SEND SOS"
+  "drillSendRealSos": "END DRILL AND SEND SOS",
+  "emergencyContactsOpen": "Emergency numbers and official links",
+  "emergencyContactsTitle": "Emergency directory",
+  "emergencyContactsSafetyNotice": "Call numbers may work without mobile data, but they still require cellular voice coverage. Official websites require internet.",
+  "emergencyContactsCountry": "Country or territory",
+  "emergencyContactsAutomatic": "Automatic ({country})",
+  "@emergencyContactsAutomatic": {"placeholders": {"country": {"type": "String"}}},
+  "emergencyContactsNumbers": "Emergency numbers",
+  "emergencyContactsOrganizations": "Official organizations",
+  "emergencyContactsCall": "CALL",
+  "emergencyContactsWebsite": "WEBSITE",
+  "emergencyContactsSources": "Sources and review",
+  "emergencyContactsReviewed": "Reviewed {date}",
+  "@emergencyContactsReviewed": {"placeholders": {"date": {"type": "String"}}},
+  "emergencyContactsFallback": "This translation was unavailable, so the verified English directory is shown.",
+  "emergencyContactsLoadError": "The offline emergency directory could not be loaded.",
+  "emergencyContactsOpenError": "This phone could not open that number or link.",
+  "emergencyContactsRetry": "RETRY"
 }

@@ -436,5 +436,20 @@
   "drillCheckInBody": "この報告は訓練チャンネル内に留まり、救助警報、地図、エクスポートには表示されません。",
   "drillExitForRealTitle": "本物のSOSを送信しますか？",
   "drillExitForRealBody": "訓練を終了し、位置共有と繰り返しSOSを伴う実際の救助要請を開始します。",
-  "drillSendRealSos": "訓練を終了してSOSを送信"
+  "drillSendRealSos": "訓練を終了してSOSを送信",
+  "emergencyContactsOpen": "緊急番号と公式リンク",
+  "emergencyContactsTitle": "緊急連絡先",
+  "emergencyContactsSafetyNotice": "緊急番号はモバイルデータなしでも利用できる場合がありますが、携帯電話の音声回線が必要です。公式サイトにはインターネットが必要です。",
+  "emergencyContactsCountry": "国または地域",
+  "emergencyContactsAutomatic": "自動（{country}）",
+  "emergencyContactsNumbers": "緊急電話番号",
+  "emergencyContactsOrganizations": "公式機関",
+  "emergencyContactsCall": "電話する",
+  "emergencyContactsWebsite": "ウェブサイト",
+  "emergencyContactsSources": "情報源と確認",
+  "emergencyContactsReviewed": "確認日：{date}",
+  "emergencyContactsFallback": "この翻訳を利用できないため、確認済みの英語版を表示しています。",
+  "emergencyContactsLoadError": "オフライン緊急連絡先を読み込めませんでした。",
+  "emergencyContactsOpenError": "この端末では番号またはリンクを開けませんでした。",
+  "emergencyContactsRetry": "再試行"
 }

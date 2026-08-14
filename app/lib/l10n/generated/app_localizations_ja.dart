@@ -1396,4 +1396,54 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get drillSendRealSos => '訓練を終了してSOSを送信';
+
+  @override
+  String get emergencyContactsOpen => '緊急番号と公式リンク';
+
+  @override
+  String get emergencyContactsTitle => '緊急連絡先';
+
+  @override
+  String get emergencyContactsSafetyNotice =>
+      '緊急番号はモバイルデータなしでも利用できる場合がありますが、携帯電話の音声回線が必要です。公式サイトにはインターネットが必要です。';
+
+  @override
+  String get emergencyContactsCountry => '国または地域';
+
+  @override
+  String emergencyContactsAutomatic(String country) {
+    return '自動（$country）';
+  }
+
+  @override
+  String get emergencyContactsNumbers => '緊急電話番号';
+
+  @override
+  String get emergencyContactsOrganizations => '公式機関';
+
+  @override
+  String get emergencyContactsCall => '電話する';
+
+  @override
+  String get emergencyContactsWebsite => 'ウェブサイト';
+
+  @override
+  String get emergencyContactsSources => '情報源と確認';
+
+  @override
+  String emergencyContactsReviewed(String date) {
+    return '確認日：$date';
+  }
+
+  @override
+  String get emergencyContactsFallback => 'この翻訳を利用できないため、確認済みの英語版を表示しています。';
+
+  @override
+  String get emergencyContactsLoadError => 'オフライン緊急連絡先を読み込めませんでした。';
+
+  @override
+  String get emergencyContactsOpenError => 'この端末では番号またはリンクを開けませんでした。';
+
+  @override
+  String get emergencyContactsRetry => '再試行';
 }

@@ -1454,4 +1454,57 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get drillSendRealSos => 'ÜBUNG BEENDEN UND SOS SENDEN';
+
+  @override
+  String get emergencyContactsOpen => 'Notrufnummern und offizielle Links';
+
+  @override
+  String get emergencyContactsTitle => 'Notfallverzeichnis';
+
+  @override
+  String get emergencyContactsSafetyNotice =>
+      'Notrufnummern können ohne mobile Daten funktionieren, benötigen aber Mobilfunk-Sprachabdeckung. Offizielle Websites benötigen Internet.';
+
+  @override
+  String get emergencyContactsCountry => 'Land oder Gebiet';
+
+  @override
+  String emergencyContactsAutomatic(String country) {
+    return 'Automatisch ($country)';
+  }
+
+  @override
+  String get emergencyContactsNumbers => 'Notrufnummern';
+
+  @override
+  String get emergencyContactsOrganizations => 'Offizielle Organisationen';
+
+  @override
+  String get emergencyContactsCall => 'ANRUFEN';
+
+  @override
+  String get emergencyContactsWebsite => 'WEBSITE';
+
+  @override
+  String get emergencyContactsSources => 'Quellen und Prüfung';
+
+  @override
+  String emergencyContactsReviewed(String date) {
+    return 'Geprüft am $date';
+  }
+
+  @override
+  String get emergencyContactsFallback =>
+      'Diese Übersetzung war nicht verfügbar; das geprüfte englische Verzeichnis wird angezeigt.';
+
+  @override
+  String get emergencyContactsLoadError =>
+      'Das Offline-Notfallverzeichnis konnte nicht geladen werden.';
+
+  @override
+  String get emergencyContactsOpenError =>
+      'Diese Nummer oder dieser Link konnte nicht geöffnet werden.';
+
+  @override
+  String get emergencyContactsRetry => 'ERNEUT VERSUCHEN';
 }
