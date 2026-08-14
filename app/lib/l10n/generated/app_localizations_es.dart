@@ -811,6 +811,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get radarActionBeacon => 'Baliza';
 
   @override
+  String get radarActionDirection => 'Dirección';
+
+  @override
+  String get radarActionSweeping => 'Barrido';
+
+  @override
+  String get radarActionWaiting => 'Esperando';
+
+  @override
   String get radarRadioStart => 'Medir distancia por radio';
 
   @override

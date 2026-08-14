@@ -26,6 +26,13 @@ class _RadarPlatform extends MeshPlatformService {
   Future<void> stopRadioRanging() async {}
 
   @override
+  Future<String> requestRemoteBeacon(
+    String peerId, {
+    int flags = 0,
+    Duration duration = Duration.zero,
+  }) async => 'request-1';
+
+  @override
   Future<Map<Object?, Object?>> getRangingCapabilities() async => {
     'available': radioAvailable,
   };
@@ -112,15 +119,24 @@ void main() {
   ) async {
     final (platform, _) = await pumpRadar(
       tester,
-      size: const Size(411, 870),
+      size: const Size(320, 700),
       radioAvailable: true,
     );
     platform.emitRssi(-65);
     await tester.pump();
 
+    expect(find.text('Dirección'), findsOneWidget);
     expect(find.text('Radio'), findsOneWidget);
     expect(find.text('Sonar'), findsOneWidget);
     expect(find.text('Baliza'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.explore_outlined));
+    await tester.pump();
+    expect(find.text('Barrido'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.flashlight_on_outlined));
+    await tester.pump();
+    expect(find.text('Esperando'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

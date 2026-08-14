@@ -810,6 +810,15 @@ class AppLocalizationsDe extends AppLocalizations {
   String get radarActionBeacon => 'Signal';
 
   @override
+  String get radarActionDirection => 'Richtung';
+
+  @override
+  String get radarActionSweeping => 'Suche';
+
+  @override
+  String get radarActionWaiting => 'Warten';
+
+  @override
   String get radarRadioStart => 'Entfernung per Funk messen';
 
   @override

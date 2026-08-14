@@ -803,6 +803,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get radarActionBeacon => 'Beacon';
 
   @override
+  String get radarActionDirection => 'Direction';
+
+  @override
+  String get radarActionSweeping => 'Sweeping';
+
+  @override
+  String get radarActionWaiting => 'Waiting';
+
+  @override
   String get radarRadioStart => 'Measure distance by radio';
 
   @override

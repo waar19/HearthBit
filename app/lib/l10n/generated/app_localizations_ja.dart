@@ -779,6 +779,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get radarActionBeacon => 'ビーコン';
 
   @override
+  String get radarActionDirection => '方向';
+
+  @override
+  String get radarActionSweeping => '探索中';
+
+  @override
+  String get radarActionWaiting => '待機中';
+
+  @override
   String get radarRadioStart => '無線で距離を測定';
 
   @override

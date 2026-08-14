@@ -1118,83 +1118,73 @@ class _RadarScreenState extends State<RadarScreen>
         ? context.l10n.radarSweepStart
         : context.l10n.radarSweepRestart;
     final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compactActions = largeText || constraints.maxWidth < 360;
-        final directionButton = compactActions
-            ? IconButton.outlined(
-                tooltip: directionLabel,
-                onPressed: _compassUnavailable || _sweepActive
-                    ? null
-                    : _startDirectionSweep,
-                icon: const Icon(Icons.explore_outlined),
+    final compactActions = largeText;
+    final actions = <Widget>[
+      _buildRangingAction(
+        compact: compactActions,
+        label: _sweepActive
+            ? context.l10n.radarActionSweeping
+            : context.l10n.radarActionDirection,
+        tooltip: _sweepActive
+            ? context.l10n.radarSweepProgress(
+                (_sweepEstimator.progress * 100).round(),
               )
-            : OutlinedButton.icon(
-                onPressed: _compassUnavailable || _sweepActive
-                    ? null
-                    : _startDirectionSweep,
-                icon: const Icon(Icons.explore_outlined),
-                label: Text(
-                  directionLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              );
-        return SizedBox(
-          height: compactActions ? 48 : 64,
-          child: Row(
-            children: [
-              if (compactActions)
-                directionButton
-              else
-                Expanded(child: directionButton),
-              if (_radioRangingAvailable) ...[
-                const SizedBox(width: 6),
-                _buildRangingAction(
-                  compact: compactActions,
-                  label: context.l10n.radarActionRadio,
-                  tooltip: _radioRangingActive
-                      ? context.l10n.radarRadioStop
-                      : context.l10n.radarRadioStart,
-                  icon: _radioRangingActive
-                      ? Icons.radar
-                      : Icons.social_distance,
-                  onPressed: _toggleRadioRanging,
-                ),
-              ],
-              const SizedBox(width: 6),
-              _buildRangingAction(
-                compact: compactActions,
-                label: context.l10n.radarActionSonar,
-                tooltip: _acousticActive
-                    ? context.l10n.radarSonarStop
-                    : context.l10n.radarSonarStart,
-                icon: _acousticActive
-                    ? Icons.hearing_disabled
-                    : Icons.graphic_eq,
-                onPressed: _toggleAcousticSonar,
-              ),
-              if (_canRequestBeacon || _beaconStatus == 'active') ...[
-                const SizedBox(width: 6),
-                _buildRangingAction(
-                  compact: compactActions,
-                  label: context.l10n.radarActionBeacon,
-                  tooltip: _beaconStatus == 'active'
-                      ? context.l10n.beaconStopRemote
-                      : context.l10n.beaconRequestRemote,
-                  icon: _beaconStatus == 'active'
-                      ? Icons.flashlight_off_outlined
-                      : Icons.flashlight_on_outlined,
-                  onPressed: _requestingBeacon || _beaconStatus == 'requested'
-                      ? null
-                      : _toggleRemoteBeacon,
-                  emphasized: true,
-                ),
-              ],
-            ],
-          ),
-        );
-      },
+            : directionLabel,
+        icon: _sweepActive ? Icons.sync : Icons.explore_outlined,
+        onPressed: _compassUnavailable || _sweepActive
+            ? null
+            : _startDirectionSweep,
+        outlined: true,
+      ),
+      if (_radioRangingAvailable)
+        _buildRangingAction(
+          compact: compactActions,
+          label: context.l10n.radarActionRadio,
+          tooltip: _radioRangingActive
+              ? context.l10n.radarRadioStop
+              : context.l10n.radarRadioStart,
+          icon: _radioRangingActive ? Icons.radar : Icons.social_distance,
+          onPressed: _toggleRadioRanging,
+        ),
+      _buildRangingAction(
+        compact: compactActions,
+        label: context.l10n.radarActionSonar,
+        tooltip: _acousticActive
+            ? context.l10n.radarSonarStop
+            : context.l10n.radarSonarStart,
+        icon: _acousticActive ? Icons.hearing_disabled : Icons.graphic_eq,
+        onPressed: _toggleAcousticSonar,
+      ),
+      if (_canRequestBeacon ||
+          _beaconStatus == 'requested' ||
+          _beaconStatus == 'active')
+        _buildRangingAction(
+          compact: compactActions,
+          label: _beaconStatus == 'requested'
+              ? context.l10n.radarActionWaiting
+              : context.l10n.radarActionBeacon,
+          tooltip: _beaconStatus == 'active'
+              ? context.l10n.beaconStopRemote
+              : context.l10n.beaconRequestRemote,
+          icon: _beaconStatus == 'active'
+              ? Icons.flashlight_off_outlined
+              : Icons.flashlight_on_outlined,
+          onPressed: _requestingBeacon || _beaconStatus == 'requested'
+              ? null
+              : _toggleRemoteBeacon,
+          emphasized: true,
+        ),
+    ];
+    return SizedBox(
+      height: compactActions ? 48 : 64,
+      child: Row(
+        children: [
+          for (var index = 0; index < actions.length; index++) ...[
+            if (index > 0) const SizedBox(width: 6),
+            Expanded(child: actions[index]),
+          ],
+        ],
+      ),
     );
   }
 
@@ -1205,32 +1195,58 @@ class _RadarScreenState extends State<RadarScreen>
     required IconData icon,
     required VoidCallback? onPressed,
     bool emphasized = false,
+    bool outlined = false,
   }) {
+    final disabledStyle = IconButton.styleFrom(
+      disabledForegroundColor: const Color(0xFF94A3B8),
+      disabledBackgroundColor: Colors.white10,
+    );
     if (compact) {
-      return emphasized
-          ? IconButton.filled(
-              tooltip: tooltip,
-              onPressed: onPressed,
-              icon: Icon(icon),
-            )
-          : IconButton.filledTonal(
-              tooltip: tooltip,
-              onPressed: onPressed,
-              icon: Icon(icon),
-            );
+      return Center(
+        child: outlined
+            ? IconButton.outlined(
+                tooltip: tooltip,
+                onPressed: onPressed,
+                icon: Icon(icon),
+                style: disabledStyle,
+              )
+            : emphasized
+            ? IconButton.filled(
+                tooltip: tooltip,
+                onPressed: onPressed,
+                icon: Icon(icon),
+                style: disabledStyle,
+              )
+            : IconButton.filledTonal(
+                tooltip: tooltip,
+                onPressed: onPressed,
+                icon: Icon(icon),
+                style: disabledStyle,
+              ),
+      );
     }
-    final button = emphasized
+    final button = outlined
+        ? IconButton.outlined(
+            onPressed: onPressed,
+            icon: Icon(icon),
+            constraints: const BoxConstraints.tightFor(width: 42, height: 40),
+            padding: EdgeInsets.zero,
+            style: disabledStyle,
+          )
+        : emphasized
         ? IconButton.filled(
             onPressed: onPressed,
             icon: Icon(icon),
             constraints: const BoxConstraints.tightFor(width: 42, height: 40),
             padding: EdgeInsets.zero,
+            style: disabledStyle,
           )
         : IconButton.filledTonal(
             onPressed: onPressed,
             icon: Icon(icon),
             constraints: const BoxConstraints.tightFor(width: 42, height: 40),
             padding: EdgeInsets.zero,
+            style: disabledStyle,
           );
     return Tooltip(
       message: tooltip,
@@ -1239,24 +1255,23 @@ class _RadarScreenState extends State<RadarScreen>
         enabled: onPressed != null,
         label: tooltip,
         child: ExcludeSemantics(
-          child: SizedBox(
-            width: 56,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                button,
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFFCBD5E1),
-                    fontSize: 10,
-                    height: 1,
-                  ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              button,
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: onPressed == null
+                      ? const Color(0xFF94A3B8)
+                      : const Color(0xFFCBD5E1),
+                  fontSize: 10,
+                  height: 1,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

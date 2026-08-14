@@ -1443,6 +1443,24 @@ abstract class AppLocalizations {
   /// **'Beacon'**
   String get radarActionBeacon;
 
+  /// No description provided for @radarActionDirection.
+  ///
+  /// In en, this message translates to:
+  /// **'Direction'**
+  String get radarActionDirection;
+
+  /// No description provided for @radarActionSweeping.
+  ///
+  /// In en, this message translates to:
+  /// **'Sweeping'**
+  String get radarActionSweeping;
+
+  /// No description provided for @radarActionWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting'**
+  String get radarActionWaiting;
+
   /// No description provided for @radarRadioStart.
   ///
   /// In en, this message translates to:
