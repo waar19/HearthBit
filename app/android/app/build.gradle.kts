@@ -102,8 +102,8 @@ flutter {
 }
 
 dependencies {
-    implementation("androidx.security:security-crypto:1.1.0")
-    implementation("org.bouncycastle:bcprov-jdk18on:1.85")
+    implementation("com.google.crypto.tink:tink-android:1.23.0")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.85.2")
     implementation("com.google.android.gms:play-services-nearby:19.3.0")
     implementation("com.google.android.gms:play-services-base:18.5.0")
     testImplementation("junit:junit:4.13.2")

@@ -15,6 +15,7 @@ import '../l10n/l10n.dart';
 import '../services/fountain_code.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/optical_protocol.dart';
+import '../services/transfer_crypto.dart';
 import '../services/transfer_protocol.dart';
 
 /// Receptor óptico: escanea la secuencia de QR y reconstruye el archivo con
@@ -109,15 +110,17 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
       trust = header.isLegacy ? _OpticalTrust.legacy : _OpticalTrust.unverified;
       await _scanner.start();
     }
+    final decoder = await FountainDecoder.createInIsolate(
+      chunkCount: header.chunkCount,
+      chunkSize: header.chunkSize,
+      seed: header.seed,
+    );
+    if (!mounted) return;
     // Cabecera nueva: el emisor reinició la sesión (o es otra transferencia).
     setState(() {
       _header = header;
       _trust = trust;
-      _decoder = FountainDecoder(
-        chunkCount: header.chunkCount,
-        chunkSize: header.chunkSize,
-        seed: header.seed,
-      );
+      _decoder = decoder;
       _error = null;
       _approvingHeader = false;
       _pendingSymbols.clear();
@@ -221,8 +224,8 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
   Future<void> _finish(OpticalHeader header, FountainDecoder decoder) async {
     await _scanner.stop();
     try {
-      final data = decoder.assemble(header.fileSize);
-      final digest = Uint8List.fromList(sha256.convert(data).bytes);
+      final data = await decoder.assembleInIsolate(header.fileSize);
+      final digest = await TransferCrypto.hashBytes(data);
       if (!_sameId(digest, header.sha256)) {
         throw StateError(currentL10n.opticalShaFailed);
       }

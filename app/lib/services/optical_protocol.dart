@@ -82,6 +82,7 @@ class OpticalProtocol {
   }) {
     if (transferId.length != transferIdLength ||
         symbolIndex < 0 ||
+        symbolIndex > 0xffffffff ||
         payload.isEmpty ||
         payload.length > maximumChunkSize) {
       throw ArgumentError('Invalid optical data symbol');
@@ -221,8 +222,14 @@ class OpticalProtocol {
   }
 
   static bool _isCoherentHeader(OpticalHeader header) {
+    final fileNameBytes = utf8.encode(header.fileName);
+    final senderPeerId = header.senderPeerId;
     if (header.transferId.length != transferIdLength ||
         header.sha256.length != sha256Length ||
+        fileNameBytes.isEmpty ||
+        fileNameBytes.length > 255 ||
+        (senderPeerId.isNotEmpty &&
+            !RegExp(r'^[0-9a-fA-F]{8,128}$').hasMatch(senderPeerId)) ||
         header.fileSize <= 0 ||
         header.fileSize > maximumFileSize ||
         header.chunkSize <= 0 ||

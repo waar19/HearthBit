@@ -63,7 +63,7 @@ kotlin {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.17.0")
-    implementation("androidx.security:security-crypto:1.1.0")
-    implementation("org.bouncycastle:bcprov-jdk18on:1.85")
+    implementation("com.google.crypto.tink:tink-android:1.23.0")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.85.2")
     testImplementation("junit:junit:4.13.2")
 }

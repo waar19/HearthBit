@@ -16,5 +16,5 @@
 -keep class org.bouncycastle.crypto.** { *; }
 -keep class com.bitchat.android.noise.southernstorm.** { *; }
 
-# Solo se usa durante la migración conservadora desde security-crypto.
--keep class androidx.security.crypto.** { *; }
+# Tink lee una sola vez los keysets legados durante la migración conservadora.
+-keep class com.google.crypto.tink.** { *; }

@@ -137,5 +137,28 @@ void main() {
       }),
       isNull,
     );
+    expect(
+      MeshPeer.tryParse({'id': 'peer', 'nickname': '救' * 30, 'lastSeen': 1234}),
+      isNull,
+      reason: 'el límite se aplica a bytes UTF-8, no a code units',
+    );
+    expect(
+      GenericBlePresence.tryParse({
+        'id': 'presence',
+        'kind': 'genericBle',
+        'rssi': double.nan,
+        'lastSeen': 1234,
+      }),
+      isNull,
+    );
+    expect(
+      GenericBlePresence.tryParse({
+        'id': 'presence',
+        'kind': 'genericBle',
+        'rssi': -70,
+        'lastSeen': double.infinity,
+      }),
+      isNull,
+    );
   });
 }

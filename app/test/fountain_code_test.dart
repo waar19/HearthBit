@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -80,12 +81,16 @@ void main() {
 
   test('codifica y decodifica lotes fuera del isolate UI', () async {
     final data = _randomData(2048, 31);
-    final encoder = FountainEncoder(data: data, chunkSize: 128, seed: 77);
+    final encoder = await FountainEncoder.createInIsolate(
+      data: data,
+      chunkSize: 128,
+      seed: 77,
+    );
     final encoded = await encoder.encodeSymbolsInIsolate(
       startIndex: 0,
       count: 64,
     );
-    var decoder = FountainDecoder(
+    var decoder = await FountainDecoder.createInIsolate(
       chunkCount: encoder.chunkCount,
       chunkSize: 128,
       seed: 77,
@@ -96,7 +101,7 @@ void main() {
     ]);
 
     expect(decoder.isComplete, isTrue);
-    expect(decoder.assemble(data.length), data);
+    expect(await decoder.assembleInIsolate(data.length), data);
   });
 
   group('protocolo óptico HBQ', () {
@@ -215,6 +220,36 @@ void main() {
           seed: 1,
         ),
         throwsArgumentError,
+      );
+    });
+
+    test('rechaza metadatos ópticos manipulados y tamaños anti-OOM', () {
+      final valid = OpticalHeader(
+        transferId: Uint8List(16),
+        seed: 1,
+        fileSize: 1000,
+        chunkSize: 100,
+        chunkCount: 10,
+        sha256: Uint8List(32),
+        fileName: 'safe.bin',
+      );
+      final incoherent = base64Decode(
+        OpticalProtocol.encodeLegacyHeader(valid),
+      );
+      ByteData.sublistView(incoherent).setUint32(35, 9);
+      expect(OpticalProtocol.decode(base64Encode(incoherent)), isNull);
+
+      final oversized = base64Decode(OpticalProtocol.encodeLegacyHeader(valid));
+      ByteData.sublistView(
+        oversized,
+      ).setUint64(25, OpticalProtocol.maximumFileSize + 1);
+      expect(OpticalProtocol.decode(base64Encode(oversized)), isNull);
+
+      expect(
+        OpticalProtocol.decode(
+          'A' * (OpticalProtocol.maximumEncodedFrameLength + 1),
+        ),
+        isNull,
       );
     });
   });

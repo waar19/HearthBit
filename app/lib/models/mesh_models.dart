@@ -425,10 +425,10 @@ class MeshPeer {
     final lastSeen = map['lastSeen'];
     if (id is! String ||
         id.isEmpty ||
-        id.length > 128 ||
+        utf8.encode(id).length > 128 ||
         nickname is! String ||
         nickname.trim().isEmpty ||
-        nickname.length > 80 ||
+        utf8.encode(nickname).length > 80 ||
         lastSeen is! num ||
         !lastSeen.isFinite ||
         lastSeen <= 0 ||
@@ -439,6 +439,11 @@ class MeshPeer {
     final radarConsentSource = map['radarConsentSource'];
     if (radarConsentSource != null &&
         (radarConsentSource is! String || radarConsentSource.length > 64)) {
+      return null;
+    }
+    final signingPublicKey = map['signingPublicKey'];
+    if (signingPublicKey is List<int> &&
+        signingPublicKey.any((byte) => byte < 0 || byte > 255)) {
       return null;
     }
     return MeshPeer(
@@ -458,7 +463,7 @@ class MeshPeer {
         _ => null,
       },
       radarConsentSource: radarConsentSource as String?,
-      signingPublicKey: switch (map['signingPublicKey']) {
+      signingPublicKey: switch (signingPublicKey) {
         final Uint8List value when value.length == 32 => value,
         final List<int> value when value.length == 32 => Uint8List.fromList(
           value,
@@ -516,15 +521,39 @@ class GenericBlePresence {
   });
 
   factory GenericBlePresence.fromMap(Map<Object?, Object?> map) {
+    final parsed = tryParse(map);
+    if (parsed == null) {
+      throw const FormatException('Invalid generic BLE presence');
+    }
+    return parsed;
+  }
+
+  static GenericBlePresence? tryParse(Map<Object?, Object?> map) {
+    final id = map['id'];
+    final kind = map['kind'];
+    final rssi = map['rssi'];
+    final lastSeen = map['lastSeen'];
+    if (id is! String ||
+        id.isEmpty ||
+        utf8.encode(id).length > 128 ||
+        kind != null && (kind is! String || utf8.encode(kind).length > 32) ||
+        rssi is! num ||
+        !rssi.isFinite ||
+        rssi < -127 ||
+        rssi > 20 ||
+        lastSeen is! num ||
+        !lastSeen.isFinite ||
+        lastSeen <= 0 ||
+        lastSeen > 8640000000000000) {
+      return null;
+    }
     return GenericBlePresence(
-      id: map['id']! as String,
+      id: id,
       role: MeshNodeRole.fromWire(map['role']),
-      kind: map['kind'] as String? ?? 'genericBle',
-      chatAvailable: map['chatAvailable'] as bool? ?? false,
-      rssi: (map['rssi']! as num).toInt(),
-      lastSeen: DateTime.fromMillisecondsSinceEpoch(
-        (map['lastSeen']! as num).toInt(),
-      ),
+      kind: kind as String? ?? 'genericBle',
+      chatAvailable: map['chatAvailable'] == true,
+      rssi: rssi.toInt(),
+      lastSeen: DateTime.fromMillisecondsSinceEpoch(lastSeen.toInt()),
     );
   }
 
@@ -576,20 +605,21 @@ class MeshMessage {
     final channel = map['channel'];
     if (id is! String ||
         id.isEmpty ||
-        id.length > maximumIdLength ||
+        utf8.encode(id).length > maximumIdLength ||
         sender is! String ||
-        sender.length > maximumNicknameLength ||
+        utf8.encode(sender).length > maximumNicknameLength ||
         content is! String ||
         utf8.encode(content).length > maximumContentBytes ||
         senderPeerId is! String ||
         senderPeerId.isEmpty ||
-        senderPeerId.length > maximumIdLength ||
+        utf8.encode(senderPeerId).length > maximumIdLength ||
         timestamp is! num ||
         !timestamp.isFinite ||
         timestamp <= 0 ||
         timestamp > 8640000000000000 ||
         (channel != null &&
-            (channel is! String || channel.length > maximumChannelLength))) {
+            (channel is! String ||
+                utf8.encode(channel).length > maximumChannelLength))) {
       return null;
     }
     return MeshMessage(

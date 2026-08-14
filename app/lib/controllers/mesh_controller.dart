@@ -1703,9 +1703,10 @@ class MeshController extends ChangeNotifier {
     _presences
       ..clear()
       ..addAll(
-        rawPresences.whereType<Map<Object?, Object?>>().map(
-          GenericBlePresence.fromMap,
-        ),
+        rawPresences
+            .whereType<Map<Object?, Object?>>()
+            .map(GenericBlePresence.tryParse)
+            .whereType<GenericBlePresence>(),
       );
   }
 

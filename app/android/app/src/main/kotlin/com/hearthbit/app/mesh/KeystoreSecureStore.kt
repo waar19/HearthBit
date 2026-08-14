@@ -5,13 +5,21 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
+import android.util.Log
+import com.google.crypto.tink.Aead
+import com.google.crypto.tink.DeterministicAead
+import com.google.crypto.tink.KeyTemplates
+import com.google.crypto.tink.aead.AeadConfig
+import com.google.crypto.tink.daead.DeterministicAeadConfig
+import com.google.crypto.tink.integration.android.AndroidKeysetManager
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
+import java.io.IOException
+import java.nio.ByteBuffer
+import java.security.GeneralSecurityException
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -23,9 +31,8 @@ import javax.crypto.spec.GCMParameterSpec
  * Keystore. Los nombres lógicos no son secretos; valores, sets y claves de
  * identidad permanecen cifrados y autenticados.
  *
- * La dependencia security-crypto se conserva temporalmente solo para leer y
- * borrar el formato legado. Retirarla antes de que las instalaciones activas
- * hayan ejecutado esta migración perdería identidades existentes.
+ * El lector Tink integrado conserva la migración desde
+ * EncryptedSharedPreferences sin mantener la API security-crypto deprecada.
  */
 internal class KeystoreSecureStore private constructor(
     private val preferences: SharedPreferences,
@@ -166,6 +173,7 @@ internal class KeystoreSecureStore private constructor(
         private const val TYPE_LONG = 2
         private const val TYPE_BOOLEAN = 3
         private const val TYPE_STRING_SET = 4
+        private const val TAG = "KeystoreSecureStore"
 
         fun open(context: Context, namespace: String): KeystoreSecureStore {
             val appContext = context.applicationContext
@@ -202,7 +210,6 @@ internal class KeystoreSecureStore private constructor(
             }
         }
 
-        @Suppress("DEPRECATION")
         private fun migrateLegacyEncryptedPreferences(
             context: Context,
             namespace: String,
@@ -218,19 +225,25 @@ internal class KeystoreSecureStore private constructor(
                 "shared_prefs${File.separator}$namespace.xml",
             )
             if (!legacyFile.exists()) {
-                check(migration.edit().putBoolean(KEY_MIGRATION_COMPLETE, true).commit())
+                markLegacyMigrationComplete(migration, namespace)
                 return
             }
-            val legacy = EncryptedSharedPreferences.create(
-                context,
-                namespace,
-                MasterKey.Builder(context)
-                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                    .build(),
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-            )
-            legacy.all.forEach { (key, value) ->
+
+            val legacyPreferences = context.getSharedPreferences(namespace, Context.MODE_PRIVATE)
+            val entries = readLegacyOrDiscard(
+                namespace = namespace,
+                readLegacy = {
+                    LegacyEncryptedPreferencesReader(context, namespace).readAll()
+                },
+                clearLegacy = { legacyPreferences.edit().clear().commit() },
+                markComplete = {
+                    migration.edit()
+                        .putBoolean(KEY_MIGRATION_COMPLETE, true)
+                        .commit()
+                },
+            ) ?: return
+
+            entries.forEach { (key, value) ->
                 val migrated = when (value) {
                     is String -> destination.putString(key, value)
                     is Long -> destination.putLong(key, value)
@@ -246,10 +259,188 @@ internal class KeystoreSecureStore private constructor(
                 }
                 check(migrated) { "No se pudo migrar $key desde $namespace" }
             }
-            check(migration.edit().putBoolean(KEY_MIGRATION_COMPLETE, true).commit())
-            check(legacy.edit().clear().commit()) {
+            check(legacyPreferences.edit().clear().commit()) {
                 "No se pudo borrar el almacén legado $namespace"
             }
+            markLegacyMigrationComplete(migration, namespace)
         }
+
+        private fun markLegacyMigrationComplete(
+            migration: SharedPreferences,
+            namespace: String,
+        ) {
+            if (!migration.edit().putBoolean(KEY_MIGRATION_COMPLETE, true).commit()) {
+                Log.e(TAG, "No se pudo marcar la migración completa para $namespace")
+            }
+        }
+    }
+}
+
+/**
+ * Lee el formato legado o lo invalida de forma permanente si su keyset ya no
+ * puede abrirse (por ejemplo, después de restaurar datos sin su clave Keystore).
+ */
+internal fun readLegacyOrDiscard(
+    namespace: String,
+    readLegacy: () -> Map<String, Any?>,
+    clearLegacy: () -> Boolean,
+    markComplete: () -> Boolean,
+    logWarning: (String, Throwable) -> Unit = { message, error ->
+        Log.w("KeystoreSecureStore", message, error)
+    },
+): Map<String, Any?>? {
+    val entries = try {
+        readLegacy()
+    } catch (error: GeneralSecurityException) {
+        discardUnreadableLegacy(
+            namespace,
+            clearLegacy,
+            markComplete,
+            error,
+            logWarning,
+        )
+        return null
+    } catch (error: IOException) {
+        discardUnreadableLegacy(
+            namespace,
+            clearLegacy,
+            markComplete,
+            error,
+            logWarning,
+        )
+        return null
+    } catch (error: RuntimeException) {
+        discardUnreadableLegacy(
+            namespace,
+            clearLegacy,
+            markComplete,
+            error,
+            logWarning,
+        )
+        return null
+    }
+    return entries
+}
+
+private fun discardUnreadableLegacy(
+    namespace: String,
+    clearLegacy: () -> Boolean,
+    markComplete: () -> Boolean,
+    error: Exception,
+    logWarning: (String, Throwable) -> Unit,
+) {
+    logWarning("Descartando almacén legado indescifrable $namespace", error)
+    if (!clearLegacy()) {
+        logWarning(
+            "No se pudo borrar el almacén legado $namespace",
+            IllegalStateException("SharedPreferences.clear() devolvió false"),
+        )
+    }
+    if (!markComplete()) {
+        logWarning(
+            "No se pudo marcar la migración completa para $namespace",
+            IllegalStateException("SharedPreferences.commit() devolvió false"),
+        )
+    }
+}
+
+/**
+ * Lector de migración para el formato de EncryptedSharedPreferences.
+ *
+ * Usa los mismos keysets Tink y AAD del formato AndroidX, pero solo expone una
+ * lectura única seguida de borrado. Nunca crea ni escribe datos en el formato
+ * legado.
+ */
+private class LegacyEncryptedPreferencesReader(
+    context: Context,
+    private val fileName: String,
+) {
+    private val preferences = context.getSharedPreferences(fileName, Context.MODE_PRIVATE)
+    private val keyAead: DeterministicAead
+    private val valueAead: Aead
+
+    init {
+        check(preferences.contains(KEY_KEYSET_ALIAS) && preferences.contains(VALUE_KEYSET_ALIAS)) {
+            "El almacén legado $fileName no contiene sus keysets"
+        }
+        AeadConfig.register()
+        DeterministicAeadConfig.register()
+        keyAead = AndroidKeysetManager.Builder()
+            .withSharedPref(context, KEY_KEYSET_ALIAS, fileName)
+            .withKeyTemplate(KeyTemplates.get("AES256_SIV"))
+            .withMasterKeyUri(MASTER_KEY_URI)
+            .build()
+            .keysetHandle
+            .getPrimitive(DeterministicAead::class.java)
+        valueAead = AndroidKeysetManager.Builder()
+            .withSharedPref(context, VALUE_KEYSET_ALIAS, fileName)
+            .withKeyTemplate(KeyTemplates.get("AES256_GCM"))
+            .withMasterKeyUri(MASTER_KEY_URI)
+            .build()
+            .keysetHandle
+            .getPrimitive(Aead::class.java)
+    }
+
+    fun readAll(): Map<String, Any?> = buildMap {
+        preferences.all.forEach { (encryptedKey, encryptedValue) ->
+            if (encryptedKey == KEY_KEYSET_ALIAS || encryptedKey == VALUE_KEYSET_ALIAS) return@forEach
+            try {
+                check(encryptedValue is String) { "Valor legado no cifrado en $fileName" }
+                val encryptedKeyBytes = Base64.decode(encryptedKey, Base64.DEFAULT)
+                val key = keyAead.decryptDeterministically(
+                    encryptedKeyBytes,
+                    fileName.toByteArray(Charsets.UTF_8),
+                ).toString(Charsets.UTF_8)
+                if (key == NULL_VALUE) return@forEach
+                val clearValue = valueAead.decrypt(
+                    Base64.decode(encryptedValue, Base64.DEFAULT),
+                    encryptedKeyBytes,
+                )
+                put(key, decodeValue(clearValue))
+            } catch (error: GeneralSecurityException) {
+                Log.w(TAG, "Omitiendo entrada legado indescifrable en $fileName", error)
+            } catch (error: RuntimeException) {
+                Log.w(TAG, "Omitiendo entrada legado inválida en $fileName", error)
+            }
+        }
+    }
+
+    fun clear(): Boolean = preferences.edit().clear().commit()
+
+    private fun decodeValue(clearValue: ByteArray): Any? {
+        val input = ByteBuffer.wrap(clearValue)
+        return when (val type = input.int) {
+            TYPE_STRING -> input.readString().takeUnless { it == NULL_VALUE }
+            TYPE_STRING_SET -> buildSet {
+                while (input.hasRemaining()) add(input.readString())
+            }.takeUnless { it.size == 1 && it.single() == NULL_VALUE }
+            TYPE_INT -> input.int
+            TYPE_LONG -> input.long
+            TYPE_FLOAT -> input.float
+            TYPE_BOOLEAN -> input.get().toInt() != 0
+            else -> error("Tipo legado desconocido $type en $fileName")
+        }
+    }
+
+    private fun ByteBuffer.readString(): String {
+        val length = int
+        require(length in 0..remaining()) { "Longitud legado inválida en $fileName" }
+        return ByteArray(length).also(::get).toString(Charsets.UTF_8)
+    }
+
+    companion object {
+        private const val KEY_KEYSET_ALIAS =
+            "__androidx_security_crypto_encrypted_prefs_key_keyset__"
+        private const val VALUE_KEYSET_ALIAS =
+            "__androidx_security_crypto_encrypted_prefs_value_keyset__"
+        private const val MASTER_KEY_URI = "android-keystore://_androidx_security_master_key_"
+        private const val NULL_VALUE = "__NULL__"
+        private const val TYPE_STRING = 0
+        private const val TYPE_STRING_SET = 1
+        private const val TYPE_INT = 2
+        private const val TYPE_LONG = 3
+        private const val TYPE_FLOAT = 4
+        private const val TYPE_BOOLEAN = 5
+        private const val TAG = "LegacyEncryptedPrefs"
     }
 }

@@ -73,18 +73,31 @@ class TransferCrypto {
   }
 
   /// SHA-256 de un archivo, leyendo por bloques para no cargarlo en memoria.
-  static Future<String> hashFile(File file) =>
+  static Future<String> hashFile(File file) async {
+    final digest = await hashFileBytes(file);
+    return digest.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  static Future<Uint8List> hashFileBytes(File file) =>
       Isolate.run(() => _hashFilePath(file.path));
+
+  static Future<Uint8List> hashBytes(Uint8List bytes) {
+    final transferable = TransferableTypedData.fromList([bytes]);
+    return Isolate.run(() {
+      final input = transferable.materialize().asUint8List();
+      return Uint8List.fromList(crypto.sha256.convert(input).bytes);
+    });
+  }
 }
 
-Future<String> _hashFilePath(String path) async {
+Future<Uint8List> _hashFilePath(String path) async {
   final output = _DigestSink();
   final input = crypto.sha256.startChunkedConversion(output);
   await for (final block in File(path).openRead()) {
     input.add(block);
   }
   input.close();
-  return output.digest.toString();
+  return Uint8List.fromList(output.digest.bytes);
 }
 
 class TransferCipher {

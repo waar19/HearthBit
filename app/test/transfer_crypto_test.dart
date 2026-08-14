@@ -79,5 +79,9 @@ void main() {
       await TransferCrypto.hashFile(file),
       'fbbab289f7f94b25736c58be46a994c441fd02552cc6022352e3d86d2fab7c83',
     );
+    expect(
+      await TransferCrypto.hashBytes(await file.readAsBytes()),
+      await TransferCrypto.hashFileBytes(file),
+    );
   });
 }

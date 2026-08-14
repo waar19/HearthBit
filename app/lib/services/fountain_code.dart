@@ -135,6 +135,21 @@ class FountainEncoder {
   late final RobustSoliton _soliton;
   late final List<Uint8List> _chunks;
 
+  static Future<FountainEncoder> createInIsolate({
+    required Uint8List data,
+    required int chunkSize,
+    required int seed,
+  }) {
+    final transferable = TransferableTypedData.fromList([data]);
+    return Isolate.run(
+      () => FountainEncoder(
+        data: transferable.materialize().asUint8List(),
+        chunkSize: chunkSize,
+        seed: seed,
+      ),
+    );
+  }
+
   Uint8List encodeSymbol(int symbolIndex) {
     final payload = Uint8List(chunkSize);
     for (final neighbor in neighborsOf(symbolIndex)) {
@@ -215,6 +230,18 @@ class FountainDecoder {
   int get decodedCount => _decodedCount;
 
   bool get isComplete => _decodedCount == chunkCount;
+
+  static Future<FountainDecoder> createInIsolate({
+    required int chunkCount,
+    required int chunkSize,
+    required int seed,
+  }) => Isolate.run(
+    () => FountainDecoder(
+      chunkCount: chunkCount,
+      chunkSize: chunkSize,
+      seed: seed,
+    ),
+  );
 
   /// Procesa un símbolo; devuelve true si aportó información nueva.
   bool addSymbol(int symbolIndex, Uint8List payload) {
@@ -309,4 +336,7 @@ class FountainDecoder {
     }
     return output;
   }
+
+  Future<Uint8List> assembleInIsolate(int fileSize) =>
+      Isolate.run(() => assemble(fileSize));
 }
