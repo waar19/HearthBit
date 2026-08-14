@@ -791,7 +791,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get radarSourcesDisagree =>
-      'GPS und BLE stimmen nicht überein; die GPS-Richtung hat Vorrang.';
+      'GPS und BLE stimmen nicht überein; die Richtung bleibt bis zur nächsten Messung verborgen.';
 
   @override
   String get dateToday => 'Heute';
@@ -1135,6 +1135,10 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get mapOfflineHint =>
       'Kein Netzwerk. Bereits gespeicherte Kartenkacheln bleiben sichtbar.';
+
+  @override
+  String get mapTileBlockedHint =>
+      'Der Anbieter hat Kartenkacheln vorübergehend gesperrt. Rettungsmarkierungen bleiben verfügbar; für Offline-Karten ist eine autorisierte Quelle oder ein eigener Server erforderlich.';
 
   @override
   String get mapShowOnMap => 'Auf Karte zeigen';

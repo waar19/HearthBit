@@ -283,6 +283,50 @@ class RunnerTests: XCTestCase {
     XCTAssertTrue(IOSMeshNodeRole.phoneRelay.canChat)
   }
 
+  func testPeerReachabilityAllowsNinetySecondKeepaliveAndBoundary() {
+    let now = Date(timeIntervalSince1970: 10_000)
+
+    XCTAssertTrue(
+      IOSPeerReachabilityPolicy.isOnline(
+        lastActivity: now.addingTimeInterval(-90),
+        now: now
+      )
+    )
+    XCTAssertTrue(
+      IOSPeerReachabilityPolicy.isOnline(
+        lastActivity: now.addingTimeInterval(-IOSPeerReachabilityPolicy.window),
+        now: now
+      )
+    )
+  }
+
+  func testLongReachabilityGapRequiresOneTransportRekey() {
+    let now = Date(timeIntervalSince1970: 10_000)
+    let stale = now.addingTimeInterval(-IOSPeerReachabilityPolicy.window - 0.001)
+
+    XCTAssertFalse(
+      IOSPeerReachabilityPolicy.isOnline(lastActivity: stale, now: now)
+    )
+    XCTAssertTrue(
+      IOSPeerReachabilityPolicy.requiresTransportRekey(
+        previousLastSeen: stale,
+        now: now
+      )
+    )
+    XCTAssertFalse(
+      IOSPeerReachabilityPolicy.requiresTransportRekey(
+        previousLastSeen: now,
+        now: now
+      )
+    )
+    XCTAssertFalse(
+      IOSPeerReachabilityPolicy.requiresTransportRekey(
+        previousLastSeen: nil,
+        now: now
+      )
+    )
+  }
+
   func testLongRangeTrunkCapabilityUsesBitFourWithoutChangingRole() throws {
     let original = IOSMeshNodeRole.infraRelay.capabilityPayload
     let withTrunk = IOSMeshNodeRole.infraRelay.capabilityPayload(

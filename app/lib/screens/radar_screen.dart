@@ -427,32 +427,36 @@ class _RadarScreenState extends State<RadarScreen>
         title: Text(context.l10n.radarTitle(widget.nickname)),
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: Center(
-                child: AspectRatio(
-                  aspectRatio: 1,
-                  child: AnimatedBuilder(
-                    animation: Listenable.merge([_sweep, _pulse]),
-                    builder: (context, _) => CustomPaint(
-                      painter: _RadarPainter(
-                        sweepProgress: _sweep.value,
-                        pulseProgress: _pulse.value,
-                        strength: _stale ? null : reading?.strength,
-                        directionSweepSectors: _sweepEstimator.sectorCoverage,
-                        estimatedDirectionRadians: _bleDirectionRadians(fusion),
-                        gpsDirectionRadians: _gpsDirectionRadians(fusion),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final radarSide = math.min(
+              420.0,
+              math.max(0.0, constraints.maxWidth - 32),
+            );
+            return SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: radarSide,
+                    height: radarSide,
+                    child: AnimatedBuilder(
+                      animation: Listenable.merge([_sweep, _pulse]),
+                      builder: (context, _) => CustomPaint(
+                        painter: _RadarPainter(
+                          sweepProgress: _sweep.value,
+                          pulseProgress: _pulse.value,
+                          strength: _stale ? null : reading?.strength,
+                          directionSweepSectors: _sweepEstimator.sectorCoverage,
+                          estimatedDirectionRadians: _bleDirectionRadians(
+                            fusion,
+                          ),
+                          gpsDirectionRadians: _gpsDirectionRadians(fusion),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-              child: Column(
-                children: [
+                  const SizedBox(height: 12),
                   _buildPanel(theme, reading, searching, fusion),
                   if (_canRequestBeacon || _beaconStatus == 'active') ...[
                     const SizedBox(height: 10),
@@ -489,8 +493,8 @@ class _RadarScreenState extends State<RadarScreen>
                   ),
                 ],
               ),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -509,12 +513,30 @@ class _RadarScreenState extends State<RadarScreen>
           const SizedBox(height: 10),
         ],
         if (_compassNeedsCalibration) ...[
-          const Icon(Icons.screen_rotation_alt_outlined, color: Colors.amber),
-          const SizedBox(height: 6),
-          Text(
-            context.l10n.radarCompassCalibration,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.amber, fontSize: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: .08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.amber.withValues(alpha: .35)),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.screen_rotation_alt_outlined,
+                  color: Colors.amber,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    context.l10n.radarCompassCalibration,
+                    textAlign: TextAlign.left,
+                    style: const TextStyle(color: Colors.amber, fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 8),
         ],
@@ -627,7 +649,9 @@ class _RadarScreenState extends State<RadarScreen>
     return RadarFusion.evaluate(
       proximity: _stale ? null : _reading?.proximity,
       bleEstimate: _stale ? null : _directionEstimate,
-      headingDegrees: _headingDegrees,
+      // Una brújula marcada como imprecisa no debe seguir alimentando un
+      // rombo que parece autoritativo: ocultamos dirección hasta calibrarla.
+      headingDegrees: _compassNeedsCalibration ? null : _headingDegrees,
       localLatitude: local?.latitude,
       localLongitude: local?.longitude,
       localAccuracyMeters: local?.accuracy,
@@ -635,6 +659,7 @@ class _RadarScreenState extends State<RadarScreen>
       targetLongitude: _targetLongitude,
       targetAccuracyMeters: _targetAccuracyMeters,
       gpsDistanceMeters: _gpsDistanceMeters,
+      bleApproxDistanceMeters: _stale ? null : _reading?.approxDistanceMeters,
     );
   }
 

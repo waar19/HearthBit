@@ -790,7 +790,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get radarSourcesDisagree =>
-      'Le GPS et le BLE divergent ; le cap GPS est prioritaire.';
+      'Le GPS et le BLE divergent ; la direction reste masquée jusqu\'à une nouvelle mesure.';
 
   @override
   String get dateToday => 'Aujourd’hui';
@@ -1135,6 +1135,10 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get mapOfflineHint =>
       'Réseau indisponible. Les tuiles déjà enregistrées restent visibles.';
+
+  @override
+  String get mapTileBlockedHint =>
+      'Le fournisseur a temporairement bloqué les tuiles. Les marqueurs de secours restent disponibles ; utilisez une source autorisée ou votre propre serveur pour les cartes hors ligne.';
 
   @override
   String get mapShowOnMap => 'Afficher sur la carte';

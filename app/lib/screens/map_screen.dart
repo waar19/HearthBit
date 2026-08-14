@@ -371,9 +371,26 @@ class _MapScreenState extends State<MapScreen> {
               borderRadius: BorderRadius.circular(8),
               child: Padding(
                 padding: const EdgeInsets.all(8),
-                child: Text(
-                  context.l10n.mapOfflineHint,
-                  textAlign: TextAlign.center,
+                child: Row(
+                  children: [
+                    const Icon(Icons.map_outlined),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _lastTileError is TileAccessBlockedException
+                            ? context.l10n.mapTileBlockedHint
+                            : context.l10n.mapOfflineHint,
+                        textAlign: TextAlign.left,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: MaterialLocalizations.of(
+                        context,
+                      ).closeButtonTooltip,
+                      onPressed: () => setState(() => _lastTileError = null),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
                 ),
               ),
             ),

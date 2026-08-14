@@ -42,17 +42,6 @@ class EmergencyScreen extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
         if (drillMode) ...[_DrillBanner(), const SizedBox(height: 12)],
-        _DrillModeCard(
-          enabled: drillMode,
-          canSend: controller.canSend,
-          onEnable: () => _confirmEnableDrill(context),
-          onDisable: controller.deactivateDrill,
-          onSend: () => controller.sendDrillCheckIn(
-            CheckInStatus.needsHelp,
-            context.l10n.drillPracticeMessage,
-          ),
-        ),
-        const SizedBox(height: 20),
         Text(
           context.l10n.emergencyHeadline,
           style: Theme.of(
@@ -95,6 +84,17 @@ class EmergencyScreen extends StatelessWidget {
             controller.localBeaconActive
                 ? context.l10n.beaconStopVisible
                 : context.l10n.beaconMakeVisible,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _DrillModeCard(
+          enabled: drillMode,
+          canSend: controller.canSend,
+          onEnable: () => _confirmEnableDrill(context),
+          onDisable: controller.deactivateDrill,
+          onSend: () => controller.sendDrillCheckIn(
+            CheckInStatus.needsHelp,
+            context.l10n.drillPracticeMessage,
           ),
         ),
         const SizedBox(height: 24),

@@ -76,6 +76,7 @@ void main() {
 
       expect(source, same(MapTileSource.openStreetMap));
       expect(source.allowsBulkDownload, isFalse);
+      expect(source.cacheDirectoryName, 'osm-policy-v2');
       await expectLater(
         cache.download(const [tile]),
         throwsA(isA<TileBulkDownloadNotAllowedException>()),
@@ -104,6 +105,54 @@ void main() {
       expect(source.allowsBulkDownload, isTrue);
       await cache.download(const [tile]);
       expect(requests, 1);
+    });
+
+    test(
+      'identifica HearthBit sin usar el User-Agent de la librería',
+      () async {
+        final cache = OfflineTileCache.forTesting(
+          root: temporaryDirectory,
+          client: MockClient((request) async {
+            expect(
+              request.headers[HttpHeaders.userAgentHeader],
+              hearthBitMapUserAgent,
+            );
+            expect(request.headers['X-Requested-With'], hearthBitApplicationId);
+            expect(
+              request.headers[HttpHeaders.acceptHeader],
+              'image/png,image/*;q=0.8',
+            );
+            return http.Response.bytes(
+              pngBytes,
+              HttpStatus.ok,
+              headers: const {HttpHeaders.cacheControlHeader: 'max-age=604800'},
+            );
+          }),
+        );
+
+        expect(await cache.load(tile), pngBytes);
+      },
+    );
+
+    test('un PNG 403 nunca se guarda como tesela de mapa', () async {
+      final cache = OfflineTileCache.forTesting(
+        root: temporaryDirectory,
+        client: MockClient(
+          (_) async => http.Response.bytes(pngBytes, HttpStatus.forbidden),
+        ),
+      );
+
+      await expectLater(
+        cache.load(tile),
+        throwsA(
+          isA<TileAccessBlockedException>().having(
+            (error) => error.statusCode,
+            'statusCode',
+            HttpStatus.forbidden,
+          ),
+        ),
+      );
+      expect(await cache.fileFor(tile).exists(), isFalse);
     });
   });
 

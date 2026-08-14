@@ -174,10 +174,11 @@ void main() {
 
   group('RadarFusion', () {
     RadarFusionResult evaluate({
-      RadarProximity proximity = RadarProximity.inRange,
+      RadarProximity proximity = RadarProximity.far,
       SweepEstimate? bleEstimate,
-      double heading = 0,
+      double? heading = 0,
       double distance = 100,
+      double? bleDistance,
       double localAccuracy = 3,
       double? targetAccuracy = 5,
       double targetLatitude = 0.001,
@@ -193,6 +194,7 @@ void main() {
       targetLongitude: targetLongitude,
       targetAccuracyMeters: targetAccuracy,
       gpsDistanceMeters: distance,
+      bleApproxDistanceMeters: bleDistance,
     );
 
     test('calcula rumbo relativo cruzando cero grados', () {
@@ -222,15 +224,22 @@ void main() {
       expect(result.source, RadarDirectionSource.none);
     });
 
-    test('degrada BLE cuando contradice un rumbo GPS fiable', () {
-      final result = evaluate(
-        bleEstimate: const SweepEstimate(headingDegrees: 180, confidence: 0.9),
-      );
+    test(
+      'oculta ambas direcciones cuando GPS y BLE fiables se contradicen',
+      () {
+        final result = evaluate(
+          bleEstimate: const SweepEstimate(
+            headingDegrees: 180,
+            confidence: 0.9,
+          ),
+        );
 
-      expect(result.sourcesDisagree, isTrue);
-      expect(result.adjustedBleConfidence, closeTo(0.315, 0.001));
-      expect(result.source, RadarDirectionSource.gps);
-    });
+        expect(result.sourcesDisagree, isTrue);
+        expect(result.adjustedBleConfidence, closeTo(0.315, 0.001));
+        expect(result.source, RadarDirectionSource.none);
+        expect(result.gpsReliable, isFalse);
+      },
+    );
 
     test('usa BLE si GPS no es fiable a corta distancia', () {
       final result = evaluate(
@@ -242,6 +251,27 @@ void main() {
       expect(result.gpsReliable, isFalse);
       expect(result.source, RadarDirectionSource.ble);
       expect(result.showBleSector, isTrue);
+    });
+
+    test('descarta el rombo GPS si BLE cercano contradice la distancia', () {
+      final result = evaluate(
+        proximity: RadarProximity.close,
+        distance: 48,
+        bleDistance: 1.2,
+        targetAccuracy: 15,
+      );
+
+      expect(result.gpsRangeConsistent, isFalse);
+      expect(result.gpsReliable, isFalse);
+      expect(result.source, RadarDirectionSource.none);
+    });
+
+    test('no usa rumbo alguno mientras la brújula carece de precisión', () {
+      final result = evaluate(heading: null);
+
+      expect(result.gpsReliable, isFalse);
+      expect(result.gpsRelativeDegrees, isNull);
+      expect(result.source, RadarDirectionSource.none);
     });
   });
 

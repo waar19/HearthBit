@@ -690,7 +690,7 @@ internal class MeshEngine(
             "El rol ${localRole.wireName} no puede originar chat"
         }
         val peer = peers[peerIdHex]
-        require(peer != null) {
+        require(peer != null && isPeerOnline(peer)) {
             context.getString(R.string.error_peer_unavailable)
         }
         require(peer.role.canOriginateChat) {
@@ -723,7 +723,7 @@ internal class MeshEngine(
             "El rol ${localRole.wireName} no puede originar chat"
         }
         val peer = peers[peerIdHex]
-        require(peer != null && peer.role.canOriginateChat) {
+        require(peer != null && isPeerOnline(peer) && peer.role.canOriginateChat) {
             context.getString(R.string.error_peer_unavailable)
         }
         if (!noiseSessions.isEstablished(peerIdHex)) initiateHandshake(peerIdHex)
@@ -773,24 +773,35 @@ internal class MeshEngine(
     fun peersSnapshot(): List<Map<String, Any?>> {
         val now = System.currentTimeMillis()
         pruneRadarConsents(now)
-        return peers.values.sortedByDescending(Peer::lastSeen).map {
-            val consent = remoteRadarConsents[it.id]?.takeIf { value ->
+        return peers.values.sortedByDescending(Peer::lastSeen).map { peer ->
+            val online = isPeerOnline(peer, now)
+            val consent = remoteRadarConsents[peer.id]?.takeIf { value ->
                 value.expiresAt > now
             }
             mapOf(
-                "id" to it.id,
-                "nickname" to it.nickname,
-                "lastSeen" to it.lastSeen,
-                "secure" to noiseSessions.isEstablished(it.id),
-                "signingPublicKey" to it.signingPublicKey,
-                "supportsTransfers" to it.supportsTransfers,
-                "role" to it.role.wireName,
-                "hasLongRangeTrunk" to it.hasLongRangeTrunk,
+                "id" to peer.id,
+                "nickname" to peer.nickname,
+                "lastSeen" to peer.lastSeen,
+                "online" to online,
+                "secure" to PeerReachabilityPolicy.isSecure(
+                    peer.lastSeen,
+                    noiseSessions.isEstablished(peer.id),
+                    now,
+                ),
+                "signingPublicKey" to peer.signingPublicKey,
+                "supportsTransfers" to peer.supportsTransfers,
+                "role" to peer.role.wireName,
+                "hasLongRangeTrunk" to peer.hasLongRangeTrunk,
                 "radarAllowedUntil" to (consent?.expiresAt ?: 0L),
                 "radarConsentSource" to consent?.source,
             )
         }
     }
+
+    private fun isPeerOnline(
+        peer: Peer,
+        now: Long = System.currentTimeMillis(),
+    ): Boolean = PeerReachabilityPolicy.isOnline(peer.lastSeen, now)
 
     fun panicWipe() {
         stop()
@@ -1645,13 +1656,28 @@ internal class MeshEngine(
             LOG_TAG,
             "ANNOUNCE accepted from ${senderHex.take(8)} nickname=${announcement.nickname}",
         )
+        val now = System.currentTimeMillis()
+        val previousPeer = peers[senderHex]
+        val requiresTransportRekey = PeerReachabilityPolicy.requiresTransportRekey(
+            previousPeer?.lastSeen,
+            now,
+        )
+        if (requiresTransportRekey) {
+            Log.i(
+                LOG_TAG,
+                "ANNOUNCE after reachability gap from ${senderHex.take(8)}; resetting Noise epoch",
+            )
+            noiseSessions.invalidate(senderHex)
+            noiseFailureTracker.clear(senderHex)
+            lastHandshakeAttemptByPeer.remove(senderHex)
+        }
         // Solo vincular dirección y peerId después de validar claves y firma.
         // TTL intacto prueba que el anuncio llegó directamente, no por relay.
         if (packet.ttl == MeshProtocol.TTL) {
             addressToPeer[sourceAddress] = senderHex
         }
-        val previouslySupported = peers[senderHex]?.supportsTransfers == true
-        val previousRole = peers[senderHex]?.role ?: MeshNodeRole.PHONE_RELAY
+        val previouslySupported = previousPeer?.supportsTransfers == true
+        val previousRole = previousPeer?.role ?: MeshNodeRole.PHONE_RELAY
         peers[senderHex] = Peer(
             senderHex,
             announcement.nickname,
@@ -1660,6 +1686,7 @@ internal class MeshEngine(
             announcement.supportsTransfers || previouslySupported,
             previousRole,
             hasLongRangeTrunk = false,
+            lastSeen = now,
         )
         latestAnnouncementTimestampByPeer.merge(senderHex, packet.timestamp) { current, candidate ->
             maxOf(current, candidate)
@@ -3008,11 +3035,11 @@ internal class MeshEngine(
     }
 
     private fun nearbyPeerCount(): Int {
-        val knownPeers = peers.keys
+        val now = System.currentTimeMillis()
         val activeAddresses = clientReady.toSet() + serverSubscribers.map { it.address }
         return activeAddresses.asSequence()
             .mapNotNull(addressToPeer::get)
-            .filter(knownPeers::contains)
+            .filter { peerId -> peers[peerId]?.let { isPeerOnline(it, now) } == true }
             .toSet()
             .size
     }

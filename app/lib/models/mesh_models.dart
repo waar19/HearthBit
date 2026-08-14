@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'voice_note.dart';
+
 enum MeshNodeRole {
   phoneRelay('PHONE_RELAY'),
   phoneBeacon('PHONE_BEACON'),
@@ -256,6 +258,7 @@ class MeshPeer {
     required this.nickname,
     required this.lastSeen,
     required this.secure,
+    this.online = true,
     this.supportsTransfers = false,
     this.role = MeshNodeRole.phoneRelay,
     this.hasLongRangeTrunk = false,
@@ -265,11 +268,13 @@ class MeshPeer {
   });
 
   factory MeshPeer.fromMap(Map<Object?, Object?> map) {
+    final online = map['online'] as bool? ?? true;
     return MeshPeer(
       id: map['id']! as String,
       nickname: map['nickname']! as String,
       lastSeen: DateTime.fromMillisecondsSinceEpoch(map['lastSeen']! as int),
-      secure: map['secure'] as bool? ?? false,
+      secure: online && (map['secure'] as bool? ?? false),
+      online: online,
       supportsTransfers: map['supportsTransfers'] as bool? ?? false,
       role: MeshNodeRole.fromWire(map['role']),
       hasLongRangeTrunk: map['hasLongRangeTrunk'] as bool? ?? false,
@@ -294,6 +299,7 @@ class MeshPeer {
   final String nickname;
   final DateTime lastSeen;
   final bool secure;
+  final bool online;
   final bool supportsTransfers;
   final MeshNodeRole role;
   final bool hasLongRangeTrunk;
@@ -305,12 +311,16 @@ class MeshPeer {
 
   bool get radarAllowed => radarAllowedUntil?.isAfter(DateTime.now()) ?? false;
 
+  bool isOnlineAt(DateTime now, {required Duration freshnessWindow}) =>
+      online && !lastSeen.isBefore(now.subtract(freshnessWindow));
+
   factory MeshPeer.fromDatabase(Map<String, Object?> map) {
     return MeshPeer(
       id: map['id']! as String,
       nickname: map['nickname']! as String,
       lastSeen: DateTime.fromMillisecondsSinceEpoch(map['last_seen']! as int),
       secure: false,
+      online: false,
     );
   }
 
@@ -426,15 +436,16 @@ class MeshMessage {
       !isDrill &&
       (channel == 'checkin' || content.contains(EmergencyCheckIn.marker));
 
-  bool get isVoiceNote =>
-      isPrivate &&
-      RegExp(r'^\[HB-VOICE\|[0-9a-f]{32}\|\d+\]$').hasMatch(content);
+  VoiceNoteEnvelope? get voiceNote =>
+      isPrivate ? VoiceNoteEnvelope.tryParse(content) : null;
 
-  String? get voiceTransferId => isVoiceNote ? content.split('|')[1] : null;
+  bool get isVoiceNote => voiceNote != null;
 
-  int? get voiceDurationSeconds => isVoiceNote
-      ? int.tryParse(content.split('|')[2].replaceAll(']', ''))
-      : null;
+  String? get voiceTransferId => voiceNote?.transferId;
+
+  int? get voiceDurationSeconds => voiceNote?.durationSeconds;
+
+  List<double> get voiceWaveform => voiceNote?.waveform ?? const [];
 
   bool get isRadarLocation => isPrivate && radarLocation != null;
 

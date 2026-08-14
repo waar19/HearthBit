@@ -398,11 +398,21 @@ parte del filtro GCS y deben recuperar su propia sesión Noise.
 7. Mantenga la malla en segundo plano durante cada desconexión. La notificación
    persistente debe cambiar entre «Iniciando malla», «Malla activa · N cercanos»
    y «Error en la malla» según el estado real.
+8. Repita con el iPhone fuera de alcance o con Bluetooth apagado durante dos
+   horas. Transcurridos más de cuatro minutos, el S25 debe mostrarlo
+   desconectado aunque conserve la conversación. Envíe un marcador privado:
+   debe persistirse con estado pendiente y no figurar como enviado.
+9. Reactive el iPhone sin reabrir el chat. El primer `ANNOUNCE` válido debe
+   publicar al peer como alcanzable pero no seguro, iniciar una nueva época
+   Noise y, solo después de recuperar `secure`, drenar el mismo ID pendiente
+   exactamente una vez. Anuncios posteriores dentro de la ventana no deben
+   reiniciar el canal.
 
 Registre por dirección el tiempo desde que Bluetooth vuelve a estar disponible
 hasta que el canal aparece seguro, los intentos de handshake, el ID del mensaje
 pendiente y el número de entregas. El resultado correcto es una sola entrega,
-ningún cierre del chat y recuperación automática del canal Noise.
+ningún envío nativo durante el estado desconectado, ningún cierre del chat y
+recuperación automática del canal Noise.
 
 ## Descubrimiento de BitChat iOS en segundo plano
 

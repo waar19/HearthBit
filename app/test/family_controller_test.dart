@@ -172,7 +172,8 @@ void main() {
           {
             'id': member.peerId,
             'nickname': member.nickname,
-            'lastSeen': 2000,
+            'lastSeen': DateTime.now().millisecondsSinceEpoch,
+            'online': true,
             'signingPublicKey': key,
           },
         ],

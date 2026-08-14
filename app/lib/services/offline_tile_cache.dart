@@ -16,7 +16,9 @@ const osmAttribution = '© OpenStreetMap contributors';
 const osmAttributionUrl = 'https://www.openstreetmap.org/copyright';
 const osmTilePolicyUrl = 'https://operations.osmfoundation.org/policies/tiles/';
 const hearthBitMapUserAgent =
-    'HearthBit/1.0 (emergency offline map; https://github.com/waar19/HearthBit)';
+    'HearthBit/1.0 (+https://github.com/waar19/HearthBit; '
+    'contact: https://github.com/waar19/HearthBit/issues)';
+const hearthBitApplicationId = 'com.hearthbit.app';
 const _minimumFallbackCacheTtl = Duration(days: 7);
 
 @immutable
@@ -100,7 +102,7 @@ class MapTileSource {
   Uri get attributionUri => Uri.parse(attributionUrl);
 
   String get cacheDirectoryName {
-    if (isPublicOpenStreetMap) return 'osm';
+    if (isPublicOpenStreetMap) return 'osm-policy-v2';
     return _templateUri.host.toLowerCase().replaceAll(
       RegExp(r'[^a-z0-9.-]'),
       '_',
@@ -186,6 +188,16 @@ class TileBulkDownloadNotAllowedException implements Exception {
 
   @override
   String toString() => 'Bulk tile download is not allowed for $host';
+}
+
+class TileAccessBlockedException implements Exception {
+  const TileAccessBlockedException(this.statusCode, this.host);
+
+  final int statusCode;
+  final String host;
+
+  @override
+  String toString() => 'Tile access blocked by $host ($statusCode)';
 }
 
 class TileDownloadPlanner {
@@ -290,8 +302,22 @@ class OfflineTileCache {
   }) async {
     final effectiveSource = source ?? MapTileSource.fromEnvironment();
     final support = await getApplicationSupportDirectory();
+    final mapRoot = Directory(p.join(support.path, 'map_tiles'));
+    if (effectiveSource.isPublicOpenStreetMap) {
+      final legacyRoot = Directory(p.join(mapRoot.path, 'osm'));
+      if (await legacyRoot.exists()) {
+        // Versiones anteriores podían persistir el PNG de bloqueo 403 como si
+        // fuera un mapa válido. No se reutiliza esa caché no verificable.
+        try {
+          await legacyRoot.delete(recursive: true);
+        } on FileSystemException {
+          // La nueva generación usa otro directorio incluso si el SO mantiene
+          // temporalmente un archivo antiguo abierto.
+        }
+      }
+    }
     final root = Directory(
-      p.join(support.path, 'map_tiles', effectiveSource.cacheDirectoryName),
+      p.join(mapRoot.path, effectiveSource.cacheDirectoryName),
     );
     await root.create(recursive: true);
     return OfflineTileCache._(
@@ -360,7 +386,8 @@ class OfflineTileCache {
     final uri = source.tileUri(tile);
     final headers = <String, String>{
       HttpHeaders.userAgentHeader: hearthBitMapUserAgent,
-      HttpHeaders.acceptHeader: 'image/png',
+      'X-Requested-With': hearthBitApplicationId,
+      HttpHeaders.acceptHeader: 'image/png,image/*;q=0.8',
       HttpHeaders.ifNoneMatchHeader: ?metadata?.eTag,
       HttpHeaders.ifModifiedSinceHeader: ?metadata?.lastModified,
     };
@@ -387,6 +414,10 @@ class OfflineTileCache {
         );
         await file.setLastModified(_now());
         return staleBytes;
+      }
+      if (response.statusCode == HttpStatus.forbidden ||
+          response.statusCode == HttpStatus.tooManyRequests) {
+        throw TileAccessBlockedException(response.statusCode, uri.host);
       }
       final bytes = response.bodyBytes;
       if (response.statusCode != HttpStatus.ok ||

@@ -60,6 +60,24 @@ private enum IOSPowerProfile: String {
   }
 }
 
+enum IOSPeerReachabilityPolicy {
+  static let window: TimeInterval = 4 * 60
+
+  static func isOnline(
+    lastActivity: Date?,
+    now: Date,
+    window: TimeInterval = IOSPeerReachabilityPolicy.window
+  ) -> Bool {
+    guard let lastActivity else { return false }
+    return now.timeIntervalSince(lastActivity) <= window
+  }
+
+  static func requiresTransportRekey(previousLastSeen: Date?, now: Date) -> Bool {
+    previousLastSeen != nil &&
+      !isOnline(lastActivity: previousLastSeen, now: now)
+  }
+}
+
 final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private struct PendingCentralWrite {
     let data: Data
@@ -77,7 +95,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private static let autoHandshakeCooldown: TimeInterval = 60
   private static let handshakeTimeout: TimeInterval = 20
   private static let maximumHandshakeRestarts = 3
-  private static let peerReachabilityWindow: TimeInterval = 180
+  private static let peerReachabilityWindow = IOSPeerReachabilityPolicy.window
   private static let maximumDecryptFailures = 3
 
   private var identity = IOSMeshIdentity()
@@ -1076,7 +1094,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
 
   private func ensurePrivateChannel(peerID: String) throws {
     guard localRole.canChat else { throw IOSMeshError.roleCannotChat }
-    guard peers[peerID]?.role.canChat == true else {
+    guard peers[peerID]?.role.canChat == true, isPeerReachable(peerID) else {
       throw IOSMeshError.peerUnavailable
     }
     privateChatPeerIDs.insert(peerID)
@@ -1091,7 +1109,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     messageID: String? = nil
   ) throws -> String {
     guard localRole.canChat else { throw IOSMeshError.roleCannotChat }
-    guard peers[peerID] != nil else { throw IOSMeshError.peerUnavailable }
+    guard peers[peerID]?.role.canChat == true, isPeerReachable(peerID) else {
+      throw IOSMeshError.peerUnavailable
+    }
     privateChatPeerIDs.insert(peerID)
     let requestedID = messageID?.trimmingCharacters(in: .whitespacesAndNewlines)
     let id: String
@@ -1165,13 +1185,17 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func isPeerReachable(_ peerID: String) -> Bool {
-    if peripheralPeers.values.contains(peerID) { return true }
-    if let activity = lastNoisePeerActivity[peerID],
-       Date().timeIntervalSince(activity) <= Self.peerReachabilityWindow {
-      return true
-    }
-    guard let peer = peers[peerID] else { return false }
-    return Date().timeIntervalSince(peer.lastSeen) <= Self.peerReachabilityWindow
+    IOSPeerReachabilityPolicy.isOnline(
+      lastActivity: lastPeerActivity(peerID),
+      now: Date(),
+      window: Self.peerReachabilityWindow
+    )
+  }
+
+  private func lastPeerActivity(_ peerID: String) -> Date? {
+    let announcement = peers[peerID]?.lastSeen
+    let noise = lastNoisePeerActivity[peerID]
+    return [announcement, noise].compactMap { $0 }.max()
   }
 
   private func scheduleAutoHandshake(
@@ -1267,6 +1291,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     activeHandshakeTimeoutTokens.removeValue(forKey: peerID)
     candidateHandshakeTimeoutTokens.removeValue(forKey: peerID)
     handshakeRestartAttempts.removeValue(forKey: peerID)
+    lastAutoHandshake.removeValue(forKey: peerID)
+    lastNoisePeerActivity.removeValue(forKey: peerID)
   }
 
   private func registerDecryptFailure(peerID: String) {
@@ -1805,18 +1831,31 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         IOSMeshProtocol.peerID(announcement.noisePublicKey) == packet.senderID,
         IOSMeshIdentity.verify(packet, key: announcement.signingPublicKey)
       else { return }
+      let now = Date()
+      let previousPeer = peers[senderID]
+      let requiresTransportRekey = IOSPeerReachabilityPolicy.requiresTransportRekey(
+        previousLastSeen: previousPeer?.lastSeen,
+        now: now
+      )
+      if requiresTransportRekey {
+        NSLog(
+          "HearthBitMesh: ANNOUNCE after reachability gap from %@; resetting Noise epoch",
+          String(senderID.prefix(8))
+        )
+        invalidateNoiseState(peerID: senderID)
+      }
       peers[senderID] = IOSMeshPeer(
         id: senderID,
         nickname: announcement.nickname,
         noisePublicKey: announcement.noisePublicKey,
         signingPublicKey: announcement.signingPublicKey,
         supportsTransfers: announcement.supportsTransfers ||
-          (peers[senderID]?.supportsTransfers ?? false),
+          (previousPeer?.supportsTransfers ?? false),
         isInfrastructure: announcement.isInfrastructure ||
-          (peers[senderID]?.isInfrastructure ?? false),
-        role: peers[senderID]?.role ?? .phoneRelay,
+          (previousPeer?.isInfrastructure ?? false),
+        role: previousPeer?.role ?? .phoneRelay,
         hasLongRangeTrunk: false,
-        lastSeen: Date()
+        lastSeen: now
       )
       latestAnnouncementTimestampByPeer[senderID] = max(
         latestAnnouncementTimestampByPeer[senderID] ?? 0,
@@ -1831,12 +1870,17 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       for stored in storeForward.packets(for: packet.senderID) {
         broadcast(stored)
       }
-      if !(pendingPrivate[senderID] ?? []).isEmpty ||
-         !(pendingFrames[senderID] ?? []).isEmpty ||
-         !(pendingCourier[senderID] ?? []).isEmpty {
+      if requiresTransportRekey {
+        if shouldAutoHandshake(peerID: senderID) {
+          scheduleAutoHandshake(peerID: senderID, force: true, delay: 0.5)
+        }
+      } else if !(pendingPrivate[senderID] ?? []).isEmpty ||
+                  !(pendingFrames[senderID] ?? []).isEmpty ||
+                  !(pendingCourier[senderID] ?? []).isEmpty {
         try? initiateHandshake(peerID: senderID)
+      } else {
+        scheduleAutoHandshake(peerID: senderID)
       }
-      scheduleAutoHandshake(peerID: senderID)
     case IOSMeshProtocol.message:
       guard
         let peer = peers[senderID],
@@ -2400,17 +2444,25 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
 
   private func peerMaps() -> [[String: Any]] {
     pruneRadarConsents()
-    return peers.values.map {
-      let consent = remoteRadarConsents[$0.id]
+    let now = Date()
+    return peers.values.map { peer in
+      let activity = lastPeerActivity(peer.id) ?? peer.lastSeen
+      let online = IOSPeerReachabilityPolicy.isOnline(
+        lastActivity: activity,
+        now: now,
+        window: Self.peerReachabilityWindow
+      )
+      let consent = remoteRadarConsents[peer.id]
       return [
-        "id": $0.id,
-        "nickname": $0.nickname,
-        "lastSeen": Int($0.lastSeen.timeIntervalSince1970 * 1000),
-        "secure": sessions[$0.id]?.established ?? false,
-        "signingPublicKey": FlutterStandardTypedData(bytes: $0.signingPublicKey),
-        "supportsTransfers": $0.supportsTransfers,
-        "role": $0.role.rawValue,
-        "hasLongRangeTrunk": $0.hasLongRangeTrunk,
+        "id": peer.id,
+        "nickname": peer.nickname,
+        "lastSeen": Int(activity.timeIntervalSince1970 * 1000),
+        "online": online,
+        "secure": online && (sessions[peer.id]?.established ?? false),
+        "signingPublicKey": FlutterStandardTypedData(bytes: peer.signingPublicKey),
+        "supportsTransfers": peer.supportsTransfers,
+        "role": peer.role.rawValue,
+        "hasLongRangeTrunk": peer.hasLongRangeTrunk,
         "radarAllowedUntil": consent?.expiresAt ?? 0,
         "radarConsentSource": consent?.source ?? "",
       ]

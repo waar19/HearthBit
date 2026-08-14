@@ -145,20 +145,39 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets('mantiene el SOS antes de la configuración de simulacro', (
+    tester,
+  ) async {
+    await pumpScreen(tester);
+
+    final sosTop = tester.getTopLeft(find.text('MANTÉN PARA SOS')).dy;
+    final drillTop = tester.getTopLeft(find.text('Modo simulacro')).dy;
+
+    expect(sosTop, lessThan(drillTop));
+  });
+
   testWidgets('confirmación activa banner y envío aislado de simulacro', (
     tester,
   ) async {
     await pumpScreen(tester);
 
+    await tester.ensureVisible(find.byKey(const Key('drill-mode-switch')));
     await tester.tap(find.byKey(const Key('drill-mode-switch')));
     await tester.pumpAndSettle();
     expect(find.text('¿Activar el modo simulacro?'), findsOneWidget);
     await tester.tap(find.text('ACTIVAR SIMULACRO'));
     await tester.pumpAndSettle();
 
+    await tester.fling(find.byType(ListView), const Offset(0, 1200), 1000);
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('drill-safety-banner')), findsOneWidget);
     expect(find.text('SIMULACRO - no solicita rescate'), findsOneWidget);
     expect(find.text('Modo rescate'), findsNothing);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('drill-hold-button')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     final beaconButton = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'HACERME VISIBLE'),
     );

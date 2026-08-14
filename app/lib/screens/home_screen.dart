@@ -4,7 +4,6 @@ import 'dart:math' as math;
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -18,12 +17,15 @@ import '../controllers/transfer_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../models/transfer_models.dart';
+import '../models/voice_note.dart';
 import '../services/apk_share_service.dart';
-import '../services/invite_share_service.dart';
-import '../services/emergency_shortcut_service.dart';
 import '../services/app_preferences.dart';
+import '../services/emergency_shortcut_service.dart';
+import '../services/invite_share_service.dart';
 import '../services/photo_profile.dart';
+import '../services/voice_note_audio_controller.dart';
 import '../utils/message_chronology.dart';
+import '../widgets/voice_waveform.dart';
 import 'emergency_screen.dart';
 import 'family_screen.dart';
 import 'mesh_health_card.dart';
@@ -732,6 +734,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     MeshPeer peer, {
     required bool online,
   }) {
+    final secure = online && peer.secure;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
@@ -755,12 +758,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
           _peerTransferButton(peer, online: online),
           Tooltip(
-            message: peer.secure
+            message: secure
                 ? context.l10n.peerSecure
                 : context.l10n.peerTapToEncrypt,
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: Icon(peer.secure ? Icons.lock : Icons.lock_open),
+              child: Icon(secure ? Icons.lock : Icons.lock_open),
             ),
           ),
         ],
@@ -1266,14 +1269,18 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
   late final TextEditingController _textController;
   final ScrollController _scrollController = ScrollController();
   final AudioRecorder _audioRecorder = AudioRecorder();
-  final AudioPlayer _audioPlayer = AudioPlayer();
+  final VoiceNoteAudioController _voiceAudio = VoiceNoteAudioController();
+  final List<double> _recordingWaveform = [];
   var _privateMessageCount = 0;
   var _scrollScheduled = false;
   var _recording = false;
   var _sending = false;
   String? _sendError;
   DateTime? _recordingStarted;
-  Timer? _recordingTimer;
+  Duration _recordingElapsed = Duration.zero;
+  Timer? _recordingLimitTimer;
+  Timer? _recordingUiTimer;
+  StreamSubscription<Amplitude>? _amplitudeSubscription;
 
   @override
   void initState() {
@@ -1300,9 +1307,11 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
   void dispose() {
     widget.controller.removeListener(_handleControllerUpdate);
     widget.transfers.removeListener(_handleTransferUpdate);
-    _recordingTimer?.cancel();
+    _recordingLimitTimer?.cancel();
+    _recordingUiTimer?.cancel();
+    unawaited(_amplitudeSubscription?.cancel());
     _audioRecorder.dispose();
-    _audioPlayer.dispose();
+    _voiceAudio.dispose();
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -1339,6 +1348,7 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
       return;
     }
     if (!await _audioRecorder.hasPermission()) return;
+    await _voiceAudio.stop();
     final directory = await getTemporaryDirectory();
     final path = p.join(
       directory.path,
@@ -1347,9 +1357,13 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
     await _audioRecorder.start(
       const RecordConfig(
         encoder: AudioEncoder.aacLc,
-        bitRate: 12000,
+        bitRate: 20000,
         sampleRate: 16000,
         numChannels: 1,
+        autoGain: true,
+        echoCancel: true,
+        noiseSuppress: true,
+        audioInterruption: AudioInterruptionMode.pauseResume,
       ),
       path: path,
     );
@@ -1357,20 +1371,58 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
     setState(() {
       _recording = true;
       _recordingStarted = DateTime.now();
+      _recordingElapsed = Duration.zero;
+      _recordingWaveform.clear();
+      _sendError = null;
     });
-    _recordingTimer?.cancel();
-    _recordingTimer = Timer(const Duration(seconds: 20), _stopVoiceRecording);
+    await _amplitudeSubscription?.cancel();
+    _amplitudeSubscription = _audioRecorder
+        .onAmplitudeChanged(const Duration(milliseconds: 80))
+        .listen(_recordAmplitude);
+    _recordingUiTimer?.cancel();
+    _recordingUiTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      if (!mounted || !_recording || _recordingStarted == null) return;
+      setState(() {
+        _recordingElapsed = DateTime.now().difference(_recordingStarted!);
+      });
+    });
+    _recordingLimitTimer?.cancel();
+    _recordingLimitTimer = Timer(
+      const Duration(seconds: 20),
+      _stopVoiceRecording,
+    );
+  }
+
+  void _recordAmplitude(Amplitude amplitude) {
+    if (!mounted || !_recording) return;
+    final decibels = amplitude.current.clamp(-60.0, 0.0);
+    final linear = ((decibels + 60) / 60).clamp(0.0, 1.0);
+    final normalized = math.sqrt(linear).clamp(0.08, 1.0);
+    setState(() {
+      _recordingWaveform.add(normalized);
+    });
   }
 
   Future<void> _stopVoiceRecording() async {
     if (!_recording) return;
-    _recordingTimer?.cancel();
-    final duration = DateTime.now()
-        .difference(_recordingStarted ?? DateTime.now())
-        .inSeconds
-        .clamp(1, 20);
+    _recordingLimitTimer?.cancel();
+    _recordingUiTimer?.cancel();
+    await _amplitudeSubscription?.cancel();
+    _amplitudeSubscription = null;
+    final elapsed = DateTime.now().difference(
+      _recordingStarted ?? DateTime.now(),
+    );
+    final duration = (elapsed.inMilliseconds / 1000).ceil().clamp(1, 20);
+    final waveform = VoiceNoteEnvelope.resample(_recordingWaveform);
     final path = await _audioRecorder.stop();
-    if (mounted) setState(() => _recording = false);
+    await _voiceAudio.resetPlaybackSession();
+    if (mounted) {
+      setState(() {
+        _recording = false;
+        _recordingStarted = null;
+        _recordingElapsed = Duration.zero;
+      });
+    }
     if (path == null || !mounted) return;
     final peer =
         widget.controller.peerById(widget.peer.id) ??
@@ -1390,7 +1442,11 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
       );
       final result = await widget.controller.sendPrivate(
         peer,
-        '[HB-VOICE|$transferId|$duration]',
+        VoiceNoteEnvelope(
+          transferId: transferId,
+          durationSeconds: duration,
+          waveform: waveform,
+        ).encode(),
       );
       if (!result.accepted) {
         throw StateError(result.error ?? currentL10n.errorUnknown);
@@ -1408,6 +1464,23 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
         setState(() => _sending = false);
       }
     }
+  }
+
+  Future<void> _cancelVoiceRecording() async {
+    if (!_recording) return;
+    _recordingLimitTimer?.cancel();
+    _recordingUiTimer?.cancel();
+    await _amplitudeSubscription?.cancel();
+    _amplitudeSubscription = null;
+    await _audioRecorder.cancel();
+    await _voiceAudio.resetPlaybackSession();
+    if (!mounted) return;
+    setState(() {
+      _recording = false;
+      _recordingStarted = null;
+      _recordingElapsed = Duration.zero;
+      _recordingWaveform.clear();
+    });
   }
 
   Future<void> _sendMessage(MeshPeer peer) async {
@@ -1552,7 +1625,7 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
                         context,
                         privateMessages,
                         transfers: widget.transfers,
-                        audioPlayer: _audioPlayer,
+                        voiceAudio: _voiceAudio,
                       ),
                     ),
             ),
@@ -1577,27 +1650,74 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
                   ],
                 ),
               ),
-            Row(
-              children: [
-                IconButton.filledTonal(
-                  tooltip: _recording
-                      ? context.l10n.voiceStop
-                      : context.l10n.voiceRecord,
-                  onPressed: canUseLivePrivateChannel && peer.supportsTransfers
-                      ? () => _toggleVoiceRecording(peer)
-                      : null,
-                  icon: Icon(_recording ? Icons.stop : Icons.mic),
+            if (_recording)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  borderRadius: BorderRadius.circular(28),
                 ),
-                Expanded(
-                  child: _MessageComposer(
-                    controller: _textController,
-                    enabled: canQueueText,
-                    hint: context.l10n.composerPrivateHint,
-                    onSend: () => _sendMessage(peer),
+                child: Row(
+                  children: [
+                    IconButton(
+                      tooltip: context.l10n.actionCancel,
+                      onPressed: _cancelVoiceRecording,
+                      icon: const Icon(Icons.delete_outline),
+                    ),
+                    Icon(
+                      Icons.circle,
+                      size: 10,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _formatVoiceDuration(_recordingElapsed),
+                      style: const TextStyle(
+                        fontFeatures: [FontFeature.tabularFigures()],
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: VoiceWaveform(
+                        samples: VoiceNoteEnvelope.resample(
+                          _recordingWaveform,
+                          bars: 40,
+                        ),
+                        progress: 1,
+                        activeColor: Theme.of(context).colorScheme.error,
+                        inactiveColor: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                    IconButton.filled(
+                      tooltip: context.l10n.voiceStop,
+                      onPressed: _stopVoiceRecording,
+                      icon: const Icon(Icons.send),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Row(
+                children: [
+                  IconButton.filledTonal(
+                    tooltip: context.l10n.voiceRecord,
+                    onPressed:
+                        canUseLivePrivateChannel && peer.supportsTransfers
+                        ? () => _toggleVoiceRecording(peer)
+                        : null,
+                    icon: const Icon(Icons.mic),
                   ),
-                ),
-              ],
-            ),
+                  Expanded(
+                    child: _MessageComposer(
+                      controller: _textController,
+                      enabled: canQueueText,
+                      hint: context.l10n.composerPrivateHint,
+                      onSend: () => _sendMessage(peer),
+                    ),
+                  ),
+                ],
+              ),
           ],
         ),
       ),
@@ -1792,12 +1912,12 @@ class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
     required this.message,
     this.transfers,
-    this.audioPlayer,
+    this.voiceAudio,
   });
 
   final MeshMessage message;
   final TransferController? transfers;
-  final AudioPlayer? audioPlayer;
+  final VoiceNoteAudioController? voiceAudio;
 
   @override
   Widget build(BuildContext context) {
@@ -1847,7 +1967,7 @@ class _MessageBubble extends StatelessWidget {
               _VoiceNoteContent(
                 message: message,
                 transfers: transfers,
-                audioPlayer: audioPlayer,
+                voiceAudio: voiceAudio,
               )
             else if (message.isDrill)
               Column(
@@ -1901,7 +2021,7 @@ List<Widget> _messageTimeline(
   BuildContext context,
   List<MeshMessage> messages, {
   TransferController? transfers,
-  AudioPlayer? audioPlayer,
+  VoiceNoteAudioController? voiceAudio,
   bool compactSos = false,
 }) {
   final widgets = <Widget>[];
@@ -1918,7 +2038,7 @@ List<Widget> _messageTimeline(
           : _MessageBubble(
               message: message,
               transfers: transfers,
-              audioPlayer: audioPlayer,
+              voiceAudio: voiceAudio,
             ),
     );
   }
@@ -1985,12 +2105,12 @@ class _VoiceNoteContent extends StatelessWidget {
   const _VoiceNoteContent({
     required this.message,
     required this.transfers,
-    required this.audioPlayer,
+    required this.voiceAudio,
   });
 
   final MeshMessage message;
   final TransferController? transfers;
-  final AudioPlayer? audioPlayer;
+  final VoiceNoteAudioController? voiceAudio;
 
   @override
   Widget build(BuildContext context) {
@@ -2005,7 +2125,6 @@ class _VoiceNoteContent extends StatelessWidget {
       }
     }
     final playbackPath = record?.filePath;
-    final player = audioPlayer;
     final localFileAvailable =
         playbackPath != null && File(playbackPath).existsSync();
     final ready =
@@ -2016,44 +2135,117 @@ class _VoiceNoteContent extends StatelessWidget {
         record?.state == TransferState.failed ||
         record?.state == TransferState.rejected ||
         record?.state == TransferState.cancelled;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton.filledTonal(
-          tooltip: failed && !ready
-              ? (record?.error ?? context.l10n.errorUnknown)
-              : context.l10n.voicePlay,
-          onPressed: ready && player != null
-              ? () => player.play(DeviceFileSource(playbackPath))
-              : null,
-          icon: ready
-              ? const Icon(Icons.play_arrow)
-              : failed
-              ? Icon(
-                  Icons.error_outline,
-                  color: Theme.of(context).colorScheme.error,
-                )
-              : const SizedBox.square(
-                  dimension: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+    final transferKey = transferId ?? message.id;
+    final fallbackDuration = Duration(
+      seconds: message.voiceDurationSeconds ?? 0,
+    );
+    final samples = message.voiceWaveform.isEmpty
+        ? fallbackVoiceWaveform()
+        : message.voiceWaveform;
+    final controller = voiceAudio;
+    final contentWidth = math.min(
+      240.0,
+      MediaQuery.sizeOf(context).width * .66,
+    );
+    return AnimatedBuilder(
+      animation: controller ?? const _NoopListenable(),
+      builder: (context, _) {
+        final active = controller?.isActive(transferKey) ?? false;
+        final playing = controller?.isPlaying(transferKey) ?? false;
+        final progress =
+            controller?.progressFor(transferKey, fallbackDuration) ?? 0;
+        final position = active
+            ? controller?.position ?? Duration.zero
+            : Duration.zero;
+        final playbackError = active ? controller?.error : null;
+        final tooltip = failed && !ready
+            ? (record?.error ?? context.l10n.errorUnknown)
+            : playbackError ??
+                  (playing ? context.l10n.voicePause : context.l10n.voicePlay);
+        return SizedBox(
+          width: contentWidth,
+          child: Row(
+            children: [
+              IconButton.filledTonal(
+                tooltip: tooltip,
+                onPressed: ready && controller != null
+                    ? () => controller.toggle(
+                        transferId: transferKey,
+                        filePath: playbackPath,
+                      )
+                    : null,
+                icon: ready
+                    ? Icon(playing ? Icons.pause : Icons.play_arrow)
+                    : failed
+                    ? Icon(
+                        Icons.error_outline,
+                        color: Theme.of(context).colorScheme.error,
+                      )
+                    : const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: VoiceWaveform(
+                  samples: samples,
+                  progress: progress,
+                  onSeek: ready && active && controller != null
+                      ? (value) => controller.seek(
+                          transferId: transferKey,
+                          progress: value,
+                          fallbackDuration: fallbackDuration,
+                        )
+                      : null,
                 ),
-        ),
-        const SizedBox(width: 8),
-        Text('${message.voiceDurationSeconds ?? 0} s'),
-        if (failed && ready) ...[
-          const SizedBox(width: 6),
-          Tooltip(
-            message: record?.error ?? context.l10n.errorUnknown,
-            child: Icon(
-              Icons.error_outline,
-              size: 18,
-              color: Theme.of(context).colorScheme.error,
-            ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _formatVoiceDuration(
+                  active && position > Duration.zero
+                      ? position
+                      : fallbackDuration,
+                ),
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+              if (playbackError != null || (failed && ready)) ...[
+                const SizedBox(width: 4),
+                Tooltip(
+                  message:
+                      playbackError ??
+                      record?.error ??
+                      context.l10n.errorUnknown,
+                  child: Icon(
+                    Icons.error_outline,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ],
+            ],
           ),
-        ],
-      ],
+        );
+      },
     );
   }
+}
+
+class _NoopListenable implements Listenable {
+  const _NoopListenable();
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
+}
+
+String _formatVoiceDuration(Duration duration) {
+  final totalSeconds = duration.inSeconds.clamp(0, 5999);
+  final minutes = totalSeconds ~/ 60;
+  final seconds = totalSeconds % 60;
+  return '$minutes:${seconds.toString().padLeft(2, '0')}';
 }
 
 String _formatDayLabel(BuildContext context, DateTime day) {

@@ -787,7 +787,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get radarSourcesDisagree =>
-      'GPS and BLE disagree; the GPS bearing takes priority.';
+      'GPS and BLE disagree; direction is hidden until you repeat the measurement.';
 
   @override
   String get dateToday => 'Today';
@@ -1129,6 +1129,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get mapOfflineHint =>
       'Network unavailable. Already saved map tiles remain visible.';
+
+  @override
+  String get mapTileBlockedHint =>
+      'The provider temporarily blocked map tiles. Rescue markers remain available; use an authorized source or your own server for offline maps.';
 
   @override
   String get mapShowOnMap => 'Show on map';

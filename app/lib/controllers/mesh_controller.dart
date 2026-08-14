@@ -73,6 +73,7 @@ class MeshController extends ChangeNotifier {
   static const Duration rescueInterval = Duration(minutes: 5);
   static const Duration radarLocationInterval = Duration(seconds: 20);
   static const int radarLocationDistanceMeters = 15;
+  static const Duration peerReachabilityWindow = Duration(minutes: 4);
 
   final MeshPlatformService _platform;
   final MessageRepository _repository;
@@ -133,7 +134,11 @@ class MeshController extends ChangeNotifier {
   List<MeshMessage> get drillMessages => List.unmodifiable(
     _messages.where((message) => message.isDrill).toList().reversed,
   );
-  List<MeshPeer> get peers => List.unmodifiable(_peers);
+  List<MeshPeer> get peers {
+    final now = DateTime.now();
+    return List.unmodifiable(_peers.where((peer) => _isPeerOnline(peer, now)));
+  }
+
   List<EmergencyCheckIn> get latestCheckIns {
     final latestByPeer = <String, EmergencyCheckIn>{};
     for (final message in _messages) {
@@ -156,10 +161,15 @@ class MeshController extends ChangeNotifier {
     );
   }
 
-  bool isPeerOnline(String id) => _peers.any((peer) => peer.id == id);
+  bool isPeerOnline(String id) {
+    final now = DateTime.now();
+    return _peers.any((peer) => peer.id == id && _isPeerOnline(peer, now));
+  }
+
   MeshPeer? peerById(String id) {
+    final now = DateTime.now();
     for (final peer in _peers) {
-      if (peer.id == id) return peer;
+      if (peer.id == id && _isPeerOnline(peer, now)) return peer;
     }
     return null;
   }
@@ -176,7 +186,7 @@ class MeshController extends ChangeNotifier {
         latestByPeer[message.senderPeerId] = message;
       }
     }
-    final onlineById = {for (final peer in _peers) peer.id: peer};
+    final onlineById = {for (final peer in peers) peer.id: peer};
     final conversations = latestByPeer.entries.map((entry) {
       final online = onlineById[entry.key];
       final known = _knownPeers[entry.key];
@@ -394,10 +404,18 @@ class MeshController extends ChangeNotifier {
       return queued;
     }
 
+    final localId = _newPrivateMessageLocalId();
     final messageId = await _run(
-      () => _platform.sendPrivate(currentPeer.id, cleaned),
+      () => _platform.sendPrivate(currentPeer.id, cleaned, messageId: localId),
     );
     if (messageId == null || messageId.trim().isEmpty) {
+      if (!isPeerOnline(currentPeer.id)) {
+        return _enqueuePrivateMessage(
+          currentPeer.id,
+          cleaned,
+          localId: localId,
+        );
+      }
       final error = lastError ?? currentL10n.errorUnknown;
       if (messageId != null) {
         lastError = error;
@@ -695,7 +713,11 @@ class MeshController extends ChangeNotifier {
     }
     final recipients = _peers
         .where(
-          (peer) => peer.secure && peer.role.canChat && peer.supportsTransfers,
+          (peer) =>
+              _isPeerOnline(peer, now) &&
+              peer.secure &&
+              peer.role.canChat &&
+              peer.supportsTransfers,
         )
         .toList(growable: false);
     if (recipients.isEmpty) return;
@@ -774,10 +796,11 @@ class MeshController extends ChangeNotifier {
 
   Future<PrivateMessageSendResult> _enqueuePrivateMessage(
     String recipientPeerId,
-    String content,
-  ) async {
+    String content, {
+    String? localId,
+  }) async {
     final pending = PendingPrivateMessage(
-      localId: _newPrivateMessageLocalId(),
+      localId: localId ?? _newPrivateMessageLocalId(),
       recipientPeerId: recipientPeerId,
       content: content,
       createdAt: DateTime.now(),
@@ -1104,9 +1127,11 @@ class MeshController extends ChangeNotifier {
   }
 
   void _replacePeers(Object? value) {
+    final now = DateTime.now();
     final previouslyEligible = {
       for (final peer in _peers)
-        if (peer.secure && peer.role.canChat) peer.id,
+        if (_isPeerOnline(peer, now) && peer.secure && peer.role.canChat)
+          peer.id,
     };
     final rawPeers = value as List<Object?>? ?? const [];
     _peers
@@ -1122,6 +1147,7 @@ class MeshController extends ChangeNotifier {
     }
     final hasNewlyEligiblePeer = _peers.any(
       (peer) =>
+          _isPeerOnline(peer, now) &&
           peer.secure &&
           peer.role.canChat &&
           !previouslyEligible.contains(peer.id),
@@ -1131,6 +1157,7 @@ class MeshController extends ChangeNotifier {
     }
     final hasRadarRecipient = _peers.any(
       (peer) =>
+          _isPeerOnline(peer, now) &&
           peer.secure &&
           peer.role.canChat &&
           peer.supportsTransfers &&
@@ -1153,7 +1180,8 @@ class MeshController extends ChangeNotifier {
         .map((message) => message.recipientPeerId)
         .toSet();
     for (final peer in _peers) {
-      if (peer.secure ||
+      if (!_isPeerOnline(peer, DateTime.now()) ||
+          peer.secure ||
           !peer.role.canChat ||
           !pendingRecipients.contains(peer.id)) {
         continue;
@@ -1183,6 +1211,9 @@ class MeshController extends ChangeNotifier {
     }
     return peerId.length >= 8 ? peerId.substring(0, 8) : peerId;
   }
+
+  bool _isPeerOnline(MeshPeer peer, DateTime now) =>
+      peer.isOnlineAt(now, freshnessWindow: peerReachabilityWindow);
 
   void _notifyLocationChanged() => notifyListeners();
 

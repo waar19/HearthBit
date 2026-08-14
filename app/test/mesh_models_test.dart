@@ -74,6 +74,27 @@ void main() {
     expect(roleOnly.hasLongRangeTrunk, isFalse);
   });
 
+  test('online es compatible y nunca deja secure en un peer offline', () {
+    final legacy = MeshPeer.fromMap({
+      'id': '0123456789abcdef',
+      'nickname': 'Legacy',
+      'lastSeen': DateTime.now().millisecondsSinceEpoch,
+      'secure': true,
+    });
+    final offline = MeshPeer.fromMap({
+      'id': 'fedcba9876543210',
+      'nickname': 'Offline',
+      'lastSeen': DateTime.now().millisecondsSinceEpoch,
+      'online': false,
+      'secure': true,
+    });
+
+    expect(legacy.online, isTrue);
+    expect(legacy.secure, isTrue);
+    expect(offline.online, isFalse);
+    expect(offline.secure, isFalse);
+  });
+
   test('presencia BLE genérica queda marcada sin chat', () {
     final presence = GenericBlePresence.fromMap({
       'id': 'aabbccddeeff001122334455',

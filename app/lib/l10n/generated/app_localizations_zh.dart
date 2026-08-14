@@ -745,7 +745,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '你已非常接近：此时 BLE 扇区不再可靠，因此已隐藏。请转动身体并跟随振动。';
 
   @override
-  String get radarSourcesDisagree => 'GPS 与 BLE 方向不一致；优先采用 GPS 方位。';
+  String get radarSourcesDisagree => 'GPS 与 BLE 方向不一致；重新测量前不会显示方向。';
 
   @override
   String get dateToday => '今天';
@@ -1071,6 +1071,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mapOfflineHint => '网络不可用。已保存的地图图块仍可查看。';
+
+  @override
+  String get mapTileBlockedHint =>
+      '地图服务商暂时阻止了图块访问。救援标记仍可使用；离线地图请使用获授权的数据源或自建服务器。';
 
   @override
   String get mapShowOnMap => '在地图上显示';

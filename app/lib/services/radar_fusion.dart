@@ -10,6 +10,7 @@ class RadarFusionResult {
     required this.gpsBearingDegrees,
     required this.gpsRelativeDegrees,
     required this.gpsReliable,
+    required this.gpsRangeConsistent,
     required this.showBleSector,
     required this.adjustedBleConfidence,
     required this.bleSuppressedVeryClose,
@@ -20,6 +21,7 @@ class RadarFusionResult {
   final double? gpsBearingDegrees;
   final double? gpsRelativeDegrees;
   final bool gpsReliable;
+  final bool gpsRangeConsistent;
   final bool showBleSector;
   final double adjustedBleConfidence;
   final bool bleSuppressedVeryClose;
@@ -51,6 +53,7 @@ class RadarFusion {
     required double? targetLongitude,
     required double? targetAccuracyMeters,
     required double? gpsDistanceMeters,
+    required double? bleApproxDistanceMeters,
   }) {
     final hasGpsCoordinates =
         localLatitude != null &&
@@ -78,7 +81,7 @@ class RadarFusion {
                   2,
                 ),
           );
-    final gpsReliable =
+    final gpsQualityAdequate =
         gpsBearing != null &&
         gpsRelative != null &&
         gpsDistanceMeters != null &&
@@ -89,14 +92,24 @@ class RadarFusion {
 
     final veryClose = proximity == RadarProximity.veryClose;
     final rawBleConfidence = bleEstimate?.confidence ?? 0;
+    final gpsRangeConsistent = _gpsAndBleRangesAgree(
+      proximity: proximity,
+      gpsDistanceMeters: gpsDistanceMeters,
+      bleApproxDistanceMeters: bleApproxDistanceMeters,
+      combinedGpsAccuracyMeters: combinedAccuracy,
+    );
     final sourcesDisagree =
-        gpsReliable &&
+        gpsQualityAdequate &&
+        gpsRangeConsistent &&
         bleEstimate != null &&
+        bleEstimate.hasUsableDirection &&
         angularDistance(gpsBearing, bleEstimate.headingDegrees) >
             maximumSourceAgreementDegrees;
     final adjustedBleConfidence = sourcesDisagree
         ? rawBleConfidence * 0.35
         : rawBleConfidence;
+    final gpsReliable =
+        gpsQualityAdequate && gpsRangeConsistent && !sourcesDisagree;
     final bleUsable =
         !veryClose &&
         bleEstimate != null &&
@@ -112,6 +125,7 @@ class RadarFusion {
       gpsBearingDegrees: gpsBearing,
       gpsRelativeDegrees: gpsRelative,
       gpsReliable: gpsReliable,
+      gpsRangeConsistent: gpsRangeConsistent,
       showBleSector: source == RadarDirectionSource.ble,
       adjustedBleConfidence: adjustedBleConfidence,
       bleSuppressedVeryClose: veryClose && bleEstimate != null,
@@ -144,6 +158,30 @@ class RadarFusion {
 
   static double angularDistance(double first, double second) =>
       signedAngularDelta(first, second).abs();
+
+  static bool _gpsAndBleRangesAgree({
+    required RadarProximity? proximity,
+    required double? gpsDistanceMeters,
+    required double? bleApproxDistanceMeters,
+    required double? combinedGpsAccuracyMeters,
+  }) {
+    if (gpsDistanceMeters == null ||
+        proximity == null ||
+        proximity == RadarProximity.far) {
+      return true;
+    }
+    final proximityUpperBound = switch (proximity) {
+      RadarProximity.veryClose => 4.0,
+      RadarProximity.close => 12.0,
+      RadarProximity.inRange => 35.0,
+      RadarProximity.far => double.infinity,
+    };
+    final bleUpperBound = bleApproxDistanceMeters == null
+        ? proximityUpperBound
+        : math.max(proximityUpperBound, bleApproxDistanceMeters * 3);
+    final uncertaintyBound = (combinedGpsAccuracyMeters ?? 0) * 2;
+    return gpsDistanceMeters <= math.max(bleUpperBound, uncertaintyBound);
+  }
 
   static double normalizeDegrees(double degrees) {
     final normalized = degrees % 360;

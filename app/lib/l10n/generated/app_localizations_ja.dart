@@ -763,7 +763,7 @@ class AppLocalizationsJa extends AppLocalizations {
       'すぐ近くです。BLEの方向は信頼できないため非表示にしています。向きを変えながら振動を頼りに進んでください。';
 
   @override
-  String get radarSourcesDisagree => 'GPSとBLEが一致しないため、GPSの方角を優先します。';
+  String get radarSourcesDisagree => 'GPSとBLEが一致しないため、再測定するまで方向を表示しません。';
 
   @override
   String get dateToday => '今日';
@@ -1092,6 +1092,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get mapOfflineHint => 'ネットワークがありません。保存済みの地図タイルは表示できます。';
+
+  @override
+  String get mapTileBlockedHint =>
+      'プロバイダーが地図タイルを一時的にブロックしました。救助マーカーは引き続き利用できます。オフライン地図には許可された配信元または独自サーバーを使用してください。';
 
   @override
   String get mapShowOnMap => '地図に表示';

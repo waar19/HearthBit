@@ -77,11 +77,18 @@ confirmación visual en ambos teléfonos no permite declarar PASS.
    el canal vuelva a seguro; envíe una respuesta desde el extremo que conservó
    la sesión anterior.
 4. Repita desconectando el otro extremo y luego con el perfil de energía crítico.
+5. Ejecute una variante de ausencia prolongada: deje el iPhone fuera de alcance
+   durante dos horas. Después de cuatro minutos, confirme que la conversación
+   permanece pero el peer figura desconectado. Envíe un marcador y compruebe que
+   queda pendiente con un ID estable, sin intento de envío nativo.
+6. Al volver el iPhone, confirme la secuencia alcanzable/no seguro → handshake
+   nuevo → seguro. El pendiente debe salir con el mismo ID una sola vez; un
+   segundo `ANNOUNCE` dentro de cuatro minutos no debe volver a invalidar Noise.
 
 **PASS:** el peer cambia de desconectado a reconectando y seguro; Noise se
 renegocia automáticamente, la vista no se cierra, cada marcador se entrega una
-sola vez y el peer conocido recibe prioridad sin esperar el ciclo completo de
-ahorro.
+sola vez, ningún marcador se registra como enviado mientras el peer está stale
+y el peer conocido recibe prioridad sin esperar el ciclo completo de ahorro.
 
 **FAIL:** BitChat solo reaparece al borrar identidad o reabrir manualmente el
 chat, hay error de identidad/Noise, pérdida, duplicado o conexión repetitiva.

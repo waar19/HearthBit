@@ -792,7 +792,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get radarSourcesDisagree =>
-      'GPS y BLE no coinciden; se prioriza el rumbo GPS.';
+      'GPS y BLE no coinciden; se oculta la dirección hasta repetir la medición.';
 
   @override
   String get dateToday => 'Hoy';
@@ -1137,6 +1137,10 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get mapOfflineHint =>
       'No hay red. Las teselas guardadas siguen disponibles.';
+
+  @override
+  String get mapTileBlockedHint =>
+      'El proveedor bloqueó temporalmente las teselas. Los marcadores de rescate siguen disponibles; usa una fuente autorizada o un servidor propio para mapas offline.';
 
   @override
   String get mapShowOnMap => 'Mostrar en el mapa';

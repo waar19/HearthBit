@@ -1410,7 +1410,7 @@ abstract class AppLocalizations {
   /// No description provided for @radarSourcesDisagree.
   ///
   /// In en, this message translates to:
-  /// **'GPS and BLE disagree; the GPS bearing takes priority.'**
+  /// **'GPS and BLE disagree; direction is hidden until you repeat the measurement.'**
   String get radarSourcesDisagree;
 
   /// No description provided for @dateToday.
@@ -2006,6 +2006,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Network unavailable. Already saved map tiles remain visible.'**
   String get mapOfflineHint;
+
+  /// No description provided for @mapTileBlockedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The provider temporarily blocked map tiles. Rescue markers remain available; use an authorized source or your own server for offline maps.'**
+  String get mapTileBlockedHint;
 
   /// No description provided for @mapShowOnMap.
   ///

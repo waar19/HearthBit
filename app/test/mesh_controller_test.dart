@@ -231,6 +231,8 @@ void main() {
     required String peerId,
     required bool secure,
     String nickname = 'Rescate',
+    bool online = true,
+    DateTime? lastSeen,
   }) {
     return {
       'type': 'snapshot',
@@ -242,7 +244,8 @@ void main() {
         {
           'id': peerId,
           'nickname': nickname,
-          'lastSeen': DateTime.now().millisecondsSinceEpoch,
+          'lastSeen': (lastSeen ?? DateTime.now()).millisecondsSinceEpoch,
+          'online': online,
           'secure': secure,
           'role': 'PHONE_RELAY',
         },
@@ -279,7 +282,7 @@ void main() {
         {
           'id': '1112131415161718',
           'nickname': 'Rescate',
-          'lastSeen': 1234,
+          'lastSeen': DateTime.now().millisecondsSinceEpoch,
           'secure': true,
           'supportsTransfers': true,
           'role': 'INFRA_DATA_ANCHOR',
@@ -321,7 +324,7 @@ void main() {
           {
             'id': remoteId,
             'nickname': 'Rescate',
-            'lastSeen': 1234,
+            'lastSeen': DateTime.now().millisecondsSinceEpoch,
             'secure': true,
           },
         ],
@@ -367,6 +370,89 @@ void main() {
     expect(repository.outbox.single.content, 'Sigo aquí');
     expect(controller.messages.single.isPending, isTrue);
   });
+
+  test(
+    'peer stale queda offline y drena su DM una sola vez tras rekey',
+    () async {
+      const remoteId = 'peer-stale';
+      final staleAt = DateTime.now().subtract(
+        MeshController.peerReachabilityWindow + const Duration(seconds: 1),
+      );
+      platform.emit(
+        peerSnapshot(
+          peerId: remoteId,
+          secure: true,
+          online: true,
+          lastSeen: staleAt,
+        ),
+      );
+      platform.emit({
+        'type': 'message',
+        'message': {
+          'id': 'private-before-gap',
+          'sender': 'Rescate',
+          'content': 'Antes del corte',
+          'senderPeerId': remoteId,
+          'private': true,
+          'mine': false,
+          'timestamp': staleAt.millisecondsSinceEpoch,
+        },
+      });
+      await pumpEvents();
+
+      expect(controller.peers, isEmpty);
+      expect(controller.peerById(remoteId), isNull);
+      expect(controller.isPeerOnline(remoteId), isFalse);
+      expect(controller.conversations.single.isOnline, isFalse);
+
+      final result = await controller.sendPrivate(
+        controller.knownPeerById(remoteId)!,
+        'Después de dos horas',
+      );
+      final localId = repository.outbox.single.localId;
+
+      expect(result.disposition, PrivateMessageSendDisposition.queued);
+      expect(platform.privateMessages, isEmpty);
+      expect(platform.privateChannelRequests, isEmpty);
+      expect(controller.messages.last.id, localId);
+      expect(controller.messages.last.isPending, isTrue);
+
+      platform.emit(
+        peerSnapshot(peerId: remoteId, secure: false, online: true),
+      );
+      await pumpEvents();
+
+      expect(controller.isPeerOnline(remoteId), isTrue);
+      expect(platform.privateChannelRequests, [remoteId]);
+      expect(platform.privateMessages, isEmpty);
+
+      platform.privateMessageGate = Completer<String>();
+      platform.emit(peerSnapshot(peerId: remoteId, secure: true, online: true));
+      platform.emit(peerSnapshot(peerId: remoteId, secure: true, online: true));
+      await pumpEvents();
+      await pumpEvents();
+
+      expect(platform.privateMessages, hasLength(1));
+      expect(platform.privateMessages.single.messageId, localId);
+      expect(repository.outbox, hasLength(1));
+
+      platform.privateMessageGate!.complete(localId);
+      await controller.retryPendingPrivateMessages();
+
+      expect(platform.privateMessages, hasLength(1));
+      expect(repository.outbox, isEmpty);
+      expect(
+        controller.messages.where((message) => message.id == localId),
+        hasLength(1),
+      );
+      expect(
+        controller.messages
+            .singleWhere((message) => message.id == localId)
+            .isPending,
+        isFalse,
+      );
+    },
+  );
 
   test(
     'un peer online sin canal seguro inicia Noise antes de drenar el mensaje',
