@@ -492,18 +492,29 @@ class OfflineTileCache {
     if (!await _root.exists()) return;
     final files = <({File file, int length, DateTime modified})>[];
     var total = 0;
-    await for (final entity in _root.list(recursive: true)) {
-      if (entity is! File || !entity.path.endsWith('.png')) continue;
-      final stat = await entity.stat();
-      total += stat.size;
-      files.add((file: entity, length: stat.size, modified: stat.modified));
+    try {
+      await for (final entity in _root.list(recursive: true)) {
+        if (entity is! File || !entity.path.endsWith('.png')) continue;
+        final stat = await entity.stat();
+        total += stat.size;
+        files.add((file: entity, length: stat.size, modified: stat.modified));
+      }
+    } on FileSystemException {
+      // El borrado de pánico (o un tearDown de test) puede eliminar el
+      // directorio mientras el trim pasivo aún lista archivos; en ese caso ya
+      // no queda nada que recortar.
+      return;
     }
     if (total <= maximumCacheBytes) return;
     files.sort((a, b) => a.modified.compareTo(b.modified));
     for (final entry in files) {
-      await entry.file.delete();
-      final metadata = File('${entry.file.path}.json');
-      if (await metadata.exists()) await metadata.delete();
+      try {
+        await entry.file.delete();
+        final metadata = File('${entry.file.path}.json');
+        if (await metadata.exists()) await metadata.delete();
+      } on FileSystemException {
+        // Si otro proceso borró la entrada primero, el espacio ya quedó libre.
+      }
       total -= entry.length;
       if (total <= maximumCacheBytes) break;
     }

@@ -131,6 +131,13 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           severity: HIGH,CRITICAL
+          # Con formato SARIF el action ignora `severity` salvo que se active esto;
+          # sin ello, exit-code falla ante cualquier hallazgo, incluso LOW.
+          limit-severities-for-sarif: true
+          # Solo compilamos las fuentes Noise (noise/southernstorm) de ese submódulo;
+          # sus gradle.lockfile traen dependencias (netty, bouncycastle) que nunca
+          # se construyen ni se distribuyen con esta app.
+          skip-dirs: vendor/bitchat-android
           exit-code: "1"
       - uses: github/codeql-action/upload-sarif@v4
         if: >-

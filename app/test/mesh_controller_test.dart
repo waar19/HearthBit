@@ -2,9 +2,12 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 import 'package:hearth_bit/controllers/mesh_controller.dart';
 import 'package:hearth_bit/models/mesh_models.dart';
+import 'package:hearth_bit/services/app_preferences.dart';
 import 'package:hearth_bit/services/mesh_platform_service.dart';
 import 'package:hearth_bit/services/message_repository.dart';
 
@@ -332,6 +335,8 @@ void main() {
   late MeshController controller;
 
   setUp(() async {
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.empty();
     platform = _FakePlatform();
     repository = _FakeRepository();
     controller = MeshController(platform: platform, repository: repository);
@@ -789,6 +794,32 @@ void main() {
     expect(platform.startCalls, 0);
     expect(controller.canSend, isFalse);
   });
+
+  test(
+    'restaura la malla solicitada y conserva una detención explícita',
+    () async {
+      final preferences = AppPreferences();
+      await preferences.initialize();
+      await preferences.setMeshDesiredActive(true);
+      final restoredPlatform = _FakePlatform();
+      final restored = MeshController(
+        platform: restoredPlatform,
+        repository: _FakeRepository(),
+        preferences: preferences,
+      );
+
+      await restored.initialize();
+
+      expect(restoredPlatform.startCalls, 1);
+      expect(restored.status, MeshConnectionStatus.starting);
+
+      await restored.stop();
+      expect(preferences.meshDesiredActive, isFalse);
+
+      restored.dispose();
+      preferences.dispose();
+    },
+  );
 
   test('el estado de energía llega desde el nativo', () async {
     await controller.refreshPowerStatus();

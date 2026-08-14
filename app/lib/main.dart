@@ -152,13 +152,18 @@ class _HearthBitAppState extends State<HearthBitApp> {
     );
     _family = FamilyController(mesh: _controller);
     _lanGateway = LanGatewayController();
-    _initialization = Future.wait([
-      _controller.initialize(),
-      _transfers.initialize(),
-      _preferences.initialize(),
-      _gateway.initialize(),
-      _lanGateway.initialize(),
-    ]).then((_) => _family.initialize());
+    _initialization = _initialize();
+  }
+
+  Future<void> _initialize() async {
+    // SQLCipher serializa parte de su arranque nativo. Abrir varias bases en
+    // paralelo puede dejar una conexión a medio cerrar tras un kill/reinicio.
+    await _preferences.initialize();
+    await _controller.initialize();
+    await _transfers.initialize();
+    await _gateway.initialize();
+    await _lanGateway.initialize();
+    await _family.initialize();
   }
 
   @override

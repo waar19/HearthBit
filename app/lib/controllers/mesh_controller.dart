@@ -267,6 +267,9 @@ class MeshController extends ChangeNotifier {
     supportsBackgroundRelay = capabilities['backgroundRelay'] as bool? ?? false;
     await _restoreNativeRescueMode();
     await refreshPowerStatus();
+    if (_preferences?.meshDesiredActive == true) {
+      await _restoreRequestedMesh();
+    }
     _consentTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
       var changed = false;
       if (radarConsentUntil != null && !radarConsentActive) {
@@ -424,6 +427,21 @@ class MeshController extends ChangeNotifier {
     }
   }
 
+  Future<void> _restoreRequestedMesh() async {
+    lastError = null;
+    status = MeshConnectionStatus.starting;
+    notifyListeners();
+    try {
+      await _platform.start();
+      DiagnosticsLog.instance.info('mesh.start.restored');
+    } catch (error) {
+      status = MeshConnectionStatus.error;
+      lastError = error.toString();
+      DiagnosticsLog.instance.error('mesh.start.restore.failed', error: error);
+      notifyListeners();
+    }
+  }
+
   Future<void> start() async {
     DiagnosticsLog.instance.info('mesh.start.requested');
     lastError = null;
@@ -437,6 +455,14 @@ class MeshController extends ChangeNotifier {
         return;
       }
       await _platform.start();
+      try {
+        await _preferences?.setMeshDesiredActive(true);
+      } catch (error) {
+        DiagnosticsLog.instance.error(
+          'mesh.preference.persist.failed',
+          error: error,
+        );
+      }
     } catch (error) {
       status = MeshConnectionStatus.error;
       lastError = error.toString();
@@ -448,6 +474,7 @@ class MeshController extends ChangeNotifier {
   Future<void> stop() async {
     await setRescueMode(false);
     _stopRadarLocationSharing();
+    await _preferences?.setMeshDesiredActive(false);
     await _platform.stop();
     status = MeshConnectionStatus.stopped;
     _presences.clear();
@@ -1079,6 +1106,7 @@ class MeshController extends ChangeNotifier {
 
   Future<void> panicWipe() async {
     await setRescueMode(false);
+    await _preferences?.setMeshDesiredActive(false);
     final freshIdentity = await _platform.panicWipe();
     await _repository.destroy();
     _messages.clear();

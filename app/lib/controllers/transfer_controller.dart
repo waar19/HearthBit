@@ -1243,6 +1243,7 @@ class TransferController extends ChangeNotifier {
       unawaited(session.ackController.close());
     }
     _sessions.clear();
+    unawaited(_repository.close());
     super.dispose();
   }
 }

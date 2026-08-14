@@ -24,4 +24,24 @@ void main() {
     first.dispose();
     restored.dispose();
   });
+
+  test('persiste la intención de mantener la malla activa', () async {
+    final first = AppPreferences();
+    await first.initialize();
+    await first.setMeshDesiredActive(true);
+
+    final restored = AppPreferences();
+    await restored.initialize();
+
+    expect(restored.meshDesiredActive, isTrue);
+    await restored.setMeshDesiredActive(false);
+
+    final stopped = AppPreferences();
+    await stopped.initialize();
+    expect(stopped.meshDesiredActive, isFalse);
+
+    first.dispose();
+    restored.dispose();
+    stopped.dispose();
+  });
 }

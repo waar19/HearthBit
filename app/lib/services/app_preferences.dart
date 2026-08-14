@@ -9,6 +9,7 @@ class AppPreferences extends ChangeNotifier {
   static const _amoledKey = 'appearance.amoled';
   static const _highContrastKey = 'appearance.highContrast';
   static const _gatewayOptInKey = 'gateway.optIn';
+  static const _meshDesiredActiveKey = 'mesh.desiredActive.v1';
   static const _drillModeKey = 'emergency.drillModeEnabled.v1';
   static const _drillModeExpiresAtKey = 'emergency.drillModeExpiresAt.v1';
   static const _emergencyCountryKey = 'emergency.countryOverride.v1';
@@ -20,6 +21,7 @@ class AppPreferences extends ChangeNotifier {
   bool amoledTheme = false;
   bool highContrast = false;
   bool gatewayOptIn = false;
+  bool meshDesiredActive = false;
   bool drillModeEnabled = false;
   DateTime? drillModeExpiresAt;
   String? emergencyCountryOverride;
@@ -29,6 +31,8 @@ class AppPreferences extends ChangeNotifier {
     amoledTheme = await _preferences.getBool(_amoledKey) ?? false;
     highContrast = await _preferences.getBool(_highContrastKey) ?? false;
     gatewayOptIn = await _preferences.getBool(_gatewayOptInKey) ?? false;
+    meshDesiredActive =
+        await _preferences.getBool(_meshDesiredActiveKey) ?? false;
     drillModeEnabled = await _preferences.getBool(_drillModeKey) ?? false;
     final drillExpiry = await _preferences.getInt(_drillModeExpiresAtKey);
     drillModeExpiresAt = drillExpiry == null
@@ -70,6 +74,13 @@ class AppPreferences extends ChangeNotifier {
   Future<void> setGatewayOptIn(bool enabled) async {
     gatewayOptIn = enabled;
     await _preferences.setBool(_gatewayOptInKey, enabled);
+    notifyListeners();
+  }
+
+  Future<void> setMeshDesiredActive(bool enabled) async {
+    if (meshDesiredActive == enabled) return;
+    meshDesiredActive = enabled;
+    await _preferences.setBool(_meshDesiredActiveKey, enabled);
     notifyListeners();
   }
 
