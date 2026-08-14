@@ -12,6 +12,11 @@ internal enum class LinkReliability {
     ACKNOWLEDGED,
 }
 
+internal enum class LinkPriority {
+    STANDARD,
+    CRITICAL,
+}
+
 internal data class LinkCapabilities(
     val id: String,
     val kind: LinkKind,
@@ -41,16 +46,16 @@ internal data class LinkCapabilities(
 internal interface LinkAdapter {
     val capabilities: LinkCapabilities
 
-    fun send(frame: ByteArray): Boolean
+    fun send(frame: ByteArray, priority: LinkPriority = LinkPriority.STANDARD): Boolean
 }
 
 internal class CallbackLinkAdapter(
     override val capabilities: LinkCapabilities,
-    private val sender: (ByteArray) -> Boolean,
+    private val sender: (ByteArray, LinkPriority) -> Boolean,
 ) : LinkAdapter {
-    override fun send(frame: ByteArray): Boolean {
+    override fun send(frame: ByteArray, priority: LinkPriority): Boolean {
         if (frame.size > capabilities.mtu) return false
-        return sender(frame.copyOf())
+        return sender(frame.copyOf(), priority)
     }
 }
 
@@ -70,7 +75,7 @@ internal class InMemoryLinkAdapter(
 ) : LinkAdapter {
     private val frames = mutableListOf<ByteArray>()
 
-    override fun send(frame: ByteArray): Boolean {
+    override fun send(frame: ByteArray, priority: LinkPriority): Boolean {
         if (frame.size > capabilities.mtu) return false
         frames += frame.copyOf()
         return true

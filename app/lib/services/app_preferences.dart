@@ -13,6 +13,8 @@ class AppPreferences extends ChangeNotifier {
   static const _drillModeKey = 'emergency.drillModeEnabled.v1';
   static const _drillModeExpiresAtKey = 'emergency.drillModeExpiresAt.v1';
   static const _emergencyCountryKey = 'emergency.countryOverride.v1';
+  static const _privacyPrivateModeKey = 'privacy.privateMode.v1';
+  static const _bitchatInteropKey = 'privacy.bitchatInterop.v1';
 
   final SharedPreferencesAsync _preferences;
 
@@ -25,6 +27,8 @@ class AppPreferences extends ChangeNotifier {
   bool drillModeEnabled = false;
   DateTime? drillModeExpiresAt;
   String? emergencyCountryOverride;
+  bool privacyPrivateMode = true;
+  bool bitchatInteropEnabled = false;
 
   Future<void> initialize() async {
     onboardingComplete = await _preferences.getBool(_onboardingKey) ?? false;
@@ -49,6 +53,14 @@ class AppPreferences extends ChangeNotifier {
     emergencyCountryOverride = await _preferences.getString(
       _emergencyCountryKey,
     );
+    final storedInterop =
+        await _preferences.getBool(_bitchatInteropKey) ?? false;
+    final storedPrivateMode =
+        await _preferences.getBool(_privacyPrivateModeKey) ?? true;
+    // Mantener una sola política efectiva incluso si una versión anterior
+    // escribió preferencias contradictorias.
+    bitchatInteropEnabled = storedInterop;
+    privacyPrivateMode = storedInterop ? false : storedPrivateMode;
     initialized = true;
     notifyListeners();
   }
@@ -111,6 +123,58 @@ class AppPreferences extends ChangeNotifier {
     } else {
       await _preferences.setString(_emergencyCountryKey, value);
     }
+    notifyListeners();
+  }
+
+  Future<void> setPrivacyPrivateMode(bool enabled) async {
+    if (privacyPrivateMode == enabled && bitchatInteropEnabled == !enabled) {
+      return;
+    }
+    privacyPrivateMode = enabled;
+    bitchatInteropEnabled = !enabled;
+    await Future.wait([
+      _preferences.setBool(_privacyPrivateModeKey, enabled),
+      _preferences.setBool(_bitchatInteropKey, !enabled),
+    ]);
+    notifyListeners();
+  }
+
+  Future<void> setBitchatInteropEnabled(bool enabled) async {
+    if (bitchatInteropEnabled == enabled && privacyPrivateMode == !enabled) {
+      return;
+    }
+    bitchatInteropEnabled = enabled;
+    privacyPrivateMode = !enabled;
+    await Future.wait([
+      _preferences.setBool(_bitchatInteropKey, enabled),
+      _preferences.setBool(_privacyPrivateModeKey, !enabled),
+    ]);
+    notifyListeners();
+  }
+
+  Future<void> panicWipe() async {
+    await Future.wait([
+      _preferences.remove(_onboardingKey),
+      _preferences.remove(_amoledKey),
+      _preferences.remove(_highContrastKey),
+      _preferences.remove(_gatewayOptInKey),
+      _preferences.remove(_meshDesiredActiveKey),
+      _preferences.remove(_drillModeKey),
+      _preferences.remove(_drillModeExpiresAtKey),
+      _preferences.remove(_emergencyCountryKey),
+      _preferences.remove(_privacyPrivateModeKey),
+      _preferences.remove(_bitchatInteropKey),
+    ]);
+    onboardingComplete = false;
+    amoledTheme = false;
+    highContrast = false;
+    gatewayOptIn = false;
+    meshDesiredActive = false;
+    drillModeEnabled = false;
+    drillModeExpiresAt = null;
+    emergencyCountryOverride = null;
+    privacyPrivateMode = true;
+    bitchatInteropEnabled = false;
     notifyListeners();
   }
 }

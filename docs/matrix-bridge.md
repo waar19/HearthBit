@@ -62,7 +62,7 @@ Cada bridge deriva un ID estable de la identidad persistente del relay. El
 evento conserva el path externo sin modificar el frame. Se rechazan el propio
 ID, IDs repetidos, hops mal formados y paths mayores a `max_bridge_hops`.
 
-El fingerprint BLAKE2s canónico no depende del TTL. Un fingerprint importado se
+El fingerprint SHA-256 canónico truncado a 16 bytes no depende del TTL. Un fingerprint importado se
 retiene hasta la expiración y se acepta una sola vez; el core conserva además
 su deduplicación persistente. La expiración del evento nunca amplía la edad
 máxima del timestamp HearthBit. Un reinicio puede volver a ver eventos del

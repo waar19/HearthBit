@@ -50,7 +50,7 @@ El documento JSON contiene únicamente:
 
 - versión, comunidad y clase `message`/`sos`;
 - frame y ANNOUNCE en base64;
-- fingerprint BLAKE2s canónico;
+- fingerprint SHA-256 canónico truncado a 16 bytes;
 - instante de publicación y expiración;
 - ID de bridge y path de IDs de bridge.
 
@@ -109,7 +109,9 @@ Ejemplo mínimo:
     "community": "refugio-norte",
     "topic_prefix": "hearthbit",
     "tls_ca_file": "/etc/ssl/certs/community-ca.pem",
-    "secrets_file": "/var/lib/hearthbit-relay/mqtt-secrets.json"
+    "secrets_file": "/var/lib/hearthbit-relay/mqtt-secrets.json",
+    "bridge_allowlist": ["00112233445566778899aabbccddeeff"],
+    "inbound_queue_size": 128
   }
 }
 ```
@@ -122,6 +124,13 @@ Configure el broker con una identidad distinta por comunidad y ACL de lectura
 y escritura solo para ese topic exacto. No conceda `#`, `hearthbit/#` ni acceso
 entre comunidades. La ACL se aplica en el broker; el relay también comprueba
 que el campo `community` del envelope coincide con su configuración.
+
+`bridge_allowlist` contiene IDs de bridge de 16 bytes (32 hexadecimales), que
+cada relay registra al arrancar. Una lista vacía bloquea toda entrada MQTT y
+mantiene la exportación habilitada. La cola acotada aplica backpressure antes
+de inyectar a BLE: al llenarse descarta tráfico normal y conserva prioridad
+para SOS. Paho reintenta con backoff exponencial de 1 a 60 segundos y vuelve a
+suscribirse después de cada reconexión.
 
 ## Home Assistant
 

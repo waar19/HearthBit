@@ -122,7 +122,11 @@ class EmergencyScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 24),
-        _CheckInPanel(controller: controller, drillMode: drillMode),
+        _CheckInPanel(
+          controller: controller,
+          family: family,
+          drillMode: drillMode,
+        ),
         const SizedBox(height: 16),
         if (!drillMode) ...[
           RescueModeCard(controller: controller),
@@ -214,6 +218,13 @@ class EmergencyScreen extends StatelessWidget {
                     if (family.isVerifiedFamilyMessage(message))
                       Text(
                         context.l10n.familyAlertBadge,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    if (message.external)
+                      Text(
+                        context.l10n.externalNetworkBadge,
                         style: Theme.of(context).textTheme.labelLarge?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -325,7 +336,70 @@ class EmergencyScreen extends StatelessWidget {
       );
       if (confirmed != true) return;
     }
-    await controller.activateEmergency();
+    if (!context.mounted) return;
+    final precision = await _chooseSosLocationPrecision(context);
+    if (precision == null) return;
+    await controller.activateEmergency(locationPrecision: precision);
+  }
+
+  Future<SosLocationPrecision?> _chooseSosLocationPrecision(
+    BuildContext context,
+  ) async {
+    var selected = SosLocationPrecision.approximate;
+    return showDialog<SosLocationPrecision>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          icon: Icon(Icons.public, color: Theme.of(context).colorScheme.error),
+          title: Text(context.l10n.sosPrivacyTitle),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(context.l10n.sosPrivacyPublicWarning),
+                RadioGroup<SosLocationPrecision>(
+                  groupValue: selected,
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => selected = value);
+                    }
+                  },
+                  child: Column(
+                    children: [
+                      RadioListTile<SosLocationPrecision>(
+                        value: SosLocationPrecision.approximate,
+                        title: Text(context.l10n.sosLocationApproximate),
+                        subtitle: Text(context.l10n.sosLocationApproximateBody),
+                      ),
+                      RadioListTile<SosLocationPrecision>(
+                        value: SosLocationPrecision.exact,
+                        title: Text(context.l10n.sosLocationExact),
+                        subtitle: Text(context.l10n.sosLocationExactBody),
+                      ),
+                      RadioListTile<SosLocationPrecision>(
+                        value: SosLocationPrecision.none,
+                        title: Text(context.l10n.sosLocationNone),
+                        subtitle: Text(context.l10n.sosLocationNoneBody),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(context.l10n.actionCancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, selected),
+              child: Text(context.l10n.sosSendPublic),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget? _radarButton(BuildContext context, MeshMessage message) {
@@ -677,14 +751,36 @@ class _HoldSosButtonState extends State<_HoldSosButton>
 }
 
 class _CheckInPanel extends StatelessWidget {
-  const _CheckInPanel({required this.controller, required this.drillMode});
+  const _CheckInPanel({
+    required this.controller,
+    required this.family,
+    required this.drillMode,
+  });
 
   final MeshController controller;
+  final FamilyController family;
   final bool drillMode;
 
-  Future<void> _send(CheckInStatus status, String message) => drillMode
-      ? controller.sendDrillCheckIn(status, message)
-      : controller.sendCheckIn(status, message);
+  Future<void> _send(
+    BuildContext context,
+    CheckInStatus status,
+    String message,
+  ) async {
+    if (drillMode) {
+      await controller.sendDrillCheckIn(status, message);
+      return;
+    }
+    final accepted = await controller.sendCircleCheckIn(
+      status,
+      message,
+      family.members.map((member) => member.peerId),
+    );
+    if (accepted == 0 && context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.l10n.checkInNoCircle)));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -704,12 +800,13 @@ class _CheckInPanel extends StatelessWidget {
             Text(
               drillMode
                   ? context.l10n.drillCheckInBody
-                  : context.l10n.checkInBody,
+                  : context.l10n.checkInPrivateBody,
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: controller.canSend
-                  ? () => _send(CheckInStatus.ok, context.l10n.checkInOk)
+                  ? () =>
+                        _send(context, CheckInStatus.ok, context.l10n.checkInOk)
                   : null,
               icon: const Icon(Icons.check_circle_outline),
               label: Text(context.l10n.checkInOk),
@@ -718,6 +815,7 @@ class _CheckInPanel extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: controller.canSend
                   ? () => _send(
+                      context,
                       CheckInStatus.needsHelp,
                       context.l10n.checkInNeedsHelp,
                     )
@@ -729,6 +827,7 @@ class _CheckInPanel extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: controller.canSend
                   ? () => _send(
+                      context,
                       CheckInStatus.injured,
                       context.l10n.checkInInjured,
                     )

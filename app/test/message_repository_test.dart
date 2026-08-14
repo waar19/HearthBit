@@ -66,6 +66,37 @@ void main() {
     expect(await repository.listPendingPrivateMessages(), isEmpty);
   });
 
+  test('persiste el origen externo y la verificación HearthBit', () async {
+    await repository.save(
+      MeshMessage(
+        id: 'external-sos',
+        sender: 'BitChat',
+        content: 'SOS|Ayuda||',
+        senderPeerId: 'external-peer',
+        isPrivate: false,
+        isMine: false,
+        timestamp: DateTime.fromMillisecondsSinceEpoch(1234),
+        channel: 'sos',
+        external: true,
+      ),
+    );
+    await repository.saveKnownPeers([
+      MeshPeer(
+        id: 'hearthbit-peer',
+        nickname: 'HearthBit',
+        lastSeen: DateTime.now(),
+        secure: true,
+        hearthbitVerified: true,
+      ),
+    ]);
+
+    expect((await repository.load()).single.external, isTrue);
+    expect(
+      (await repository.loadKnownPeers()).single.hearthbitVerified,
+      isTrue,
+    );
+  });
+
   test('vence privados tras 20 intentos o 7 días y limita el outbox', () async {
     final now = DateTime.utc(2026, 8, 14);
     await repository.insertPendingPrivateMessage(

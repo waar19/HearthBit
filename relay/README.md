@@ -15,7 +15,8 @@ devices exposing the compatible service.
 - Strict v1/v2 decoding, source routes, big-endian integers, and padding.
 - TTL-decrementing relay that does not modify signed bytes.
 - Persistent X25519/Ed25519 identity, signed ANNOUNCE, and infrastructure role.
-- Persistent BLAKE2s deduplication over packets without TTL or padding.
+- Persistent SHA-256/128 deduplication over packets without TTL or padding,
+  with read compatibility for legacy BLAKE2s entries.
 - Bounded SQLite store-and-forward with expiry, quotas, and per-link delivery.
 - Opt-in Wi-Fi/LAN TCP gateway with PSK, AES-256-GCM, mDNS
   `_hearthbit._tcp.local`, and loop prevention outside the BitChat frame.
@@ -35,7 +36,10 @@ required:
 ```bash
 sudo apt update
 sudo apt install -y bluez python3-venv
+sudo useradd --system --home /var/lib/hearthbit-relay --shell /usr/sbin/nologin hearthbit-relay
+sudo usermod -aG bluetooth hearthbit-relay
 sudo install -d /opt/hearthbit-relay /etc/hearthbit-relay
+sudo install -d -o hearthbit-relay -g hearthbit-relay -m 0700 /var/lib/hearthbit-relay
 sudo cp -a relay/. /opt/hearthbit-relay/
 sudo python3 -m venv /opt/hearthbit-relay/venv
 sudo /opt/hearthbit-relay/venv/bin/pip install /opt/hearthbit-relay
@@ -46,9 +50,15 @@ sudo systemctl enable --now hearthbit-relay
 sudo journalctl -u hearthbit-relay -f
 ```
 
-The service runs as root so that the BlueZ D-Bus policy permits GATT and
-advertising registration. systemd restricts its filesystem; only
-`/var/lib/hearthbit-relay` is writable.
+The base service runs as the unprivileged `hearthbit-relay` user with only
+`CAP_NET_ADMIN`, `CAP_NET_RAW`, and membership in `bluetooth`. Verify that the
+distribution's D-Bus policy lets that user register BlueZ GATT and advertising;
+if needed, add a narrowly scoped local `org.bluez` policy instead of running
+the relay as root.
+
+The base unit permits only `AF_UNIX` and `AF_BLUETOOTH`. When LAN, MQTT, or
+Matrix is enabled, install `systemd/hearthbit-relay-network.conf` as
+`/etc/systemd/system/hearthbit-relay.service.d/network.conf`.
 
 Check the adapter before deployment:
 
@@ -69,16 +79,25 @@ as central and peripheral simultaneously.
 - `nickname`: name published in the signed ANNOUNCE.
 - `identity_path`: persistent private identity with forced `0600` file and
   `0700` directory permissions.
+- `trust_store_path`: atomically persisted TOFU peer identities with `0600`
+  permissions. When omitted, `trusted-peers.json` is placed beside
+  `identity_path`.
 - `node_role`: `INFRA_RELAY` or `INFRA_DATA_ANCHOR`.
 - `announce_interval_seconds`: ANNOUNCE and capability refresh interval.
 - `central_enabled`: discovers and connects to relays in addition to accepting
   phones.
 - `max_central_links`: maximum central connections.
 - `max_packet_size`: pre-decode input limit.
+- `identity_verification.unknown_signed_policy`: `relay-live` forwards but
+  never stores signed packets without a known ANNOUNCE; `reject` requires the
+  identity first. Learned signing keys remain pinned across restarts. A corrupt
+  trust store prevents startup rather than resetting trust.
+- `flood`: per-sender and per-bridge token buckets with emergency reserve.
 - `lan`: local gateway, disabled by default; requires a `psk_base64` of at
   least 32 bytes. See
   [`../docs/lan-mesh-gateway.md`](../docs/lan-mesh-gateway.md).
-- `mqtt`: disabled bridge, secrets outside the configuration, mandatory TLS.
+- `mqtt`: disabled bridge, secrets outside the configuration, mandatory TLS,
+  and an explicit inbound `bridge_allowlist`.
   See [`../docs/mqtt-bridge.md`](../docs/mqtt-bridge.md).
 - `matrix`: disabled bridge requiring HTTPS and a sender allowlist. See
   [`../docs/matrix-bridge.md`](../docs/matrix-bridge.md).
@@ -90,6 +109,12 @@ as central and peripheral simultaneously.
 
 A `CourierEnvelope` expiry TLV can only reduce, never extend, configured
 retention.
+
+Stop the service before trust administration. `hearthbit-relay-trust --store
+PATH list` lists sender IDs; `remove --sender ID --confirm` explicitly clears
+one pin, while `replace --sender ID --signing-key KEY --noise-key KEY --confirm`
+atomically rotates public identity material. Obtain replacement keys over an
+authenticated administrative channel.
 
 ## Container
 
@@ -111,10 +136,10 @@ reviewed source.
 2. In **Settings > Add-ons > Add-on store**, reload local add-ons.
 3. Install **HearthBit Relay**, review its options, and start it.
 
-The add-on uses `host_dbus` and host networking. It runs without AppArmor
-because BlueZ GATT and advertising registration require broad host access; use
-it only on dedicated or trusted hosts. The image supports `aarch64`, `amd64`,
-and `armv7`.
+The add-on uses `host_dbus` and host networking with `apparmor.txt` enabled.
+Startup rejects symlinked secrets and forces mode `0600` for identity, MQTT
+credentials, and Matrix tokens under `/data`. The image supports `aarch64`,
+`amd64`, and `armv7`.
 
 ## Development and tests
 
@@ -143,9 +168,9 @@ participate in Noise.
 
 ## Current limitations
 
-- It validates ANNOUNCE but is not a Noise handshake endpoint.
-  `require_signature` checks presence and format, not authenticity, for other
-  storable packets.
+- It validates ANNOUNCE and persistently pins each sender's Ed25519 key but is
+  not a Noise handshake endpoint. Without a known ANNOUNCE, the default policy
+  permits live relay and forbids persistence.
 - It does not calculate daily Courier HMAC tags or know recipient presence.
   Envelopes remain encrypted and recipients deduplicate them.
 - BlueZ notifies every subscribed central; deduplication neutralizes echoes.

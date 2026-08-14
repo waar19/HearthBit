@@ -44,4 +44,51 @@ void main() {
     restored.dispose();
     stopped.dispose();
   });
+
+  test('modo privado es predeterminado e interop BitChat es opt-in', () async {
+    final defaults = AppPreferences();
+    await defaults.initialize();
+    expect(defaults.privacyPrivateMode, isTrue);
+    expect(defaults.bitchatInteropEnabled, isFalse);
+
+    await defaults.setBitchatInteropEnabled(true);
+    final restored = AppPreferences();
+    await restored.initialize();
+    expect(restored.privacyPrivateMode, isFalse);
+    expect(restored.bitchatInteropEnabled, isTrue);
+
+    await restored.setPrivacyPrivateMode(true);
+    final privateAgain = AppPreferences();
+    await privateAgain.initialize();
+    expect(privateAgain.privacyPrivateMode, isTrue);
+    expect(privateAgain.bitchatInteropEnabled, isFalse);
+
+    defaults.dispose();
+    restored.dispose();
+    privateAgain.dispose();
+  });
+
+  test('panic wipe restablece preferencias privadas seguras', () async {
+    final preferences = AppPreferences();
+    await preferences.initialize();
+    await preferences.finishOnboarding();
+    await preferences.setAmoledTheme(true);
+    await preferences.setGatewayOptIn(true);
+    await preferences.setEmergencyCountryOverride('CO');
+    await preferences.setBitchatInteropEnabled(true);
+
+    await preferences.panicWipe();
+
+    final restored = AppPreferences();
+    await restored.initialize();
+    expect(restored.onboardingComplete, isFalse);
+    expect(restored.amoledTheme, isFalse);
+    expect(restored.gatewayOptIn, isFalse);
+    expect(restored.emergencyCountryOverride, isNull);
+    expect(restored.privacyPrivateMode, isTrue);
+    expect(restored.bitchatInteropEnabled, isFalse);
+
+    preferences.dispose();
+    restored.dispose();
+  });
 }

@@ -35,7 +35,10 @@ BLE:
 ```bash
 sudo apt update
 sudo apt install -y bluez python3-venv
+sudo useradd --system --home /var/lib/hearthbit-relay --shell /usr/sbin/nologin hearthbit-relay
+sudo usermod -aG bluetooth hearthbit-relay
 sudo install -d /opt/hearthbit-relay /etc/hearthbit-relay
+sudo install -d -o hearthbit-relay -g hearthbit-relay -m 0700 /var/lib/hearthbit-relay
 sudo cp -a relay/. /opt/hearthbit-relay/
 sudo python3 -m venv /opt/hearthbit-relay/venv
 sudo /opt/hearthbit-relay/venv/bin/pip install /opt/hearthbit-relay
@@ -46,9 +49,21 @@ sudo systemctl enable --now hearthbit-relay
 sudo journalctl -u hearthbit-relay -f
 ```
 
-El servicio se ejecuta como root para que la política del D-Bus de BlueZ
-permita registrar GATT y advertising. Su filesystem queda restringido por
-systemd y solo `/var/lib/hearthbit-relay` es escribible.
+El perfil base se ejecuta como el usuario no privilegiado `hearthbit-relay`,
+con solo `CAP_NET_ADMIN`, `CAP_NET_RAW` y pertenencia al grupo `bluetooth`.
+BlueZ debe estar encendido por el sistema. Verifique en la distribución que su
+política D-Bus permita a ese usuario registrar GATT y advertising; si lo
+deniega, añada una regla local limitada a `org.bluez` y no convierta el
+servicio en root.
+
+La unidad base solo permite `AF_UNIX` y `AF_BLUETOOTH`. Si activa LAN, MQTT o
+Matrix, instale el drop-in de red:
+
+```bash
+sudo install -D -m 0644 /opt/hearthbit-relay/systemd/hearthbit-relay-network.conf \
+  /etc/systemd/system/hearthbit-relay.service.d/network.conf
+sudo systemctl daemon-reload
+```
 
 Antes de desplegar, confirme:
 
@@ -70,16 +85,26 @@ importantes son:
 - `nickname`: nombre publicado dentro del ANNOUNCE firmado.
 - `identity_path`: identidad privada persistente con permisos `0600` y
   directorio `0700`.
+- `trust_store_path`: identidades públicas fijadas por TOFU, persistidas
+  atómicamente con permisos `0600`. Si se omite, se crea
+  `trusted-peers.json` junto a `identity_path`.
 - `node_role`: `INFRA_RELAY` o `INFRA_DATA_ANCHOR`.
 - `announce_interval_seconds`: renovación de ANNOUNCE y capacidad.
 - `central_enabled`: busca y conecta otros relays además de aceptar teléfonos.
 - `max_central_links`: máximo de conexiones centrales.
 - `max_packet_size`: límite antes de decodificar.
+- `identity_verification.unknown_signed_policy`: `relay-live` reenvía, pero no
+  almacena, firmas sin ANNOUNCE conocido; `reject` exige identidad previa. Una
+  clave aprendida queda fijada también tras reinicios y toda firma posterior
+  se verifica antes de reenviar o guardar. Un trust store corrupto impide el
+  arranque; nunca se reinicia silenciosamente.
+- `flood`: buckets por sender y bridge, con reserva separada para emergencias.
 - `lan`: gateway local desactivado por defecto; requiere `psk_base64` de al
   menos 32 bytes. Consulte
   [`../docs/lan-mesh-gateway.md`](../docs/lan-mesh-gateway.md).
-- `mqtt`: bridge desactivado, secretos fuera de la configuración y TLS
-  obligatorio. Consulte [`../docs/mqtt-bridge.md`](../docs/mqtt-bridge.md).
+- `mqtt`: bridge desactivado, secretos fuera de la configuración, TLS y
+  `bridge_allowlist` explícita para entrada. Consulte
+  [`../docs/mqtt-bridge.md`](../docs/mqtt-bridge.md).
 - `matrix`: bridge desactivado, HTTPS y allowlist de emisores. Consulte
   [`../docs/matrix-bridge.md`](../docs/matrix-bridge.md).
 - `store.max_bytes`, `store.max_packets` y `store.packet_ttl_seconds`: límites
@@ -90,6 +115,29 @@ importantes son:
 
 La expiración TLV de un `CourierEnvelope` siempre reduce, nunca amplía, la
 retención configurada.
+
+### Administración de confianza
+
+Detenga el relay antes de modificar su trust store. `list` solo muestra IDs de
+sender. `remove` limpia una identidad para un nuevo TOFU y `replace` rota
+atómicamente la clave de firma sin abrir esa ventana:
+
+```bash
+sudo systemctl stop hearthbit-relay
+sudo -u hearthbit-relay hearthbit-relay-trust \
+  --store /var/lib/hearthbit-relay/trusted-peers.json list
+sudo -u hearthbit-relay hearthbit-relay-trust \
+  --store /var/lib/hearthbit-relay/trusted-peers.json remove \
+  --sender 0011223344556677 --confirm
+sudo -u hearthbit-relay hearthbit-relay-trust \
+  --store /var/lib/hearthbit-relay/trusted-peers.json replace \
+  --sender 0011223344556677 --signing-key SIGNING_HEX \
+  --noise-key NOISE_HEX --confirm
+sudo systemctl start hearthbit-relay
+```
+
+Los IDs y claves son hexadecimales; el comando valida que la clave Noise derive
+el sender ID. Obtenga las claves nuevas por un canal administrativo autenticado.
 
 ## Contenedor
 
@@ -111,9 +159,10 @@ construida desde código revisado.
 2. En **Ajustes > Add-ons > Tienda de add-ons**, recargue los add-ons locales.
 3. Instale **HearthBit Relay**, revise sus opciones e inícielo.
 
-El add-on usa `host_dbus` y red del host. Se declara sin AppArmor porque
-necesita registrar GATT y advertising en BlueZ; resérvelo para hosts dedicados
-o de confianza. La imagen cubre `aarch64`, `amd64` y `armv7`.
+El add-on usa `host_dbus` y red del host con el perfil `apparmor.txt`
+habilitado. El arranque rechaza secretos simbólicos y fuerza `0600` sobre
+identidad, credenciales MQTT y token Matrix en `/data`. La imagen cubre
+`aarch64`, `amd64` y `armv7`.
 
 ## Desarrollo y pruebas
 
@@ -142,9 +191,9 @@ participa en Noise.
 
 ## Limitaciones de esta fase
 
-- Valida ANNOUNCE, pero no participa como endpoint en handshakes Noise.
-  `require_signature` comprueba presencia y formato, no autenticidad, para los
-  demás paquetes almacenables.
+- Valida ANNOUNCE y fija de forma persistente la clave Ed25519 por sender, pero
+  no participa como endpoint en handshakes Noise. Sin ANNOUNCE conocido, la
+  política predeterminada permite relay en vivo y prohíbe persistencia.
 - No calcula tags HMAC diarios de Courier ni conoce la presencia del
   destinatario. Los sobres siguen cifrados y el receptor deduplica.
 - BlueZ notifica a todos los centrales suscritos; la deduplicación neutraliza

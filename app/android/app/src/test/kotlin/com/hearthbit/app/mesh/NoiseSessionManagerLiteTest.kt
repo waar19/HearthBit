@@ -221,6 +221,53 @@ class NoiseSessionManagerLiteTest {
         assertNotNull(aliceManager.initiate(bob.peerId))
     }
 
+    @Test
+    fun `replay antiguo sigue rechazado despues de mas de 1024 mensajes`() {
+        val alice = identity()
+        val bob = identity()
+        val aliceManager = manager(alice)
+        val bobManager = manager(bob)
+        completeHandshake(aliceManager, alice, bobManager, bob)
+        var firstCiphertext: ByteArray? = null
+
+        repeat(1_025) { nonce ->
+            val plaintext = "message-$nonce".toByteArray()
+            val ciphertext = aliceManager.encrypt(bob.peerId, plaintext)
+            if (nonce == 0) firstCiphertext = ciphertext.copyOf()
+            assertArrayEquals(plaintext, bobManager.decrypt(alice.peerId, ciphertext))
+        }
+
+        try {
+            bobManager.decrypt(alice.peerId, checkNotNull(firstCiphertext))
+            fail("Se esperaba rechazo del nonce fuera de la ventana")
+        } catch (_: IllegalStateException) {
+            // El watermark no permite reabrir un nonce ya fuera de ventana.
+        }
+    }
+
+    @Test
+    fun `transporte Noise expira exactamente al cumplir una hora`() {
+        val alice = identity()
+        val bob = identity()
+        var now = 10_000L
+        val aliceManager = manager(alice, nowMillis = { now })
+        val bobManager = manager(bob, nowMillis = { now })
+        completeHandshake(aliceManager, alice, bobManager, bob)
+        val establishedAt = now
+
+        now = establishedAt + 60 * 60 * 1_000L - 1
+        assertNotNull(aliceManager.encrypt(bob.peerId, byteArrayOf(1)))
+
+        now = establishedAt + 60 * 60 * 1_000L
+        try {
+            aliceManager.encrypt(bob.peerId, byteArrayOf(2))
+            fail("Se esperaba rekey al cumplir una hora")
+        } catch (_: NoiseHandshakeFailure.SessionExpired) {
+            // Frontera exacta del perfil.
+        }
+        assertFalse(aliceManager.isEstablished(bob.peerId))
+    }
+
     private fun completeHandshake(
         initiator: NoiseSessionManagerLite,
         initiatorIdentity: TestIdentity,

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 import 'beacon_control_protocol.dart';
+import '../models/mesh_models.dart';
 
 class EmergencyTransmission {
   const EmergencyTransmission({required this.messageId, this.canonicalHash});
@@ -20,6 +21,7 @@ class NativeRescueState {
     this.expiresAt,
     this.expectedPings = 0,
     this.executedPings = 0,
+    this.locationPrecision = SosLocationPrecision.approximate,
   });
 
   factory NativeRescueState.fromMap(Map<Object?, Object?>? map) {
@@ -38,6 +40,10 @@ class NativeRescueState {
       expiresAt: date('expiresAt'),
       expectedPings: (map?['expectedPings'] as num?)?.toInt() ?? 0,
       executedPings: (map?['executedPings'] as num?)?.toInt() ?? 0,
+      locationPrecision: SosLocationPrecision.values.firstWhere(
+        (value) => value.wireName == map?['locationPrecision'],
+        orElse: () => SosLocationPrecision.approximate,
+      ),
     );
   }
 
@@ -48,6 +54,7 @@ class NativeRescueState {
   final DateTime? expiresAt;
   final int expectedPings;
   final int executedPings;
+  final SosLocationPrecision locationPrecision;
 }
 
 class MeshPlatformService {
@@ -103,6 +110,7 @@ class MeshPlatformService {
     DateTime? lastPingAt,
     DateTime? expiresAt,
     Duration interval = const Duration(minutes: 2),
+    SosLocationPrecision locationPrecision = SosLocationPrecision.approximate,
   }) async {
     try {
       final result = await _methods
@@ -113,6 +121,7 @@ class MeshPlatformService {
             'lastPingAt': lastPingAt?.millisecondsSinceEpoch,
             'expiresAt': expiresAt?.millisecondsSinceEpoch,
             'intervalMs': interval.inMilliseconds,
+            'locationPrecision': locationPrecision.wireName,
           });
       return NativeRescueState.fromMap(result);
     } on MissingPluginException {
@@ -156,6 +165,24 @@ class MeshPlatformService {
     return _methods.invokeMethod<void>('setGenericPresenceScanEnabled', {
       'enabled': enabled,
     });
+  }
+
+  Future<void> configurePrivacyMode({
+    required bool privateMode,
+    required bool bitchatInteropEnabled,
+  }) async {
+    try {
+      await _methods.invokeMethod<void>('configurePrivacyMode', {
+        'privateMode': privateMode,
+        'bitchatInteropEnabled': bitchatInteropEnabled,
+      });
+    } on MissingPluginException {
+      // Tests y versiones nativas antiguas conservan defaults privados.
+    } on PlatformException catch (error) {
+      if (error.code != 'not_implemented') rethrow;
+    } catch (_) {
+      // Algunos tests unitarios no inicializan ServicesBinding.
+    }
   }
 
   Future<void> injectRawMeshFrame({

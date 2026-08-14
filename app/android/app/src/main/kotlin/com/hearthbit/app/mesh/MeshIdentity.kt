@@ -2,8 +2,6 @@ package com.hearthbit.app.mesh
 
 import android.content.Context
 import android.util.Base64
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import com.bitchat.android.noise.southernstorm.protocol.Noise
 import org.bouncycastle.crypto.generators.Ed25519KeyPairGenerator
 import org.bouncycastle.crypto.params.Ed25519KeyGenerationParameters
@@ -13,37 +11,29 @@ import org.bouncycastle.crypto.signers.Ed25519Signer
 import java.security.SecureRandom
 
 internal class MeshIdentity(context: Context) {
-    private val preferences = EncryptedSharedPreferences.create(
-        context,
-        "hearthbit_identity",
-        MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build(),
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-    )
+    private val preferences = KeystoreSecureStore.open(context, "hearthbit_identity")
 
     // «SOS-XXXX» como nombre por defecto: neutro y comprensible en cualquier
     // idioma, clave ahora que la app está localizada en varios idiomas.
     var nickname: String
-        get() = preferences.getString(KEY_NICKNAME, null)
+        get() = preferences.getString(KEY_NICKNAME)
             ?: "SOS-${peerIdHex.takeLast(4)}"
         set(value) {
-            preferences.edit().putString(KEY_NICKNAME, value.take(31)).apply()
+            check(preferences.putString(KEY_NICKNAME, value.take(31)))
         }
 
     var radarConsentUntil: Long
         get() = preferences.getLong(KEY_RADAR_CONSENT_UNTIL, 0L)
         set(value) {
-            preferences.edit().putLong(KEY_RADAR_CONSENT_UNTIL, value).apply()
+            check(preferences.putLong(KEY_RADAR_CONSENT_UNTIL, value))
         }
 
     var nodeRole: MeshNodeRole
         get() = MeshNodeRole.fromWireName(
-            preferences.getString(KEY_NODE_ROLE, null),
+            preferences.getString(KEY_NODE_ROLE),
         ) ?: MeshNodeRole.PHONE_RELAY
         set(value) {
-            preferences.edit().putString(KEY_NODE_ROLE, value.wireName).apply()
+            check(preferences.putString(KEY_NODE_ROLE, value.wireName))
         }
 
     val noisePrivateKey: ByteArray
@@ -123,7 +113,7 @@ internal class MeshIdentity(context: Context) {
     }
 
     fun clear() {
-        check(preferences.edit().clear().commit()) {
+        check(preferences.clear()) {
             "No se pudo borrar la identidad cifrada"
         }
         noisePrivateKey.fill(0)
@@ -138,7 +128,7 @@ internal class MeshIdentity(context: Context) {
     }
 
     private fun write(key: String, value: ByteArray) {
-        preferences.edit().putString(key, Base64.encodeToString(value, Base64.NO_WRAP)).apply()
+        check(preferences.putString(key, Base64.encodeToString(value, Base64.NO_WRAP)))
     }
 
     private companion object {

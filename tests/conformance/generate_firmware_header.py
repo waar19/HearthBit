@@ -10,16 +10,33 @@ ROOT = Path(__file__).resolve().parent
 OUTPUT = ROOT.parents[1] / "firmware" / "anchor-node" / "main" / "conformance_vectors.h"
 PACKET_IDS = (
     "packet.v1.message",
+    "packet.v2.route_signed",
     "packet.v1.raw_deflate",
     "packet.v1.zlib_read",
     "packet.invalid.version",
     "packet.invalid.header_truncated",
     "packet.invalid.payload_truncated",
     "packet.invalid.signature_truncated",
+    "packet.invalid.route_truncated",
     "packet.invalid.padding",
     "packet.invalid.deflate_truncated",
     "packet.invalid.deflate_trailing",
     "packet.invalid.expanded_size",
+)
+FINGERPRINT_IDS = (
+    "fingerprint.v1.message",
+    "fingerprint.v2.route_signed",
+)
+AUXILIARY_IDS = (
+    "fragment.payload.valid",
+    "fragment.invalid.total_zero",
+    "fragment.invalid.index_equal_total",
+    "fragment.reassemble.out_of_order.0",
+    "fragment.reassemble.out_of_order.1",
+    "gcs.request.two_packets",
+    "gcs.invalid.p_zero",
+    "courier.envelope.valid",
+    "courier.invalid.truncated",
 )
 
 
@@ -51,6 +68,55 @@ def render() -> str:
             "",
             "#define CONFORMANCE_PACKET_VECTOR_COUNT \\",
             "    (sizeof(CONFORMANCE_PACKET_VECTORS) / sizeof(CONFORMANCE_PACKET_VECTORS[0]))",
+            "",
+            "typedef struct {",
+            "    const char *id;",
+            "    const char *hex;",
+            "    const char *expected;",
+            "} conformance_fingerprint_vector_t;",
+            "",
+            "static const conformance_fingerprint_vector_t CONFORMANCE_FINGERPRINT_VECTORS[] = {",
+        ]
+    )
+    for fixture_id in FINGERPRINT_IDS:
+        entry = entries[fixture_id]
+        hex_blob = "".join(
+            (ROOT / entry["blob"]).read_text(encoding="ascii").split()
+        )
+        expected = entry["expect"]["relay16"]
+        lines.append(f'    {{"{fixture_id}", "{hex_blob}", "{expected}"}},')
+    lines.extend(
+        [
+            "};",
+            "",
+            "#define CONFORMANCE_FINGERPRINT_VECTOR_COUNT \\",
+            "    (sizeof(CONFORMANCE_FINGERPRINT_VECTORS) / sizeof(CONFORMANCE_FINGERPRINT_VECTORS[0]))",
+            "",
+            "typedef struct {",
+            "    const char *id;",
+            "    const char *operation;",
+            "    const char *hex;",
+            "    bool valid;",
+            "} conformance_auxiliary_vector_t;",
+            "",
+            "static const conformance_auxiliary_vector_t CONFORMANCE_AUXILIARY_VECTORS[] = {",
+        ]
+    )
+    for fixture_id in AUXILIARY_IDS:
+        entry = entries[fixture_id]
+        hex_blob = "".join(
+            (ROOT / entry["blob"]).read_text(encoding="ascii").split()
+        )
+        valid = "true" if entry["valid"] else "false"
+        lines.append(
+            f'    {{"{fixture_id}", "{entry["operation"]}", "{hex_blob}", {valid}}},'
+        )
+    lines.extend(
+        [
+            "};",
+            "",
+            "#define CONFORMANCE_AUXILIARY_VECTOR_COUNT \\",
+            "    (sizeof(CONFORMANCE_AUXILIARY_VECTORS) / sizeof(CONFORMANCE_AUXILIARY_VECTORS[0]))",
             "",
             "#endif",
             "",

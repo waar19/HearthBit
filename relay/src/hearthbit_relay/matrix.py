@@ -20,7 +20,13 @@ from typing import Any, Protocol
 
 from .config import MatrixConfig
 from .link import LinkCapabilities, LinkKind, LinkReliability, RelayLink
-from .public_bridge import PublicBridgePolicy, expiry_for, valid_expiry
+from .public_bridge import (
+    BoundedIngressQueue,
+    PublicBridgePolicy,
+    expiry_for,
+    has_emergency_coordinates,
+    valid_expiry,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -110,6 +116,7 @@ class MatrixBridge(RelayLink):
             clock_ms=self._clock_ms,
         )
         self._imported: dict[bytes, int] = {}
+        self._ingress = BoundedIngressQueue(config.inbound_queue_size)
         self._started = False
         digest = hashlib.blake2s(digest_size=16, person=b"HBitMtrx")
         digest.update(identity_material)
@@ -133,11 +140,13 @@ class MatrixBridge(RelayLink):
     async def start(self) -> None:
         if self._started:
             return
+        self._ingress.start(self._inject)
         await self._api.start(self._receive, self.config.rooms)
         try:
             await self._core.register_link(self)
         except Exception:
             await self._api.stop()
+            await self._ingress.stop()
             raise
         self._started = True
 
@@ -146,6 +155,7 @@ class MatrixBridge(RelayLink):
             return
         await self._core.remove_link(self.id)
         await self._api.stop()
+        await self._ingress.stop()
         self._started = False
 
     async def send(self, frame: bytes) -> None:
@@ -160,6 +170,15 @@ class MatrixBridge(RelayLink):
         self._purge(now_ms)
         inspected = self._policy.inspect_outbound(frame)
         if inspected is None:
+            return
+        if (
+            not self.config.allow_sensitive_emergency_coordinates
+            and has_emergency_coordinates(inspected.packet.payload)
+        ):
+            LOGGER.warning(
+                "Matrix privacy policy blocked emergency coordinates; "
+                "enable allow_sensitive_emergency_coordinates explicitly"
+            )
             return
         path = tuple(gateway_path)
         if (
@@ -242,10 +261,19 @@ class MatrixBridge(RelayLink):
         if self._imported.get(inspected.fingerprint, 0) > now_ms:
             return
         self._imported[inspected.fingerprint] = envelope.expires_at_ms
-        await self._core.inbound(
-            self.id,
+        if not self._ingress.enqueue(
             inspected.frame,
-            gateway_path=envelope.path,
+            envelope.path,
+            emergency=inspected.kind == "sos",
+        ):
+            self._imported.pop(inspected.fingerprint, None)
+            LOGGER.warning("Matrix ingress queue is full; frame dropped")
+
+    async def _inject(self, frame: bytes, path: tuple[bytes, ...]) -> object:
+        return await self._core.inbound(
+            self.id,
+            frame,
+            gateway_path=path,
         )
 
     def _purge(self, now_ms: int) -> None:

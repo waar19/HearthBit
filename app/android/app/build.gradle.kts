@@ -30,6 +30,13 @@ val hasReleaseSigning = if (keystorePropertiesFile.exists()) {
     )
     false
 }
+val releaseRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+val ciBuild = System.getenv("CI")?.equals("true", ignoreCase = true) == true
+require(hasReleaseSigning || !releaseRequested || ciBuild) {
+    "Release builds require android/key.properties. Debug signing is allowed only in CI."
+}
 
 android {
     namespace = "com.hearthbit.app"
@@ -76,6 +83,12 @@ android {
 
     buildTypes {
         release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             signingConfig = if (hasReleaseSigning) {
                 signingConfigs.getByName("release")
             } else {
@@ -96,8 +109,8 @@ flutter {
 }
 
 dependencies {
-    implementation("androidx.security:security-crypto:1.1.0")
-    implementation("org.bouncycastle:bcprov-jdk18on:1.85")
+    implementation("com.google.crypto.tink:tink-android:1.23.0")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.85.2")
     implementation("com.google.android.gms:play-services-nearby:19.3.0")
     implementation("com.google.android.gms:play-services-base:18.5.0")
     testImplementation("junit:junit:4.13.2")

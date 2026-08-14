@@ -15,6 +15,7 @@ import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import android.telephony.TelephonyManager
+import android.view.WindowManager
 import androidx.core.content.ContextCompat
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
@@ -139,6 +140,9 @@ class MainActivity : FlutterActivity() {
                             expiresAt = call.argument<Number>("expiresAt")?.toLong() ?: 0L,
                             intervalMs = call.argument<Number>("intervalMs")?.toLong()
                                 ?: 120_000L,
+                            locationPrecision =
+                                call.argument<String>("locationPrecision")
+                                    ?: RescueModeStore.LOCATION_APPROXIMATE,
                         )
                     } else {
                         store.disable()
@@ -161,6 +165,23 @@ class MainActivity : FlutterActivity() {
                 }
                 "setLanDiscoveryEnabled" -> runMethod(result) {
                     setLanMulticastEnabled(call.argument<Boolean>("enabled") == true)
+                    null
+                }
+                "setSecureScreen" -> {
+                    val enabled = call.argument<Boolean>("enabled") == true
+                    if (enabled) {
+                        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    } else {
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    }
+                    result.success(null)
+                }
+                "configurePrivacyMode" -> runMethod(result) {
+                    MeshRuntime.engine(this).configurePrivacyMode(
+                        privateMode = call.argument<Boolean>("privateMode") != false,
+                        bitchatInteropEnabled =
+                            call.argument<Boolean>("bitchatInteropEnabled") == true,
+                    )
                     null
                 }
                 "injectRawMeshFrame" -> runMethod(result) {

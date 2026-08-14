@@ -27,6 +27,7 @@ import '../services/diagnostics_log.dart';
 import '../services/emergency_shortcut_service.dart';
 import '../services/invite_share_service.dart';
 import '../services/photo_profile.dart';
+import '../services/privacy_data_eraser.dart';
 import '../services/secure_database.dart';
 import '../services/voice_note_audio_controller.dart';
 import '../utils/message_chronology.dart';
@@ -34,6 +35,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/list_section_title.dart';
 import '../widgets/message_composer.dart';
 import '../widgets/nickname_dialog.dart';
+import '../widgets/sensitive_screen.dart';
 import '../widgets/voice_waveform.dart';
 import 'emergency_screen.dart';
 import 'family_screen.dart';
@@ -44,7 +46,14 @@ import 'optical_send_screen.dart';
 import 'radar_screen.dart';
 import 'transfers_tab.dart';
 
-enum _AppMenuAction { family, changeNickname, support, about, panicWipe }
+enum _AppMenuAction {
+  family,
+  changeNickname,
+  privacy,
+  support,
+  about,
+  panicWipe,
+}
 
 enum _PeerTransferAction { file, apk }
 
@@ -367,6 +376,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                   ),
                   PopupMenuItem(
+                    value: _AppMenuAction.privacy,
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.privacy_tip_outlined),
+                      title: Text(context.l10n.privacyTitle),
+                    ),
+                  ),
+                  PopupMenuItem(
                     value: _AppMenuAction.support,
                     child: ListTile(
                       contentPadding: EdgeInsets.zero,
@@ -599,10 +616,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ...conversations.map((conversation) {
             final peer = conversation.peer;
             final message = conversation.lastMessage;
+            final chatAvailable = controller.canChatWithPeer(peer);
             return Card(
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
-                onTap: peer.role.canChat
+                onTap: chatAvailable
                     ? () => _openPrivateChat(controller, peer)
                     : null,
                 child: Padding(
@@ -645,11 +663,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           ],
                         ),
                       ),
-                      _peerControls(
-                        controller,
-                        peer,
-                        online: conversation.isOnline,
-                      ),
+                      if (chatAvailable)
+                        _peerControls(
+                          controller,
+                          peer,
+                          online: conversation.isOnline,
+                        ),
                     ],
                   ),
                 ),
@@ -659,8 +678,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ],
         if (newNearbyPeers.isNotEmpty) ...[
           ListSectionTitle(title: context.l10n.nearbyPeopleTitle),
-          ...newNearbyPeers.map(
-            (peer) => Card(
+          ...newNearbyPeers.map((peer) {
+            final chatAvailable = controller.canChatWithPeer(peer);
+            return Card(
               child: Column(
                 children: [
                   ListTile(
@@ -673,20 +693,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       children: [
                         Text(
                           '${peer.id.substring(0, 8)} · '
-                          '${peer.role.canChat ? (peer.secure ? context.l10n.peerSecure : context.l10n.peerTapToEncrypt) : context.l10n.genericPresenceNoChat}',
+                          '${chatAvailable ? (peer.secure ? context.l10n.peerSecure : context.l10n.peerTapToEncrypt) : context.l10n.externalPresenceNoChat}',
                         ),
                         _peerCapabilityBadges(peer),
                       ],
                     ),
-                    onTap: peer.role.canChat
+                    onTap: chatAvailable
                         ? () => _openPrivateChat(controller, peer)
                         : null,
                   ),
-                  _peerControls(controller, peer, online: true),
+                  if (chatAvailable)
+                    _peerControls(controller, peer, online: true),
                 ],
               ),
-            ),
-          ),
+            );
+          }),
         ],
         if (genericPresences.isNotEmpty) ...[
           ListSectionTitle(title: context.l10n.genericPresenceSectionTitle),
@@ -773,6 +794,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     required bool online,
   }) {
     final secure = online && peer.secure;
+    final radarAvailable = online && peer.radarAllowed;
+    final radarStatus = !online
+        ? context.l10n.peerOffline
+        : peer.radarAllowed
+        ? context.l10n.tooltipRadar
+        : context.l10n.radarConsentRequired;
+    final colors = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Wrap(
@@ -780,19 +808,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           IconButton(
-            tooltip: !online
-                ? context.l10n.peerOffline
-                : peer.radarAllowed
-                ? context.l10n.tooltipRadar
-                : context.l10n.radarConsentRequired,
-            onPressed: online && peer.radarAllowed
+            tooltip: radarStatus,
+            color: radarAvailable ? colors.primary : colors.outline,
+            onPressed: radarAvailable
                 ? () => _openRadar(
                     peerId: peer.id,
                     nickname: peer.nickname,
                     consentExpiresAt: peer.radarAllowedUntil!,
                     consentSource: peer.radarConsentSource ?? 'temporary',
                   )
-                : null,
+                : () => _showUnavailablePeerAction(radarStatus),
             icon: const Icon(Icons.radar),
           ),
           _peerTransferButton(peer, online: online),
@@ -802,12 +827,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 : context.l10n.peerTapToEncrypt,
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: Icon(secure ? Icons.lock : Icons.lock_open),
+              child: Icon(
+                secure ? Icons.lock : Icons.lock_open,
+                color: secure ? colors.primary : colors.outline,
+              ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  void _showUnavailablePeerAction(String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _peerTransferButton(MeshPeer peer, {required bool online}) {
@@ -918,6 +953,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       case _AppMenuAction.changeNickname:
         await _changeNickname(controller);
         return;
+      case _AppMenuAction.privacy:
+        await _showPrivacy();
+        return;
       case _AppMenuAction.support:
         await _openExternal(InviteShareService.donationUri);
         return;
@@ -928,6 +966,50 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         await _confirmWipe(controller);
         return;
     }
+  }
+
+  Future<void> _showPrivacy() async {
+    var interopEnabled = widget.preferences.bitchatInteropEnabled;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          icon: const Icon(Icons.privacy_tip_outlined),
+          title: Text(context.l10n.privacyTitle),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(context.l10n.privacyPrivateDefaultBody),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(context.l10n.privacyBitchatInteropTitle),
+                  subtitle: Text(
+                    interopEnabled
+                        ? context.l10n.privacyBitchatInteropWarning
+                        : context.l10n.privacyBitchatInteropOffBody,
+                  ),
+                  value: interopEnabled,
+                  onChanged: (enabled) async {
+                    await widget.preferences.setBitchatInteropEnabled(enabled);
+                    if (!mounted) return;
+                    setDialogState(() => interopEnabled = enabled);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(context.l10n.actionClose),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _showNodeMode(MeshController controller) async {
@@ -1297,7 +1379,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       await widget.lanGateway?.panicWipe();
       await controller.panicWipe();
       await DiagnosticsLog.instance.clear();
+      await PrivacyDataEraser.clearResidualFiles();
       await SecureDatabaseKeyStore.destroy();
+      await widget.preferences.panicWipe();
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -1666,179 +1750,184 @@ class _PrivateChatSheetState extends State<_PrivateChatSheet> {
       mediaQuery.size.height * .65,
       math.max(160, availableHeight),
     );
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: mediaQuery.viewInsets.bottom + 16,
-      ),
-      child: SizedBox(
-        height: sheetHeight.toDouble(),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Icon(secure ? Icons.lock : Icons.lock_open),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    peer.nickname,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleLarge,
+    return SensitiveScreen(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: mediaQuery.viewInsets.bottom + 16,
+        ),
+        child: SizedBox(
+          height: sheetHeight.toDouble(),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Icon(secure ? Icons.lock : Icons.lock_open),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      peer.nickname,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
                   ),
-                ),
-                IconButton(
-                  tooltip: peer.radarAllowed
-                      ? context.l10n.tooltipRadar
-                      : context.l10n.radarConsentRequired,
-                  onPressed: isOnline && peer.radarAllowed
-                      ? () => widget.onOpenRadar(peer)
-                      : null,
-                  icon: const Icon(Icons.radar),
-                ),
-              ],
-            ),
-            const Divider(),
-            if (!isOnline || !secure)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    Icon(
-                      isOnline
-                          ? Icons.lock_clock_outlined
-                          : Icons.cloud_off_outlined,
-                      size: 18,
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        isOnline
-                            ? context.l10n.secureChatUnavailableHint
-                            : context.l10n.offlineChatHint,
-                      ),
-                    ),
-                  ],
-                ),
+                  IconButton(
+                    tooltip: peer.radarAllowed
+                        ? context.l10n.tooltipRadar
+                        : context.l10n.radarConsentRequired,
+                    onPressed: isOnline && peer.radarAllowed
+                        ? () => widget.onOpenRadar(peer)
+                        : null,
+                    icon: const Icon(Icons.radar),
+                  ),
+                ],
               ),
-            Expanded(
-              child: privateMessages.isEmpty
-                  ? Center(
-                      child: Text(
-                        context.l10n.privateChatIntro,
-                        textAlign: TextAlign.center,
-                      ),
-                    )
-                  : ListView.builder(
-                      controller: _scrollController,
-                      keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior.onDrag,
-                      itemCount: timeline.length,
-                      itemBuilder: (context, index) =>
-                          _buildMessageTimelineEntry(
-                            context,
-                            timeline[index],
-                            transfers: widget.transfers,
-                            voiceAudio: _voiceAudio,
-                          ),
-                    ),
-            ),
-            if (_sendError case final error?)
-              Semantics(
-                liveRegion: true,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+              const Divider(),
+              if (!isOnline || !secure)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
                   child: Row(
                     children: [
                       Icon(
-                        Icons.error_outline,
-                        color: Theme.of(context).colorScheme.error,
+                        isOnline
+                            ? Icons.lock_clock_outlined
+                            : Icons.cloud_off_outlined,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.outline,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          context.l10n.privateMessageSendError(error),
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
+                          isOnline
+                              ? context.l10n.secureChatUnavailableHint
+                              : context.l10n.offlineChatHint,
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
-            if (_recording)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.errorContainer,
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                child: Row(
-                  children: [
-                    IconButton(
-                      tooltip: context.l10n.actionCancel,
-                      onPressed: _cancelVoiceRecording,
-                      icon: const Icon(Icons.delete_outline),
-                    ),
-                    Icon(
-                      Icons.circle,
-                      size: 10,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _formatVoiceDuration(_recordingElapsed),
-                      style: const TextStyle(
-                        fontFeatures: [FontFeature.tabularFigures()],
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: VoiceWaveform(
-                        samples: VoiceNoteEnvelope.resample(
-                          _recordingWaveform,
-                          bars: 40,
+              Expanded(
+                child: privateMessages.isEmpty
+                    ? Center(
+                        child: Text(
+                          context.l10n.privateChatIntro,
+                          textAlign: TextAlign.center,
                         ),
-                        progress: 1,
-                        activeColor: Theme.of(context).colorScheme.error,
-                        inactiveColor: Theme.of(context).colorScheme.error,
+                      )
+                    : ListView.builder(
+                        controller: _scrollController,
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        itemCount: timeline.length,
+                        itemBuilder: (context, index) =>
+                            _buildMessageTimelineEntry(
+                              context,
+                              timeline[index],
+                              transfers: widget.transfers,
+                              voiceAudio: _voiceAudio,
+                            ),
                       ),
+              ),
+              if (_sendError case final error?)
+                Semantics(
+                  liveRegion: true,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            context.l10n.privateMessageSendError(error),
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    IconButton.filled(
-                      tooltip: context.l10n.voiceStop,
-                      onPressed: _stopVoiceRecording,
-                      icon: const Icon(Icons.send),
+                  ),
+                ),
+              if (_recording)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.errorContainer,
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        tooltip: context.l10n.actionCancel,
+                        onPressed: _cancelVoiceRecording,
+                        icon: const Icon(Icons.delete_outline),
+                      ),
+                      Icon(
+                        Icons.circle,
+                        size: 10,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _formatVoiceDuration(_recordingElapsed),
+                        style: const TextStyle(
+                          fontFeatures: [FontFeature.tabularFigures()],
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: VoiceWaveform(
+                          samples: VoiceNoteEnvelope.resample(
+                            _recordingWaveform,
+                            bars: 40,
+                          ),
+                          progress: 1,
+                          activeColor: Theme.of(context).colorScheme.error,
+                          inactiveColor: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                      IconButton.filled(
+                        tooltip: context.l10n.voiceStop,
+                        onPressed: _stopVoiceRecording,
+                        icon: const Icon(Icons.send),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Row(
+                  children: [
+                    IconButton.filledTonal(
+                      tooltip: context.l10n.voiceRecord,
+                      onPressed:
+                          canUseLivePrivateChannel && peer.supportsTransfers
+                          ? () => _toggleVoiceRecording(peer)
+                          : null,
+                      icon: const Icon(Icons.mic),
+                    ),
+                    Expanded(
+                      child: MessageComposer(
+                        controller: _textController,
+                        enabled: canQueueText,
+                        hint: context.l10n.composerPrivateHint,
+                        onSend: () => _sendMessage(peer),
+                      ),
                     ),
                   ],
                 ),
-              )
-            else
-              Row(
-                children: [
-                  IconButton.filledTonal(
-                    tooltip: context.l10n.voiceRecord,
-                    onPressed:
-                        canUseLivePrivateChannel && peer.supportsTransfers
-                        ? () => _toggleVoiceRecording(peer)
-                        : null,
-                    icon: const Icon(Icons.mic),
-                  ),
-                  Expanded(
-                    child: MessageComposer(
-                      controller: _textController,
-                      enabled: canQueueText,
-                      hint: context.l10n.composerPrivateHint,
-                      onSend: () => _sendMessage(peer),
-                    ),
-                  ),
-                ],
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

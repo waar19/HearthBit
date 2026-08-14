@@ -12,6 +12,7 @@ void main() {
       isMine: false,
       timestamp: DateTime.fromMillisecondsSinceEpoch(1234),
       channel: 'sos',
+      external: true,
     );
 
     final restored = MeshMessage.fromDatabase(original.toDatabase());
@@ -19,6 +20,7 @@ void main() {
     expect(restored.id, original.id);
     expect(restored.content, original.content);
     expect(restored.isSos, isTrue);
+    expect(restored.external, isTrue);
   });
 
   test('solo ofrece archivos a un peer HearthBit conectado', () {
@@ -74,6 +76,24 @@ void main() {
     expect(roleOnly.hasLongRangeTrunk, isFalse);
   });
 
+  test('distingue presencia HearthBit de presencia de red externa', () {
+    final verified = MeshPeer.fromMap({
+      'id': '0123456789abcdef',
+      'nickname': 'HearthBit',
+      'lastSeen': 1234,
+      'supportsTransfers': true,
+    });
+    final external = MeshPeer.fromMap({
+      'id': 'fedcba9876543210',
+      'nickname': 'BitChat',
+      'lastSeen': 1234,
+      'hearthbitVerified': false,
+    });
+
+    expect(verified.hearthbitVerified, isTrue);
+    expect(external.hearthbitVerified, isFalse);
+  });
+
   test('online es compatible y nunca deja secure en un peer offline', () {
     final legacy = MeshPeer.fromMap({
       'id': '0123456789abcdef',
@@ -109,5 +129,56 @@ void main() {
     expect(presence.chatAvailable, isFalse);
     expect(presence.rssi, -72);
     expect(presence.id, hasLength(24));
+  });
+
+  test('tryParse rechaza peers y mensajes malformados sin lanzar', () {
+    expect(MeshPeer.tryParse({'id': 7, 'nickname': 'Ana'}), isNull);
+    expect(
+      MeshPeer.tryParse({'id': 'peer', 'nickname': 'x' * 81, 'lastSeen': 1234}),
+      isNull,
+    );
+    expect(
+      MeshMessage.tryParse({
+        'id': 'message',
+        'sender': 'Ana',
+        'content': 'x' * (MeshMessage.maximumContentBytes + 1),
+        'senderPeerId': 'peer',
+        'timestamp': 1234,
+      }),
+      isNull,
+    );
+    expect(
+      MeshMessage.tryParse({
+        'id': 'message',
+        'sender': 'Ana',
+        'content': 'ok',
+        'senderPeerId': 'peer',
+        'timestamp': 'ayer',
+      }),
+      isNull,
+    );
+    expect(
+      MeshPeer.tryParse({'id': 'peer', 'nickname': '救' * 30, 'lastSeen': 1234}),
+      isNull,
+      reason: 'el límite se aplica a bytes UTF-8, no a code units',
+    );
+    expect(
+      GenericBlePresence.tryParse({
+        'id': 'presence',
+        'kind': 'genericBle',
+        'rssi': double.nan,
+        'lastSeen': 1234,
+      }),
+      isNull,
+    );
+    expect(
+      GenericBlePresence.tryParse({
+        'id': 'presence',
+        'kind': 'genericBle',
+        'rssi': -70,
+        'lastSeen': double.infinity,
+      }),
+      isNull,
+    );
   });
 }

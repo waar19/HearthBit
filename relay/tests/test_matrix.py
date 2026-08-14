@@ -1,3 +1,4 @@
+import asyncio
 import base64
 from dataclasses import replace
 
@@ -236,7 +237,7 @@ async def test_import_checks_allowlist_signature_fingerprint_replay_and_loop(
         material=b"matrix-target",
         clock=lambda: NOW_MS,
     )
-    await target_api.start(target._receive, (ROOM_ID,))
+    await target.start()
 
     await target_api.deliver(content, sender="@not-allowed:example.org")
     await target_api.deliver(content, room_id="!other:example.org")
@@ -244,6 +245,7 @@ async def test_import_checks_allowlist_signature_fingerprint_replay_and_loop(
 
     await target_api.deliver(content)
     await target_api.deliver(content)
+    await asyncio.sleep(0)
     assert target_core.injected == [
         (target.id, frame, (source.bridge_id,))
     ]
@@ -260,6 +262,7 @@ async def test_import_checks_allowlist_signature_fingerprint_replay_and_loop(
     }
     await target_api.deliver(looped)
     assert len(target_core.injected) == 1
+    await target.stop()
 
 
 async def test_import_rejects_tampering_and_expired_events(tmp_path) -> None:
@@ -297,7 +300,7 @@ async def test_import_rejects_tampering_and_expired_events(tmp_path) -> None:
         material=b"matrix-target",
         clock=lambda: NOW_MS,
     )
-    await target_api.start(target._receive, (ROOM_ID,))
+    await target.start()
     misleading = {**content, "body": "mensaje no firmado"}
     await target_api.deliver(misleading)
     await target_api.deliver(tampered)
@@ -311,9 +314,11 @@ async def test_import_rejects_tampering_and_expired_events(tmp_path) -> None:
         material=b"matrix-late",
         clock=lambda: NOW_MS + 3_601_000,
     )
-    await late_api.start(late._receive, (ROOM_ID,))
+    await late.start()
     await late_api.deliver(content)
     assert late_core.injected == []
+    await target.stop()
+    await late.stop()
 
 
 def test_access_token_comes_from_environment_or_private_file(

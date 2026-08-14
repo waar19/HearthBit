@@ -25,10 +25,28 @@ Those services have their own operators, logs, privacy policies and licenses.
 
 ## What nearby devices can observe
 
-BLE requires discoverable radio identifiers and advertisements. Nearby
-observers may infer that a HearthBit-compatible device is present, observe
-changing technical identifiers, measure radio strength and correlate timing.
-HearthBit reduces unnecessary exposure but cannot provide radio anonymity.
+Private mode is enabled by default. On Android, the scan response contains a
+keyed discovery token that rotates every 15 minutes instead of the stable peer
+ID. iOS advertises only the service UUID. Nearby observers may still infer that
+a HearthBit-compatible device is present, measure radio strength and correlate
+timing. After connection, HearthBit first sends an anonymous protocol proof
+without nickname, keys or peer ID. Identity packets are released only to a link
+that presents this proof, a rotating HearthBit token or a verified HearthBit
+capability. A malicious active client can imitate that public proof, so
+HearthBit reduces passive tracking but does not provide radio anonymity.
+
+BitChat interoperability is an advanced opt-in. It restores the stable peer ID
+and full identity-announcement propagation required by compatible BitChat
+clients, increasing correlation risk. In private mode ordinary identity
+announcements remain one hop. A public SOS deliberately sends a full-reach
+signed announcement first so distant relays can verify it.
+
+With interoperability off, public chat from unverified BitChat peers is hidden
+locally while relay behavior remains unchanged. Their public SOS alerts are
+still shown and labeled as external-network alerts. Such devices remain visible
+as external presence without chat actions. HearthBit identity and capability
+packets are not sent over an unproven BLE link; the full-reach announcement
+required for a public SOS is the documented exception.
 
 Public-channel messages are intended for channel participants and must not be
 treated as confidential. They are signed to detect tampering. Private messages
@@ -37,8 +55,11 @@ radio presence can remain observable.
 
 ## Location and rescue radar
 
-Location is shared when the user performs an action that needs it, such as an
-SOS, rescue mode or a time-limited radar consent. Operating systems may retain
+Before a public SOS the user chooses exact, approximate (coordinates rounded to
+three decimals), or no location. The choice also applies to periodic rescue
+pings. The SOS message and cryptographic identity remain public to the mesh.
+Check-ins from the emergency screen are instead sent through Noise-encrypted
+private channels to verified family members. Operating systems may retain
 permission and location-access records independently of HearthBit.
 
 Radar sources have different limits:
@@ -61,14 +82,18 @@ metadata. Measurements are aids, not certified location evidence.
 ## Files, voice and local storage
 
 File offers are signed and accepted content is verified. Private transfer
-content uses the authenticated transfer channel. Received files and voice notes
-remain on the device until the user or operating system removes them.
+content uses the authenticated transfer channel. App-controlled received files
+and voice notes are encrypted by chunks at rest and materialized as temporary
+cleartext only when needed for playback. iOS marks transfer and map-cache
+directories as excluded from backup.
 
-Local databases and caches improve offline reliability. Device compromise,
-unlocked backups, screenshots and exported files are outside the protection of
-the mesh protocol. Panic wipe removes HearthBit-controlled state but cannot
-guarantee deletion from backups, notification history or another participant's
-device.
+Local databases and caches improve offline reliability. Sensitive Flutter
+screens request screenshot protection (`FLAG_SECURE` on Android; capture
+obscuring while iOS reports active capture). iOS cannot prevent every still
+screenshot. Panic wipe removes identities, trust state, gateway TOFU pins,
+preferences, transfer files, map tiles and known HearthBit temporary files, but
+cannot guarantee deletion from prior backups, notification history or another
+participant's device.
 
 ## Optional gateways
 
@@ -76,7 +101,9 @@ MQTT, Matrix and LAN gateways intentionally move messages beyond the local BLE
 mesh. Enabling one changes the trust boundary: gateway operators and remote
 servers may process identifiers, message content and timestamps. Administrators
 must disclose that deployment and protect credentials, logs and broker/server
-access.
+access. External bridges block emergency frames carrying coordinates by
+default; forwarding them requires explicit operator consent. LAN binds to
+loopback by default, and MQTT egress requires a non-empty bridge allowlist.
 
 ## Background behavior and battery
 

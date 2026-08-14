@@ -18,6 +18,10 @@ class OpticalProtocol {
   static const int transferIdLength = 16;
   static const int sha256Length = 32;
   static const int signatureLength = 64;
+  static const int maximumEncodedFrameLength = 32 * 1024;
+  static const int maximumFileSize = 64 * 1024 * 1024;
+  static const int maximumChunkSize = 4096;
+  static const int maximumChunkCount = 262144;
 
   static String encodeHeader(OpticalHeader header) {
     final signature = header.signature;
@@ -42,6 +46,9 @@ class OpticalProtocol {
     OpticalHeader header, {
     required int protocolVersion,
   }) {
+    if (!_isCoherentHeader(header)) {
+      throw ArgumentError('Incoherent or oversized optical header');
+    }
     final builder = BytesBuilder(copy: false)
       ..add([...magicPrefix, protocolVersion])
       ..addByte(typeHeader)
@@ -52,10 +59,16 @@ class OpticalProtocol {
       ..add(_u32(header.chunkCount))
       ..add(header.sha256);
     final name = utf8.encode(header.fileName);
+    if (name.isEmpty || name.length > 255) {
+      throw ArgumentError.value(header.fileName, 'fileName');
+    }
     builder
       ..addByte(name.length)
       ..add(name);
     final peer = ascii.encode(header.senderPeerId);
+    if (peer.length > 128) {
+      throw ArgumentError.value(header.senderPeerId, 'senderPeerId');
+    }
     builder
       ..addByte(peer.length)
       ..add(peer);
@@ -67,6 +80,13 @@ class OpticalProtocol {
     required int symbolIndex,
     required Uint8List payload,
   }) {
+    if (transferId.length != transferIdLength ||
+        symbolIndex < 0 ||
+        symbolIndex > 0xffffffff ||
+        payload.isEmpty ||
+        payload.length > maximumChunkSize) {
+      throw ArgumentError('Invalid optical data symbol');
+    }
     final builder = BytesBuilder(copy: false)
       ..add(magic)
       ..addByte(typeData)
@@ -79,6 +99,9 @@ class OpticalProtocol {
   /// Devuelve [OpticalHeader], [OpticalDataSymbol] o null si el contenido no
   /// es un símbolo HBQ válido.
   static Object? decode(String content) {
+    if (content.isEmpty || content.length > maximumEncodedFrameLength) {
+      return null;
+    }
     Uint8List bytes;
     try {
       bytes = base64Decode(content);
@@ -117,6 +140,8 @@ class OpticalProtocol {
         final view = ByteData.sublistView(bytes);
         final symbolIndex = view.getUint32(offset);
         offset += 4;
+        final payloadLength = bytes.length - offset;
+        if (payloadLength <= 0 || payloadLength > maximumChunkSize) return null;
         return OpticalDataSymbol(
           transferId: Uint8List.fromList(transferId),
           symbolIndex: symbolIndex,
@@ -151,18 +176,26 @@ class OpticalProtocol {
     final nameLength = bytes[offset];
     offset += 1;
     if (bytes.length < offset + nameLength + 1) return null;
-    final fileName = utf8.decode(
-      Uint8List.sublistView(bytes, offset, offset + nameLength),
-      allowMalformed: true,
-    );
+    String fileName;
+    try {
+      fileName = utf8.decode(
+        Uint8List.sublistView(bytes, offset, offset + nameLength),
+      );
+    } on FormatException {
+      return null;
+    }
     offset += nameLength;
     final peerLength = bytes[offset];
     offset += 1;
     if (bytes.length < offset + peerLength) return null;
-    final senderPeerId = ascii.decode(
-      Uint8List.sublistView(bytes, offset, offset + peerLength),
-      allowInvalid: true,
-    );
+    String senderPeerId;
+    try {
+      senderPeerId = ascii.decode(
+        Uint8List.sublistView(bytes, offset, offset + peerLength),
+      );
+    } on FormatException {
+      return null;
+    }
     offset += peerLength;
     Uint8List? signature;
     if (protocolVersion == version) {
@@ -173,8 +206,7 @@ class OpticalProtocol {
     } else if (bytes.length != offset) {
       return null;
     }
-    if (chunkSize == 0 || chunkCount == 0 || fileSize <= 0) return null;
-    return OpticalHeader(
+    final header = OpticalHeader(
       transferId: Uint8List.fromList(transferId),
       seed: seed,
       fileSize: fileSize,
@@ -186,6 +218,29 @@ class OpticalProtocol {
       protocolVersion: protocolVersion,
       signature: signature,
     );
+    return _isCoherentHeader(header) ? header : null;
+  }
+
+  static bool _isCoherentHeader(OpticalHeader header) {
+    final fileNameBytes = utf8.encode(header.fileName);
+    final senderPeerId = header.senderPeerId;
+    if (header.transferId.length != transferIdLength ||
+        header.sha256.length != sha256Length ||
+        fileNameBytes.isEmpty ||
+        fileNameBytes.length > 255 ||
+        (senderPeerId.isNotEmpty &&
+            !RegExp(r'^[0-9a-fA-F]{8,128}$').hasMatch(senderPeerId)) ||
+        header.fileSize <= 0 ||
+        header.fileSize > maximumFileSize ||
+        header.chunkSize <= 0 ||
+        header.chunkSize > maximumChunkSize ||
+        header.chunkCount <= 0 ||
+        header.chunkCount > maximumChunkCount) {
+      return false;
+    }
+    final expectedChunks =
+        (header.fileSize + header.chunkSize - 1) ~/ header.chunkSize;
+    return expectedChunks == header.chunkCount;
   }
 
   static Uint8List _u16(int value) =>

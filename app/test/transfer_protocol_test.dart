@@ -111,6 +111,38 @@ void main() {
       ),
       isNull,
     );
+    expect(
+      TransferFrame.decode(
+        Uint8List.fromList([
+          TransferProtocol.version,
+          TransferProtocol.typeCancel,
+          1,
+          0,
+          0,
+          1,
+          0,
+          0,
+        ]),
+      ),
+      isNull,
+      reason: 'los tags TLV duplicados son ambiguos',
+    );
+  });
+
+  test('RESUME_REQUEST conserva bitmap y transporte', () {
+    final frame = TransferFrame(TransferProtocol.typeResumeRequest)
+      ..setBytes(TransferProtocol.tagTransferId, Uint8List(16))
+      ..setBytes(TransferProtocol.tagChunkBitmap, [0x55, 0x01])
+      ..setU8(TransferProtocol.tagTransport, TransferProtocol.transportIdBle);
+
+    final decoded = TransferFrame.decode(frame.encode())!;
+
+    expect(decoded.type, TransferProtocol.typeResumeRequest);
+    expect(decoded.bytes(TransferProtocol.tagChunkBitmap), [0x55, 0x01]);
+    expect(
+      decoded.u8(TransferProtocol.tagTransport),
+      TransferProtocol.transportIdBle,
+    );
   });
 
   test('sanea nombres de archivo peligrosos', () {

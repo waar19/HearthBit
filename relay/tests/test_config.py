@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from dbus_next import Variant
+from dbus_fast import Variant
 
 from hearthbit_relay.bluez import (
     SERVICE_UUID_DASHED,
@@ -14,6 +14,13 @@ from hearthbit_relay.identity import NodeRole
 
 def test_default_central_limit_is_greater_than_two() -> None:
     assert RelayConfig().max_central_links > 2
+
+
+def test_privacy_defaults_bind_lan_to_loopback() -> None:
+    config = RelayConfig()
+    assert config.lan.listen_host == "127.0.0.1"
+    assert not config.mqtt.allow_sensitive_emergency_coordinates
+    assert not config.matrix.allow_sensitive_emergency_coordinates
 
 
 def test_identity_role_and_presence_interval_are_configurable(tmp_path) -> None:
@@ -34,6 +41,7 @@ def test_identity_role_and_presence_interval_are_configurable(tmp_path) -> None:
     config = load_config(path)
 
     assert config.identity_path == str(tmp_path / "identity.json")
+    assert config.trust_store_path == str(tmp_path / "trusted-peers.json")
     assert config.nickname == "Refugio Norte"
     assert config.node_role is NodeRole.INFRA_DATA_ANCHOR
     assert config.announce_interval_seconds == 45
@@ -182,6 +190,10 @@ def test_enabled_mqtt_uses_community_scoped_exact_topic(tmp_path) -> None:
                     "topic_prefix": "organizacion/hearthbit",
                     "tls_client_cert_file": "/ssl/client.crt",
                     "tls_client_key_file": "/ssl/client.key",
+                    "bridge_allowlist": [
+                        "00112233445566778899aabbccddeeff"
+                    ],
+                    "inbound_queue_size": 64,
                 }
             }
         ),
@@ -192,6 +204,10 @@ def test_enabled_mqtt_uses_community_scoped_exact_topic(tmp_path) -> None:
 
     assert config.topic == "organizacion/hearthbit/refugio-norte/public"
     assert "+" not in config.topic and "#" not in config.topic
+    assert config.bridge_allowlist == frozenset(
+        {bytes.fromhex("00112233445566778899aabbccddeeff")}
+    )
+    assert config.inbound_queue_size == 64
 
 
 @pytest.mark.parametrize(
@@ -225,11 +241,81 @@ def test_enabled_mqtt_uses_community_scoped_exact_topic(tmp_path) -> None:
             "community": "rescate",
             "password": "no-debe-estar-aqui",
         },
+        {
+            "enabled": True,
+            "host": "mqtt.example.org",
+            "community": "rescate",
+            "bridge_allowlist": ["not-hex"],
+        },
     ],
 )
 def test_unsafe_mqtt_configuration_is_rejected(tmp_path, mqtt) -> None:
     path = tmp_path / "config.json"
     path.write_text(json.dumps({"mqtt": mqtt}), encoding="utf-8")
 
+    with pytest.raises(ValueError):
+        load_config(path)
+
+
+def test_identity_and_flood_policies_are_bounded(tmp_path) -> None:
+    path = tmp_path / "config.json"
+    path.write_text(
+        json.dumps(
+            {
+                "identity_verification": {
+                    "unknown_signed_policy": "reject",
+                },
+                "flood": {
+                    "sender_rate_per_second": 4,
+                    "sender_burst": 8,
+                    "emergency_rate_per_second": 1,
+                    "emergency_burst": 3,
+                    "bridge_rate_per_second": 10,
+                    "bridge_burst": 20,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(path)
+    assert config.identity_verification.unknown_signed_policy == "reject"
+    assert config.flood.sender_burst == 8
+
+    path.write_text(
+        json.dumps(
+            {
+                "identity_verification": {
+                    "unknown_signed_policy": "allow-unverified",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError):
+        load_config(path)
+
+
+def test_trust_store_path_is_configurable_and_cannot_replace_identity(
+    tmp_path,
+) -> None:
+    path = tmp_path / "config.json"
+    trust_path = tmp_path / "state" / "peers.json"
+    path.write_text(
+        json.dumps({"trust_store_path": str(trust_path)}),
+        encoding="utf-8",
+    )
+    assert load_config(path).trust_store_path == str(trust_path)
+
+    identity_path = tmp_path / "identity.json"
+    path.write_text(
+        json.dumps(
+            {
+                "identity_path": str(identity_path),
+                "trust_store_path": str(identity_path),
+            }
+        ),
+        encoding="utf-8",
+    )
     with pytest.raises(ValueError):
         load_config(path)

@@ -1,11 +1,17 @@
 import asyncio
 from dataclasses import replace
 
-from hearthbit_relay.config import RelayConfig, StoreConfig
+from hearthbit_relay.config import (
+    FloodConfig,
+    IdentityVerificationConfig,
+    RelayConfig,
+    StoreConfig,
+)
 from hearthbit_relay.core import RelayCore
 from hearthbit_relay.identity import (
     NodeRole,
     RelayIdentity,
+    encode_announcement,
     validate_announcement,
     verify_packet_signature,
 )
@@ -17,10 +23,12 @@ from hearthbit_relay.link import (
 )
 from hearthbit_relay.protocol import (
     TYPE_ANNOUNCE,
+    TYPE_FRAGMENT,
     TYPE_HBT_CAPABILITY,
     TYPE_NODE_CAPABILITY,
     TYPE_NOISE_HANDSHAKE,
     TYPE_REQUEST_SYNC,
+    canonical_packet_bytes,
     decode_packet,
     encode_packet,
 )
@@ -52,10 +60,77 @@ def relay_config() -> RelayConfig:
         max_bytes=10_000,
         replay_batch=10,
     )
-    return replace(RelayConfig(), store=store)
+    return replace(
+        RelayConfig(),
+        store=store,
+        trust_store_path=":memory:",
+    )
 
 
-async def test_relay_deduplicates_decrements_ttl_and_replays_store() -> None:
+def signed_message(
+    identity: RelayIdentity,
+    *,
+    payload: bytes,
+    timestamp_ms: int,
+    version: int = 1,
+    route=(),
+) -> bytes:
+    unsigned = decode_packet(
+        encode_packet(
+            version=version,
+            message_type=0x02,
+            ttl=7,
+            timestamp_ms=timestamp_ms,
+            sender_id=identity.peer_id,
+            payload=payload,
+            route=route,
+        )
+    )
+    return encode_packet(
+        version=version,
+        message_type=0x02,
+        ttl=7,
+        timestamp_ms=timestamp_ms,
+        sender_id=identity.peer_id,
+        payload=payload,
+        route=route,
+        signature=identity.sign(canonical_packet_bytes(unsigned)),
+        pad=True,
+    )
+
+
+def fragment_frames(
+    raw: bytes,
+    *,
+    sender_id: bytes,
+    original_type: int,
+    count: int = 3,
+) -> list[bytes]:
+    chunk_size = (len(raw) + count - 1) // count
+    chunks = [
+        raw[offset : offset + chunk_size]
+        for offset in range(0, len(raw), chunk_size)
+    ]
+    fragment_id = b"fragtest"
+    return [
+        encode_packet(
+            message_type=TYPE_FRAGMENT,
+            ttl=4,
+            timestamp_ms=100 + index,
+            sender_id=sender_id,
+            payload=(
+                fragment_id
+                + index.to_bytes(2, "big")
+                + len(chunks).to_bytes(2, "big")
+                + bytes((original_type,))
+                + chunk
+            ),
+        )
+        for index, chunk in enumerate(chunks)
+    ]
+
+
+async def test_relay_deduplicates_decrements_ttl_and_replays_store(tmp_path) -> None:
     config = relay_config()
     store = PacketStore(config.store)
     core = RelayCore(config, store)
@@ -63,15 +138,13 @@ async def test_relay_deduplicates_decrements_ttl_and_replays_store() -> None:
     live_peer = MemoryLink("live")
     await core.register_link(source)
     await core.register_link(live_peer)
-    raw = encode_packet(
-        message_type=0x02,
-        ttl=7,
-        timestamp_ms=123,
-        sender_id=b"sender01",
-        payload=b"mensaje",
-        signature=b"s" * 64,
-        pad=True,
+    remote = RelayIdentity.load_or_create(tmp_path / "remote.json")
+    await core.inbound(
+        source.id,
+        remote.build_announcement(nickname="Remote", timestamp_ms=100),
     )
+    live_peer.sent.clear()
+    raw = signed_message(remote, payload=b"mensaje", timestamp_ms=123)
 
     result = await core.inbound(source.id, raw)
     assert result.accepted
@@ -141,24 +214,24 @@ async def test_unsigned_packets_relay_live_but_are_not_persisted() -> None:
     store.close()
 
 
-async def test_v2_route_is_relayed_without_changes_other_than_ttl() -> None:
+async def test_v2_route_is_relayed_without_changes_other_than_ttl(tmp_path) -> None:
     config = relay_config()
     store = PacketStore(config.store)
     core = RelayCore(config, store)
     peer = MemoryLink("peer")
     await core.register_link(peer)
-    raw = encode_packet(
+    remote = RelayIdentity.load_or_create(tmp_path / "remote.json")
+    await core.inbound(
+        "source",
+        remote.build_announcement(nickname="Remote", timestamp_ms=1),
+    )
+    peer.sent.clear()
+    raw = signed_message(
+        remote,
         version=2,
-        message_type=0x02,
-        ttl=4,
-        timestamp_ms=1,
-        sender_id=b"sender01",
-        recipient_id=b"target01",
-        route=[b"route001", b"route002"],
+        route=(b"route001", b"route002"),
         payload=b"publico",
-        signature=b"s" * 64,
-        extra_flags=0x90,
-        pad=True,
+        timestamp_ms=2,
     )
 
     result = await core.inbound("source", raw)
@@ -265,7 +338,10 @@ async def test_identity_is_announced_periodically(tmp_path) -> None:
     peer.sent.clear()
 
     await core.start()
-    await asyncio.sleep(0.025)
+    for _ in range(20):
+        if len(peer.sent) >= 4:
+            break
+        await asyncio.sleep(0.01)
     await core.stop()
 
     assert len(peer.sent) >= 4
@@ -293,4 +369,338 @@ async def test_invalid_announcement_is_not_relayed(tmp_path) -> None:
     assert not result.accepted
     assert result.reason == "invalid-announce"
     assert peer.sent == []
+    store.close()
+
+
+async def test_known_identity_verifies_signatures_and_rejects_key_rotation(
+    tmp_path,
+) -> None:
+    config = relay_config()
+    store = PacketStore(config.store)
+    core = RelayCore(config, store)
+    peer = MemoryLink("peer")
+    await core.register_link(peer)
+    identity = RelayIdentity.load_or_create(tmp_path / "identity.json")
+    attacker = RelayIdentity.load_or_create(tmp_path / "attacker.json")
+    announce = identity.build_announcement(nickname="Known", timestamp_ms=1)
+    assert (await core.inbound("source", announce)).accepted
+    peer.sent.clear()
+
+    valid = signed_message(identity, payload=b"valid", timestamp_ms=2)
+    assert (await core.inbound("source", valid)).accepted
+    forged = bytearray(signed_message(identity, payload=b"forged", timestamp_ms=3))
+    decoded_forged = decode_packet(bytes(forged))
+    forged[decoded_forged.wire_length - 1] ^= 1
+    result = await core.inbound("source", bytes(forged))
+    assert result.reason == "invalid-signature"
+
+    conflicting_payload = encode_announcement(
+        nickname="Conflict",
+        noise_public_key=identity.noise_public_key,
+        signing_public_key=attacker.signing_public_key,
+        is_infrastructure=False,
+    )
+    unsigned = decode_packet(
+        encode_packet(
+            message_type=TYPE_ANNOUNCE,
+            ttl=7,
+            timestamp_ms=4,
+            sender_id=identity.peer_id,
+            payload=conflicting_payload,
+        )
+    )
+    conflict = encode_packet(
+        message_type=TYPE_ANNOUNCE,
+        ttl=7,
+        timestamp_ms=4,
+        sender_id=identity.peer_id,
+        payload=conflicting_payload,
+        signature=attacker.sign(canonical_packet_bytes(unsigned)),
+    )
+    assert (await core.inbound("source", conflict)).reason == "identity-conflict"
+    store.close()
+
+
+async def test_pinned_identity_survives_core_restart(tmp_path) -> None:
+    trust_path = tmp_path / "trusted-peers.json"
+    config = replace(relay_config(), trust_store_path=str(trust_path))
+    identity = RelayIdentity.load_or_create(tmp_path / "identity.json")
+    attacker = RelayIdentity.load_or_create(tmp_path / "attacker.json")
+
+    first_store = PacketStore(config.store)
+    first = RelayCore(config, first_store)
+    assert (
+        await first.inbound(
+            "source",
+            identity.build_announcement(nickname="Known", timestamp_ms=1),
+        )
+    ).accepted
+    first_store.close()
+
+    second_store = PacketStore(config.store)
+    second = RelayCore(config, second_store)
+    valid = await second.inbound(
+        "source",
+        signed_message(identity, payload=b"after-restart", timestamp_ms=2),
+    )
+    assert valid.accepted and valid.stored
+
+    conflicting_payload = encode_announcement(
+        nickname="Conflict",
+        noise_public_key=identity.noise_public_key,
+        signing_public_key=attacker.signing_public_key,
+        is_infrastructure=False,
+    )
+    unsigned = decode_packet(
+        encode_packet(
+            message_type=TYPE_ANNOUNCE,
+            ttl=7,
+            timestamp_ms=3,
+            sender_id=identity.peer_id,
+            payload=conflicting_payload,
+        )
+    )
+    conflict = encode_packet(
+        message_type=TYPE_ANNOUNCE,
+        ttl=7,
+        timestamp_ms=3,
+        sender_id=identity.peer_id,
+        payload=conflicting_payload,
+        signature=attacker.sign(canonical_packet_bytes(unsigned)),
+    )
+    assert (await second.inbound("source", conflict)).reason == "identity-conflict"
+    second_store.close()
+
+
+async def test_unknown_signed_policy_never_stores_and_can_reject(tmp_path) -> None:
+    identity = RelayIdentity.load_or_create(tmp_path / "identity.json")
+    packet = signed_message(identity, payload=b"unknown", timestamp_ms=1)
+
+    live_config = relay_config()
+    live_store = PacketStore(live_config.store)
+    live = await RelayCore(live_config, live_store).inbound("source", packet)
+    assert live.accepted and not live.stored
+    live_store.close()
+
+    reject_config = replace(
+        relay_config(),
+        identity_verification=IdentityVerificationConfig(
+            unknown_signed_policy="reject"
+        ),
+    )
+    reject_store = PacketStore(reject_config.store)
+    rejected = await RelayCore(reject_config, reject_store).inbound(
+        "source",
+        packet,
+    )
+    assert rejected.reason == "unknown-signing-key"
+    reject_store.close()
+
+
+async def test_rate_limit_reserves_capacity_for_emergency() -> None:
+    config = replace(
+        relay_config(),
+        flood=FloodConfig(
+            sender_rate_per_second=0.001,
+            sender_burst=1,
+            emergency_rate_per_second=0.001,
+            emergency_burst=1,
+            bridge_rate_per_second=1,
+            bridge_burst=1,
+        ),
+    )
+    store = PacketStore(config.store)
+    core = RelayCore(config, store, monotonic=lambda: 10.0)
+    normal = lambda timestamp: encode_packet(
+        message_type=0x02,
+        ttl=3,
+        timestamp_ms=timestamp,
+        sender_id=b"sender01",
+        payload=b"normal",
+    )
+    emergency = encode_packet(
+        message_type=0x02,
+        ttl=3,
+        timestamp_ms=3,
+        sender_id=b"sender01",
+        payload=b"SOS|help||",
+    )
+
+    assert (await core.inbound("source", normal(1))).accepted
+    assert (await core.inbound("source", normal(2))).reason == "rate-limited"
+    assert (await core.inbound("source", emergency)).accepted
+    store.close()
+
+
+async def test_external_bridge_has_independent_bucket_and_sos_reserve() -> None:
+    config = replace(
+        relay_config(),
+        flood=FloodConfig(
+            sender_rate_per_second=1,
+            sender_burst=10,
+            emergency_rate_per_second=1,
+            emergency_burst=2,
+            bridge_rate_per_second=0.001,
+            bridge_burst=1,
+        ),
+    )
+    store = PacketStore(config.store)
+    core = RelayCore(config, store, monotonic=lambda: 10.0)
+
+    def packet(sender: bytes, payload: bytes, timestamp: int) -> bytes:
+        return encode_packet(
+            message_type=0x02,
+            ttl=3,
+            timestamp_ms=timestamp,
+            sender_id=sender,
+            payload=payload,
+        )
+
+    assert (
+        await core.inbound(
+            "mqtt:bridge-a",
+            packet(b"sender01", b"normal", 1),
+        )
+    ).accepted
+    assert (
+        await core.inbound(
+            "mqtt:bridge-a",
+            packet(b"sender02", b"normal", 2),
+        )
+    ).reason == "rate-limited"
+    assert (
+        await core.inbound(
+            "mqtt:bridge-a",
+            packet(b"sender03", b"SOS|help||", 3),
+        )
+    ).accepted
+    store.close()
+
+
+async def test_fragment_reassembly_marks_inner_packet_as_seen() -> None:
+    config = relay_config()
+    store = PacketStore(config.store)
+    core = RelayCore(config, store)
+    inner = encode_packet(
+        message_type=0x02,
+        ttl=5,
+        timestamp_ms=1,
+        sender_id=b"sender01",
+        payload=b"reassembled",
+    )
+    split = len(inner) // 2
+    chunks = (inner[:split], inner[split:])
+    for index, chunk in enumerate(chunks):
+        fragment = encode_packet(
+            message_type=TYPE_FRAGMENT,
+            ttl=4,
+            timestamp_ms=10 + index,
+            sender_id=b"sender01",
+            payload=(
+                b"fragment"
+                + index.to_bytes(2, "big")
+                + len(chunks).to_bytes(2, "big")
+                + bytes((0x02,))
+                + chunk
+            ),
+        )
+        assert (await core.inbound("source", fragment)).accepted
+
+    assert (await core.inbound("source", inner)).reason == "duplicate"
+    store.close()
+
+
+async def test_fragmented_announce_pins_identity_without_second_forward(
+    tmp_path,
+) -> None:
+    config = relay_config()
+    store = PacketStore(config.store)
+    core = RelayCore(config, store)
+    peer = MemoryLink("peer")
+    await core.register_link(peer)
+    identity = RelayIdentity.load_or_create(tmp_path / "identity.json")
+    announce = identity.build_announcement(nickname="Fragmented", timestamp_ms=1)
+    fragments = fragment_frames(
+        announce,
+        sender_id=identity.peer_id,
+        original_type=TYPE_ANNOUNCE,
+    )
+
+    for fragment in fragments:
+        result = await core.inbound("source", fragment)
+    assert result.reason == "relayed-reassembled"
+    assert len(peer.sent) == len(fragments)
+    assert all(
+        decode_packet(frame).message_type == TYPE_FRAGMENT
+        for frame in peer.sent
+    )
+
+    message = signed_message(identity, payload=b"trusted", timestamp_ms=2)
+    accepted = await core.inbound("source", message)
+    assert accepted.accepted and accepted.stored
+    store.close()
+
+
+async def test_invalid_fragmented_announce_does_not_pin_identity(tmp_path) -> None:
+    base = relay_config()
+    config = replace(
+        base,
+        identity_verification=IdentityVerificationConfig(
+            unknown_signed_policy="reject"
+        ),
+    )
+    store = PacketStore(config.store)
+    core = RelayCore(config, store)
+    identity = RelayIdentity.load_or_create(tmp_path / "identity.json")
+    announce = bytearray(
+        identity.build_announcement(nickname="Invalid", timestamp_ms=1)
+    )
+    decoded = decode_packet(bytes(announce))
+    announce[decoded.wire_length - 1] ^= 1
+
+    for fragment in fragment_frames(
+        bytes(announce),
+        sender_id=identity.peer_id,
+        original_type=TYPE_ANNOUNCE,
+    ):
+        result = await core.inbound("source", fragment)
+    assert result.accepted
+
+    message = signed_message(identity, payload=b"untrusted", timestamp_ms=2)
+    assert (await core.inbound("source", message)).reason == "unknown-signing-key"
+    store.close()
+
+
+async def test_fragmented_signed_message_is_stored_without_second_forward(
+    tmp_path,
+) -> None:
+    config = relay_config()
+    store = PacketStore(config.store)
+    core = RelayCore(config, store)
+    peer = MemoryLink("peer")
+    await core.register_link(peer)
+    identity = RelayIdentity.load_or_create(tmp_path / "identity.json")
+    await core.inbound(
+        "source",
+        identity.build_announcement(nickname="Known", timestamp_ms=1),
+    )
+    peer.sent.clear()
+    message = signed_message(identity, payload=b"stored", timestamp_ms=2)
+    fragments = fragment_frames(
+        message,
+        sender_id=identity.peer_id,
+        original_type=0x02,
+    )
+
+    for fragment in fragments:
+        result = await core.inbound("source", fragment)
+    assert result.reason == "relayed-reassembled"
+    assert result.stored
+    assert store.packet_count() == 1
+    assert len(peer.sent) == len(fragments)
+    assert all(
+        decode_packet(frame).message_type == TYPE_FRAGMENT
+        for frame in peer.sent
+    )
+    assert (await core.inbound("source", message)).reason == "duplicate"
     store.close()

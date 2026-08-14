@@ -304,6 +304,9 @@ class _OnboardingPage extends StatelessWidget {
                   const SizedBox(height: 32),
                   Text(
                     title,
+                    textScaler: MediaQuery.textScalerOf(
+                      context,
+                    ).clamp(maxScaleFactor: 1.5),
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),

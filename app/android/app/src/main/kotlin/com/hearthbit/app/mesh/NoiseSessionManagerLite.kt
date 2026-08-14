@@ -152,6 +152,11 @@ internal class NoiseSessionManagerLite(
     fun encrypt(peerId: String, plaintext: ByteArray): ByteArray {
         val session = sessions[peerId]?.takeIf(NoiseSessionLite::established)
             ?: throw NoiseHandshakeFailure.State("Noise session is not established")
+        if (session.isTransportExpired()) {
+            sessions.remove(peerId, session)
+            session.close()
+            throw NoiseHandshakeFailure.SessionExpired()
+        }
         return session.encrypt(plaintext)
     }
 
@@ -159,6 +164,11 @@ internal class NoiseSessionManagerLite(
     fun decrypt(peerId: String, ciphertext: ByteArray): ByteArray {
         val session = sessions[peerId]?.takeIf(NoiseSessionLite::established)
             ?: throw NoiseHandshakeFailure.State("Noise session is not established")
+        if (session.isTransportExpired()) {
+            sessions.remove(peerId, session)
+            session.close()
+            throw NoiseHandshakeFailure.SessionExpired()
+        }
         return session.decrypt(ciphertext)
     }
 
@@ -213,6 +223,9 @@ internal sealed class NoiseHandshakeFailure(
 
     class State(message: String, cause: Throwable? = null) :
         NoiseHandshakeFailure(message, cause)
+
+    class SessionExpired :
+        NoiseHandshakeFailure("Noise transport reached its rekey boundary")
 
     class Protocol(cause: Throwable) :
         NoiseHandshakeFailure("Noise handshake failed", cause)

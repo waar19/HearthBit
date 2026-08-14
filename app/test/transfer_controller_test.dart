@@ -82,31 +82,53 @@ class _MemoryTransferRepository extends TransferRepository {
     : records = {for (final record in records) record.id: record};
 
   final Map<String, TransferRecord> records;
+  final Map<String, Uint8List> bitmaps = {};
+  final Map<String, TransferResumeMaterial> materials = {};
 
   @override
   Future<List<TransferRecord>> load() async => records.values.toList();
 
   @override
-  Future<void> save(TransferRecord record, {Uint8List? bitmap}) async {
+  Future<void> save(
+    TransferRecord record, {
+    Uint8List? bitmap,
+    TransferResumeMaterial? resumeMaterial,
+    bool clearResumeMaterial = false,
+    bool clearBitmap = false,
+  }) async {
     records[record.id] = record;
+    if (bitmap != null) bitmaps[record.id] = Uint8List.fromList(bitmap);
+    if (resumeMaterial != null) materials[record.id] = resumeMaterial;
+    if (clearBitmap) bitmaps.remove(record.id);
+    if (clearResumeMaterial) materials.remove(record.id);
   }
 
   @override
-  Future<Uint8List?> loadBitmap(String id) async => null;
+  Future<Uint8List?> loadBitmap(String id) async => bitmaps[id];
+
+  @override
+  Future<TransferResumeMaterial?> loadResumeMaterial(String id) async =>
+      materials[id];
 
   @override
   Future<void> delete(String id) async {
     records.remove(id);
+    bitmaps.remove(id);
+    materials.remove(id);
   }
 
   @override
   Future<void> clear() async {
     records.clear();
+    bitmaps.clear();
+    materials.clear();
   }
 
   @override
   Future<void> destroy() async {
     records.clear();
+    bitmaps.clear();
+    materials.clear();
   }
 }
 
@@ -397,6 +419,60 @@ void main() {
 
     expect(controller.transfers.single.state, TransferState.failed);
     expect(controller.transfers.single.error, isNotEmpty);
+  });
+
+  test('restaura sesión cifrada y solicita solo chunks faltantes', () async {
+    final partial = File('${temporaryDirectory.path}/resume.part');
+    await partial.writeAsBytes(Uint8List(400));
+    const id = '00112233445566778899aabbccddeeff';
+    final interrupted = TransferRecord(
+      id: id,
+      peerId: _peer().id,
+      peerNickname: 'Rescuer',
+      direction: TransferDirection.incoming,
+      fileName: 'partial.bin',
+      mimeType: 'application/octet-stream',
+      fileSize: 400,
+      sha256Hex: '00' * 32,
+      chunkSize: 100,
+      state: TransferState.transferring,
+      transport: TransferTransport.ble,
+      filePath: partial.path,
+    );
+    final local = await TransferCrypto.generateEphemeralKeyPair();
+    final remote = await TransferCrypto.generateEphemeralKeyPair();
+    final exported = await TransferCrypto.exportKeyPair(local);
+    final bitmap = ChunkBitmap(4)
+      ..set(0)
+      ..set(2);
+
+    controller.dispose();
+    repository = _MemoryTransferRepository([interrupted])
+      ..bitmaps[id] = bitmap.toBytes()
+      ..materials[id] = TransferResumeMaterial(
+        localPrivateKey: exported.privateKey,
+        localPublicKey: exported.publicKey,
+        remotePublicKey: await TransferCrypto.publicKeyBytes(remote),
+        offeredTransports: TransferProtocol.transportBle,
+      );
+    mesh.sentFrames.clear();
+    controller = TransferController(
+      mesh,
+      platform: platform,
+      repository: repository,
+    );
+
+    await controller.initialize();
+
+    expect(controller.transfers.single.state, TransferState.connecting);
+    expect(controller.transfers.single.bytesDone, 200);
+    final resume = TransferFrame.decode(mesh.sentFrames.single)!;
+    expect(resume.type, TransferProtocol.typeResumeRequest);
+    expect(resume.bytes(TransferProtocol.tagChunkBitmap), bitmap.toBytes());
+    expect(
+      resume.u8(TransferProtocol.tagTransport),
+      TransferProtocol.transportIdBle,
+    );
   });
 
   test('enforces BLE and voice-note size policy', () {

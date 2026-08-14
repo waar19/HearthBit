@@ -1,0 +1,28 @@
+#include <tunables/global>
+
+profile hearthbit_relay flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+  #include <abstractions/nameservice>
+
+  network,
+  capability net_admin,
+  capability net_raw,
+
+  /usr/bin/with-contenv ix,
+  /command/** rix,
+  /package/** rix,
+  /etc/s6-overlay/** rix,
+  /init ix,
+
+  /opt/hearthbit-relay/** rix,
+  /run.sh rix,
+  /run/** rwk,
+  /data/** rwk,
+  /config/** r,
+  /ssl/** r,
+
+  /run/dbus/system_bus_socket rw,
+  /dev/** rw,
+  /proc/** r,
+  /sys/** r,
+}

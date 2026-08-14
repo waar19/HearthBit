@@ -2,14 +2,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+import os
+from collections.abc import Callable, Coroutine
 from typing import Any
 
-from dbus_next import BusType, Variant
-from dbus_next.aio import MessageBus
-from dbus_next.constants import PropertyAccess
-from dbus_next.errors import DBusError
-from dbus_next.service import ServiceInterface, dbus_property, method
+from dbus_fast import BusType, Variant
+from dbus_fast.constants import PropertyAccess
+from dbus_fast.errors import DBusError
+from dbus_fast.service import ServiceInterface, dbus_property, method
+
+if os.name == "nt":
+    MessageBus = None
+else:
+    from dbus_fast.aio import MessageBus
 
 from .config import RelayConfig
 from .core import RelayCore
@@ -36,6 +41,39 @@ SERVICE_PATH = f"{APP_ROOT}/service0"
 CHARACTERISTIC_PATH = f"{SERVICE_PATH}/char0"
 ADVERTISEMENT_PATH = f"{APP_ROOT}/advertisement0"
 BLUEZ_FRAME_MTU = 512
+
+
+class _TaskTracker:
+    def __init__(self) -> None:
+        self.tasks: set[asyncio.Task[Any]] = set()
+
+    def spawn(
+        self,
+        operation: Coroutine[Any, Any, Any],
+        *,
+        label: str,
+    ) -> asyncio.Task[Any]:
+        task = asyncio.create_task(operation, name=f"bluez:{label}")
+        self.tasks.add(task)
+
+        def completed(done: asyncio.Task[Any]) -> None:
+            self.tasks.discard(done)
+            if done.cancelled():
+                return
+            try:
+                done.result()
+            except Exception:
+                LOGGER.exception("BlueZ background task failed: %s", label)
+
+        task.add_done_callback(completed)
+        return task
+
+    async def stop(self) -> None:
+        tasks = list(self.tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 class ManagedObjectInterface(ServiceInterface):
@@ -92,13 +130,14 @@ class PeripheralLink(RelayLink):
 
 
 class HearthBitCharacteristic(ServiceInterface):
-    def __init__(self, core: RelayCore) -> None:
+    def __init__(self, core: RelayCore, tasks: _TaskTracker | None = None) -> None:
         super().__init__(GATT_CHARACTERISTIC)
         self._core = core
         self._value = b""
         self._notifying = False
         self._session = 0
         self._link_id: str | None = None
+        self._tasks = tasks or _TaskTracker()
 
     @dbus_property(access=PropertyAccess.READ)
     def UUID(self) -> "s":
@@ -123,8 +162,11 @@ class HearthBitCharacteristic(ServiceInterface):
     @method()
     def WriteValue(self, value: "ay", options: "a{sv}") -> "":
         device = _option_value(options, "device", "unknown")
-        source_id = f"peripheral-write:{device}"
-        asyncio.create_task(self._core.inbound(source_id, bytes(value)))
+        source_id = self._link_id or f"peripheral-write:{device}"
+        self._tasks.spawn(
+            self._core.inbound(source_id, bytes(value)),
+            label="peripheral-write",
+        )
 
     @method()
     def StartNotify(self) -> "":
@@ -148,7 +190,10 @@ class HearthBitCharacteristic(ServiceInterface):
             ),
             self,
         )
-        asyncio.create_task(self._core.register_link(link))
+        self._tasks.spawn(
+            self._core.register_link(link),
+            label="register-peripheral",
+        )
 
     @method()
     def StopNotify(self) -> "":
@@ -159,7 +204,10 @@ class HearthBitCharacteristic(ServiceInterface):
         self._link_id = None
         self.emit_properties_changed({"Notifying": False})
         if link_id is not None:
-            asyncio.create_task(self._core.remove_link(link_id))
+            self._tasks.spawn(
+                self._core.remove_link(link_id),
+                label="remove-peripheral",
+            )
 
     async def notify(self, packet: bytes) -> None:
         if not self._notifying:
@@ -225,9 +273,10 @@ class BlueZTransport:
     def __init__(self, config: RelayConfig, core: RelayCore) -> None:
         self.config = config
         self.core = core
-        self.bus: MessageBus | None = None
+        self._tasks = _TaskTracker()
+        self.bus: Any | None = None
         self._service = HearthBitService()
-        self._characteristic = HearthBitCharacteristic(core)
+        self._characteristic = HearthBitCharacteristic(core, self._tasks)
         self._advertisement = HearthBitAdvertisement(config.local_name)
         self._object_manager = ManagedObjectInterface(self._managed_objects)
         self._central_links: dict[str, CentralLink] = {}
@@ -236,6 +285,8 @@ class BlueZTransport:
         self._adv_manager: Any = None
 
     async def start(self) -> None:
+        if MessageBus is None:
+            raise RuntimeError("BlueZ transport requires Linux")
         self.bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
         adapter = await self._proxy(self.config.adapter_path)
         properties = adapter.get_interface(PROPERTIES)
@@ -254,12 +305,17 @@ class BlueZTransport:
             "BlueZ relay active on %s as %s", self.config.adapter, self.config.local_name
         )
         if self.config.central_enabled:
-            self._scan_task = asyncio.create_task(self._scan_loop())
+            self._scan_task = self._tasks.spawn(
+                self._scan_loop(),
+                label="scan-loop",
+            )
 
     async def stop(self) -> None:
         if self._scan_task is not None:
             self._scan_task.cancel()
             await asyncio.gather(self._scan_task, return_exceptions=True)
+            self._scan_task = None
+        await self._tasks.stop()
         if self._adv_manager is not None:
             try:
                 await self._adv_manager.call_unregister_advertisement(ADVERTISEMENT_PATH)
@@ -381,8 +437,12 @@ class BlueZTransport:
         ) -> None:
             del invalidated
             if interface_name == GATT_CHARACTERISTIC and "Value" in values:
-                asyncio.create_task(
-                    self.core.inbound(device_path, bytes(values["Value"].value))
+                self._tasks.spawn(
+                    self.core.inbound(
+                        device_path,
+                        bytes(values["Value"].value),
+                    ),
+                    label="central-notification",
                 )
 
         properties.on_properties_changed(changed)

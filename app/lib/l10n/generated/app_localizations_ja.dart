@@ -57,6 +57,30 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tooltipPanicWipe => '緊急消去';
 
   @override
+  String get privacyTitle => 'プライバシー';
+
+  @override
+  String get privacyPrivateDefaultBody =>
+      'プライベートモードは既定で有効です。HearthBit は固定された無線識別子と本人情報の通知を最小限にします。';
+
+  @override
+  String get privacyBitchatInteropTitle => 'BitChat 互換性';
+
+  @override
+  String get privacyBitchatInteropOffBody =>
+      '無効です。BitChat の公開チャットは表示されません。外部端末はチャット不可の状態で表示され、公開 SOS のみ受信します。';
+
+  @override
+  String get privacyBitchatInteropWarning =>
+      '有効です。近くの第三者が固定無線識別子でこの端末を追跡でき、公開メッセージはメッシュから読み取れます。';
+
+  @override
+  String get externalPresenceNoChat => '外部ネットワーク端末 · チャット不可';
+
+  @override
+  String get externalNetworkBadge => '外部ネットワーク';
+
+  @override
   String get tabChannel => 'チャンネル';
 
   @override
@@ -125,6 +149,34 @@ class AppLocalizationsJa extends AppLocalizations {
   String get sosCardBody => '可能であれば GPS 位置情報が添付されます。アラートは公開され、メッシュ全体に中継されます。';
 
   @override
+  String get sosPrivacyTitle => '公開 SOS のプライバシー';
+
+  @override
+  String get sosPrivacyPublicWarning =>
+      '公開 SOS はメッシュ参加者にメッセージと暗号学的な本人情報を公開します。位置精度を選んでください。';
+
+  @override
+  String get sosLocationExact => '正確な位置';
+
+  @override
+  String get sosLocationExactBody => '迅速な救助に最適ですが、正確な座標を公開します。';
+
+  @override
+  String get sosLocationApproximate => 'おおよその位置（推奨）';
+
+  @override
+  String get sosLocationApproximateBody => '座標をおよそ近隣地域単位に丸めます。';
+
+  @override
+  String get sosLocationNone => '位置情報なし';
+
+  @override
+  String get sosLocationNoneBody => 'SOS メッセージのみ送信します。';
+
+  @override
+  String get sosSendPublic => '公開 SOS を送信';
+
+  @override
   String get sosMedical => '医療支援が必要です';
 
   @override
@@ -141,6 +193,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get sosNoneReceived => 'SOS アラートは受信していません。';
+
+  @override
+  String get checkInPrivateBody => '確認済みの家族だけにエンドツーエンド暗号化された更新を送ります。';
+
+  @override
+  String get checkInNoCircle => '非公開チェックインを送る前に確認済みの家族を追加してください。';
 
   @override
   String get actionTrack => '追跡';
@@ -473,6 +531,10 @@ class AppLocalizationsJa extends AppLocalizations {
       '大きな円を描くようにゆっくり歩いてください。レーダーは直接の Bluetooth 信号（数十メートル）を検出します。';
 
   @override
+  String get radarNoSignalHint =>
+      'まだ直接の信号を読み取れていません。両方の端末で HearthBit を開いたまま、ゆっくり歩いてください。';
+
+  @override
   String get proximityVeryClose => 'すぐ近く';
 
   @override
@@ -767,6 +829,11 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String radarMeasuredDistance(String distance) {
     return '実測：$distance';
+  }
+
+  @override
+  String radarGpsDistanceMargin(String distance, String accuracy) {
+    return 'GPS 約$distance ±$accuracy';
   }
 
   @override
@@ -1139,6 +1206,67 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get gatewayTls => '暗号化TLS接続を使用';
+
+  @override
+  String get gatewayTrustTitle => 'TLS証明書の信頼方式';
+
+  @override
+  String get gatewayTrustSystem => 'システム';
+
+  @override
+  String get gatewayTrustSystemBody =>
+      '端末が信頼する認証局を使用します。公開サービスと互換性がありますが、ゲートウェイを特定の証明書には固定しません。';
+
+  @override
+  String get gatewayTrustTofu => 'TOFU';
+
+  @override
+  String get gatewayTrustTofuBody =>
+      'この接続先で最初に確認した証明書を信頼し、その後の変更を拒否します。初回接続が傍受されていないことを確認してください。';
+
+  @override
+  String get gatewayTrustPinned => '固定';
+
+  @override
+  String get gatewayTrustPinnedBody =>
+      '完全に一致するSHA-256証明書フィンガープリントだけを許可します。証明書更新時は値を更新するまで送信できません。';
+
+  @override
+  String get gatewayFingerprint => '証明書のSHA-256フィンガープリント';
+
+  @override
+  String get gatewayFingerprintHint => '16進数64文字。区切り文字も使用できます';
+
+  @override
+  String get gatewayFingerprintInvalid =>
+      '有効な64文字のSHA-256証明書フィンガープリントを入力してください。';
+
+  @override
+  String get gatewayResetTofu => '最初の証明書を忘れる';
+
+  @override
+  String get gatewayResetTofuDone => '保存されたTOFU証明書を削除しました。';
+
+  @override
+  String get gatewayPrivacyScopeTitle => 'ゲートウェイと共有するデータ';
+
+  @override
+  String get gatewaySensitiveContentConsent => 'メッセージ内容と送信者情報を共有';
+
+  @override
+  String get gatewaySensitiveContentConsentBody =>
+      '緊急内容、表示名、ピア識別子を含みます。初期状態ではオフです。';
+
+  @override
+  String get gatewayCoordinatesConsent => '正確な位置情報を共有';
+
+  @override
+  String get gatewayCoordinatesConsentBody =>
+      '存在する場合に緯度と経度を含めます。メッセージ内容とは別の同意です。';
+
+  @override
+  String get gatewayPrivacyScopeWarning =>
+      'ゲートウェイは選択したデータをローカルメッシュ外のインターネットサービスへ送信します。十分な同意がある項目だけを有効にしてください。';
 
   @override
   String get mapOpen => 'オフライン地図を開く';

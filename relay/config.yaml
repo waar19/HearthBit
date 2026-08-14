@@ -15,12 +15,13 @@ host_dbus: true
 host_network: true
 map:
   - ssl:ro
-apparmor: false
+apparmor: true
 options:
   adapter: "hci0"
   local_name: "Bitle Relay"
   nickname: "Bitle Relay"
   identity_path: "/data/identity.json"
+  trust_store_path: "/data/trusted-peers.json"
   node_role: "INFRA_RELAY"
   announce_interval_seconds: 300
   central_enabled: true
@@ -28,9 +29,18 @@ options:
   max_central_links: 4
   max_packet_size: 2048
   log_level: "INFO"
+  identity_verification:
+    unknown_signed_policy: "relay-live"
+  flood:
+    sender_rate_per_second: 8
+    sender_burst: 32
+    emergency_rate_per_second: 2
+    emergency_burst: 8
+    bridge_rate_per_second: 20
+    bridge_burst: 64
   lan:
     enabled: false
-    listen_host: "0.0.0.0"
+    listen_host: "127.0.0.1"
     port: 45893
     psk_base64: ""
     discovery: true
@@ -60,6 +70,8 @@ options:
     announce_max_age_seconds: 600
     future_skew_seconds: 120
     max_bridge_hops: 8
+    bridge_allowlist: []
+    inbound_queue_size: 128
   matrix:
     enabled: false
     homeserver_url: ""
@@ -78,6 +90,7 @@ options:
     announce_max_age_seconds: 600
     future_skew_seconds: 120
     max_bridge_hops: 8
+    inbound_queue_size: 128
     allow_insecure_localhost_for_tests: false
     private_opaque:
       enabled: false
@@ -98,6 +111,7 @@ schema:
   local_name: str
   nickname: str
   identity_path: str
+  trust_store_path: str
   node_role: list(INFRA_RELAY|INFRA_DATA_ANCHOR)
   announce_interval_seconds: float
   central_enabled: bool
@@ -105,6 +119,15 @@ schema:
   max_central_links: int
   max_packet_size: int
   log_level: list(TRACE|DEBUG|INFO|WARNING|ERROR|CRITICAL)
+  identity_verification:
+    unknown_signed_policy: list(reject|relay-live)
+  flood:
+    sender_rate_per_second: float
+    sender_burst: int
+    emergency_rate_per_second: float
+    emergency_burst: int
+    bridge_rate_per_second: float
+    bridge_burst: int
   lan:
     enabled: bool
     listen_host: str
@@ -137,6 +160,9 @@ schema:
     announce_max_age_seconds: int
     future_skew_seconds: int
     max_bridge_hops: int
+    bridge_allowlist:
+      - str
+    inbound_queue_size: int
   matrix:
     enabled: bool
     homeserver_url: str
@@ -157,6 +183,7 @@ schema:
     announce_max_age_seconds: int
     future_skew_seconds: int
     max_bridge_hops: int
+    inbound_queue_size: int
     allow_insecure_localhost_for_tests: bool
     private_opaque:
       enabled: bool

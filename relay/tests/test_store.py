@@ -23,6 +23,20 @@ def test_seen_cache_expires(tmp_path) -> None:
     store.close()
 
 
+def test_seen_cache_recognizes_legacy_fingerprint_alias(tmp_path) -> None:
+    store = PacketStore(StoreConfig(path=str(tmp_path / "relay.db")))
+    legacy = b"l" * 16
+    current = b"n" * 16
+
+    assert not store.seen_or_add(legacy, now_ms=1_000)
+    assert store.seen_or_add_compatible(
+        current,
+        (legacy,),
+        now_ms=1_001,
+    )
+    store.close()
+
+
 def test_store_replays_once_per_link_and_evicts_oldest(tmp_path) -> None:
     store = PacketStore(
         StoreConfig(

@@ -57,6 +57,31 @@ class AppLocalizationsFr extends AppLocalizations {
   String get tooltipPanicWipe => 'Effacement d\'urgence';
 
   @override
+  String get privacyTitle => 'Confidentialité';
+
+  @override
+  String get privacyPrivateDefaultBody =>
+      'Le mode privé est activé par défaut. HearthBit réduit les identifiants radio stables et limite les annonces d’identité.';
+
+  @override
+  String get privacyBitchatInteropTitle => 'Compatibilité BitChat';
+
+  @override
+  String get privacyBitchatInteropOffBody =>
+      'Désactivée. Les discussions publiques BitChat sont masquées. Les appareils externes restent visibles sans discussion ; seules leurs alertes SOS publiques sont affichées.';
+
+  @override
+  String get privacyBitchatInteropWarning =>
+      'Activée. Des observateurs proches peuvent corréler cet appareil grâce à un identifiant radio stable et les messages publics restent lisibles par le réseau.';
+
+  @override
+  String get externalPresenceNoChat =>
+      'Présence réseau externe · sans discussion';
+
+  @override
+  String get externalNetworkBadge => 'RÉSEAU EXTERNE';
+
+  @override
   String get tabChannel => 'Canal';
 
   @override
@@ -127,6 +152,36 @@ class AppLocalizationsFr extends AppLocalizations {
       'Votre position GPS sera jointe si possible. L\'alerte est publique et relayée par le maillage.';
 
   @override
+  String get sosPrivacyTitle => 'Confidentialité du SOS public';
+
+  @override
+  String get sosPrivacyPublicWarning =>
+      'Un SOS public révèle votre message et votre identité cryptographique aux participants du maillage. Choisissez la précision de la position.';
+
+  @override
+  String get sosLocationExact => 'Position exacte';
+
+  @override
+  String get sosLocationExactBody =>
+      'Idéale pour un secours immédiat ; expose des coordonnées précises.';
+
+  @override
+  String get sosLocationApproximate => 'Position approximative (recommandé)';
+
+  @override
+  String get sosLocationApproximateBody =>
+      'Arrondit les coordonnées à une zone de quartier environ.';
+
+  @override
+  String get sosLocationNone => 'Sans position';
+
+  @override
+  String get sosLocationNoneBody => 'Envoie uniquement votre message SOS.';
+
+  @override
+  String get sosSendPublic => 'ENVOYER LE SOS PUBLIC';
+
+  @override
   String get sosMedical => 'J\'ai besoin d\'aide médicale';
 
   @override
@@ -143,6 +198,14 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get sosNoneReceived => 'Aucune alerte SOS reçue.';
+
+  @override
+  String get checkInPrivateBody =>
+      'Envoie une mise à jour chiffrée de bout en bout uniquement aux proches vérifiés.';
+
+  @override
+  String get checkInNoCircle =>
+      'Ajoutez un proche vérifié avant d’envoyer un check-in privé.';
 
   @override
   String get actionTrack => 'LOCALISER';
@@ -489,6 +552,10 @@ class AppLocalizationsFr extends AppLocalizations {
       'Marchez lentement en décrivant un large cercle. Le radar capte le signal Bluetooth direct (quelques dizaines de mètres).';
 
   @override
+  String get radarNoSignalHint =>
+      'Pas encore de lecture directe du signal. Gardez HearthBit ouvert sur les deux téléphones et marchez lentement.';
+
+  @override
   String get proximityVeryClose => 'TRÈS PROCHE';
 
   @override
@@ -797,6 +864,11 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String radarMeasuredDistance(String distance) {
     return 'Mesurée : $distance';
+  }
+
+  @override
+  String radarGpsDistanceMargin(String distance, String accuracy) {
+    return '≈$distance ±$accuracy GPS';
   }
 
   @override
@@ -1186,6 +1258,70 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get gatewayTls => 'Utiliser une connexion TLS chiffrée';
+
+  @override
+  String get gatewayTrustTitle => 'Confiance du certificat TLS';
+
+  @override
+  String get gatewayTrustSystem => 'Système';
+
+  @override
+  String get gatewayTrustSystemBody =>
+      'Utilise les autorités de certification approuvées par l’appareil. Compatible avec les services publics, sans verrouiller la passerelle sur un certificat.';
+
+  @override
+  String get gatewayTrustTofu => 'TOFU';
+
+  @override
+  String get gatewayTrustTofuBody =>
+      'Approuve le premier certificat vu pour ce service et refuse les changements ultérieurs. Vérifiez que la première connexion n’est pas interceptée.';
+
+  @override
+  String get gatewayTrustPinned => 'Épinglé';
+
+  @override
+  String get gatewayTrustPinnedBody =>
+      'Seule l’empreinte SHA-256 exacte est acceptée. Un renouvellement de certificat bloquera l’envoi jusqu’à la mise à jour de cette valeur.';
+
+  @override
+  String get gatewayFingerprint => 'Empreinte SHA-256 du certificat';
+
+  @override
+  String get gatewayFingerprintHint =>
+      '64 caractères hexadécimaux ; séparateurs autorisés';
+
+  @override
+  String get gatewayFingerprintInvalid =>
+      'Saisissez une empreinte SHA-256 valide de 64 caractères.';
+
+  @override
+  String get gatewayResetTofu => 'Oublier le premier certificat';
+
+  @override
+  String get gatewayResetTofuDone =>
+      'Le certificat TOFU enregistré a été supprimé.';
+
+  @override
+  String get gatewayPrivacyScopeTitle => 'Données partagées avec la passerelle';
+
+  @override
+  String get gatewaySensitiveContentConsent =>
+      'Partager le contenu et l’identité de l’expéditeur';
+
+  @override
+  String get gatewaySensitiveContentConsentBody =>
+      'Inclut la description d’urgence, le nom affiché et l’identifiant du pair. Désactivé par défaut.';
+
+  @override
+  String get gatewayCoordinatesConsent => 'Partager les coordonnées précises';
+
+  @override
+  String get gatewayCoordinatesConsentBody =>
+      'Inclut latitude et longitude lorsqu’elles existent. Ce consentement est distinct du contenu.';
+
+  @override
+  String get gatewayPrivacyScopeWarning =>
+      'La passerelle envoie les données sélectionnées à un service Internet hors du maillage local. Activez chaque catégorie uniquement avec un consentement éclairé.';
 
   @override
   String get mapOpen => 'Ouvrir la carte hors ligne';

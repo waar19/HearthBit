@@ -107,10 +107,28 @@ void main() {
   testWidgets('mantiene acciones y radar utilizables con texto al 200%', (
     tester,
   ) async {
-    await pumpRadar(tester, size: const Size(411, 870), textScale: 2);
+    final (platform, _) = await pumpRadar(
+      tester,
+      size: const Size(411, 870),
+      textScale: 2,
+    );
+    platform.emitRssi(-65);
+    await tester.pump();
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'tras recibir señal al 200%',
+    );
 
     expect(find.byKey(const ValueKey('radar-canvas')), findsOneWidget);
     expect(find.byIcon(Icons.explore_outlined), findsOneWidget);
+    expect(find.text('Dirección'), findsOneWidget);
+    expect(find.text('Sonar'), findsOneWidget);
+    expect(find.text('Baliza'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Baliza')).dy,
+      greaterThan(tester.getTopLeft(find.text('Dirección')).dy),
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -124,6 +142,7 @@ void main() {
     );
     platform.emitRssi(-65);
     await tester.pump();
+    expect(tester.takeException(), isNull, reason: 'tras recibir señal');
 
     expect(find.text('Dirección'), findsOneWidget);
     expect(find.text('Radio'), findsOneWidget);
@@ -132,10 +151,20 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.explore_outlined));
     await tester.pump();
+    expect(tester.takeException(), isNull, reason: 'al iniciar barrido');
     expect(find.text('Barrido'), findsOneWidget);
+    final instruction = tester.widget<Text>(
+      find.text(
+        'Mantenlo plano frente al pecho, con la pantalla hacia arriba y el '
+        'borde superior apuntando al frente. Gira lentamente todo el cuerpo.',
+      ),
+    );
+    expect(instruction.maxLines, isNull);
+    expect(instruction.overflow, isNull);
 
     await tester.tap(find.byIcon(Icons.flashlight_on_outlined));
     await tester.pump();
+    expect(tester.takeException(), isNull, reason: 'al pedir baliza');
     expect(find.text('Esperando'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -170,6 +199,11 @@ void main() {
         compassEvents.add(CompassEvent.fromList([heading, heading, 5]));
         platform.emitRssi(-70);
         await tester.pump(const Duration(milliseconds: 1));
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'durante barrido en $heading°, muestra $sample',
+        );
       }
     }
 

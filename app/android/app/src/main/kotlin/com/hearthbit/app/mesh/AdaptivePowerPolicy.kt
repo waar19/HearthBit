@@ -75,8 +75,9 @@ internal object AdaptivePowerPolicy {
         return when {
             survivalMode -> PowerProfile.SURVIVAL
             battery <= 10 -> PowerProfile.CRITICAL
+            highPerformanceRequested ->
+                if (isCharging) PowerProfile.PERFORMANCE else PowerProfile.BALANCED
             !screenOn || systemPowerSave -> PowerProfile.POWER_SAVER
-            isCharging && highPerformanceRequested -> PowerProfile.PERFORMANCE
             isCharging -> PowerProfile.BALANCED
             battery <= 40 -> PowerProfile.POWER_SAVER
             else -> PowerProfile.BALANCED

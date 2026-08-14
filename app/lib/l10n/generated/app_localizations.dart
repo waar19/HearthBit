@@ -190,6 +190,48 @@ abstract class AppLocalizations {
   /// **'Emergency wipe'**
   String get tooltipPanicWipe;
 
+  /// No description provided for @privacyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy'**
+  String get privacyTitle;
+
+  /// No description provided for @privacyPrivateDefaultBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Private mode is on by default. HearthBit minimizes stable radio identifiers and limits identity announcements.'**
+  String get privacyPrivateDefaultBody;
+
+  /// No description provided for @privacyBitchatInteropTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'BitChat compatibility'**
+  String get privacyBitchatInteropTitle;
+
+  /// No description provided for @privacyBitchatInteropOffBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Off. BitChat public chat is hidden. External devices remain visible without chat, and only their public SOS alerts are shown.'**
+  String get privacyBitchatInteropOffBody;
+
+  /// No description provided for @privacyBitchatInteropWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'On. Nearby observers can correlate this device through a stable radio identifier, and public messages remain readable by the mesh.'**
+  String get privacyBitchatInteropWarning;
+
+  /// No description provided for @externalPresenceNoChat.
+  ///
+  /// In en, this message translates to:
+  /// **'External network presence · no chat'**
+  String get externalPresenceNoChat;
+
+  /// No description provided for @externalNetworkBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'EXTERNAL NETWORK'**
+  String get externalNetworkBadge;
+
   /// No description provided for @tabChannel.
   ///
   /// In en, this message translates to:
@@ -316,6 +358,60 @@ abstract class AppLocalizations {
   /// **'Your GPS location will be attached if possible. The alert is public and relayed across the mesh.'**
   String get sosCardBody;
 
+  /// No description provided for @sosPrivacyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Public SOS privacy'**
+  String get sosPrivacyTitle;
+
+  /// No description provided for @sosPrivacyPublicWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'A public SOS reveals your message and cryptographic identity to mesh participants. Choose how much location to include.'**
+  String get sosPrivacyPublicWarning;
+
+  /// No description provided for @sosLocationExact.
+  ///
+  /// In en, this message translates to:
+  /// **'Exact location'**
+  String get sosLocationExact;
+
+  /// No description provided for @sosLocationExactBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Best for immediate rescue; exposes precise coordinates.'**
+  String get sosLocationExactBody;
+
+  /// No description provided for @sosLocationApproximate.
+  ///
+  /// In en, this message translates to:
+  /// **'Approximate location (recommended)'**
+  String get sosLocationApproximate;
+
+  /// No description provided for @sosLocationApproximateBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Rounds coordinates to roughly a neighborhood-sized area.'**
+  String get sosLocationApproximateBody;
+
+  /// No description provided for @sosLocationNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No location'**
+  String get sosLocationNone;
+
+  /// No description provided for @sosLocationNoneBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Sends only your SOS message.'**
+  String get sosLocationNoneBody;
+
+  /// No description provided for @sosSendPublic.
+  ///
+  /// In en, this message translates to:
+  /// **'SEND PUBLIC SOS'**
+  String get sosSendPublic;
+
   /// No description provided for @sosMedical.
   ///
   /// In en, this message translates to:
@@ -351,6 +447,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No SOS alerts received.'**
   String get sosNoneReceived;
+
+  /// No description provided for @checkInPrivateBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Sends an end-to-end encrypted update only to verified family members.'**
+  String get checkInPrivateBody;
+
+  /// No description provided for @checkInNoCircle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a verified family member before sending a private check-in.'**
+  String get checkInNoCircle;
 
   /// No description provided for @actionTrack.
   ///
@@ -921,6 +1029,12 @@ abstract class AppLocalizations {
   /// **'Walk slowly in a wide circle. The radar picks up the direct Bluetooth signal (tens of meters).'**
   String get radarSearchingHint;
 
+  /// No description provided for @radarNoSignalHint.
+  ///
+  /// In en, this message translates to:
+  /// **'No direct signal reading yet. Keep HearthBit open on both phones and walk slowly.'**
+  String get radarNoSignalHint;
+
   /// No description provided for @proximityVeryClose.
   ///
   /// In en, this message translates to:
@@ -1424,6 +1538,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Measured: {distance}'**
   String radarMeasuredDistance(String distance);
+
+  /// No description provided for @radarGpsDistanceMargin.
+  ///
+  /// In en, this message translates to:
+  /// **'≈{distance} ±{accuracy} GPS'**
+  String radarGpsDistanceMargin(String distance, String accuracy);
 
   /// No description provided for @radarActionRadio.
   ///
@@ -2114,6 +2234,114 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Use encrypted TLS connection'**
   String get gatewayTls;
+
+  /// No description provided for @gatewayTrustTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'TLS certificate trust'**
+  String get gatewayTrustTitle;
+
+  /// No description provided for @gatewayTrustSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get gatewayTrustSystem;
+
+  /// No description provided for @gatewayTrustSystemBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Uses the certificate authorities trusted by your device. This is compatible with public services, but does not lock the gateway to one certificate.'**
+  String get gatewayTrustSystemBody;
+
+  /// No description provided for @gatewayTrustTofu.
+  ///
+  /// In en, this message translates to:
+  /// **'TOFU'**
+  String get gatewayTrustTofu;
+
+  /// No description provided for @gatewayTrustTofuBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Trusts the first certificate seen for this endpoint and rejects later changes. Verify the first connection is not being intercepted.'**
+  String get gatewayTrustTofuBody;
+
+  /// No description provided for @gatewayTrustPinned.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned'**
+  String get gatewayTrustPinned;
+
+  /// No description provided for @gatewayTrustPinnedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Only the exact SHA-256 certificate fingerprint is accepted. Certificate rotation will block delivery until this value is updated.'**
+  String get gatewayTrustPinnedBody;
+
+  /// No description provided for @gatewayFingerprint.
+  ///
+  /// In en, this message translates to:
+  /// **'Certificate SHA-256 fingerprint'**
+  String get gatewayFingerprint;
+
+  /// No description provided for @gatewayFingerprintHint.
+  ///
+  /// In en, this message translates to:
+  /// **'64 hexadecimal characters; separators are allowed'**
+  String get gatewayFingerprintHint;
+
+  /// No description provided for @gatewayFingerprintInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid 64-character SHA-256 certificate fingerprint.'**
+  String get gatewayFingerprintInvalid;
+
+  /// No description provided for @gatewayResetTofu.
+  ///
+  /// In en, this message translates to:
+  /// **'Forget first certificate'**
+  String get gatewayResetTofu;
+
+  /// No description provided for @gatewayResetTofuDone.
+  ///
+  /// In en, this message translates to:
+  /// **'The saved TOFU certificate was removed.'**
+  String get gatewayResetTofuDone;
+
+  /// No description provided for @gatewayPrivacyScopeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Data shared with the gateway'**
+  String get gatewayPrivacyScopeTitle;
+
+  /// No description provided for @gatewaySensitiveContentConsent.
+  ///
+  /// In en, this message translates to:
+  /// **'Share message content and sender identity'**
+  String get gatewaySensitiveContentConsent;
+
+  /// No description provided for @gatewaySensitiveContentConsentBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Includes the emergency description, display name and peer identifier. Off by default.'**
+  String get gatewaySensitiveContentConsentBody;
+
+  /// No description provided for @gatewayCoordinatesConsent.
+  ///
+  /// In en, this message translates to:
+  /// **'Share precise coordinates'**
+  String get gatewayCoordinatesConsent;
+
+  /// No description provided for @gatewayCoordinatesConsentBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Includes latitude and longitude when present. This consent is separate from message content.'**
+  String get gatewayCoordinatesConsentBody;
+
+  /// No description provided for @gatewayPrivacyScopeWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'The gateway sends selected data to an internet service outside the local mesh. Enable each category only with informed consent.'**
+  String get gatewayPrivacyScopeWarning;
 
   /// No description provided for @mapOpen.
   ///

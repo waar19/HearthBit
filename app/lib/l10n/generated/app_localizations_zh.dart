@@ -57,6 +57,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tooltipPanicWipe => '紧急抹除';
 
   @override
+  String get privacyTitle => '隐私';
+
+  @override
+  String get privacyPrivateDefaultBody =>
+      '默认启用隐私模式。HearthBit 会尽量减少固定无线标识符并限制身份广播。';
+
+  @override
+  String get privacyBitchatInteropTitle => 'BitChat 兼容性';
+
+  @override
+  String get privacyBitchatInteropOffBody =>
+      '已关闭。BitChat 公共聊天将被隐藏。外部设备仍会显示但无法聊天，只显示其公共 SOS 警报。';
+
+  @override
+  String get privacyBitchatInteropWarning =>
+      '已开启。附近观察者可通过固定无线标识符关联此设备，网状网络仍可读取公开消息。';
+
+  @override
+  String get externalPresenceNoChat => '外部网络设备 · 无法聊天';
+
+  @override
+  String get externalNetworkBadge => '外部网络';
+
+  @override
   String get tabChannel => '频道';
 
   @override
@@ -123,6 +147,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sosCardBody => '如有可能将附上您的 GPS 位置。警报是公开的，并将通过网状网络转发。';
 
   @override
+  String get sosPrivacyTitle => '公开 SOS 隐私';
+
+  @override
+  String get sosPrivacyPublicWarning => '公开 SOS 会向网状网络参与者透露您的消息和加密身份。请选择位置精度。';
+
+  @override
+  String get sosLocationExact => '精确位置';
+
+  @override
+  String get sosLocationExactBody => '最适合立即救援；会公开精确坐标。';
+
+  @override
+  String get sosLocationApproximate => '大致位置（推荐）';
+
+  @override
+  String get sosLocationApproximateBody => '将坐标取整到大约一个街区范围。';
+
+  @override
+  String get sosLocationNone => '不含位置';
+
+  @override
+  String get sosLocationNoneBody => '仅发送 SOS 消息。';
+
+  @override
+  String get sosSendPublic => '发送公开 SOS';
+
+  @override
   String get sosMedical => '我需要医疗救助';
 
   @override
@@ -139,6 +190,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sosNoneReceived => '尚未收到 SOS 警报。';
+
+  @override
+  String get checkInPrivateBody => '仅向已验证的家人发送端到端加密状态。';
+
+  @override
+  String get checkInNoCircle => '发送私密签到前，请先添加已验证的家人。';
 
   @override
   String get actionTrack => '追踪';
@@ -461,6 +518,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get radarSearchingHint => '慢慢地绕大圈行走。雷达接收的是直接的蓝牙信号（数十米范围）。';
 
   @override
+  String get radarNoSignalHint => '尚未读取到直接信号。请在两部手机上保持 HearthBit 打开，并缓慢走动。';
+
+  @override
   String get proximityVeryClose => '非常近';
 
   @override
@@ -752,6 +812,11 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String radarMeasuredDistance(String distance) {
     return '实测：$distance';
+  }
+
+  @override
+  String radarGpsDistanceMargin(String distance, String accuracy) {
+    return 'GPS 约$distance ±$accuracy';
   }
 
   @override
@@ -1118,6 +1183,62 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get gatewayTls => '使用加密 TLS 连接';
+
+  @override
+  String get gatewayTrustTitle => 'TLS 证书信任方式';
+
+  @override
+  String get gatewayTrustSystem => '系统';
+
+  @override
+  String get gatewayTrustSystemBody => '使用设备信任的证书颁发机构。兼容公共服务，但不会将网关锁定到某一张证书。';
+
+  @override
+  String get gatewayTrustTofu => 'TOFU';
+
+  @override
+  String get gatewayTrustTofuBody => '信任此端点首次出现的证书，并拒绝之后的变化。请确认首次连接未被拦截。';
+
+  @override
+  String get gatewayTrustPinned => '固定';
+
+  @override
+  String get gatewayTrustPinnedBody =>
+      '只接受完全匹配的 SHA-256 证书指纹。证书轮换后，更新此值前将无法发送。';
+
+  @override
+  String get gatewayFingerprint => '证书 SHA-256 指纹';
+
+  @override
+  String get gatewayFingerprintHint => '64 个十六进制字符；允许分隔符';
+
+  @override
+  String get gatewayFingerprintInvalid => '请输入有效的 64 字符 SHA-256 证书指纹。';
+
+  @override
+  String get gatewayResetTofu => '忘记首次证书';
+
+  @override
+  String get gatewayResetTofuDone => '已删除保存的 TOFU 证书。';
+
+  @override
+  String get gatewayPrivacyScopeTitle => '与网关共享的数据';
+
+  @override
+  String get gatewaySensitiveContentConsent => '共享消息内容和发送者身份';
+
+  @override
+  String get gatewaySensitiveContentConsentBody => '包括紧急情况描述、显示名称和节点标识符。默认关闭。';
+
+  @override
+  String get gatewayCoordinatesConsent => '共享精确坐标';
+
+  @override
+  String get gatewayCoordinatesConsentBody => '在存在时包括纬度和经度。此同意与消息内容相互独立。';
+
+  @override
+  String get gatewayPrivacyScopeWarning =>
+      '网关会将所选数据发送到本地网状网络之外的互联网服务。仅在获得知情同意后启用相应类别。';
 
   @override
   String get mapOpen => '打开离线地图';

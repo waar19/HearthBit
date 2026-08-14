@@ -63,6 +63,8 @@ class MeshController extends ChangeNotifier {
        _repository = repository ?? MessageRepository(),
        _preferences = preferences,
        _drillModeEnabled = preferences?.drillModeEnabled ?? false,
+       _privateMode = preferences?.privacyPrivateMode ?? true,
+       _bitchatInteropEnabled = preferences?.bitchatInteropEnabled ?? false,
        peerLocations = locationTracker ?? PeerLocationTracker() {
     peerLocations.addListener(_notifyLocationChanged);
     preferences?.addListener(_handlePreferencesChanged);
@@ -130,6 +132,8 @@ class MeshController extends ChangeNotifier {
 
   /// Vacía significa «usar el texto por defecto localizado» ([sendSos]).
   String _rescueDescription = '';
+  SosLocationPrecision _rescueLocationPrecision =
+      SosLocationPrecision.approximate;
 
   // Estado de energía/ubicación reportado por el sistema.
   bool ignoringBatteryOptimizations = true;
@@ -140,8 +144,11 @@ class MeshController extends ChangeNotifier {
   bool adaptivePowerSaving = false;
   bool survivalMode = false;
   bool _drillModeEnabled;
+  bool _privateMode;
+  bool _bitchatInteropEnabled;
 
   List<MeshMessage> get messages => List.unmodifiable(_messages);
+  bool get bitchatInteropEnabled => _bitchatInteropEnabled;
   List<EmergencyDelivery> get emergencyDeliveries =>
       List.unmodifiable(_emergencyDeliveries);
   bool get drillModeEnabled => _drillModeEnabled;
@@ -233,6 +240,9 @@ class MeshController extends ChangeNotifier {
       (status == MeshConnectionStatus.active ||
           status == MeshConnectionStatus.degraded);
 
+  bool canChatWithPeer(MeshPeer peer) =>
+      peer.role.canChat && (_bitchatInteropEnabled || peer.hearthbitVerified);
+
   Future<void> initialize() async {
     _messages
       ..clear()
@@ -262,9 +272,13 @@ class MeshController extends ChangeNotifier {
       (first, second) => first.timestamp.compareTo(second.timestamp),
     );
     _trimMessagesInMemory();
-    _subscription = _platform.events.listen(_handleEvent);
+    _subscription = _platform.events.listen(_handleEventSafely);
     final capabilities = await _platform.getCapabilities();
     supportsBackgroundRelay = capabilities['backgroundRelay'] as bool? ?? false;
+    await _platform.configurePrivacyMode(
+      privateMode: _privateMode,
+      bitchatInteropEnabled: _bitchatInteropEnabled,
+    );
     await _restoreNativeRescueMode();
     await refreshPowerStatus();
     if (_preferences?.meshDesiredActive == true) {
@@ -349,6 +363,7 @@ class MeshController extends ChangeNotifier {
     bool enabled, {
     String? description,
     Duration? interval,
+    SosLocationPrecision? locationPrecision,
   }) async {
     if (!enabled) {
       final wasRescueActive = rescueMode;
@@ -367,6 +382,9 @@ class MeshController extends ChangeNotifier {
     if (description != null && description.trim().isNotEmpty) {
       _rescueDescription = description.trim();
     }
+    if (locationPrecision != null) {
+      _rescueLocationPrecision = locationPrecision;
+    }
     final now = DateTime.now();
     rescueMode = true;
     rescueStartedAt ??= now;
@@ -382,6 +400,7 @@ class MeshController extends ChangeNotifier {
       lastPingAt: lastRescuePing,
       expiresAt: rescueExpiresAt,
       interval: interval ?? rescueInterval,
+      locationPrecision: _rescueLocationPrecision,
     );
     _applyNativeRescueState(state);
   }
@@ -389,7 +408,10 @@ class MeshController extends ChangeNotifier {
   Future<void> _rescuePing() async {
     if (!rescueMode) return;
     await _platform.setRadarConsent(enabled: true, minutes: 10);
-    await sendSos(_rescueDescription);
+    await sendSos(
+      _rescueDescription,
+      locationPrecision: _rescueLocationPrecision,
+    );
     lastRescuePing = DateTime.now();
     notifyListeners();
   }
@@ -421,6 +443,7 @@ class MeshController extends ChangeNotifier {
     rescueStartedAt = state.startedAt;
     rescueExpiresAt = state.expiresAt;
     lastRescuePing = state.lastPingAt;
+    _rescueLocationPrecision = state.locationPrecision;
     final description = state.description?.trim();
     if (description != null && description.isNotEmpty) {
       _rescueDescription = description;
@@ -492,7 +515,7 @@ class MeshController extends ChangeNotifier {
     String content,
   ) async {
     final cleaned = content.trim();
-    if (!peer.role.canChat || cleaned.isEmpty) {
+    if (!canChatWithPeer(peer) || cleaned.isEmpty) {
       return PrivateMessageSendResult.failed(currentL10n.errorUnknown);
     }
     final currentPeer = peerById(peer.id);
@@ -531,15 +554,33 @@ class MeshController extends ChangeNotifier {
     return const PrivateMessageSendResult.sent();
   }
 
-  Future<void> sendSos(String description) async {
+  Future<void> sendSos(
+    String description, {
+    SosLocationPrecision locationPrecision = SosLocationPrecision.approximate,
+  }) async {
     DiagnosticsLog.instance.info('sos.send.started');
-    final position = await _currentPosition();
+    final position = locationPrecision == SosLocationPrecision.none
+        ? null
+        : await _currentPosition();
     final readable = description.trim().isEmpty
         ? currentL10n.sosDefaultMessage
         : description.trim();
-    final location = position == null
+    final coordinates = position == null
+        ? null
+        : switch (locationPrecision) {
+            SosLocationPrecision.exact => (
+              position.latitude,
+              position.longitude,
+            ),
+            SosLocationPrecision.approximate => (
+              coarsenEmergencyCoordinate(position.latitude),
+              coarsenEmergencyCoordinate(position.longitude),
+            ),
+            SosLocationPrecision.none => null,
+          };
+    final location = coordinates == null
         ? '||'
-        : '|${position.latitude}|${position.longitude}';
+        : '|${coordinates.$1}|${coordinates.$2}';
     final delivery = await _enqueueEmergency(
       kind: EmergencyDeliveryKind.sos,
       content: 'SOS|$readable$location',
@@ -554,7 +595,10 @@ class MeshController extends ChangeNotifier {
     if (accepted) {
       DiagnosticsLog.instance.info(
         'sos.send.accepted_by_mesh',
-        data: {'gpsAttached': position != null},
+        data: {
+          'gpsAttached': coordinates != null,
+          'precision': locationPrecision.wireName,
+        },
       );
     } else {
       DiagnosticsLog.instance.warning('sos.send.failed');
@@ -576,6 +620,44 @@ class MeshController extends ChangeNotifier {
       lifetime: emergencyCheckInLifetime,
     );
     await _transmitEmergency(delivery, force: true);
+  }
+
+  Future<int> sendCircleCheckIn(
+    CheckInStatus status,
+    String readableMessage,
+    Iterable<String> trustedPeerIds,
+  ) async {
+    final recipients = trustedPeerIds
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty && value != peerId.toLowerCase())
+        .toSet();
+    if (recipients.isEmpty) return 0;
+    final position = await _currentPosition();
+    final content = EmergencyCheckIn.encode(
+      status: status,
+      readableMessage: readableMessage,
+      timestamp: DateTime.now(),
+      latitude: position?.latitude,
+      longitude: position?.longitude,
+    );
+    var accepted = 0;
+    for (final recipient in recipients) {
+      final peer =
+          peerById(recipient) ??
+          knownPeerById(recipient) ??
+          MeshPeer(
+            id: recipient,
+            nickname: recipient.substring(0, min(8, recipient.length)),
+            lastSeen: DateTime.fromMillisecondsSinceEpoch(0),
+            secure: false,
+            hearthbitVerified: true,
+          );
+      final result = await sendPrivate(peer, content);
+      if (result.disposition != PrivateMessageSendDisposition.failed) {
+        accepted += 1;
+      }
+    }
+    return accepted;
   }
 
   Future<void> retryEmergency(String localId) async {
@@ -640,7 +722,10 @@ class MeshController extends ChangeNotifier {
     if (localBeaconActive) await stopLocalBeacon();
   }
 
-  Future<void> activateEmergency({String? description}) async {
+  Future<void> activateEmergency({
+    String? description,
+    SosLocationPrecision locationPrecision = SosLocationPrecision.approximate,
+  }) async {
     if (activatingEmergency || rescueMode) return;
     if (drillModeEnabled) await deactivateDrill();
     activatingEmergency = true;
@@ -664,6 +749,7 @@ class MeshController extends ChangeNotifier {
       await setRescueMode(
         true,
         description: description ?? currentL10n.sosDefaultMessage,
+        locationPrecision: locationPrecision,
       );
       DiagnosticsLog.instance.info('sos.activation.completed');
     } catch (error) {
@@ -703,6 +789,9 @@ class MeshController extends ChangeNotifier {
     }
     return null;
   }
+
+  static double coarsenEmergencyCoordinate(double value) =>
+      (value * 1000).round() / 1000;
 
   Future<void> updateNickname(String value) async {
     final cleaned = value.trim();
@@ -1284,7 +1373,7 @@ class MeshController extends ChangeNotifier {
         continue;
       }
       final peer = peerById(original.recipientPeerId);
-      if (peer == null || !peer.secure || !peer.role.canChat) continue;
+      if (peer == null || !peer.secure || !canChatWithPeer(peer)) continue;
       var pending = original.copyWith(
         attempts: original.attempts + 1,
         status: PrivateMessageOutboxStatus.retrying,
@@ -1412,7 +1501,8 @@ class MeshController extends ChangeNotifier {
       case 'message':
         final rawMessage = event['message'];
         if (rawMessage is Map<Object?, Object?>) {
-          final message = MeshMessage.fromMap(rawMessage);
+          final message = MeshMessage.tryParse(rawMessage);
+          if (message == null) break;
           if (message.isRadarLocation) {
             peerLocations.ingestLive(message);
             break;
@@ -1465,13 +1555,44 @@ class MeshController extends ChangeNotifier {
         }
         break;
       case 'rssi':
-        // Lecturas del radar de rescate: las consume RadarScreen directamente
-        // del stream; evitar redibujar toda la app varias veces por segundo.
+      case 'radarDiagnostic':
+        // Lecturas y avisos del radar de rescate: los consume RadarScreen
+        // directamente del stream; evitar redibujar toda la app.
         return;
       default:
         break;
     }
     notifyListeners();
+  }
+
+  void _handleEventSafely(Map<Object?, Object?> event) {
+    try {
+      _handleEvent(event);
+    } on FormatException catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'mesh.event.invalid',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    } on TypeError catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'mesh.event.invalid_type',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    } on RangeError catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'mesh.event.invalid_range',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    } catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'mesh.event.rejected',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   Future<void> _recordEmergencyAcknowledgement(
@@ -1611,7 +1732,10 @@ class MeshController extends ChangeNotifier {
     _peers
       ..clear()
       ..addAll(
-        rawPeers.whereType<Map<Object?, Object?>>().map(MeshPeer.fromMap),
+        rawPeers
+            .whereType<Map<Object?, Object?>>()
+            .map(MeshPeer.tryParse)
+            .whereType<MeshPeer>(),
       );
     for (final peer in _peers) {
       _knownPeers[peer.id] = peer;
@@ -1669,9 +1793,10 @@ class MeshController extends ChangeNotifier {
     _presences
       ..clear()
       ..addAll(
-        rawPresences.whereType<Map<Object?, Object?>>().map(
-          GenericBlePresence.fromMap,
-        ),
+        rawPresences
+            .whereType<Map<Object?, Object?>>()
+            .map(GenericBlePresence.tryParse)
+            .whereType<GenericBlePresence>(),
       );
   }
 
@@ -1693,10 +1818,26 @@ class MeshController extends ChangeNotifier {
 
   void _handlePreferencesChanged() {
     final enabled = _preferences?.drillModeEnabled ?? false;
-    if (enabled == _drillModeEnabled) return;
-    _drillModeEnabled = enabled;
-    if (enabled) unawaited(_enforceDrillIsolation());
-    notifyListeners();
+    var changed = false;
+    if (enabled != _drillModeEnabled) {
+      _drillModeEnabled = enabled;
+      if (enabled) unawaited(_enforceDrillIsolation());
+      changed = true;
+    }
+    final privateMode = _preferences?.privacyPrivateMode ?? true;
+    final interop = _preferences?.bitchatInteropEnabled ?? false;
+    if (privateMode != _privateMode || interop != _bitchatInteropEnabled) {
+      _privateMode = privateMode;
+      _bitchatInteropEnabled = interop;
+      unawaited(
+        _platform.configurePrivacyMode(
+          privateMode: privateMode,
+          bitchatInteropEnabled: interop,
+        ),
+      );
+      changed = true;
+    }
+    if (changed) notifyListeners();
   }
 
   @override

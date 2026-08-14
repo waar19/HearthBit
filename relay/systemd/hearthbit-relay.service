@@ -7,11 +7,17 @@ Requires=dbus.service
 
 [Service]
 Type=simple
+User=hearthbit-relay
+Group=hearthbit-relay
+SupplementaryGroups=bluetooth
 ExecStart=/opt/hearthbit-relay/venv/bin/hearthbit-relay --config /etc/hearthbit-relay/config.json
 Restart=on-failure
 RestartSec=5
 StateDirectory=hearthbit-relay
+StateDirectoryMode=0700
 UMask=0077
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
 
 NoNewPrivileges=true
 PrivateTmp=true

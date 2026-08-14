@@ -14,7 +14,8 @@ internal class NoiseSessionLite(
     private var receiveCipher: CipherState? = null
     private var patternCount = 0
     private var sendNonce = 0L
-    private val receivedNonces = LinkedHashSet<Long>()
+    private val replayWindow = NoiseReplayWindow()
+    private var establishedAt = 0L
 
     var lastActivityAt: Long = nowMillis()
         private set
@@ -27,6 +28,10 @@ internal class NoiseSessionLite(
 
     fun isStale(now: Long, timeoutMs: Long): Boolean =
         handshaking && now - lastActivityAt >= timeoutMs
+
+    fun isTransportExpired(now: Long = nowMillis()): Boolean =
+        established &&
+            (sendNonce > UInt.MAX_VALUE.toLong() || now - establishedAt >= MAX_TRANSPORT_AGE_MS)
 
     fun start(): ByteArray {
         if (!initiator || handshake != null || established) {
@@ -109,7 +114,7 @@ internal class NoiseSessionLite(
                 ((input[1].toLong() and 0xFF) shl 16) or
                 ((input[2].toLong() and 0xFF) shl 8) or
                 (input[3].toLong() and 0xFF)
-        check(nonce !in receivedNonces) { "Repeated Noise nonce" }
+        check(replayWindow.canAccept(nonce)) { "Repeated or stale Noise nonce" }
         val cipher = checkNotNull(receiveCipher)
         cipher.setNonce(nonce)
         val ciphertext = input.copyOfRange(4, input.size)
@@ -122,10 +127,7 @@ internal class NoiseSessionLite(
             0,
             ciphertext.size,
         )
-        receivedNonces.add(nonce)
-        while (receivedNonces.size > 1024) {
-            receivedNonces.remove(receivedNonces.first())
-        }
+        replayWindow.recordAuthenticated(nonce)
         touch()
         return plaintext.copyOf(length)
     }
@@ -138,7 +140,8 @@ internal class NoiseSessionLite(
         sendCipher = null
         receiveCipher = null
         established = false
-        receivedNonces.clear()
+        replayWindow.clear()
+        establishedAt = 0L
     }
 
     private fun initialize(role: Int) {
@@ -174,6 +177,7 @@ internal class NoiseSessionLite(
         state.destroy()
         handshake = null
         established = true
+        establishedAt = nowMillis()
         touch()
     }
 
@@ -183,5 +187,6 @@ internal class NoiseSessionLite(
 
     private companion object {
         const val PROTOCOL = "Noise_XX_25519_ChaChaPoly_SHA256"
+        const val MAX_TRANSPORT_AGE_MS = 60 * 60 * 1_000L
     }
 }

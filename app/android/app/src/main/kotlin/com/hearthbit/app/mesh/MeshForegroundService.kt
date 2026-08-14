@@ -275,13 +275,25 @@ class MeshForegroundService : Service() {
         val state = rescueStore.read()
         if (!state.active) return
         rescuePingInProgress = true
-        currentRescueLocation { location ->
+        val deliver: (Location?) -> Unit = { location ->
             val timestamp = System.currentTimeMillis()
             runCatching {
                 val engine = MeshRuntime.engine(this)
                 engine.ensureStarted()
                 engine.setRadarConsent(enabled = true, durationMs = 10 * 60_000L)
-                engine.sendSos(state.description, location?.latitude, location?.longitude)
+                val latitude = when (state.locationPrecision) {
+                    RescueModeStore.LOCATION_NONE -> null
+                    RescueModeStore.LOCATION_APPROXIMATE ->
+                        location?.latitude?.let(::coarsenEmergencyCoordinate)
+                    else -> location?.latitude
+                }
+                val longitude = when (state.locationPrecision) {
+                    RescueModeStore.LOCATION_NONE -> null
+                    RescueModeStore.LOCATION_APPROXIMATE ->
+                        location?.longitude?.let(::coarsenEmergencyCoordinate)
+                    else -> location?.longitude
+                }
+                engine.sendSos(state.description, latitude, longitude)
             }.onSuccess {
                 rescueStore.recordPing(timestamp)
                 MeshRuntime.eventListener?.invoke(
@@ -298,7 +310,15 @@ class MeshForegroundService : Service() {
             rescuePingInProgress = false
             scheduleRescueMode()
         }
+        if (state.locationPrecision == RescueModeStore.LOCATION_NONE) {
+            deliver(null)
+        } else {
+            currentRescueLocation(deliver)
+        }
     }
+
+    private fun coarsenEmergencyCoordinate(value: Double): Double =
+        kotlin.math.round(value * 1_000.0) / 1_000.0
 
     private fun currentRescueLocation(onResult: (Location?) -> Unit) {
         val fine = ContextCompat.checkSelfPermission(

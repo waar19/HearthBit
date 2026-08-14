@@ -158,6 +158,7 @@ void main() {
   Map<Object?, Object?> snapshot({
     required bool secure,
     required String nickname,
+    bool radarAllowed = true,
   }) {
     return {
       'type': 'snapshot',
@@ -172,9 +173,11 @@ void main() {
           'lastSeen': DateTime.now().millisecondsSinceEpoch,
           'secure': secure,
           'role': 'PHONE_RELAY',
-          'radarAllowedUntil': DateTime.now()
-              .add(const Duration(minutes: 10))
-              .millisecondsSinceEpoch,
+          'hearthbitVerified': true,
+          if (radarAllowed)
+            'radarAllowedUntil': DateTime.now()
+                .add(const Duration(minutes: 10))
+                .millisecondsSinceEpoch,
         },
       ],
     };
@@ -244,6 +247,27 @@ void main() {
       true,
       false,
     ]);
+  });
+
+  testWidgets('explica por qué el radar no está disponible', (tester) async {
+    await pumpHome(tester);
+    platform.emit(
+      snapshot(secure: false, nickname: 'Nearby peer', radarAllowed: false),
+    );
+    await tester.pump();
+    await tester.tap(find.text('Nearby'));
+    await tester.pumpAndSettle();
+
+    final lock = tester.widget<Icon>(find.byIcon(Icons.lock_open));
+    final colors = Theme.of(
+      tester.element(find.byType(HomeScreen)),
+    ).colorScheme;
+    expect(lock.color, colors.outline);
+
+    await tester.tap(find.byIcon(Icons.radar));
+    await tester.pump();
+
+    expect(find.text("Requires this person's consent"), findsOneWidget);
   });
 
   testWidgets('el sheet actualiza peer y canal seguro sin cerrarse', (

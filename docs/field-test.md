@@ -27,6 +27,12 @@ cambiarlo a `PASS`, `FAIL` o `BLOCKED`.
   calibración, pérdida de señal y texto al 200 % sin colapso de layout.
 - `P0-BATTERY-24H`: malla activa 24 horas en Android e iOS, registrando batería,
   memoria, duty-cycle BLE y estabilidad sin contenido ni identificadores.
+- `P0-IOS-MESH-RESTART`: en un iPhone con Bluetooth ya encendido, activar,
+  detener y reactivar la malla varias veces sin alternar Bluetooth; cada ciclo
+  debe abandonar «Iniciando» y llegar a «Malla activa».
+- `P0-INTEROP-OFF`: con BitChat cercano, ocultar su chat público, mostrar su SOS
+  como «red externa», mantenerlo como presencia sin chat y confirmar que
+  interoperabilidad ON restaura el comportamiento compatible.
 - `P0-PANIC-WIPE`: borrar sin matar el proceso y verificar identidad nueva,
   bases, colas, grupos, claves, gateways y diagnósticos vacíos.
 - `P0-OPTICAL-TRUST`: firma válida conocida, firma alterada rechazada, emisor
@@ -55,6 +61,49 @@ reales.
 La interoperabilidad HearthBit↔BitChat con hardware real (pasos 2-5) es una
 prueba manual obligatoria antes de declarar compatibilidad física; los tests
 binarios automatizados no la sustituyen.
+
+### Interoperabilidad desactivada
+
+Estado funcional: `PASS` el 2026-08-14 en S25 con un BitChat cercano. Se
+confirmó chat público oculto con interop OFF, SOS externo etiquetado y
+restauración del comportamiento al activar interop. La captura HCI del paso 6
+y la paridad en iPhone permanecen `PENDING`.
+
+1. En HearthBit, confirme que «Compatibilidad con BitChat» está desactivada.
+2. Mantenga un BitChat oficial a menos de cinco metros y envíe un mensaje
+   público normal. No debe aparecer en el canal HearthBit.
+3. Envíe desde BitChat un payload SOS compatible. Debe aparecer una sola vez
+   con la insignia «RED EXTERNA».
+4. Abra «Cercanos»: BitChat puede aparecer como presencia externa, pero no debe
+   ofrecer chat, archivo, radar ni candado.
+5. Active la compatibilidad, repita el mensaje público y confirme que vuelve a
+   mostrarse. Desactívela de nuevo y confirme el filtro sin reiniciar Bluetooth.
+6. Capture HCI/PacketLogger con contenido saneado: antes de la prueba anónima
+   `HB-LINK1`, un enlace BitChat normal no debe recibir `ANNOUNCE`,
+   `HBT_CAPABILITY` ni capacidades locales. El anuncio previo a un SOS público
+   es la excepción esperada.
+
+**PASS:** se cumplen los seis pasos en cinco ciclos consecutivos.
+**FAIL:** aparece chat BitChat con interop OFF, falta la etiqueta del SOS, se
+habilita una acción de chat externa o se filtra identidad antes de probar el
+enlace.
+
+### Reactivación de la malla en iPhone
+
+Estado: `PENDING` hasta disponer de Mac con Xcode y un iPhone físico.
+
+1. Abra HearthBit con Bluetooth encendido y active la malla; espere «Malla
+   activa».
+2. Pulse «DETENER», espere el estado detenido y vuelva a activar sin apagar
+   Bluetooth ni cerrar la app.
+3. Repita el ciclo cinco veces, incluyendo una pasada después de enviar la app
+   a segundo plano y recuperarla.
+4. Registre el tiempo desde «Iniciando» hasta «Malla activa» y los estados de
+   `CBCentralManager` y `CBPeripheralManager`, sin guardar identificadores.
+
+**PASS:** los cinco ciclos llegan a «Malla activa» sin alternar Bluetooth.
+**FAIL:** un ciclo queda en «Iniciando», necesita alternar Bluetooth o duplica
+servicios/anuncios.
 
 ## D1 — guion reproducible pendiente de ejecución física
 

@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart' as sqlcipher;
+
+import 'secure_storage_config.dart';
 
 typedef DatabaseConfigure = Future<void> Function(sqlcipher.Database database);
 typedef DatabaseCreate =
@@ -24,12 +26,7 @@ class SecureDatabaseKeyStore {
   SecureDatabaseKeyStore._();
 
   static const keyName = 'hearthbit.database.master.v1';
-  static const _storage = FlutterSecureStorage(
-    iOptions: IOSOptions(
-      accessibility: KeychainAccessibility.first_unlock_this_device,
-      synchronizable: false,
-    ),
-  );
+  static const _storage = hearthBitSecureStorage;
 
   static Future<String>? _cachedKey;
 
@@ -110,6 +107,11 @@ class SecureDatabase {
     String password,
   ) async {
     final source = File(databasePath);
+    final recoveredEncrypted = await _recoverInterruptedMigration(
+      databasePath,
+      (path) => _verify(path, password),
+    );
+    if (recoveredEncrypted) return;
     if (!await source.exists()) return;
 
     Object? encryptedOpenError;
@@ -125,6 +127,7 @@ class SecureDatabase {
       } finally {
         await encrypted.close();
       }
+      await _cleanupConfirmedEncrypted(databasePath);
       return;
     } catch (error) {
       encryptedOpenError = error;
@@ -143,7 +146,7 @@ class SecureDatabase {
     final temporaryPath = '$databasePath.encrypted.tmp';
     final backupPath = '$databasePath.plaintext.backup';
     await _deleteIfPresent(File(temporaryPath));
-    await _deleteIfPresent(File(backupPath));
+    await _deleteSidecars(temporaryPath);
 
     sqlcipher.Database? plaintext;
     try {
@@ -168,23 +171,87 @@ class SecureDatabase {
       await plaintext.close();
       plaintext = null;
 
+      // El checkpoint ya incorporó el WAL a la base. Estos archivos conservan
+      // páginas en claro y no deben sobrevivir al cambio de nombre.
+      await _deleteSidecars(databasePath);
+      await _deleteIfPresent(File(backupPath));
+      await _deleteSidecars(backupPath);
       await source.rename(backupPath);
       await File(temporaryPath).rename(databasePath);
       try {
         await _verify(databasePath, password);
       } catch (_) {
         await _deleteIfPresent(File(databasePath));
+        await _deleteSidecars(databasePath);
         await File(backupPath).rename(databasePath);
         rethrow;
       }
-      await _deleteIfPresent(File(backupPath));
-      await _deleteIfPresent(File('$backupPath-wal'));
-      await _deleteIfPresent(File('$backupPath-shm'));
+      await _cleanupConfirmedEncrypted(databasePath);
     } catch (_) {
       await plaintext?.close();
       await _deleteIfPresent(File(temporaryPath));
+      await _deleteSidecars(temporaryPath);
       rethrow;
     }
+  }
+
+  /// Recupera el punto atómico `backup -> temporal -> base` tras un cierre.
+  ///
+  /// Devuelve true si dejó una base cifrada verificada en [databasePath].
+  static Future<bool> _recoverInterruptedMigration(
+    String databasePath,
+    Future<void> Function(String path) verify,
+  ) async {
+    final source = File(databasePath);
+    final temporaryPath = '$databasePath.encrypted.tmp';
+    final backupPath = '$databasePath.plaintext.backup';
+    final temporary = File(temporaryPath);
+    final backup = File(backupPath);
+    if (await source.exists()) return false;
+
+    if (await temporary.exists()) {
+      try {
+        await verify(temporaryPath);
+        await temporary.rename(databasePath);
+        await _cleanupConfirmedEncrypted(databasePath);
+        return true;
+      } catch (_) {
+        await _deleteIfPresent(temporary);
+        await _deleteSidecars(temporaryPath);
+      }
+    }
+
+    if (await backup.exists()) {
+      await backup.rename(databasePath);
+      return false;
+    }
+    return false;
+  }
+
+  @visibleForTesting
+  static Future<bool> recoverInterruptedMigrationForTest({
+    required String databasePath,
+    required Future<void> Function(String path) verify,
+  }) => _recoverInterruptedMigration(databasePath, verify);
+
+  @visibleForTesting
+  static Future<void> cleanupConfirmedEncryptedForTest(String databasePath) =>
+      _cleanupConfirmedEncrypted(databasePath);
+
+  static Future<void> _cleanupConfirmedEncrypted(String databasePath) async {
+    final backupPath = '$databasePath.plaintext.backup';
+    final temporaryPath = '$databasePath.encrypted.tmp';
+    await _deleteIfPresent(File(backupPath));
+    await _deleteSidecars(backupPath);
+    await _deleteIfPresent(File(temporaryPath));
+    await _deleteSidecars(temporaryPath);
+    await _deleteSidecars(databasePath);
+  }
+
+  static Future<void> _deleteSidecars(String path) async {
+    await _deleteIfPresent(File('$path-wal'));
+    await _deleteIfPresent(File('$path-shm'));
+    await _deleteIfPresent(File('$path-journal'));
   }
 
   static Future<void> _verify(String databasePath, String password) async {

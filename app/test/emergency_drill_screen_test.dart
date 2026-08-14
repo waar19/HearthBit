@@ -104,10 +104,15 @@ class _EmergencyActionController extends MeshController {
 
   final _DrillPlatform testPlatform;
   var emergencyActivations = 0;
+  SosLocationPrecision? lastLocationPrecision;
 
   @override
-  Future<void> activateEmergency({String? description}) async {
+  Future<void> activateEmergency({
+    String? description,
+    SosLocationPrecision locationPrecision = SosLocationPrecision.approximate,
+  }) async {
     emergencyActivations += 1;
+    lastLocationPrecision = locationPrecision;
     await testPlatform.sendSos(content: description ?? 'real emergency');
   }
 }
@@ -204,13 +209,45 @@ void main() {
       find.ancestor(of: holdButton, matching: find.byType(Semantics)).first,
     );
     semantics.properties.onLongPress!();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(find.text('Privacidad del SOS público'), findsOneWidget);
+    await tester.tap(find.text('ENVIAR SOS PÚBLICO'));
+    await tester.pumpAndSettle();
 
     expect(platform.sosCalls, 1);
     expect(mesh.emergencyActivations, 1);
+    expect(mesh.lastLocationPrecision, SosLocationPrecision.approximate);
     expect(platform.publicMessages, isEmpty);
+  });
+
+  testWidgets('etiqueta los SOS que llegan desde una red externa', (
+    tester,
+  ) async {
+    await pumpScreen(tester);
+    platform.eventsController.add({
+      'type': 'message',
+      'message': {
+        'id': 'external-sos',
+        'sender': 'BitChat',
+        'content': 'SOS|Ayuda||',
+        'senderPeerId': 'external-peer',
+        'private': false,
+        'mine': false,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'channel': 'sos',
+        'external': true,
+      },
+    });
+    await tester.pumpAndSettle();
+
+    expect(
+      mesh.messages.any((message) => message.id == 'external-sos'),
+      isTrue,
+    );
+    await tester.fling(find.byType(ListView), const Offset(0, -2000), 1000);
+    await tester.pumpAndSettle();
+    final badge = find.text('RED EXTERNA');
+    expect(badge, findsOneWidget);
   });
 
   testWidgets('la acción accesible activa el SOS sin gesto mantenido', (
@@ -223,7 +260,9 @@ void main() {
     );
 
     semantics.properties.onTap!();
-    await tester.pump();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ENVIAR SOS PÚBLICO'));
+    await tester.pumpAndSettle();
 
     expect(mesh.emergencyActivations, 1);
     expect(platform.sosCalls, 1);

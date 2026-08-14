@@ -46,7 +46,11 @@ def _core() -> tuple[RelayCore, PacketStore]:
         max_packets=100,
         max_bytes=100_000,
     )
-    config = replace(RelayConfig(), store=store_config)
+    config = replace(
+        RelayConfig(),
+        store=store_config,
+        trust_store_path=":memory:",
+    )
     store = PacketStore(store_config)
     return RelayCore(config, store), store
 

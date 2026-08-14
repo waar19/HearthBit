@@ -17,11 +17,11 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from .protocol import (
-    FLAG_RSR,
     TYPE_ANNOUNCE,
     TYPE_NODE_CAPABILITY,
     Packet,
     PacketError,
+    canonical_packet_bytes,
     decode_packet,
     encode_packet,
 )
@@ -295,21 +295,6 @@ def decode_announcement(payload: bytes) -> Announcement | None:
         noise_public_key,
         signing_public_key,
         is_infrastructure,
-    )
-
-
-def canonical_packet_bytes(packet: Packet) -> bytes:
-    return encode_packet(
-        version=packet.version,
-        message_type=packet.message_type,
-        ttl=0,
-        timestamp_ms=packet.timestamp_ms,
-        sender_id=packet.sender_id,
-        recipient_id=packet.recipient_id,
-        route=packet.route,
-        payload=packet.payload,
-        extra_flags=packet.flags & ~FLAG_RSR,
-        pad=True,
     )
 
 

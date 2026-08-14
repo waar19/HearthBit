@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 from dataclasses import replace
@@ -6,7 +7,8 @@ import pytest
 
 from hearthbit_relay.config import MqttConfig
 from hearthbit_relay.identity import RelayIdentity
-from hearthbit_relay.mqtt import BrokerMessage, MqttBridge
+from hearthbit_relay.mqtt import BrokerMessage, MqttBridge, PahoMqttBroker
+from hearthbit_relay.public_bridge import BoundedIngressQueue
 from hearthbit_relay.protocol import (
     TYPE_COURIER_ENVELOPE,
     TYPE_HBT_CAPABILITY,
@@ -256,14 +258,16 @@ async def test_import_validates_signature_replay_retained_and_loop(tmp_path) -> 
         target_broker,
         material=b"bridge-target",
         clock=lambda: NOW_MS,
+        config=mqtt_config(bridge_allowlist=frozenset({source.bridge_id})),
     )
-    await target_broker.start(target._receive)
+    await target.start()
 
     await target_broker.deliver(payload, retained=True)
     assert target_core.injected == []
 
     await target_broker.deliver(payload)
     await target_broker.deliver(payload)
+    await asyncio.sleep(0)
     assert target_core.injected == [
         (target.id, frame, (source.bridge_id,))
     ]
@@ -274,6 +278,38 @@ async def test_import_validates_signature_replay_retained_and_loop(tmp_path) -> 
         json.dumps(looped, separators=(",", ":")).encode()
     )
     assert len(target_core.injected) == 1
+    await target.stop()
+
+
+async def test_import_is_denied_when_mqtt_bridge_allowlist_is_empty(
+    tmp_path,
+) -> None:
+    identity = RelayIdentity.load_or_create(tmp_path / "identity.json")
+    source_core = FakeCore()
+    source_broker = FakeBroker()
+    source = bridge(
+        source_core,
+        source_broker,
+        material=b"bridge-source",
+        clock=lambda: NOW_MS,
+    )
+    await source.send(announcement(identity))
+    await source.send(signed_packet(identity, payload=b"mensaje"))
+
+    target_core = FakeCore()
+    target_broker = FakeBroker()
+    target = bridge(
+        target_core,
+        target_broker,
+        material=b"bridge-target",
+        clock=lambda: NOW_MS,
+    )
+    await target.start()
+    await target_broker.deliver(source_broker.published[0]["payload"])
+    await asyncio.sleep(0)
+
+    assert target_core.injected == []
+    await target.stop()
 
 
 async def test_import_rejects_invalid_signature_and_expired_envelope(tmp_path) -> None:
@@ -304,9 +340,11 @@ async def test_import_rejects_invalid_signature_and_expired_envelope(tmp_path) -
         target_broker,
         material=b"bridge-target",
         clock=lambda: NOW_MS,
+        config=mqtt_config(bridge_allowlist=frozenset({source.bridge_id})),
     )
-    await target_broker.start(target._receive)
+    await target.start()
     await target_broker.deliver(json.dumps(document).encode())
+    await asyncio.sleep(0)
     assert target_core.injected == []
 
     await source.send(signed_packet(identity, payload=b"SOS|tarde||"))
@@ -318,10 +356,13 @@ async def test_import_rejects_invalid_signature_and_expired_envelope(tmp_path) -
         late_broker,
         material=b"bridge-late",
         clock=lambda: NOW_MS + 601_000,
+        config=mqtt_config(bridge_allowlist=frozenset({source.bridge_id})),
     )
-    await late_broker.start(late._receive)
+    await late.start()
     await late_broker.deliver(expired_payload)
     assert late_core.injected == []
+    await target.stop()
+    await late.stop()
 
 
 async def test_message_without_recent_valid_announcement_is_not_exported(
@@ -341,6 +382,54 @@ async def test_message_without_recent_valid_announcement_is_not_exported(
     await mqtt.send(signed_packet(identity, payload=b"announce viejo"))
 
     assert broker.published == []
+
+
+async def test_bounded_ingress_queue_prioritizes_emergency() -> None:
+    queue = BoundedIngressQueue(2)
+    delivered: list[bytes] = []
+
+    async def handler(frame: bytes, path: tuple[bytes, ...]) -> object:
+        del path
+        delivered.append(frame)
+        return object()
+
+    assert queue.enqueue(b"normal-1", (), emergency=False)
+    assert queue.enqueue(b"normal-2", (), emergency=False)
+    assert queue.enqueue(b"SOS", (), emergency=True)
+    assert not queue.enqueue(b"normal-3", (), emergency=False)
+    queue.start(handler)
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    await queue.stop()
+
+    assert delivered == [b"SOS", b"normal-2"]
+
+
+async def test_mqtt_resubscribes_after_every_successful_connect() -> None:
+    class Reason:
+        is_failure = False
+
+    class Client:
+        def __init__(self) -> None:
+            self.subscriptions: list[tuple[str, int]] = []
+
+        def subscribe(self, topic: str, qos: int):
+            self.subscriptions.append((topic, qos))
+            return (0, 1)
+
+    broker = PahoMqttBroker(mqtt_config())
+    broker._loop = asyncio.get_running_loop()
+    broker._connected = broker._loop.create_future()
+    client = Client()
+
+    broker._on_connect(client, None, None, Reason(), None)
+    await asyncio.sleep(0)
+    broker._on_connect(client, None, None, Reason(), None)
+
+    assert client.subscriptions == [
+        (broker.config.topic, 1),
+        (broker.config.topic, 1),
+    ]
 
 
 @pytest.mark.parametrize("field", ["username", "password"])

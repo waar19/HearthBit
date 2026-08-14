@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -288,7 +289,7 @@ class AcousticSonarStreamAnalyzer {
     );
   }
 
-  List<AcousticDetection> finish({int maximumDetections = 2}) {
+  Float32List _takeOrderedSamples() {
     final ordered = Float32List(_sampleCount);
     final start = _sampleCount == _samples.length ? _writeIndex : 0;
     for (var index = 0; index < _sampleCount; index++) {
@@ -298,12 +299,25 @@ class AcousticSonarStreamAnalyzer {
       _peakBufferedBytes,
       _samples.lengthInBytes + ordered.lengthInBytes,
     );
-    final detections = AcousticSonarDsp.detectChirps(
-      ordered,
+    reset(clearPeak: false);
+    return ordered;
+  }
+
+  List<AcousticDetection> finish({int maximumDetections = 2}) {
+    return AcousticSonarDsp.detectChirps(
+      _takeOrderedSamples(),
       maximumDetections: maximumDetections,
     );
-    reset(clearPeak: false);
-    return detections;
+  }
+
+  Future<List<AcousticDetection>> finishInIsolate({int maximumDetections = 2}) {
+    final samples = _takeOrderedSamples();
+    return Isolate.run(
+      () => AcousticSonarDsp.detectChirps(
+        samples,
+        maximumDetections: maximumDetections,
+      ),
+    );
   }
 
   void reset({bool clearPeak = true}) {
@@ -379,7 +393,7 @@ class AcousticSonarCapture {
     await _recorder.stop();
     await _subscription?.cancel();
     _subscription = null;
-    return _analyzer.finish();
+    return _analyzer.finishInIsolate();
   }
 
   Future<void> cancel() async {

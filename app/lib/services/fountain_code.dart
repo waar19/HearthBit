@@ -1,3 +1,4 @@
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -102,14 +103,22 @@ void _xorInto(Uint8List target, Uint8List source) {
   }
 }
 
+int _validatedEncoderChunkCount(Uint8List data, int chunkSize) {
+  if (data.isEmpty) throw ArgumentError.value(data.length, 'data');
+  if (chunkSize <= 0 || chunkSize > 4096) {
+    throw ArgumentError.value(chunkSize, 'chunkSize');
+  }
+  final count = (data.length + chunkSize - 1) ~/ chunkSize;
+  if (count > 262144) throw ArgumentError.value(count, 'chunkCount');
+  return count;
+}
+
 class FountainEncoder {
   FountainEncoder({
     required Uint8List data,
     required this.chunkSize,
     required this.seed,
-  }) : chunkCount = data.isEmpty
-           ? 0
-           : (data.length + chunkSize - 1) ~/ chunkSize {
+  }) : chunkCount = _validatedEncoderChunkCount(data, chunkSize) {
     _soliton = RobustSoliton(chunkCount);
     _chunks = List.generate(chunkCount, (index) {
       final chunk = Uint8List(chunkSize);
@@ -126,12 +135,45 @@ class FountainEncoder {
   late final RobustSoliton _soliton;
   late final List<Uint8List> _chunks;
 
+  static Future<FountainEncoder> createInIsolate({
+    required Uint8List data,
+    required int chunkSize,
+    required int seed,
+  }) {
+    final transferable = TransferableTypedData.fromList([data]);
+    return Isolate.run(
+      () => FountainEncoder(
+        data: transferable.materialize().asUint8List(),
+        chunkSize: chunkSize,
+        seed: seed,
+      ),
+    );
+  }
+
   Uint8List encodeSymbol(int symbolIndex) {
     final payload = Uint8List(chunkSize);
     for (final neighbor in neighborsOf(symbolIndex)) {
       _xorInto(payload, _chunks[neighbor]);
     }
     return payload;
+  }
+
+  /// Precalcula un lote fuera del isolate UI. El grafo transferido contiene
+  /// únicamente enteros, listas Dart y TypedData.
+  Future<List<Uint8List>> encodeSymbolsInIsolate({
+    required int startIndex,
+    required int count,
+  }) {
+    if (startIndex < 0 || count <= 0 || count > 64) {
+      throw ArgumentError('Invalid fountain symbol batch');
+    }
+    return Isolate.run(
+      () => List<Uint8List>.generate(
+        count,
+        (offset) => encodeSymbol(startIndex + offset),
+        growable: false,
+      ),
+    );
   }
 
   List<int> neighborsOf(int symbolIndex) => symbolNeighbors(
@@ -150,12 +192,29 @@ class _PendingSymbol {
 }
 
 class FountainDecoder {
+  static const int maximumTrackedSymbols = 65536;
+  static const int maximumPendingSymbols = 8192;
+
   FountainDecoder({
     required this.chunkCount,
     required this.chunkSize,
     required this.seed,
-  }) : _soliton = RobustSoliton(chunkCount),
-       _chunks = List<Uint8List?>.filled(chunkCount, null);
+  }) : _soliton = RobustSoliton(_validateChunkCount(chunkCount)),
+       _chunks = List<Uint8List?>.filled(
+         _validateChunkCount(chunkCount),
+         null,
+       ) {
+    if (chunkSize <= 0 || chunkSize > 4096) {
+      throw ArgumentError.value(chunkSize, 'chunkSize');
+    }
+  }
+
+  static int _validateChunkCount(int value) {
+    if (value <= 0 || value > 262144) {
+      throw ArgumentError.value(value, 'chunkCount');
+    }
+    return value;
+  }
 
   final int chunkCount;
   final int chunkSize;
@@ -172,9 +231,27 @@ class FountainDecoder {
 
   bool get isComplete => _decodedCount == chunkCount;
 
+  static Future<FountainDecoder> createInIsolate({
+    required int chunkCount,
+    required int chunkSize,
+    required int seed,
+  }) => Isolate.run(
+    () => FountainDecoder(
+      chunkCount: chunkCount,
+      chunkSize: chunkSize,
+      seed: seed,
+    ),
+  );
+
   /// Procesa un símbolo; devuelve true si aportó información nueva.
   bool addSymbol(int symbolIndex, Uint8List payload) {
-    if (isComplete || payload.length != chunkSize) return false;
+    if (isComplete ||
+        symbolIndex < 0 ||
+        symbolIndex > 0x7fffffff ||
+        payload.length != chunkSize ||
+        _seenSymbols.length >= maximumTrackedSymbols) {
+      return false;
+    }
     if (!_seenSymbols.add(symbolIndex)) return false;
     symbolsReceived += 1;
 
@@ -198,8 +275,26 @@ class FountainDecoder {
       _resolve(remaining.first, reduced);
       return true;
     }
+    if (_pending.length >= maximumPendingSymbols) return false;
     _pending.add(_PendingSymbol(remaining, reduced));
     return true;
+  }
+
+  /// Aplica un lote en un isolate y devuelve la copia ya mutada del decoder.
+  static Future<FountainDecoder> addSymbolsInIsolate(
+    FountainDecoder decoder,
+    List<(int, Uint8List)> symbols,
+  ) {
+    if (symbols.length > 256) {
+      throw ArgumentError.value(symbols.length, 'symbols');
+    }
+    return Isolate.run(() {
+      for (final (index, payload) in symbols) {
+        decoder.addSymbol(index, payload);
+        if (decoder.isComplete) break;
+      }
+      return decoder;
+    });
   }
 
   /// Peeling: resolver un chunk puede degradar símbolos pendientes a grado 1
@@ -241,4 +336,7 @@ class FountainDecoder {
     }
     return output;
   }
+
+  Future<Uint8List> assembleInIsolate(int fileSize) =>
+      Isolate.run(() => assemble(fileSize));
 }

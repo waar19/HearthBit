@@ -15,6 +15,7 @@ import '../l10n/l10n.dart';
 import '../services/fountain_code.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/optical_protocol.dart';
+import '../services/transfer_crypto.dart';
 import '../services/transfer_protocol.dart';
 
 /// Receptor óptico: escanea la secuencia de QR y reconstruye el archivo con
@@ -46,6 +47,8 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
   String? _error;
   bool _finishing = false;
   bool _approvingHeader = false;
+  bool _decoding = false;
+  final List<(int, Uint8List)> _pendingSymbols = [];
   _OpticalTrust? _trust;
 
   void _onDetect(BarcodeCapture capture) {
@@ -107,17 +110,20 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
       trust = header.isLegacy ? _OpticalTrust.legacy : _OpticalTrust.unverified;
       await _scanner.start();
     }
+    final decoder = await FountainDecoder.createInIsolate(
+      chunkCount: header.chunkCount,
+      chunkSize: header.chunkSize,
+      seed: header.seed,
+    );
+    if (!mounted) return;
     // Cabecera nueva: el emisor reinició la sesión (o es otra transferencia).
     setState(() {
       _header = header;
       _trust = trust;
-      _decoder = FountainDecoder(
-        chunkCount: header.chunkCount,
-        chunkSize: header.chunkSize,
-        seed: header.seed,
-      );
+      _decoder = decoder;
       _error = null;
       _approvingHeader = false;
+      _pendingSymbols.clear();
     });
   }
 
@@ -176,22 +182,50 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
 
   void _onData(OpticalDataSymbol symbol) {
     final header = _header;
-    final decoder = _decoder;
-    if (header == null || decoder == null) return;
+    if (header == null || _decoder == null) return;
     if (!_sameId(header.transferId, symbol.transferId)) return;
-    final progressed = decoder.addSymbol(symbol.symbolIndex, symbol.payload);
-    if (progressed) setState(() {});
-    if (decoder.isComplete) {
-      _finishing = true;
-      unawaited(_finish(header, decoder));
+    if (_pendingSymbols.length < 256) {
+      _pendingSymbols.add((
+        symbol.symbolIndex,
+        Uint8List.fromList(symbol.payload),
+      ));
+    }
+    unawaited(_drainSymbols());
+  }
+
+  Future<void> _drainSymbols() async {
+    if (_decoding || _finishing) return;
+    _decoding = true;
+    try {
+      while (_pendingSymbols.isNotEmpty && !_finishing) {
+        final header = _header;
+        final decoder = _decoder;
+        if (header == null || decoder == null) return;
+        final take = _pendingSymbols.length.clamp(0, 32);
+        final batch = _pendingSymbols.sublist(0, take);
+        _pendingSymbols.removeRange(0, take);
+        final updated = await FountainDecoder.addSymbolsInIsolate(
+          decoder,
+          batch,
+        );
+        if (!mounted || !identical(decoder, _decoder)) return;
+        _decoder = updated;
+        setState(() {});
+        if (updated.isComplete) {
+          _finishing = true;
+          await _finish(header, updated);
+        }
+      }
+    } finally {
+      _decoding = false;
     }
   }
 
   Future<void> _finish(OpticalHeader header, FountainDecoder decoder) async {
     await _scanner.stop();
     try {
-      final data = decoder.assemble(header.fileSize);
-      final digest = Uint8List.fromList(sha256.convert(data).bytes);
+      final data = await decoder.assembleInIsolate(header.fileSize);
+      final digest = await TransferCrypto.hashBytes(data);
       if (!_sameId(digest, header.sha256)) {
         throw StateError(currentL10n.opticalShaFailed);
       }

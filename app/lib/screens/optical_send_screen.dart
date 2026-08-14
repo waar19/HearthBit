@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:qr/qr.dart';
 
@@ -11,6 +10,7 @@ import '../l10n/l10n.dart';
 import '../services/fountain_code.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/optical_protocol.dart';
+import '../services/transfer_crypto.dart';
 import '../services/transfer_protocol.dart';
 
 /// Emisor óptico: muestra una secuencia de QR con símbolos fountain.
@@ -67,6 +67,9 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
   Timer? _timer;
   int _frameCounter = 0;
   int _symbolIndex = 0;
+  int _nextEncodedIndex = 0;
+  final List<Uint8List> _encodedSymbols = [];
+  bool _encodingBatch = false;
   double _fps = 8;
   _Density _density = _Density.medium;
   String? _currentQr;
@@ -83,15 +86,25 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
 
   Future<void> _prepare() async {
     try {
-      final bytes = await File(widget.filePath).readAsBytes();
-      if (bytes.isEmpty) {
+      final file = File(widget.filePath);
+      final fileSize = await file.length();
+      if (fileSize <= 0) {
         setState(() => _error = currentL10n.opticalFileEmpty);
         return;
       }
+      if (fileSize > OpticalProtocol.maximumFileSize) {
+        throw StateError(
+          'Optical file exceeds ${OpticalProtocol.maximumFileSize} bytes',
+        );
+      }
+      final digestFuture = TransferCrypto.hashFileBytes(file);
+      final bytes = await file.readAsBytes();
+      final digest = await digestFuture;
+      if (!mounted) return;
       final random = Random.secure();
       setState(() {
         _fileBytes = bytes;
-        _sha256 = Uint8List.fromList(sha256.convert(bytes).bytes);
+        _sha256 = digest;
         _transferId = Uint8List.fromList(
           List.generate(16, (_) => random.nextInt(256)),
         );
@@ -115,11 +128,12 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
       List.generate(16, (_) => random.nextInt(256)),
     );
     _seed = random.nextInt(0xffffffff);
-    _encoder = FountainEncoder(
+    _encoder = await FountainEncoder.createInIsolate(
       data: bytes,
       chunkSize: _density.chunkSize,
       seed: _seed,
     );
+    if (!mounted || generation != _encoderGeneration) return;
     final unsignedHeader = OpticalHeader(
       transferId: _transferId,
       seed: _seed,
@@ -159,7 +173,28 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
     );
     _frameCounter = 0;
     _symbolIndex = 0;
+    _nextEncodedIndex = 0;
+    _encodedSymbols.clear();
+    await _fillSymbolBatch();
     _restartTimer();
+  }
+
+  Future<void> _fillSymbolBatch() async {
+    final encoder = _encoder;
+    if (encoder == null || _encodingBatch || _confirmed) return;
+    _encodingBatch = true;
+    final start = _nextEncodedIndex;
+    try {
+      final symbols = await encoder.encodeSymbolsInIsolate(
+        startIndex: start,
+        count: 12,
+      );
+      if (!mounted || !identical(encoder, _encoder)) return;
+      _encodedSymbols.addAll(symbols);
+      _nextEncodedIndex += symbols.length;
+    } finally {
+      _encodingBatch = false;
+    }
   }
 
   void _restartTimer() {
@@ -178,12 +213,17 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
     if (_frameCounter % _headerEvery == 0) {
       content = _headerContent!;
     } else {
+      if (_encodedSymbols.isEmpty) {
+        unawaited(_fillSymbolBatch());
+        return;
+      }
       content = OpticalProtocol.encodeData(
         transferId: _transferId,
         symbolIndex: _symbolIndex,
-        payload: encoder.encodeSymbol(_symbolIndex),
+        payload: _encodedSymbols.removeAt(0),
       );
       _symbolIndex += 1;
+      if (_encodedSymbols.length < 4) unawaited(_fillSymbolBatch());
     }
     _frameCounter += 1;
     setState(() => _currentQr = content);
