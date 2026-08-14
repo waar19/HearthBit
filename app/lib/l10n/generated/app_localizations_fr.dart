@@ -1454,4 +1454,57 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get drillSendRealSos => 'TERMINER L’EXERCICE ET ENVOYER SOS';
+
+  @override
+  String get emergencyContactsOpen => 'Numéros et liens officiels d’urgence';
+
+  @override
+  String get emergencyContactsTitle => 'Annuaire d’urgence';
+
+  @override
+  String get emergencyContactsSafetyNotice =>
+      'Les numéros peuvent fonctionner sans données mobiles, mais nécessitent une couverture vocale. Les sites officiels nécessitent Internet.';
+
+  @override
+  String get emergencyContactsCountry => 'Pays ou territoire';
+
+  @override
+  String emergencyContactsAutomatic(String country) {
+    return 'Automatique ($country)';
+  }
+
+  @override
+  String get emergencyContactsNumbers => 'Numéros d’urgence';
+
+  @override
+  String get emergencyContactsOrganizations => 'Organismes officiels';
+
+  @override
+  String get emergencyContactsCall => 'APPELER';
+
+  @override
+  String get emergencyContactsWebsite => 'SITE WEB';
+
+  @override
+  String get emergencyContactsSources => 'Sources et vérification';
+
+  @override
+  String emergencyContactsReviewed(String date) {
+    return 'Vérifié le $date';
+  }
+
+  @override
+  String get emergencyContactsFallback =>
+      'Cette traduction n’était pas disponible ; l’annuaire anglais vérifié est affiché.';
+
+  @override
+  String get emergencyContactsLoadError =>
+      'Impossible de charger l’annuaire d’urgence hors ligne.';
+
+  @override
+  String get emergencyContactsOpenError =>
+      'Ce téléphone n’a pas pu ouvrir ce numéro ou ce lien.';
+
+  @override
+  String get emergencyContactsRetry => 'RÉESSAYER';
 }

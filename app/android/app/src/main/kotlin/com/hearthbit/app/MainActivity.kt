@@ -14,6 +14,7 @@ import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
@@ -87,6 +88,14 @@ class MainActivity : FlutterActivity() {
                         ),
                     ),
                 )
+                "getSimCountry" -> {
+                    val country = getSystemService(TelephonyManager::class.java)
+                        ?.networkCountryIso
+                        ?.trim()
+                        ?.uppercase()
+                        ?.takeIf { it.length == 2 }
+                    result.success(country)
+                }
                 "getInstalledApkForShare" -> prepareInstalledApk(result)
                 "requestPermissions" -> requestMeshPermissions(result)
                 "requestFamilyNotificationPermission" ->

@@ -1455,4 +1455,58 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get drillSendRealSos => 'FINALIZAR SIMULACRO Y ENVIAR SOS';
+
+  @override
+  String get emergencyContactsOpen =>
+      'Números y enlaces oficiales de emergencia';
+
+  @override
+  String get emergencyContactsTitle => 'Directorio de emergencias';
+
+  @override
+  String get emergencyContactsSafetyNotice =>
+      'Los números pueden funcionar sin datos móviles, pero necesitan cobertura celular de voz. Los sitios oficiales requieren internet.';
+
+  @override
+  String get emergencyContactsCountry => 'País o territorio';
+
+  @override
+  String emergencyContactsAutomatic(String country) {
+    return 'Automático ($country)';
+  }
+
+  @override
+  String get emergencyContactsNumbers => 'Números de emergencia';
+
+  @override
+  String get emergencyContactsOrganizations => 'Organismos oficiales';
+
+  @override
+  String get emergencyContactsCall => 'LLAMAR';
+
+  @override
+  String get emergencyContactsWebsite => 'SITIO WEB';
+
+  @override
+  String get emergencyContactsSources => 'Fuentes y revisión';
+
+  @override
+  String emergencyContactsReviewed(String date) {
+    return 'Revisado el $date';
+  }
+
+  @override
+  String get emergencyContactsFallback =>
+      'Esta traducción no estaba disponible; se muestra el directorio verificado en inglés.';
+
+  @override
+  String get emergencyContactsLoadError =>
+      'No se pudo cargar el directorio de emergencias sin conexión.';
+
+  @override
+  String get emergencyContactsOpenError =>
+      'El teléfono no pudo abrir ese número o enlace.';
+
+  @override
+  String get emergencyContactsRetry => 'REINTENTAR';
 }

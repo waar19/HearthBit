@@ -436,5 +436,20 @@
   "drillCheckInBody": "Ces mises à jour restent dans le canal d’exercice et sont exclues des alertes, cartes et exports de secours.",
   "drillExitForRealTitle": "Envoyer un vrai SOS ?",
   "drillExitForRealBody": "Cela mettra fin à l’exercice et activera une vraie demande de secours avec partage de position et SOS répétés.",
-  "drillSendRealSos": "TERMINER L’EXERCICE ET ENVOYER SOS"
+  "drillSendRealSos": "TERMINER L’EXERCICE ET ENVOYER SOS",
+  "emergencyContactsOpen": "Numéros et liens officiels d’urgence",
+  "emergencyContactsTitle": "Annuaire d’urgence",
+  "emergencyContactsSafetyNotice": "Les numéros peuvent fonctionner sans données mobiles, mais nécessitent une couverture vocale. Les sites officiels nécessitent Internet.",
+  "emergencyContactsCountry": "Pays ou territoire",
+  "emergencyContactsAutomatic": "Automatique ({country})",
+  "emergencyContactsNumbers": "Numéros d’urgence",
+  "emergencyContactsOrganizations": "Organismes officiels",
+  "emergencyContactsCall": "APPELER",
+  "emergencyContactsWebsite": "SITE WEB",
+  "emergencyContactsSources": "Sources et vérification",
+  "emergencyContactsReviewed": "Vérifié le {date}",
+  "emergencyContactsFallback": "Cette traduction n’était pas disponible ; l’annuaire anglais vérifié est affiché.",
+  "emergencyContactsLoadError": "Impossible de charger l’annuaire d’urgence hors ligne.",
+  "emergencyContactsOpenError": "Ce téléphone n’a pas pu ouvrir ce numéro ou ce lien.",
+  "emergencyContactsRetry": "RÉESSAYER"
 }

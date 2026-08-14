@@ -1446,4 +1446,57 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get drillSendRealSos => 'END DRILL AND SEND SOS';
+
+  @override
+  String get emergencyContactsOpen => 'Emergency numbers and official links';
+
+  @override
+  String get emergencyContactsTitle => 'Emergency directory';
+
+  @override
+  String get emergencyContactsSafetyNotice =>
+      'Call numbers may work without mobile data, but they still require cellular voice coverage. Official websites require internet.';
+
+  @override
+  String get emergencyContactsCountry => 'Country or territory';
+
+  @override
+  String emergencyContactsAutomatic(String country) {
+    return 'Automatic ($country)';
+  }
+
+  @override
+  String get emergencyContactsNumbers => 'Emergency numbers';
+
+  @override
+  String get emergencyContactsOrganizations => 'Official organizations';
+
+  @override
+  String get emergencyContactsCall => 'CALL';
+
+  @override
+  String get emergencyContactsWebsite => 'WEBSITE';
+
+  @override
+  String get emergencyContactsSources => 'Sources and review';
+
+  @override
+  String emergencyContactsReviewed(String date) {
+    return 'Reviewed $date';
+  }
+
+  @override
+  String get emergencyContactsFallback =>
+      'This translation was unavailable, so the verified English directory is shown.';
+
+  @override
+  String get emergencyContactsLoadError =>
+      'The offline emergency directory could not be loaded.';
+
+  @override
+  String get emergencyContactsOpenError =>
+      'This phone could not open that number or link.';
+
+  @override
+  String get emergencyContactsRetry => 'RETRY';
 }

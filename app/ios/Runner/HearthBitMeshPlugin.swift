@@ -281,6 +281,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         ])
       case "getInstalledApkForShare":
         result(["status": "unsupported"])
+      case "getSimCountry":
+        // Carrier-country APIs are deprecated on iOS. Flutter falls back to
+        // the system region or a country explicitly selected by the user.
+        result(nil)
       case "requestPermissions":
         result(true)
       case "requestFamilyNotificationPermission":

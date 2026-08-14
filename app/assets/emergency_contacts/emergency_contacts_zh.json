@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "locale": "zh",
+  "reviewedAt": "2026-08-13",
+  "disclaimer": "这些联系方式仅适用于所示国家。号码和可用性可能变化。遇到紧迫危险时，请听从当地政府和接线员指示。行政机构和红十字会电话不能替代紧急调度。",
+  "countries": [
+    {
+      "code": "INT", "name": "国际备用信息",
+      "callingNote": "没有任何紧急号码在全球都有效。112 在欧盟境内有保障；911 是美国及部分国家的主要号码。使用前请核实当地情况。",
+      "numbers": [
+        {"id": "eu-112", "kind": "general", "label": "欧盟紧急号码", "number": "112", "note": "在整个欧盟免费使用；并非全球都有效。", "sourceIds": ["eu-112"]},
+        {"id": "us-911", "kind": "general", "label": "美国紧急号码", "number": "911", "note": "美国主要紧急号码；其他国家的可用性不同。", "sourceIds": ["us-emergency"]}
+      ],
+      "organizations": [
+        {"id": "ifrc", "kind": "red-cross", "name": "红十字会与红新月会国际联合会", "phone": null, "url": "https://www.ifrc.org/where-we-work", "note": "查找当前国家的红十字会或红新月会。", "sourceIds": ["ifrc-directory"]},
+        {"id": "family-links", "kind": "missing-persons", "name": "恢复家庭联系", "phone": null, "url": "https://familylinks.icrc.org/", "note": "为因冲突、灾害或迁移失联的家庭提供国际服务。", "sourceIds": ["icrc-family-links"]}
+      ]
+    },
+    {
+      "code": "CO", "name": "哥伦比亚",
+      "callingNote": "123 是哥伦比亚全国统一免费紧急号码，全天可用。仅用于真实紧急情况。",
+      "numbers": [{"id": "co-123", "kind": "general", "label": "全国紧急号码", "number": "123", "note": "警察、医疗、消防及其他政府紧急服务。", "sourceIds": ["co-123"]}],
+      "organizations": [
+        {"id": "ungrd", "kind": "disaster-management", "name": "Unidad Nacional para la Gestión del Riesgo de Desastres (UNGRD)", "phone": "018000113200", "url": "https://portal.gestiondelriesgo.gov.co/Paginas/Atencion-a-la-Ciudadania.aspx", "note": "工作日提供灾害风险信息和公众服务；不负责紧急调度。", "sourceIds": ["co-ungrd"]},
+        {"id": "crc", "kind": "red-cross", "name": "Cruz Roja Colombiana", "phone": "018005198534", "url": "https://cruzrojacolombiana.org/", "note": "人道援助和信息；紧迫危险请先拨 123。", "sourceIds": ["co-red-cross"]},
+        {"id": "crc-family", "kind": "missing-persons", "name": "Cruz Roja Colombiana — Protección de Vínculos Familiares", "phone": "+573212139525", "url": "https://www.cruzrojacolombiana.org/cruz-roja-colombiana-despliega-equipo-humanitario-a-venezuela-y-activa-campana-de-recaudo-para-apoyar-a-las-comunidades-afectadas-por-los-sismos/", "note": "人道紧急情况下家庭失联使用的 WhatsApp 渠道。", "sourceIds": ["co-red-cross-family"]},
+        {"id": "ubpd", "kind": "missing-persons", "name": "Unidad de Búsqueda de Personas dadas por Desaparecidas (UBPD)", "phone": "018000162226", "url": "https://unidadbusqueda.gov.co/", "note": "仅处理与哥伦比亚武装冲突有关、发生在 2016 年 12 月 1 日前的失踪。", "sourceIds": ["co-ubpd"]}
+      ]
+    },
+    {
+      "code": "US", "name": "美国",
+      "callingNote": "911 用于需要警察、消防或医疗立即响应的紧急情况，由当地中心调度。",
+      "numbers": [{"id": "us-911", "kind": "general", "label": "紧急服务", "number": "911", "note": "紧迫危险时联系警察、消防和救护车。", "sourceIds": ["us-emergency"]}],
+      "organizations": [
+        {"id": "fema", "kind": "disaster-management", "name": "Federal Emergency Management Agency (FEMA)", "phone": "18006213362", "url": "https://www.usa.gov/agencies/federal-emergency-management-agency", "note": "灾害援助和恢复信息；不负责紧急调度。", "sourceIds": ["us-fema"]},
+        {"id": "american-red-cross", "kind": "red-cross", "name": "American Red Cross", "phone": "18007332767", "url": "https://www.redcross.org/contact-us.html", "note": "灾害援助、避难所信息和红十字服务。", "sourceIds": ["us-red-cross"]},
+        {"id": "us-family", "kind": "missing-persons", "name": "USAGov — 灾后寻找亲友", "phone": null, "url": "https://www.usa.gov/help-disaster-survivors", "note": "灾后恢复联系的官方指导；紧迫危险请拨 911。", "sourceIds": ["us-family"]}
+      ]
+    },
+    {
+      "code": "MX", "name": "墨西哥",
+      "callingNote": "911 是全国统一紧急号码，可调度警察、医疗、消防、民防和红十字服务。",
+      "numbers": [{"id": "mx-911", "kind": "general", "label": "全国紧急号码", "number": "911", "note": "免费、全天可用，仅用于真实紧急情况。", "sourceIds": ["mx-911"]}],
+      "organizations": [
+        {"id": "cnpc", "kind": "disaster-management", "name": "Coordinación Nacional de Protección Civil", "phone": null, "url": "https://www.gob.mx/cnpc", "note": "国家民防信息；立即响应请拨 911。", "sourceIds": ["mx-cnpc"]},
+        {"id": "crm", "kind": "red-cross", "name": "Cruz Roja Mexicana", "phone": null, "url": "https://www.cruzrojamexicana.org.mx/", "note": "人道及救护组织；紧急请求通过 911 调度。", "sourceIds": ["mx-red-cross"]},
+        {"id": "cnb", "kind": "missing-persons", "name": "Comisión Nacional de Búsqueda", "phone": "8000287783", "url": "https://comisionacionaldebusqueda.segob.gob.mx/reportar-desaparicion/", "note": "应立即报告失踪；官方电话全天开放。", "sourceIds": ["mx-cnb"]}
+      ]
+    },
+    {
+      "code": "ES", "name": "西班牙",
+      "callingNote": "112 免费并覆盖全西班牙所有紧急情况；在技术允许时，锁定手机或无有效 SIM 也可拨打。",
+      "numbers": [{"id": "es-112", "kind": "general", "label": "统一紧急号码", "number": "112", "note": "全西班牙的警察、救护车、消防和救援。", "sourceIds": ["es-112"]}],
+      "organizations": [
+        {"id": "dgpce", "kind": "disaster-management", "name": "Dirección General de Protección Civil y Emergencias", "phone": "+34915373171", "url": "https://www.proteccioncivil.es/", "note": "行政和国家民防信息；不负责紧急调度。", "sourceIds": ["es-protection"]},
+        {"id": "cre", "kind": "red-cross", "name": "Cruz Roja Española", "phone": "900221122", "url": "https://www2.cruzroja.es/contacto", "note": "在公布服务时间提供免费信息和帮助；紧迫危险请拨 112。", "sourceIds": ["es-red-cross"]},
+        {"id": "cndes", "kind": "missing-persons", "name": "Centro Nacional de Desaparecidos (CNDES)", "phone": null, "url": "https://cndes-web.ses.mir.es/publico/Desaparecidos/", "note": "官方失踪人员信息；紧急失踪请通过 112 或警察报告。", "sourceIds": ["es-missing"]}
+      ]
+    },
+    {
+      "code": "DE", "name": "德国",
+      "callingNote": "112 联系消防和医疗救援；110 联系警察。两者均免费。",
+      "numbers": [
+        {"id": "de-112", "kind": "medical", "label": "消防和医疗救援", "number": "112", "note": "危及生命的医疗情况、火灾和救援。", "sourceIds": ["de-emergency"]},
+        {"id": "de-110", "kind": "police", "label": "警察", "number": "110", "note": "需要警察立即协助。", "sourceIds": ["de-emergency"]}
+      ],
+      "organizations": [
+        {"id": "bbk", "kind": "disaster-management", "name": "Bundesamt für Bevölkerungsschutz und Katastrophenhilfe (BBK)", "phone": null, "url": "https://www.bbk.bund.de/EN/Home/home_node.html", "note": "联邦民防和灾害准备信息。", "sourceIds": ["de-bbk"]},
+        {"id": "drk", "kind": "red-cross", "name": "Deutsches Rotes Kreuz (DRK)", "phone": null, "url": "https://www.drk.de/en/", "note": "德国红十字人道服务；紧迫危险请拨 112。", "sourceIds": ["de-drk"]},
+        {"id": "drk-tracing", "kind": "missing-persons", "name": "DRK-Suchdienst", "phone": "+498968077311", "url": "https://www.drk-suchdienst.de/en/", "note": "为因冲突、迁移或灾害失联的家庭提供寻亲服务。", "sourceIds": ["de-tracing"]}
+      ]
+    },
+    {
+      "code": "FR", "name": "法国",
+      "callingNote": "112 可转接任何紧急情况；法国也保留按服务划分的全国号码。",
+      "numbers": [
+        {"id": "fr-112", "kind": "general", "label": "欧洲紧急号码", "number": "112", "note": "转接至适当的紧急服务。", "sourceIds": ["fr-emergency"]},
+        {"id": "fr-15", "kind": "medical", "label": "SAMU 医疗急救", "number": "15", "note": "紧急医疗援助。", "sourceIds": ["fr-emergency"]},
+        {"id": "fr-17", "kind": "police", "label": "警察", "number": "17", "note": "警察或宪兵立即协助。", "sourceIds": ["fr-emergency"]},
+        {"id": "fr-18", "kind": "fire", "label": "消防与救援", "number": "18", "note": "消防和救援服务。", "sourceIds": ["fr-emergency"]},
+        {"id": "fr-116000", "kind": "general", "label": "失踪儿童", "number": "116000", "note": "欧洲热线；如有紧迫危险请拨 17 或 112。", "sourceIds": ["fr-emergency"]}
+      ],
+      "organizations": [
+        {"id": "dgscgc", "kind": "disaster-management", "name": "Direction générale de la sécurité civile et de la gestion des crises", "phone": "+33149274927", "url": "https://www.interieur.gouv.fr/ministere/securite-civile-0", "note": "民防行政机构；不负责紧急调度。", "sourceIds": ["fr-civil"]},
+        {"id": "crf", "kind": "red-cross", "name": "Croix-Rouge française", "phone": null, "url": "https://www.croix-rouge.fr/", "note": "人道援助；紧迫危险请拨 112、15、17 或 18。", "sourceIds": ["fr-red-cross"]},
+        {"id": "fr-missing", "kind": "missing-persons", "name": "116 000 Enfants Disparus", "phone": "116000", "url": "https://www.116000enfantsdisparus.fr/", "note": "为失踪儿童家庭提供官方认可的支持。", "sourceIds": ["fr-emergency"]}
+      ]
+    },
+    {
+      "code": "CN", "name": "中国",
+      "callingNote": "中国大陆按服务使用不同号码，没有全国统一的 911/112。",
+      "numbers": [
+        {"id": "cn-110", "kind": "police", "label": "报警求助", "number": "110", "note": "犯罪、人身危险和紧急警务协助。", "sourceIds": ["cn-emergency"]},
+        {"id": "cn-119", "kind": "fire", "label": "火警与救援", "number": "119", "note": "火灾及救援事件。", "sourceIds": ["cn-emergency"]},
+        {"id": "cn-120", "kind": "medical", "label": "医疗急救", "number": "120", "note": "医疗急救和救护车调度。", "sourceIds": ["cn-emergency"]}
+      ],
+      "organizations": [
+        {"id": "mem", "kind": "disaster-management", "name": "中华人民共和国应急管理部", "phone": null, "url": "https://www.mem.gov.cn/", "note": "国家应急管理信息；需要立即帮助时请拨上方对应号码。", "sourceIds": ["cn-mem"]},
+        {"id": "rccs", "kind": "red-cross", "name": "中国红十字会总会", "phone": null, "url": "https://www.redcross.org.cn/", "note": "全国红十字人道组织。", "sourceIds": ["cn-red-cross"]}
+      ]
+    },
+    {
+      "code": "JP", "name": "日本",
+      "callingNote": "110 联系警察；119 联系消防和救护车，在日本全国有效。",
+      "numbers": [
+        {"id": "jp-110", "kind": "police", "label": "警察", "number": "110", "note": "犯罪、交通事故和需要警察立即协助。", "sourceIds": ["jp-emergency"]},
+        {"id": "jp-119", "kind": "medical", "label": "消防和救护车", "number": "119", "note": "说明需要消防还是救护车。", "sourceIds": ["jp-emergency"]}
+      ],
+      "organizations": [
+        {"id": "cao", "kind": "disaster-management", "name": "内閣府 防災情報", "phone": "+81352532111", "url": "https://www.bousai.go.jp/index-e.html", "note": "国家及多语言灾害信息；不负责紧急调度。", "sourceIds": ["jp-disaster"]},
+        {"id": "jrcs", "kind": "red-cross", "name": "日本赤十字社", "phone": "+81334381311", "url": "https://www.jrc.or.jp/english/", "note": "总部联系和人道信息；紧迫危险请拨 110 或 119。", "sourceIds": ["jp-red-cross"]},
+        {"id": "jp-family", "kind": "missing-persons", "name": "日本赤十字社 — 灾后家庭联系", "phone": null, "url": "https://www.jrc.or.jp/english/relief/2024NotoPeninsulaEarthquake.html", "note": "引导联系相关都道府县和地方政府；紧急案件请拨 110。", "sourceIds": ["jp-family"]}
+      ]
+    }
+  ],
+  "sources": [
+    {"id": "eu-112", "title": "112 — 欧盟紧急号码", "publisher": "欧盟委员会", "url": "https://digital-strategy.ec.europa.eu/en/policies/112", "accessed": "2026-08-13"},
+    {"id": "us-emergency", "title": "紧急与灾害服务", "publisher": "USAGov", "url": "https://www.usa.gov/emergency-services", "accessed": "2026-08-13"},
+    {"id": "ifrc-directory", "title": "我们的工作地点", "publisher": "IFRC", "url": "https://www.ifrc.org/where-we-work", "accessed": "2026-08-13"},
+    {"id": "icrc-family-links", "title": "恢复家庭联系", "publisher": "ICRC", "url": "https://familylinks.icrc.org/", "accessed": "2026-08-13"},
+    {"id": "co-123", "title": "哥伦比亚全国 123 紧急号码", "publisher": "Función Pública de Colombia", "url": "https://www1.funcionpublica.gov.co/preguntas-frecuentes/-/asset_publisher/sqxafjubsrEu/content/linea-unica-de-emergencias-nacional-123/28585938", "accessed": "2026-08-13"},
+    {"id": "co-ungrd", "title": "公众服务", "publisher": "UNGRD", "url": "https://portal.gestiondelriesgo.gov.co/Paginas/Atencion-a-la-Ciudadania.aspx", "accessed": "2026-08-13"},
+    {"id": "co-red-cross", "title": "哥伦比亚红十字会", "publisher": "Cruz Roja Colombiana", "url": "https://cruzrojacolombiana.org/", "accessed": "2026-08-13"},
+    {"id": "co-red-cross-family", "title": "家庭联系保护", "publisher": "Cruz Roja Colombiana", "url": "https://www.cruzrojacolombiana.org/cruz-roja-colombiana-despliega-equipo-humanitario-a-venezuela-y-activa-campana-de-recaudo-para-apoyar-a-las-comunidades-afectadas-por-los-sismos/", "accessed": "2026-08-13"},
+    {"id": "co-ubpd", "title": "失踪人员搜寻机构", "publisher": "UBPD", "url": "https://unidadbusqueda.gov.co/", "accessed": "2026-08-13"},
+    {"id": "us-fema", "title": "联邦紧急事务管理署", "publisher": "USAGov", "url": "https://www.usa.gov/agencies/federal-emergency-management-agency", "accessed": "2026-08-13"},
+    {"id": "us-red-cross", "title": "联系方式", "publisher": "American Red Cross", "url": "https://www.redcross.org/contact-us.html", "accessed": "2026-08-13"},
+    {"id": "us-family", "title": "灾后帮助与寻找亲友", "publisher": "USAGov", "url": "https://www.usa.gov/help-disaster-survivors", "accessed": "2026-08-13"},
+    {"id": "mx-911", "title": "911", "publisher": "墨西哥政府", "url": "https://www.gob.mx/911", "accessed": "2026-08-13"},
+    {"id": "mx-cnpc", "title": "国家民防协调机构", "publisher": "墨西哥政府", "url": "https://www.gob.mx/cnpc", "accessed": "2026-08-13"},
+    {"id": "mx-red-cross", "title": "墨西哥红十字会", "publisher": "Cruz Roja Mexicana", "url": "https://www.cruzrojamexicana.org.mx/", "accessed": "2026-08-13"},
+    {"id": "mx-cnb", "title": "报告失踪", "publisher": "Comisión Nacional de Búsqueda", "url": "https://comisionacionaldebusqueda.segob.gob.mx/reportar-desaparicion/", "accessed": "2026-08-13"},
+    {"id": "es-112", "title": "西班牙 112 服务", "publisher": "西班牙政府", "url": "https://administracion.gob.es/pag_Home/Tu-espacio-europeo/derechos-obligaciones/ciudadanos/asistencia-sanitaria/numeros-urgencia", "accessed": "2026-08-13"},
+    {"id": "es-protection", "title": "民防与紧急事务总局", "publisher": "西班牙政府", "url": "https://administracion.gob.es/pagFront/espanaAdmon/directorioOrganigrama/fichaUnidadOrganica.htm?codigoUnidad=E00129002", "accessed": "2026-08-13"},
+    {"id": "es-red-cross", "title": "联系方式", "publisher": "Cruz Roja Española", "url": "https://www2.cruzroja.es/contacto", "accessed": "2026-08-13"},
+    {"id": "es-missing", "title": "国家失踪人员中心", "publisher": "西班牙内政部", "url": "https://cndes-web.ses.mir.es/publico/Desaparecidos/", "accessed": "2026-08-13"},
+    {"id": "de-emergency", "title": "紧急电话号码", "publisher": "德国联邦卫生部", "url": "https://gesund.bund.de/en/notfallnummern", "accessed": "2026-08-13"},
+    {"id": "de-bbk", "title": "德国联邦民防与灾害援助局", "publisher": "BBK", "url": "https://www.bbk.bund.de/EN/Home/home_node.html", "accessed": "2026-08-13"},
+    {"id": "de-drk", "title": "德国红十字会", "publisher": "DRK", "url": "https://www.drk.de/en/", "accessed": "2026-08-13"},
+    {"id": "de-tracing", "title": "寻亲服务", "publisher": "DRK-Suchdienst", "url": "https://www.drk-suchdienst.de/en/", "accessed": "2026-08-13"},
+    {"id": "fr-emergency", "title": "法国紧急号码", "publisher": "Service-Public.fr", "url": "https://lannuaire.service-public.fr/", "accessed": "2026-08-13"},
+    {"id": "fr-civil", "title": "民防与危机管理总局", "publisher": "Service-Public.fr", "url": "https://lannuaire.service-public.fr/gouvernement/07698e91-2d43-4e6d-aff4-2ad51780ece7", "accessed": "2026-08-13"},
+    {"id": "fr-red-cross", "title": "法国红十字会", "publisher": "Croix-Rouge française", "url": "https://www.croix-rouge.fr/", "accessed": "2026-08-13"},
+    {"id": "cn-emergency", "title": "常用应急号码", "publisher": "中华人民共和国中央人民政府", "url": "https://www.gov.cn/ztzl/yjzn/content_562406.htm", "accessed": "2026-08-13"},
+    {"id": "cn-mem", "title": "应急管理部", "publisher": "中华人民共和国政府", "url": "https://www.mem.gov.cn/", "accessed": "2026-08-13"},
+    {"id": "cn-red-cross", "title": "中国红十字会总会", "publisher": "中国红十字会总会", "url": "https://www.redcross.org.cn/", "accessed": "2026-08-13"},
+    {"id": "jp-emergency", "title": "紧急呼叫", "publisher": "日本出入国在留管理厅", "url": "https://www.moj.go.jp/isa/content/001453712.pdf", "accessed": "2026-08-13"},
+    {"id": "jp-disaster", "title": "防灾信息", "publisher": "日本内阁府", "url": "https://www.bousai.go.jp/index-e.html", "accessed": "2026-08-13"},
+    {"id": "jp-red-cross", "title": "日本红十字会", "publisher": "日本赤十字社", "url": "https://www.jrc.or.jp/english/about/glance/", "accessed": "2026-08-13"},
+    {"id": "jp-family", "title": "灾后家庭失联信息", "publisher": "日本赤十字社", "url": "https://www.jrc.or.jp/english/relief/2024NotoPeninsulaEarthquake.html", "accessed": "2026-08-13"}
+  ]
+}

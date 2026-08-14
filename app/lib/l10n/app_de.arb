@@ -436,5 +436,20 @@
   "drillCheckInBody": "Diese Meldungen bleiben im Übungskanal und erscheinen nicht in Rettungsalarmen, Karten oder Exporten.",
   "drillExitForRealTitle": "Echtes SOS senden?",
   "drillExitForRealBody": "Dies beendet die Übung und aktiviert eine echte Rettungsanfrage mit Standortfreigabe und wiederholten SOS-Alarmen.",
-  "drillSendRealSos": "ÜBUNG BEENDEN UND SOS SENDEN"
+  "drillSendRealSos": "ÜBUNG BEENDEN UND SOS SENDEN",
+  "emergencyContactsOpen": "Notrufnummern und offizielle Links",
+  "emergencyContactsTitle": "Notfallverzeichnis",
+  "emergencyContactsSafetyNotice": "Notrufnummern können ohne mobile Daten funktionieren, benötigen aber Mobilfunk-Sprachabdeckung. Offizielle Websites benötigen Internet.",
+  "emergencyContactsCountry": "Land oder Gebiet",
+  "emergencyContactsAutomatic": "Automatisch ({country})",
+  "emergencyContactsNumbers": "Notrufnummern",
+  "emergencyContactsOrganizations": "Offizielle Organisationen",
+  "emergencyContactsCall": "ANRUFEN",
+  "emergencyContactsWebsite": "WEBSITE",
+  "emergencyContactsSources": "Quellen und Prüfung",
+  "emergencyContactsReviewed": "Geprüft am {date}",
+  "emergencyContactsFallback": "Diese Übersetzung war nicht verfügbar; das geprüfte englische Verzeichnis wird angezeigt.",
+  "emergencyContactsLoadError": "Das Offline-Notfallverzeichnis konnte nicht geladen werden.",
+  "emergencyContactsOpenError": "Diese Nummer oder dieser Link konnte nicht geöffnet werden.",
+  "emergencyContactsRetry": "ERNEUT VERSUCHEN"
 }

@@ -1370,4 +1370,54 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get drillSendRealSos => '结束演练并发送 SOS';
+
+  @override
+  String get emergencyContactsOpen => '紧急电话号码与官方链接';
+
+  @override
+  String get emergencyContactsTitle => '紧急联系目录';
+
+  @override
+  String get emergencyContactsSafetyNotice =>
+      '紧急电话可能无需移动数据，但仍需蜂窝语音信号。官方网站需要互联网。';
+
+  @override
+  String get emergencyContactsCountry => '国家或地区';
+
+  @override
+  String emergencyContactsAutomatic(String country) {
+    return '自动（$country）';
+  }
+
+  @override
+  String get emergencyContactsNumbers => '紧急电话号码';
+
+  @override
+  String get emergencyContactsOrganizations => '官方机构';
+
+  @override
+  String get emergencyContactsCall => '拨打';
+
+  @override
+  String get emergencyContactsWebsite => '网站';
+
+  @override
+  String get emergencyContactsSources => '来源与审核';
+
+  @override
+  String emergencyContactsReviewed(String date) {
+    return '审核日期：$date';
+  }
+
+  @override
+  String get emergencyContactsFallback => '此翻译不可用，现显示已验证的英文目录。';
+
+  @override
+  String get emergencyContactsLoadError => '无法加载离线紧急联系目录。';
+
+  @override
+  String get emergencyContactsOpenError => '此手机无法打开该号码或链接。';
+
+  @override
+  String get emergencyContactsRetry => '重试';
 }

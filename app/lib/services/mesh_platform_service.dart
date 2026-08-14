@@ -31,6 +31,21 @@ class MeshPlatformService {
     return await _methods.invokeMethod<bool>('requestPermissions') ?? false;
   }
 
+  /// Returns the current mobile-network country on Android when available.
+  /// iOS intentionally returns null because its carrier-country API is
+  /// deprecated; callers must fall back to the system region.
+  Future<String?> getSimCountry() async {
+    try {
+      final country = await _methods.invokeMethod<String>('getSimCountry');
+      final normalized = country?.trim().toUpperCase();
+      return normalized == null || normalized.isEmpty ? null : normalized;
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+  }
+
   Future<void> start() => _methods.invokeMethod<void>('startMesh');
 
   Future<void> stop() => _methods.invokeMethod<void>('stopMesh');
