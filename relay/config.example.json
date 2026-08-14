@@ -3,6 +3,7 @@
   "local_name": "Bitle Relay",
   "nickname": "Bitle Relay",
   "identity_path": "/var/lib/hearthbit-relay/identity.json",
+  "trust_store_path": "/var/lib/hearthbit-relay/trusted-peers.json",
   "node_role": "INFRA_RELAY",
   "announce_interval_seconds": 300,
   "central_enabled": true,

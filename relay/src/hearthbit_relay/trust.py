@@ -66,6 +66,15 @@ class TrustStore:
                     )
                 ):
                     raise TrustConflictError("trusted peer identity conflicts")
+                if (
+                    existing.noise_public_key is None
+                    and peer.noise_public_key is not None
+                ):
+                    updated = dict(self._peers)
+                    updated[peer.sender_id] = peer
+                    self._write(updated)
+                    self._peers = updated
+                    return True
                 return False
             if len(self._peers) >= MAX_TRUSTED_PEERS:
                 raise TrustStoreError("trusted peer capacity reached")
@@ -87,6 +96,25 @@ class TrustStore:
             self._peers = updated
             return True
 
+    def replace(
+        self,
+        sender_id: bytes,
+        signing_public_key: bytes,
+        noise_public_key: bytes,
+    ) -> None:
+        peer = _validated_peer(
+            sender_id,
+            signing_public_key,
+            noise_public_key,
+        )
+        with self._lock:
+            if peer.sender_id not in self._peers:
+                raise TrustStoreError("trusted sender does not exist")
+            updated = dict(self._peers)
+            updated[peer.sender_id] = peer
+            self._write(updated)
+            self._peers = updated
+
     def sender_ids(self) -> tuple[bytes, ...]:
         with self._lock:
             return tuple(sorted(self._peers))
@@ -100,9 +128,10 @@ class TrustStore:
         if path.is_symlink():
             raise TrustStoreError("trust store cannot be a symbolic link")
         try:
-            if path.stat().st_size > MAX_TRUST_STORE_BYTES:
-                raise TrustStoreError("trust store exceeds its size limit")
-            document = json.loads(path.read_text(encoding="utf-8"))
+            document = json.loads(
+                _read_trust_file(path),
+                object_pairs_hook=_unique_object,
+            )
         except TrustStoreError:
             raise
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -224,6 +253,37 @@ def _encode_peer(peer: TrustedPeer) -> dict[str, str]:
     }
 
 
+def _read_trust_file(path: Path) -> str:
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(path, flags)
+    try:
+        details = os.fstat(descriptor)
+        if not stat.S_ISREG(details.st_mode):
+            raise TrustStoreError("trust store must be a regular file")
+        if details.st_size > MAX_TRUST_STORE_BYTES:
+            raise TrustStoreError("trust store exceeds its size limit")
+        with os.fdopen(descriptor, "r", encoding="utf-8") as stream:
+            descriptor = -1
+            value = stream.read(MAX_TRUST_STORE_BYTES + 1)
+        if len(value.encode("utf-8")) > MAX_TRUST_STORE_BYTES:
+            raise TrustStoreError("trust store exceeds its size limit")
+        return value
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise TrustStoreError("trust store contains duplicate fields")
+        result[key] = value
+    return result
+
+
 def _restrict_file(path: Path) -> None:
     try:
         os.chmod(path, 0o600, follow_symlinks=False)
@@ -266,6 +326,20 @@ def _parse_sender(value: str) -> bytes:
     return sender
 
 
+def _parse_key(value: str) -> bytes:
+    try:
+        key = bytes.fromhex(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "public key must be 64 hexadecimal characters"
+        ) from error
+    if len(key) != 32:
+        raise argparse.ArgumentTypeError(
+            "public key must be 64 hexadecimal characters"
+        )
+    return key
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Administrative HearthBit peer trust-store operations"
@@ -280,6 +354,18 @@ def main() -> None:
         action="store_true",
         help="confirm the destructive trust removal",
     )
+    replace = subparsers.add_parser(
+        "replace",
+        help="atomically replace public keys for one pinned sender",
+    )
+    replace.add_argument("--sender", required=True, type=_parse_sender)
+    replace.add_argument("--signing-key", required=True, type=_parse_key)
+    replace.add_argument("--noise-key", required=True, type=_parse_key)
+    replace.add_argument(
+        "--confirm",
+        action="store_true",
+        help="confirm the administrative key rotation",
+    )
     args = parser.parse_args()
     try:
         store = TrustStore(args.store)
@@ -288,9 +374,13 @@ def main() -> None:
                 print(sender_id.hex())
             return
         if not args.confirm:
-            parser.error("remove requires --confirm")
-        removed = store.remove(args.sender)
-        print("removed" if removed else "not-found")
+            parser.error(f"{args.command} requires --confirm")
+        if args.command == "remove":
+            removed = store.remove(args.sender)
+            print("removed" if removed else "not-found")
+            return
+        store.replace(args.sender, args.signing_key, args.noise_key)
+        print("replaced")
     except TrustStoreError as error:
         print(f"trust-store error: {error}", file=sys.stderr)
         raise SystemExit(2) from None

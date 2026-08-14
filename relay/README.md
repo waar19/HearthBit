@@ -79,6 +79,9 @@ as central and peripheral simultaneously.
 - `nickname`: name published in the signed ANNOUNCE.
 - `identity_path`: persistent private identity with forced `0600` file and
   `0700` directory permissions.
+- `trust_store_path`: atomically persisted TOFU peer identities with `0600`
+  permissions. When omitted, `trusted-peers.json` is placed beside
+  `identity_path`.
 - `node_role`: `INFRA_RELAY` or `INFRA_DATA_ANCHOR`.
 - `announce_interval_seconds`: ANNOUNCE and capability refresh interval.
 - `central_enabled`: discovers and connects to relays in addition to accepting
@@ -87,7 +90,8 @@ as central and peripheral simultaneously.
 - `max_packet_size`: pre-decode input limit.
 - `identity_verification.unknown_signed_policy`: `relay-live` forwards but
   never stores signed packets without a known ANNOUNCE; `reject` requires the
-  identity first. Learned signing keys are pinned for the process lifetime.
+  identity first. Learned signing keys remain pinned across restarts. A corrupt
+  trust store prevents startup rather than resetting trust.
 - `flood`: per-sender and per-bridge token buckets with emergency reserve.
 - `lan`: local gateway, disabled by default; requires a `psk_base64` of at
   least 32 bytes. See
@@ -105,6 +109,12 @@ as central and peripheral simultaneously.
 
 A `CourierEnvelope` expiry TLV can only reduce, never extend, configured
 retention.
+
+Stop the service before trust administration. `hearthbit-relay-trust --store
+PATH list` lists sender IDs; `remove --sender ID --confirm` explicitly clears
+one pin, while `replace --sender ID --signing-key KEY --noise-key KEY --confirm`
+atomically rotates public identity material. Obtain replacement keys over an
+authenticated administrative channel.
 
 ## Container
 
@@ -158,9 +168,9 @@ participate in Noise.
 
 ## Current limitations
 
-- It validates ANNOUNCE and pins each sender's Ed25519 key but is not a Noise
-  handshake endpoint. Without a known ANNOUNCE, the default policy permits
-  live relay and forbids persistence.
+- It validates ANNOUNCE and persistently pins each sender's Ed25519 key but is
+  not a Noise handshake endpoint. Without a known ANNOUNCE, the default policy
+  permits live relay and forbids persistence.
 - It does not calculate daily Courier HMAC tags or know recipient presence.
   Envelopes remain encrypted and recipients deduplicate them.
 - BlueZ notifies every subscribed central; deduplication neutralizes echoes.

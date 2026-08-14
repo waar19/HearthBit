@@ -99,6 +99,9 @@ internal class GattDeliveryQueue(
 }
 
 internal object GattFramePriority {
+    fun forOriginalPacket(encodedPacket: ByteArray): LinkPriority =
+        if (isCritical(encodedPacket)) LinkPriority.CRITICAL else LinkPriority.STANDARD
+
     fun isCritical(encodedFrame: ByteArray): Boolean {
         val packet = MeshProtocol.decode(encodedFrame) ?: return false
         val effectiveType = if (packet.type == MeshProtocol.TYPE_FRAGMENT) {

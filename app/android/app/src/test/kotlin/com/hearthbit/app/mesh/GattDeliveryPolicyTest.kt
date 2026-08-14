@@ -71,5 +71,25 @@ class GattDeliveryPolicyTest {
         assertTrue(GattFramePriority.isCritical(MeshProtocol.encode(packet, padded = false)))
     }
 
+    @Test
+    fun `regular message keeps standard priority across local fragmentation`() {
+        val packet = MeshProtocol.Packet(
+            type = MeshProtocol.TYPE_MESSAGE,
+            ttl = MeshProtocol.TTL,
+            timestamp = 1,
+            senderId = ByteArray(8),
+            payload = ByteArray(1_000) { index ->
+                (index xor (index shr 3) xor (index * 31)).toByte()
+            },
+        )
+        val encoded = MeshProtocol.encode(packet, padded = false)
+        val frames = MeshPacketFragmenter { ByteArray(8) { 1 } }.prepare(encoded, 100)!!
+        val propagated = GattFramePriority.forOriginalPacket(encoded)
+
+        assertTrue(frames.size > 1)
+        assertEquals(LinkPriority.STANDARD, propagated)
+        assertTrue(frames.all { propagated == LinkPriority.STANDARD })
+    }
+
     private fun frame(value: Int): ByteArray = byteArrayOf(value.toByte())
 }

@@ -331,8 +331,9 @@ Para recepción segura en este perfil:
 
 Tras reensamblar, el receptor **MUST** decodificar de nuevo el frame original y
 **MUST** pasarlo por las mismas validaciones de identidad, firma y tipo. El
-commit fijado suprime un segundo relay del contenido reensamblado poniendo su
-TTL a cero; los fragmentos ya se relayaron individualmente.
+relay conserva el TTL original para aplicar política y persistencia local, pero
+suprime explícitamente un segundo reenvío del contenido reensamblado; los
+fragmentos ya se relayaron individualmente.
 
 ## 12. Sincronización GCS `0x21` **[BC]**
 

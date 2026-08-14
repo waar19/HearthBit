@@ -20,6 +20,7 @@ test = ["pytest>=8,<10", "pytest-asyncio>=0.24,<2"]
 
 [project.scripts]
 hearthbit-relay = "hearthbit_relay.main:main"
+hearthbit-relay-trust = "hearthbit_relay.trust:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

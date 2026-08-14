@@ -85,6 +85,9 @@ importantes son:
 - `nickname`: nombre publicado dentro del ANNOUNCE firmado.
 - `identity_path`: identidad privada persistente con permisos `0600` y
   directorio `0700`.
+- `trust_store_path`: identidades públicas fijadas por TOFU, persistidas
+  atómicamente con permisos `0600`. Si se omite, se crea
+  `trusted-peers.json` junto a `identity_path`.
 - `node_role`: `INFRA_RELAY` o `INFRA_DATA_ANCHOR`.
 - `announce_interval_seconds`: renovación de ANNOUNCE y capacidad.
 - `central_enabled`: busca y conecta otros relays además de aceptar teléfonos.
@@ -92,8 +95,9 @@ importantes son:
 - `max_packet_size`: límite antes de decodificar.
 - `identity_verification.unknown_signed_policy`: `relay-live` reenvía, pero no
   almacena, firmas sin ANNOUNCE conocido; `reject` exige identidad previa. Una
-  clave aprendida queda fijada hasta reiniciar el proceso y toda firma
-  posterior se verifica antes de reenviar o guardar.
+  clave aprendida queda fijada también tras reinicios y toda firma posterior
+  se verifica antes de reenviar o guardar. Un trust store corrupto impide el
+  arranque; nunca se reinicia silenciosamente.
 - `flood`: buckets por sender y bridge, con reserva separada para emergencias.
 - `lan`: gateway local desactivado por defecto; requiere `psk_base64` de al
   menos 32 bytes. Consulte
@@ -111,6 +115,29 @@ importantes son:
 
 La expiración TLV de un `CourierEnvelope` siempre reduce, nunca amplía, la
 retención configurada.
+
+### Administración de confianza
+
+Detenga el relay antes de modificar su trust store. `list` solo muestra IDs de
+sender. `remove` limpia una identidad para un nuevo TOFU y `replace` rota
+atómicamente la clave de firma sin abrir esa ventana:
+
+```bash
+sudo systemctl stop hearthbit-relay
+sudo -u hearthbit-relay hearthbit-relay-trust \
+  --store /var/lib/hearthbit-relay/trusted-peers.json list
+sudo -u hearthbit-relay hearthbit-relay-trust \
+  --store /var/lib/hearthbit-relay/trusted-peers.json remove \
+  --sender 0011223344556677 --confirm
+sudo -u hearthbit-relay hearthbit-relay-trust \
+  --store /var/lib/hearthbit-relay/trusted-peers.json replace \
+  --sender 0011223344556677 --signing-key SIGNING_HEX \
+  --noise-key NOISE_HEX --confirm
+sudo systemctl start hearthbit-relay
+```
+
+Los IDs y claves son hexadecimales; el comando valida que la clave Noise derive
+el sender ID. Obtenga las claves nuevas por un canal administrativo autenticado.
 
 ## Contenedor
 
@@ -164,7 +191,7 @@ participa en Noise.
 
 ## Limitaciones de esta fase
 
-- Valida ANNOUNCE y fija la clave Ed25519 por sender durante el proceso, pero
+- Valida ANNOUNCE y fija de forma persistente la clave Ed25519 por sender, pero
   no participa como endpoint en handshakes Noise. Sin ANNOUNCE conocido, la
   política predeterminada permite relay en vivo y prohíbe persistencia.
 - No calcula tags HMAC diarios de Courier ni conoce la presencia del

@@ -6,7 +6,7 @@ if [ -f /data/options.json ]; then
     export HEARTHBIT_CONFIG=/data/options.json
 fi
 
-for secret in /data/identity.json /data/mqtt-secrets.json /data/matrix-access-token; do
+for secret in /data/identity.json /data/trusted-peers.json /data/mqtt-secrets.json /data/matrix-access-token; do
     if [ -e "${secret}" ]; then
         if [ -L "${secret}" ]; then
             echo "Refusing symbolic-link secret: ${secret}" >&2

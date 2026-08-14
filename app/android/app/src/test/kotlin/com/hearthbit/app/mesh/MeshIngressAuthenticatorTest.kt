@@ -79,7 +79,9 @@ class MeshIngressAuthenticatorTest {
         pins: Map<String, PeerIdentityKeys>,
         validSignatureKey: ByteArray,
     ) = MeshIngressAuthenticator(
-        pinnedKeys = pins::get,
+        trustLookup = { peerId ->
+            pins[peerId]?.let(PeerTrustLookup::Pinned) ?: PeerTrustLookup.Unknown
+        },
         validateAndPin = { peerId, announced ->
             val existing = pins[peerId]
             PeerIdentityPolicy.evaluate(existing, announced)

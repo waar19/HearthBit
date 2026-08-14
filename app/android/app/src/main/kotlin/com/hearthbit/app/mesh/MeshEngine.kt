@@ -117,7 +117,7 @@ internal class MeshEngine(
     private val emergencyFingerprints = EmergencyFingerprintCache(context)
     private val peerTrustStore = PeerTrustStore(context)
     private val ingressAuthenticator = MeshIngressAuthenticator(
-        pinnedKeys = peerTrustStore::pinnedKeys,
+        trustLookup = peerTrustStore::lookup,
         validateAndPin = { peerId, keys -> peerTrustStore.validateAndPin(peerId, keys) },
         verifySignature = { packet, key -> identity.verify(packet, key) },
     )
@@ -385,7 +385,7 @@ internal class MeshEngine(
                 maxConnections = 1,
                 cost = LAN_LINK_COST,
             ),
-        ) { frame ->
+        ) { frame, _ ->
             emit(
                 mapOf(
                     "type" to "rawMeshFrame",
@@ -1530,12 +1530,13 @@ internal class MeshEngine(
                         mtu = maximumSize,
                         reliability = LinkReliability.BEST_EFFORT,
                     ),
-                ) { frame ->
+                ) { frame, priority ->
                     enqueueServerNotifications(
                         device,
                         server,
                         characteristic,
                         listOf(frame),
+                        critical = priority == LinkPriority.CRITICAL,
                     )
                 }
             }
@@ -1549,8 +1550,14 @@ internal class MeshEngine(
                     mtu = maximumSize,
                     reliability = LinkReliability.ACKNOWLEDGED,
                 ),
-            ) { frame ->
-                enqueueClientWrites(address, gatt, remoteCharacteristic, listOf(frame))
+            ) { frame, priority ->
+                enqueueClientWrites(
+                    address,
+                    gatt,
+                    remoteCharacteristic,
+                    listOf(frame),
+                    critical = priority == LinkPriority.CRITICAL,
+                )
             }
         }
         lanBridge?.let(links::add)
@@ -1584,7 +1591,8 @@ internal class MeshEngine(
             emitLinkTelemetry(link.capabilities, bytes.size, 0, accepted = false)
             return false
         }
-        val accepted = frames.all(link::send)
+        val priority = GattFramePriority.forOriginalPacket(bytes)
+        val accepted = frames.all { link.send(it, priority) }
         emitLinkTelemetry(link.capabilities, bytes.size, frames.size, accepted)
         return accepted
     }
@@ -1624,9 +1632,9 @@ internal class MeshEngine(
         gatt: BluetoothGatt,
         characteristic: BluetoothGattCharacteristic,
         frames: List<ByteArray>,
+        critical: Boolean,
     ): Boolean {
         if (frames.isEmpty()) return true
-        val critical = frames.any(GattFramePriority::isCritical)
         val result = synchronized(clientWriteLock) {
             val queue = clientWriteQueues.getOrPut(address) {
                 GattDeliveryQueue(MAX_PENDING_GATT_WRITES)
@@ -1753,10 +1761,10 @@ internal class MeshEngine(
         server: BluetoothGattServer,
         characteristic: BluetoothGattCharacteristic,
         frames: List<ByteArray>,
+        critical: Boolean,
     ): Boolean {
         if (frames.isEmpty()) return true
         val address = device.address
-        val critical = frames.any(GattFramePriority::isCritical)
         val result = synchronized(serverNotificationLock) {
             val queue = serverNotificationQueues.getOrPut(address) {
                 GattDeliveryQueue(MAX_PENDING_GATT_WRITES)

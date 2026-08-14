@@ -3,10 +3,12 @@ import pytest
 from hearthbit_relay.protocol import (
     FLAG_ROUTE,
     FLAG_RSR,
+    TYPE_FRAGMENT,
     TYPE_GROUP_MESSAGE,
     TYPE_HBT_CAPABILITY,
     TYPE_NODE_CAPABILITY,
     TYPE_PREKEY_BUNDLE,
+    FragmentReassembler,
     PacketError,
     decode_packet,
     encode_packet,
@@ -224,3 +226,48 @@ def test_expired_ttl_cannot_be_forwarded(ttl: int) -> None:
     )
     with pytest.raises(PacketError, match="TTL"):
         packet.forwarded_bytes()
+
+
+def test_fragment_reassembler_enforces_type_count_and_set_limits() -> None:
+    now = [0.0]
+    reassembler = FragmentReassembler(monotonic=lambda: now[0])
+
+    def fragment(
+        fragment_id: bytes,
+        *,
+        index: int = 0,
+        total: int = 2,
+        original_type: int = 0x02,
+    ):
+        return decode_packet(
+            encode_packet(
+                message_type=TYPE_FRAGMENT,
+                ttl=4,
+                timestamp_ms=index,
+                sender_id=b"sender01",
+                payload=(
+                    fragment_id
+                    + index.to_bytes(2, "big")
+                    + total.to_bytes(2, "big")
+                    + bytes((original_type,))
+                    + b"x"
+                ),
+            )
+        )
+
+    assert reassembler.accept(
+        fragment(b"too-many", total=257)
+    ) is None
+    assert reassembler.accept(
+        fragment(b"nested!!", total=1, original_type=TYPE_FRAGMENT)
+    ) is None
+
+    for index in range(65):
+        assert reassembler.accept(fragment(index.to_bytes(8, "big"))) is None
+    assert len(reassembler._sets) == 64
+    assert reassembler._bytes == 64
+
+    now[0] = 31.0
+    assert reassembler.accept(fragment((65).to_bytes(8, "big"))) is None
+    assert len(reassembler._sets) == 1
+    assert reassembler._bytes == 1

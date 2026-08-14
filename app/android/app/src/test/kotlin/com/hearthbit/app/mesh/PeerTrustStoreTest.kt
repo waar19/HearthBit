@@ -53,6 +53,16 @@ class PeerTrustStoreTest {
         assertEquals(4_096, storage.values.size)
     }
 
+    @Test
+    fun `corrupt persisted pin is invalid rather than unknown`() {
+        val storage = FakePeerTrustStorage()
+        val store = PeerTrustStore(storage)
+        val peerId = "0011223344556677"
+        storage.values["peer_$peerId"] = "corrupt"
+
+        assertEquals(PeerTrustLookup.Invalid, store.lookup(peerId))
+    }
+
     private fun keys(seed: Int): PeerIdentityKeys = PeerIdentityKeys(
         signingPublicKey = ByteArray(32) { (seed + it).toByte() },
         noisePublicKey = ByteArray(32) { (seed * 3 + it).toByte() },

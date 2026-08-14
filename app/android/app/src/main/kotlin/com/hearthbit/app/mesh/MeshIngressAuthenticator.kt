@@ -25,7 +25,7 @@ internal data class MeshIngressAuthentication(
  * be processed or persisted until a valid ANNOUNCE establishes their pin.
  */
 internal class MeshIngressAuthenticator(
-    private val pinnedKeys: (String) -> PeerIdentityKeys?,
+    private val trustLookup: (String) -> PeerTrustLookup,
     private val validateAndPin: (String, PeerIdentityKeys) -> PeerIdentityDecision,
     private val verifySignature: (MeshProtocol.Packet, ByteArray) -> Boolean,
 ) {
@@ -56,12 +56,17 @@ internal class MeshIngressAuthenticator(
         if (!requiresPublicSignature(packet.type)) {
             return MeshIngressAuthentication(MeshIngressDisposition.ACCEPT)
         }
-        val pinned = pinnedKeys(senderHex)
-            ?: return MeshIngressAuthentication(MeshIngressDisposition.RELAY_ONLY_UNKNOWN)
-        return if (verifySignature(packet, pinned.signingPublicKey)) {
-            MeshIngressAuthentication(MeshIngressDisposition.ACCEPT)
-        } else {
-            rejected()
+        return when (val trust = trustLookup(senderHex)) {
+            PeerTrustLookup.Unknown ->
+                MeshIngressAuthentication(MeshIngressDisposition.RELAY_ONLY_UNKNOWN)
+            PeerTrustLookup.Invalid -> rejected()
+            is PeerTrustLookup.Pinned -> {
+                if (verifySignature(packet, trust.keys.signingPublicKey)) {
+                    MeshIngressAuthentication(MeshIngressDisposition.ACCEPT)
+                } else {
+                    rejected()
+                }
+            }
         }
     }
 

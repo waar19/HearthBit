@@ -34,6 +34,7 @@ def test_identity_role_and_presence_interval_are_configurable(tmp_path) -> None:
     config = load_config(path)
 
     assert config.identity_path == str(tmp_path / "identity.json")
+    assert config.trust_store_path == str(tmp_path / "trusted-peers.json")
     assert config.nickname == "Refugio Norte"
     assert config.node_role is NodeRole.INFRA_DATA_ANCHOR
     assert config.announce_interval_seconds == 45
@@ -280,6 +281,31 @@ def test_identity_and_flood_policies_are_bounded(tmp_path) -> None:
                 "identity_verification": {
                     "unknown_signed_policy": "allow-unverified",
                 }
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError):
+        load_config(path)
+
+
+def test_trust_store_path_is_configurable_and_cannot_replace_identity(
+    tmp_path,
+) -> None:
+    path = tmp_path / "config.json"
+    trust_path = tmp_path / "state" / "peers.json"
+    path.write_text(
+        json.dumps({"trust_store_path": str(trust_path)}),
+        encoding="utf-8",
+    )
+    assert load_config(path).trust_store_path == str(trust_path)
+
+    identity_path = tmp_path / "identity.json"
+    path.write_text(
+        json.dumps(
+            {
+                "identity_path": str(identity_path),
+                "trust_store_path": str(identity_path),
             }
         ),
         encoding="utf-8",

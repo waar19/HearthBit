@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import struct
+import time
 import zlib
+from collections.abc import Callable
 from dataclasses import dataclass
 
 VERSION = 1
@@ -48,6 +50,7 @@ MAX_PACKET_SIZE = NORMALIZED_SIZES[-1]
 MAX_PAYLOAD_LENGTH = 10_485_760
 MAX_FRAGMENT_COUNT = 256
 MAX_FRAGMENT_SET_BYTES = 1_048_576
+FRAGMENT_SET_TTL_SECONDS = 30.0
 MAX_GCS_FILTER_BYTES = 1024
 
 
@@ -288,13 +291,20 @@ def decode_fragment_payload(payload: bytes) -> FragmentPayload:
 class FragmentReassembler:
     """Bounded relay-side reassembly using the production packet decoder."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        monotonic: Callable[[], float] | None = None,
+    ) -> None:
         self._sets: dict[tuple[bytes, bytes], dict[str, object]] = {}
         self._bytes = 0
+        self._monotonic = monotonic or time.monotonic
 
     def accept(self, packet: Packet) -> Packet | None:
         if packet.message_type != TYPE_FRAGMENT:
             return None
+        now = float(self._monotonic())
+        self._purge_expired(now)
         fragment = decode_fragment_payload(packet.payload)
         if (
             fragment.total > MAX_FRAGMENT_COUNT
@@ -313,7 +323,12 @@ class FragmentReassembler:
         if current is None:
             if len(self._sets) >= 64:
                 return None
-            current = {"metadata": metadata, "parts": {}, "bytes": 0}
+            current = {
+                "metadata": metadata,
+                "parts": {},
+                "bytes": 0,
+                "updated_at": now,
+            }
             self._sets[key] = current
         elif current["metadata"] != metadata:
             self._remove(key)
@@ -334,6 +349,7 @@ class FragmentReassembler:
             return None
         parts[fragment.index] = fragment.data
         current["bytes"] = set_bytes + len(fragment.data)
+        current["updated_at"] = now
         self._bytes += len(fragment.data)
         if len(parts) != fragment.total:
             return None
@@ -350,6 +366,15 @@ class FragmentReassembler:
         ):
             return None
         return decoded
+
+    def _purge_expired(self, now: float) -> None:
+        expired = [
+            key
+            for key, current in self._sets.items()
+            if now - float(current["updated_at"]) >= FRAGMENT_SET_TTL_SECONDS
+        ]
+        for key in expired:
+            self._remove(key)
 
     def _remove(self, key: tuple[bytes, bytes]) -> None:
         removed = self._sets.pop(key, None)

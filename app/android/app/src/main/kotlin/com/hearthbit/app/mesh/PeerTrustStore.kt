@@ -1,8 +1,8 @@
 package com.hearthbit.app.mesh
 
 import android.content.Context
-import android.util.Base64
 import java.security.MessageDigest
+import java.util.Base64
 
 internal interface PeerTrustStorage {
     fun getString(key: String): String?
@@ -10,6 +10,12 @@ internal interface PeerTrustStorage {
     fun putString(key: String, value: String): Boolean
     fun keys(): Set<String>
     fun clear(): Boolean
+}
+
+internal sealed interface PeerTrustLookup {
+    data class Pinned(val keys: PeerIdentityKeys) : PeerTrustLookup
+    data object Unknown : PeerTrustLookup
+    data object Invalid : PeerTrustLookup
 }
 
 /**
@@ -46,14 +52,20 @@ internal class PeerTrustStore private constructor(
         val stored = runCatching { storage.getString(storageKey) }.getOrElse {
             return PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION
         }
-        if (stored == null && storage.contains(storageKey)) {
+        val contains = runCatching { storage.contains(storageKey) }.getOrElse {
+            return PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION
+        }
+        if (stored == null && contains) {
             return PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION
         }
         val pinned = stored?.let(::decode)?.keys
         if (stored != null && pinned == null) {
             return PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION
         }
-        if (stored == null && trustEntryCount() >= MAX_TRUSTED_PEERS) {
+        val trustCount = runCatching(::trustEntryCount).getOrElse {
+            return PeerIdentityDecision.REJECT_CAPACITY
+        }
+        if (stored == null && trustCount >= MAX_TRUSTED_PEERS) {
             return PeerIdentityDecision.REJECT_CAPACITY
         }
         val decision = PeerIdentityPolicy.evaluate(
@@ -68,9 +80,21 @@ internal class PeerTrustStore private constructor(
     }
 
     @Synchronized
-    fun pinnedKeys(peerId: String): PeerIdentityKeys? {
-        if (!peerId.matches(PEER_ID_PATTERN)) return null
-        return storage.getString(key(peerId))?.let(::decode)?.keys
+    fun lookup(peerId: String): PeerTrustLookup {
+        if (!peerId.matches(PEER_ID_PATTERN)) return PeerTrustLookup.Invalid
+        val storageKey = key(peerId)
+        val stored = runCatching { storage.getString(storageKey) }
+            .getOrElse { return PeerTrustLookup.Invalid }
+        if (stored == null) {
+            val contains = runCatching { storage.contains(storageKey) }
+                .getOrElse { return PeerTrustLookup.Invalid }
+            return if (contains) PeerTrustLookup.Invalid else PeerTrustLookup.Unknown
+        }
+        val record = decode(stored) ?: return PeerTrustLookup.Invalid
+        if (MeshProtocol.hex(MeshProtocol.peerIdFromNoiseKey(record.keys.noisePublicKey)) != peerId) {
+            return PeerTrustLookup.Invalid
+        }
+        return PeerTrustLookup.Pinned(record.keys)
     }
 
     fun clear() {
@@ -80,8 +104,8 @@ internal class PeerTrustStore private constructor(
     private fun trustEntryCount(): Int = storage.keys().count { it.startsWith(KEY_PREFIX) }
 
     private fun encode(keys: PeerIdentityKeys, decision: PeerIdentityDecision): String {
-        val noise = Base64.encodeToString(keys.noisePublicKey, Base64.NO_WRAP)
-        val signing = Base64.encodeToString(keys.signingPublicKey, Base64.NO_WRAP)
+        val noise = Base64.getEncoder().encodeToString(keys.noisePublicKey)
+        val signing = Base64.getEncoder().encodeToString(keys.signingPublicKey)
         val noiseFingerprint = fingerprint(keys.noisePublicKey)
         val signingFingerprint = fingerprint(keys.signingPublicKey)
         val trust = when (decision) {
@@ -106,8 +130,8 @@ internal class PeerTrustStore private constructor(
     private fun decode(value: String): Record? = runCatching {
         val fields = value.split(SEPARATOR)
         if (fields.size != FIELD_COUNT || fields[0] != FORMAT_VERSION) return null
-        val noise = Base64.decode(fields[2], Base64.NO_WRAP)
-        val signing = Base64.decode(fields[3], Base64.NO_WRAP)
+        val noise = Base64.getDecoder().decode(fields[2])
+        val signing = Base64.getDecoder().decode(fields[3])
         if (noise.size != PUBLIC_KEY_SIZE || signing.size != PUBLIC_KEY_SIZE) return null
         if (fields[4] != fingerprint(noise) || fields[5] != fingerprint(signing)) return null
         Record(

@@ -23,9 +23,12 @@ async def run(config_path: str | None) -> None:
         level=getattr(logging, config.log_level, logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    store = await asyncio.to_thread(PacketStore, config.store)
-    identity = RelayIdentity.load_or_create(config.identity_path)
+    identity = await asyncio.to_thread(
+        RelayIdentity.load_or_create,
+        config.identity_path,
+    )
     trust_store = await asyncio.to_thread(TrustStore, config.trust_store_path)
+    store = await asyncio.to_thread(PacketStore, config.store)
     core = RelayCore(config, store, identity, trust_store=trust_store)
     transport = BlueZTransport(config, core)
     lan_transport = (

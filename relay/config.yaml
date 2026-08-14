@@ -21,6 +21,7 @@ options:
   local_name: "Bitle Relay"
   nickname: "Bitle Relay"
   identity_path: "/data/identity.json"
+  trust_store_path: "/data/trusted-peers.json"
   node_role: "INFRA_RELAY"
   announce_interval_seconds: 300
   central_enabled: true
@@ -110,6 +111,7 @@ schema:
   local_name: str
   nickname: str
   identity_path: str
+  trust_store_path: str
   node_role: list(INFRA_RELAY|INFRA_DATA_ANCHOR)
   announce_interval_seconds: float
   central_enabled: bool
