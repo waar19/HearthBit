@@ -894,12 +894,22 @@ class _RadarScreenState extends State<RadarScreen>
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
+            final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
             final content = _buildRadarColumn(
               reading: reading,
               searching: searching,
               fusion: fusion,
               compact: constraints.maxHeight < 700,
+              fixedRadarHeight: largeText
+                  ? math.min(260, constraints.maxWidth)
+                  : null,
             );
+            if (largeText) {
+              return SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: content,
+              );
+            }
             if (constraints.maxHeight >= 520) {
               return Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -921,55 +931,55 @@ class _RadarScreenState extends State<RadarScreen>
     required bool searching,
     required RadarFusionResult fusion,
     required bool compact,
+    double? fixedRadarHeight,
   }) {
+    final radar = LayoutBuilder(
+      builder: (context, constraints) {
+        final radarSide = math.min(
+          420.0,
+          math.min(constraints.maxWidth, constraints.maxHeight),
+        );
+        return Center(
+          child: Semantics(
+            image: true,
+            liveRegion: true,
+            label: searching
+                ? context.l10n.radarSearching
+                : _stale
+                ? context.l10n.radarSignalLost
+                : _proximityLabel(context.l10n, reading!.proximity),
+            child: ExcludeSemantics(
+              child: SizedBox.square(
+                key: const ValueKey('radar-canvas'),
+                dimension: radarSide,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _AnimatedRadarCanvas(
+                      sweep: _sweep,
+                      pulse: _pulse,
+                      strength: _stale ? null : reading?.strength,
+                      directionSweepSectors: _sweepEstimator.sectorCoverage,
+                      estimatedDirectionRadians: _bleDirectionRadians(fusion),
+                      gpsDirectionRadians: _gpsDirectionRadians(fusion),
+                    ),
+                    if (_sweepActive) _buildSweepOverlay(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
     return Column(
       children: [
         _buildBannerSlot(fusion),
         const SizedBox(height: 6),
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final radarSide = math.min(
-                420.0,
-                math.min(constraints.maxWidth, constraints.maxHeight),
-              );
-              return Center(
-                child: Semantics(
-                  image: true,
-                  liveRegion: true,
-                  label: searching
-                      ? context.l10n.radarSearching
-                      : _stale
-                      ? context.l10n.radarSignalLost
-                      : _proximityLabel(context.l10n, reading!.proximity),
-                  child: ExcludeSemantics(
-                    child: SizedBox.square(
-                      key: const ValueKey('radar-canvas'),
-                      dimension: radarSide,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          _AnimatedRadarCanvas(
-                            sweep: _sweep,
-                            pulse: _pulse,
-                            strength: _stale ? null : reading?.strength,
-                            directionSweepSectors:
-                                _sweepEstimator.sectorCoverage,
-                            estimatedDirectionRadians: _bleDirectionRadians(
-                              fusion,
-                            ),
-                            gpsDirectionRadians: _gpsDirectionRadians(fusion),
-                          ),
-                          if (_sweepActive) _buildSweepOverlay(),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
+        if (fixedRadarHeight case final height?)
+          SizedBox(height: height, child: radar)
+        else
+          Expanded(child: radar),
         const SizedBox(height: 6),
         _buildPanel(reading, searching, fusion, compact: compact),
         const SizedBox(height: 6),
@@ -1118,10 +1128,8 @@ class _RadarScreenState extends State<RadarScreen>
         ? context.l10n.radarSweepStart
         : context.l10n.radarSweepRestart;
     final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.5;
-    final compactActions = largeText;
     final actions = <Widget>[
       _buildRangingAction(
-        compact: compactActions,
         label: _sweepActive
             ? context.l10n.radarActionSweeping
             : context.l10n.radarActionDirection,
@@ -1138,7 +1146,6 @@ class _RadarScreenState extends State<RadarScreen>
       ),
       if (_radioRangingAvailable)
         _buildRangingAction(
-          compact: compactActions,
           label: context.l10n.radarActionRadio,
           tooltip: _radioRangingActive
               ? context.l10n.radarRadioStop
@@ -1147,7 +1154,6 @@ class _RadarScreenState extends State<RadarScreen>
           onPressed: _toggleRadioRanging,
         ),
       _buildRangingAction(
-        compact: compactActions,
         label: context.l10n.radarActionSonar,
         tooltip: _acousticActive
             ? context.l10n.radarSonarStop
@@ -1159,7 +1165,6 @@ class _RadarScreenState extends State<RadarScreen>
           _beaconStatus == 'requested' ||
           _beaconStatus == 'active')
         _buildRangingAction(
-          compact: compactActions,
           label: _beaconStatus == 'requested'
               ? context.l10n.radarActionWaiting
               : context.l10n.radarActionBeacon,
@@ -1175,21 +1180,33 @@ class _RadarScreenState extends State<RadarScreen>
           emphasized: true,
         ),
     ];
-    return SizedBox(
-      height: compactActions ? 48 : 64,
-      child: Row(
-        children: [
-          for (var index = 0; index < actions.length; index++) ...[
-            if (index > 0) const SizedBox(width: 6),
-            Expanded(child: actions[index]),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 6.0;
+        const runSpacing = 4.0;
+        final columns = largeText
+            ? math.min(2, actions.length)
+            : actions.length;
+        final actionWidth =
+            (constraints.maxWidth - (spacing * (columns - 1))) / columns;
+        return Wrap(
+          alignment: WrapAlignment.center,
+          spacing: spacing,
+          runSpacing: runSpacing,
+          children: [
+            for (final action in actions)
+              SizedBox(
+                width: actionWidth,
+                height: largeText ? 68 : 64,
+                child: action,
+              ),
           ],
-        ],
-      ),
+        );
+      },
     );
   }
 
   Widget _buildRangingAction({
-    required bool compact,
     required String label,
     required String tooltip,
     required IconData icon,
@@ -1201,30 +1218,6 @@ class _RadarScreenState extends State<RadarScreen>
       disabledForegroundColor: const Color(0xFF94A3B8),
       disabledBackgroundColor: Colors.white10,
     );
-    if (compact) {
-      return Center(
-        child: outlined
-            ? IconButton.outlined(
-                tooltip: tooltip,
-                onPressed: onPressed,
-                icon: Icon(icon),
-                style: disabledStyle,
-              )
-            : emphasized
-            ? IconButton.filled(
-                tooltip: tooltip,
-                onPressed: onPressed,
-                icon: Icon(icon),
-                style: disabledStyle,
-              )
-            : IconButton.filledTonal(
-                tooltip: tooltip,
-                onPressed: onPressed,
-                icon: Icon(icon),
-                style: disabledStyle,
-              ),
-      );
-    }
     final button = outlined
         ? IconButton.outlined(
             onPressed: onPressed,
@@ -1261,6 +1254,9 @@ class _RadarScreenState extends State<RadarScreen>
               button,
               Text(
                 label,
+                textScaler: MediaQuery.textScalerOf(
+                  context,
+                ).clamp(maxScaleFactor: 1.5),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -1328,10 +1324,8 @@ class _RadarScreenState extends State<RadarScreen>
   }) {
     const green = Color(0xFF4ADE80);
     const red = Color(0xFFF87171);
-    const dim = Color(0xFF94A3B8);
-    final textScale = MediaQuery.textScalerOf(context).scale(1);
-    final baseHeight = compact ? 142.0 : 170.0;
-    final height = baseHeight + ((textScale - 1).clamp(0, 1) * 72);
+    const dim = Color(0xFFCBD5E1);
+    final height = compact ? 142.0 : 170.0;
     Widget content;
     if (_permissionExpired || _startError != null) {
       content = Row(
@@ -1484,8 +1478,9 @@ class _RadarScreenState extends State<RadarScreen>
             const SizedBox(height: 5),
             Text(
               summary,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+              textScaler: MediaQuery.textScalerOf(
+                context,
+              ).clamp(maxScaleFactor: 1.5),
               textAlign: TextAlign.center,
               style: const TextStyle(color: dim, fontSize: 11),
             ),
@@ -1523,7 +1518,7 @@ class _RadarScreenState extends State<RadarScreen>
               label,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: color, fontSize: 11),
+              style: TextStyle(color: color, fontSize: 12),
             ),
           ),
         ],
@@ -1743,43 +1738,44 @@ class _SweepHoldingGuide extends StatelessWidget {
         ),
       );
     }
-    return Row(
-      children: [
-        SizedBox(
-          width: 68,
-          height: 68,
-          child: AnimatedBuilder(
-            animation: animation,
-            builder: (context, _) => CustomPaint(
-              painter: _SweepGuidePainter(
-                rotationProgress: active ? animation.value : 0,
+    return SingleChildScrollView(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 68,
+            height: 68,
+            child: AnimatedBuilder(
+              animation: animation,
+              builder: (context, _) => CustomPaint(
+                painter: _SweepGuidePainter(
+                  rotationProgress: active ? animation.value : 0,
+                ),
               ),
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                context.l10n.radarSweepHoldTitle,
-                style: const TextStyle(
-                  color: green,
-                  fontWeight: FontWeight.bold,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.l10n.radarSweepHoldTitle,
+                  style: const TextStyle(
+                    color: green,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                context.l10n.radarSweepInstruction,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: dim, fontSize: 12),
-              ),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  context.l10n.radarSweepInstruction,
+                  style: const TextStyle(color: dim, fontSize: 12),
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

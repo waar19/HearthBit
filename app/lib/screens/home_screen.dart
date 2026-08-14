@@ -773,6 +773,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     required bool online,
   }) {
     final secure = online && peer.secure;
+    final radarAvailable = online && peer.radarAllowed;
+    final radarStatus = !online
+        ? context.l10n.peerOffline
+        : peer.radarAllowed
+        ? context.l10n.tooltipRadar
+        : context.l10n.radarConsentRequired;
+    final colors = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Wrap(
@@ -780,19 +787,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           IconButton(
-            tooltip: !online
-                ? context.l10n.peerOffline
-                : peer.radarAllowed
-                ? context.l10n.tooltipRadar
-                : context.l10n.radarConsentRequired,
-            onPressed: online && peer.radarAllowed
+            tooltip: radarStatus,
+            color: radarAvailable ? colors.primary : colors.outline,
+            onPressed: radarAvailable
                 ? () => _openRadar(
                     peerId: peer.id,
                     nickname: peer.nickname,
                     consentExpiresAt: peer.radarAllowedUntil!,
                     consentSource: peer.radarConsentSource ?? 'temporary',
                   )
-                : null,
+                : () => _showUnavailablePeerAction(radarStatus),
             icon: const Icon(Icons.radar),
           ),
           _peerTransferButton(peer, online: online),
@@ -802,12 +806,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 : context.l10n.peerTapToEncrypt,
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: Icon(secure ? Icons.lock : Icons.lock_open),
+              child: Icon(
+                secure ? Icons.lock : Icons.lock_open,
+                color: secure ? colors.primary : colors.outline,
+              ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  void _showUnavailablePeerAction(String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _peerTransferButton(MeshPeer peer, {required bool online}) {

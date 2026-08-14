@@ -32,6 +32,11 @@ void main() {
       ),
     );
 
+    final title = tester.widget<Text>(
+      find.text('Comunicación cuando fallan las redes'),
+    );
+    expect(title.textScaler?.scale(20), 30);
+
     await tester.tap(find.byType(FilledButton));
     await tester.pumpAndSettle();
 
