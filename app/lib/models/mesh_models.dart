@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'voice_note.dart';
@@ -413,24 +414,50 @@ class MeshPeer {
   });
 
   factory MeshPeer.fromMap(Map<Object?, Object?> map) {
-    final online = map['online'] as bool? ?? true;
+    final parsed = tryParse(map);
+    if (parsed == null) throw const FormatException('Invalid mesh peer');
+    return parsed;
+  }
+
+  static MeshPeer? tryParse(Map<Object?, Object?> map) {
+    final id = map['id'];
+    final nickname = map['nickname'];
+    final lastSeen = map['lastSeen'];
+    if (id is! String ||
+        id.isEmpty ||
+        id.length > 128 ||
+        nickname is! String ||
+        nickname.trim().isEmpty ||
+        nickname.length > 80 ||
+        lastSeen is! num ||
+        !lastSeen.isFinite ||
+        lastSeen <= 0 ||
+        lastSeen > 8640000000000000) {
+      return null;
+    }
+    final online = map['online'] is bool ? map['online']! as bool : true;
+    final radarConsentSource = map['radarConsentSource'];
+    if (radarConsentSource != null &&
+        (radarConsentSource is! String || radarConsentSource.length > 64)) {
+      return null;
+    }
     return MeshPeer(
-      id: map['id']! as String,
-      nickname: map['nickname']! as String,
-      lastSeen: DateTime.fromMillisecondsSinceEpoch(map['lastSeen']! as int),
-      secure: online && (map['secure'] as bool? ?? false),
+      id: id,
+      nickname: nickname,
+      lastSeen: DateTime.fromMillisecondsSinceEpoch(lastSeen.toInt()),
+      secure: online && map['secure'] == true,
       online: online,
-      supportsTransfers: map['supportsTransfers'] as bool? ?? false,
-      supportsEmergencyAck: map['supportsEmergencyAck'] as bool? ?? false,
+      supportsTransfers: map['supportsTransfers'] == true,
+      supportsEmergencyAck: map['supportsEmergencyAck'] == true,
       role: MeshNodeRole.fromWire(map['role']),
-      hasLongRangeTrunk: map['hasLongRangeTrunk'] as bool? ?? false,
+      hasLongRangeTrunk: map['hasLongRangeTrunk'] == true,
       radarAllowedUntil: switch (map['radarAllowedUntil']) {
-        final int value when value > 0 => DateTime.fromMillisecondsSinceEpoch(
-          value,
-        ),
+        final num value
+            when value.isFinite && value > 0 && value <= 8640000000000000 =>
+          DateTime.fromMillisecondsSinceEpoch(value.toInt()),
         _ => null,
       },
-      radarConsentSource: map['radarConsentSource'] as String?,
+      radarConsentSource: radarConsentSource as String?,
       signingPublicKey: switch (map['signingPublicKey']) {
         final Uint8List value when value.length == 32 => value,
         final List<int> value when value.length == 32 => Uint8List.fromList(
@@ -517,6 +544,11 @@ bool canOfferFileToPeer(MeshPeer peer, {required bool isOnline}) =>
 enum MeshMessageDeliveryStatus { transmitted, pending, expired }
 
 class MeshMessage {
+  static const int maximumIdLength = 128;
+  static const int maximumNicknameLength = 80;
+  static const int maximumContentBytes = 64 * 1024;
+  static const int maximumChannelLength = 32;
+
   const MeshMessage({
     required this.id,
     required this.sender,
@@ -530,15 +562,45 @@ class MeshMessage {
   });
 
   factory MeshMessage.fromMap(Map<Object?, Object?> map) {
+    final parsed = tryParse(map);
+    if (parsed == null) throw const FormatException('Invalid mesh message');
+    return parsed;
+  }
+
+  static MeshMessage? tryParse(Map<Object?, Object?> map) {
+    final id = map['id'];
+    final sender = map['sender'];
+    final content = map['content'];
+    final senderPeerId = map['senderPeerId'];
+    final timestamp = map['timestamp'];
+    final channel = map['channel'];
+    if (id is! String ||
+        id.isEmpty ||
+        id.length > maximumIdLength ||
+        sender is! String ||
+        sender.length > maximumNicknameLength ||
+        content is! String ||
+        utf8.encode(content).length > maximumContentBytes ||
+        senderPeerId is! String ||
+        senderPeerId.isEmpty ||
+        senderPeerId.length > maximumIdLength ||
+        timestamp is! num ||
+        !timestamp.isFinite ||
+        timestamp <= 0 ||
+        timestamp > 8640000000000000 ||
+        (channel != null &&
+            (channel is! String || channel.length > maximumChannelLength))) {
+      return null;
+    }
     return MeshMessage(
-      id: map['id']! as String,
-      sender: map['sender']! as String,
-      content: map['content']! as String,
-      senderPeerId: map['senderPeerId']! as String,
-      isPrivate: map['private'] as bool? ?? false,
-      isMine: map['mine'] as bool? ?? false,
-      timestamp: DateTime.fromMillisecondsSinceEpoch(map['timestamp']! as int),
-      channel: map['channel'] as String?,
+      id: id,
+      sender: sender,
+      content: content,
+      senderPeerId: senderPeerId,
+      isPrivate: map['private'] == true,
+      isMine: map['mine'] == true,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(timestamp.toInt()),
+      channel: channel as String?,
     );
   }
 

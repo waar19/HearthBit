@@ -466,6 +466,345 @@ class RunnerTests: XCTestCase {
       IOSBeaconControlProtocol.shouldAutoAccept(localRadarConsentUntil: now + 1, now: now)
     )
   }
+
+  func testBLEPriorityQueuePrioritizesEmergencyWithoutStarvingNormalFrames() throws {
+    var queue = IOSBLEPriorityQueue<String>(normalCapacity: 32, emergencyReserve: 8)
+    XCTAssertTrue(queue.enqueue(["n0", "n1"], priority: .normal))
+    XCTAssertTrue(
+      queue.enqueue((0..<10).map { "e\($0)" }, priority: .emergency)
+    )
+
+    var drained: [String] = []
+    while let next = queue.next() {
+      drained.append(next)
+      queue.completeCurrent()
+    }
+
+    XCTAssertEqual(Array(drained.prefix(8)), (0..<8).map { "e\($0)" })
+    XCTAssertEqual(drained[8], "n0")
+    XCTAssertEqual(Array(drained[9...10]), ["e8", "e9"])
+    XCTAssertEqual(drained.last, "n1")
+  }
+
+  func testBLEPriorityQueueRetainsFailedWriteUntilRetryBudgetExpires() throws {
+    var queue = IOSBLEPriorityQueue<String>(normalCapacity: 2, emergencyReserve: 1)
+    XCTAssertTrue(queue.enqueue(["sos"], priority: .emergency))
+    XCTAssertEqual(queue.next(), "sos")
+
+    for attempt in 1...IOSBLEPriorityQueue<String>.maximumRetries {
+      let failure = try XCTUnwrap(queue.failCurrent())
+      XCTAssertEqual(failure.attempt, attempt)
+      XCTAssertFalse(failure.discarded)
+      XCTAssertEqual(queue.next(), "sos")
+    }
+    let terminal = try XCTUnwrap(queue.failCurrent())
+    XCTAssertTrue(terminal.discarded)
+    XCTAssertTrue(queue.isEmpty)
+  }
+
+  func testBLEPriorityQueueReportsCapacityInsteadOfSilentlyDroppingSOS() {
+    var queue = IOSBLEPriorityQueue<Int>(normalCapacity: 2, emergencyReserve: 1)
+    XCTAssertTrue(queue.enqueue([1, 2], priority: .normal))
+    XCTAssertTrue(queue.enqueue([3], priority: .emergency))
+    XCTAssertFalse(queue.enqueue([4], priority: .emergency))
+    XCTAssertEqual(queue.count, 3)
+  }
+
+  func testNoiseReplayWindowRejectsDuplicatesAndNoncesOlderThan1024() {
+    var window = IOSNoiseReplayWindow()
+    for nonce in UInt32(0)...UInt32(1_100) {
+      XCTAssertTrue(window.canAccept(nonce))
+      window.markAccepted(nonce)
+    }
+    XCTAssertFalse(window.canAccept(1_100))
+    XCTAssertTrue(window.canAccept(77))
+    window.markAccepted(77)
+    XCTAssertFalse(window.canAccept(77))
+    XCTAssertFalse(window.canAccept(76))
+  }
+
+  func testNoiseCipherRejectsReplayAfterMoreThan1024AuthenticatedNonces() throws {
+    let key = SymmetricKey(data: Data(repeating: 0x5a, count: 32))
+    let sender = IOSNoiseCipher(key: key, messageLimit: 2_000)
+    let receiver = IOSNoiseCipher(key: key, messageLimit: 2_000)
+    var frames: [Data] = []
+    for index in 0...1_100 {
+      frames.append(
+        try sender.encrypt(Data("frame-\(index)".utf8), extractedNonce: true)
+      )
+    }
+    for (index, frame) in frames.enumerated() {
+      XCTAssertEqual(
+        try receiver.decrypt(frame, extractedNonce: true),
+        Data("frame-\(index)".utf8)
+      )
+    }
+    XCTAssertThrowsError(try receiver.decrypt(frames[0], extractedNonce: true))
+    XCTAssertThrowsError(try receiver.decrypt(frames[1_100], extractedNonce: true))
+  }
+
+  func testNoiseCipherRequiresRekeyAtUInt32Boundary() throws {
+    let cipher = IOSNoiseCipher(
+      key: SymmetricKey(data: Data(repeating: 0x6b, count: 32)),
+      messageLimit: UInt64(UInt32.max) + 2,
+      initialNonce: UInt64(UInt32.max)
+    )
+    _ = try cipher.encrypt(Data([1]), extractedNonce: true)
+    XCTAssertTrue(cipher.requiresRekey)
+    XCTAssertThrowsError(try cipher.encrypt(Data([2]), extractedNonce: true))
+  }
+
+  func testStoreForwardMigratesPlaintextOnceThenFailsClosed() throws {
+    let suiteName = "HearthBit.StoreForwardTests.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer {
+      defaults.removePersistentDomain(forName: suiteName)
+    }
+    let packet = IOSMeshPacket(
+      type: IOSMeshProtocol.message,
+      ttl: 7,
+      timestamp: 123,
+      senderID: sender,
+      recipientID: Data(repeating: 9, count: 8),
+      payload: Data("SOS|migration".utf8)
+    )
+    let plaintext = IOSMeshProtocol.encode(packet, padded: false)
+    defaults.set([
+      [
+        "expiry": Date().timeIntervalSince1970 + 3_600,
+        "encoded": plaintext.base64EncodedString(),
+      ],
+    ], forKey: IOSStoreForward.entriesKey)
+    let key = SymmetricKey(data: Data(repeating: 0x33, count: 32))
+
+    let migrated = IOSStoreForward(defaults: defaults, testingKey: key)
+    XCTAssertNil(migrated.failure)
+    XCTAssertEqual(
+      defaults.integer(forKey: IOSStoreForward.migrationVersionKey),
+      IOSStoreForward.currentMigrationVersion
+    )
+    let persisted = try XCTUnwrap(
+      (defaults.array(forKey: IOSStoreForward.entriesKey) as? [[String: Any]])?.first?["encoded"]
+        as? String
+    )
+    XCTAssertNotEqual(persisted, plaintext.base64EncodedString())
+    XCTAssertEqual(
+      try migrated.validEntries(now: Date().timeIntervalSince1970).first?.encoded,
+      plaintext
+    )
+
+    defaults.set([
+      [
+        "expiry": Date().timeIntervalSince1970 + 3_600,
+        "encoded": plaintext.base64EncodedString(),
+      ],
+    ], forKey: IOSStoreForward.entriesKey)
+    let failClosed = IOSStoreForward(defaults: defaults, testingKey: key)
+    XCTAssertNil(failClosed.failure)
+    XCTAssertThrowsError(
+      try failClosed.validEntries(now: Date().timeIntervalSince1970)
+    )
+  }
+
+  func testSemanticFingerprintUsesCanonicalNonPaddedEncoding() {
+    let packet = IOSMeshPacket(
+      type: IOSMeshProtocol.noiseEncrypted,
+      ttl: 7,
+      timestamp: 99,
+      senderID: sender,
+      payload: Data((0..<40).map(UInt8.init)),
+      isRSR: true
+    )
+    var normalized = packet
+    normalized.ttl = 0
+    normalized.isRSR = false
+    let expected = Data(
+      SHA256.hash(data: IOSMeshProtocol.encode(normalized, padded: false)).prefix(12)
+    ).hexString
+
+    XCTAssertEqual(IOSMeshProtocol.fingerprint(packet), expected)
+    XCTAssertEqual(
+      IOSMeshProtocol.fingerprint(packet),
+      IOSMeshProtocol.fingerprint(
+        IOSMeshPacket(
+          type: packet.type,
+          ttl: 1,
+          timestamp: packet.timestamp,
+          senderID: packet.senderID,
+          payload: packet.payload
+        )
+      )
+    )
+  }
+
+  func testPeerPinCreatesFirstTOFUBinding() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore()
+    let identity = makePeerPinMaterial()
+
+    XCTAssertEqual(
+      try store.validateAndPin(
+        peerID: identity.peerID,
+        noisePublicKey: identity.noise,
+        signingPublicKey: identity.signing
+      ),
+      .firstBinding
+    )
+    XCTAssertEqual(store.pin(for: identity.peerID)?.noisePublicKey, identity.noise)
+    XCTAssertNotNil(backend.data)
+  }
+
+  func testPeerPinAcceptsSameBoundKeys() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore()
+    let identity = makePeerPinMaterial()
+    _ = try store.validateAndPin(
+      peerID: identity.peerID,
+      noisePublicKey: identity.noise,
+      signingPublicKey: identity.signing
+    )
+
+    XCTAssertEqual(
+      try store.validateAndPin(
+        peerID: identity.peerID,
+        noisePublicKey: identity.noise,
+        signingPublicKey: identity.signing
+      ),
+      .matched
+    )
+  }
+
+  func testPeerPinRejectsSigningKeyChange() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore()
+    let identity = makePeerPinMaterial()
+    _ = try store.validateAndPin(
+      peerID: identity.peerID,
+      noisePublicKey: identity.noise,
+      signingPublicKey: identity.signing
+    )
+    let replacement = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+
+    XCTAssertEqual(
+      try store.validateAndPin(
+        peerID: identity.peerID,
+        noisePublicKey: identity.noise,
+        signingPublicKey: replacement
+      ),
+      .conflict(noiseChanged: false, signingChanged: true)
+    )
+    XCTAssertEqual(store.pin(for: identity.peerID)?.signingPublicKey, identity.signing)
+  }
+
+  func testPeerPinRejectsNoiseKeyChange() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore()
+    let identity = makePeerPinMaterial()
+    _ = try store.validateAndPin(
+      peerID: identity.peerID,
+      noisePublicKey: identity.noise,
+      signingPublicKey: identity.signing
+    )
+    let replacement = Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation
+
+    XCTAssertEqual(
+      try store.validateAndPin(
+        peerID: identity.peerID,
+        noisePublicKey: replacement,
+        signingPublicKey: identity.signing
+      ),
+      .conflict(noiseChanged: true, signingChanged: false)
+    )
+    XCTAssertEqual(store.pin(for: identity.peerID)?.noisePublicKey, identity.noise)
+  }
+
+  func testPeerPinsRestoreFromSecurePersistence() throws {
+    let backend = TestSecurePinBackend()
+    let identity = makePeerPinMaterial()
+    _ = try backend.makeStore().validateAndPin(
+      peerID: identity.peerID,
+      noisePublicKey: identity.noise,
+      signingPublicKey: identity.signing
+    )
+
+    let restored = backend.makeStore()
+    XCTAssertNil(restored.failure)
+    XCTAssertEqual(restored.pin(for: identity.peerID)?.noisePublicKey, identity.noise)
+    XCTAssertEqual(restored.pin(for: identity.peerID)?.signingPublicKey, identity.signing)
+  }
+
+  func testPeerPinsMigrateUnversionedSecurePayload() throws {
+    let backend = TestSecurePinBackend()
+    let identity = makePeerPinMaterial()
+    backend.data = try JSONEncoder().encode([
+      IOSPeerIdentityPin(
+        peerID: identity.peerID,
+        noisePublicKey: identity.noise,
+        signingPublicKey: identity.signing
+      ),
+    ])
+    let legacyPayload = backend.data
+
+    let restored = backend.makeStore()
+
+    XCTAssertNil(restored.failure)
+    XCTAssertEqual(restored.pin(for: identity.peerID)?.noisePublicKey, identity.noise)
+    XCTAssertNotEqual(backend.data, legacyPayload)
+  }
+
+  func testPeerPinWipeRemovesSecurePersistence() throws {
+    let backend = TestSecurePinBackend()
+    let identity = makePeerPinMaterial()
+    let store = backend.makeStore()
+    _ = try store.validateAndPin(
+      peerID: identity.peerID,
+      noisePublicKey: identity.noise,
+      signingPublicKey: identity.signing
+    )
+
+    try store.clear()
+
+    XCTAssertNil(backend.data)
+    XCTAssertNil(store.pin(for: identity.peerID))
+    XCTAssertNil(backend.makeStore().pin(for: identity.peerID))
+  }
+
+  func testNoiseSessionRequiresTemporalRekeyAtOneHourWithoutSleeping() throws {
+    var clock = Date(timeIntervalSince1970: 10_000)
+    let initiatorKey = Curve25519.KeyAgreement.PrivateKey()
+    let responderKey = Curve25519.KeyAgreement.PrivateKey()
+    let initiator = IOSNoiseSession(
+      claimedPeerID: IOSMeshProtocol.peerID(responderKey.publicKey.rawRepresentation),
+      initiator: true,
+      localStatic: initiatorKey,
+      now: { clock }
+    )
+    let responder = IOSNoiseSession(
+      claimedPeerID: IOSMeshProtocol.peerID(initiatorKey.publicKey.rawRepresentation),
+      initiator: false,
+      localStatic: responderKey,
+      now: { clock }
+    )
+    let messageOne = try initiator.start()
+    let messageTwo = try XCTUnwrap(responder.process(messageOne))
+    let messageThree = try XCTUnwrap(initiator.process(messageTwo))
+    XCTAssertNil(try responder.process(messageThree))
+    XCTAssertTrue(initiator.established)
+    XCTAssertTrue(responder.established)
+
+    clock = clock.addingTimeInterval(IOSNoiseSession.maximumSessionAge - 1)
+    XCTAssertFalse(initiator.requiresRekey)
+    XCTAssertFalse(responder.requiresRekey)
+    clock = clock.addingTimeInterval(1)
+    XCTAssertTrue(initiator.requiresRekey)
+    XCTAssertTrue(responder.requiresRekey)
+  }
+
+  private func makePeerPinMaterial() -> (peerID: String, noise: Data, signing: Data) {
+    let noise = Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation
+    let signing = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+    return (IOSMeshProtocol.peerID(noise).hexString, noise, signing)
+  }
 }
 
 final class ConformanceFixtureTests: XCTestCase {
@@ -523,6 +862,79 @@ final class ConformanceFixtureTests: XCTestCase {
     XCTAssertEqual(
       Data(SHA256.hash(data: canonical)).hexString,
       "db232b00f54f6c161ab71e8756af799b2165d9f021cd4309aeb9ab203f2028af"
+    )
+  }
+
+  func testRelayFingerprintMatchesV1AndV2WireVectors() throws {
+    let vectors = [
+      (
+        id: "fingerprint.v1.message",
+        relay16: "d2960f980cd5983d2feadf811d9109a2",
+        firmware8: "d2960f980cd5983d"
+      ),
+      (
+        id: "fingerprint.v2.route_signed",
+        relay16: "988b3fd49212d7fea7a0494c68574c91",
+        firmware8: "988b3fd49212d7fe"
+      ),
+    ]
+
+    for vector in vectors {
+      let wire = fixtures.bytes(vector.id)
+      let fingerprint = try XCTUnwrap(IOSMeshProtocol.relayFingerprint(wire))
+      XCTAssertEqual(fingerprint, String(vector.relay16.prefix(24)), vector.id)
+      XCTAssertTrue(fingerprint.hasPrefix(vector.firmware8), vector.id)
+
+      var normalizedVariant = wire
+      normalizedVariant[2] = 1
+      normalizedVariant[11] |= 0x10
+      let paddingCount = 256 - normalizedVariant.count
+      XCTAssertTrue((1...255).contains(paddingCount), vector.id)
+      normalizedVariant.append(
+        Data(repeating: UInt8(paddingCount), count: paddingCount)
+      )
+      XCTAssertEqual(
+        IOSMeshProtocol.relayFingerprint(normalizedVariant),
+        fingerprint,
+        vector.id
+      )
+    }
+  }
+
+  func testRelayFingerprintRejectsInvalidPadding() {
+    var malformed = fixtures.bytes("fingerprint.v1.message")
+    malformed.append(contentsOf: [0x02, 0x01])
+    XCTAssertNil(IOSMeshProtocol.relayFingerprint(malformed))
+    XCTAssertNil(
+      IOSMeshProtocol.relayFingerprint(fixtures.bytes("packet.invalid.padding"))
+    )
+  }
+
+  func testRelayFingerprintPreservesCompressedWireRepresentation() throws {
+    let rawDeflate = fixtures.bytes("packet.v1.raw_deflate")
+    let zlibWrapped = fixtures.bytes("packet.v1.zlib_read")
+    let rawPacket = try XCTUnwrap(IOSMeshProtocol.decode(rawDeflate))
+    let zlibPacket = try XCTUnwrap(IOSMeshProtocol.decode(zlibWrapped))
+    XCTAssertEqual(rawPacket.payload, zlibPacket.payload)
+    XCTAssertEqual(
+      IOSMeshProtocol.fingerprint(rawPacket),
+      IOSMeshProtocol.fingerprint(zlibPacket)
+    )
+
+    let rawFingerprint = try XCTUnwrap(
+      IOSMeshProtocol.relayFingerprint(rawDeflate)
+    )
+    let zlibFingerprint = try XCTUnwrap(
+      IOSMeshProtocol.relayFingerprint(zlibWrapped)
+    )
+    XCTAssertNotEqual(rawFingerprint, zlibFingerprint)
+
+    var expectedWire = rawDeflate
+    expectedWire[2] = 0
+    expectedWire[11] &= 0xef
+    XCTAssertEqual(
+      rawFingerprint,
+      Data(SHA256.hash(data: expectedWire).prefix(12)).hexString
     )
   }
 
@@ -747,5 +1159,37 @@ private final class ConformanceFixtures {
 private extension Data {
   var hexString: String {
     map { String(format: "%02x", $0) }.joined()
+  }
+}
+
+private final class TestSecurePinBackend {
+  var data: Data?
+  private let suiteName: String
+  private let defaults: UserDefaults
+
+  init() {
+    let name = "HearthBit.PeerPinTests.\(UUID().uuidString)"
+    suiteName = name
+    defaults = UserDefaults(suiteName: name)!
+  }
+
+  deinit {
+    defaults.removePersistentDomain(forName: suiteName)
+  }
+
+  func makeStore() -> IOSPeerIdentityPinStore {
+    IOSPeerIdentityPinStore(
+      defaults: defaults,
+      read: { [weak self] in
+        guard let data = self?.data else { return .missing }
+        return .value(data)
+      },
+      upsert: { [weak self] data in
+        self?.data = data
+      },
+      delete: { [weak self] in
+        self?.data = nil
+      }
+    )
   }
 }

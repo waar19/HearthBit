@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import logging
-from collections.abc import Callable
+from collections import deque
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from .identity import validate_announcement, verify_packet_signature
@@ -17,6 +19,77 @@ from .protocol import (
 LOGGER = logging.getLogger(__name__)
 
 SOS_PREFIX = b"SOS|"
+
+
+class BoundedIngressQueue:
+    """Priority ingress queue that reserves capacity by evicting normal work."""
+
+    def __init__(self, capacity: int) -> None:
+        self.capacity = capacity
+        self._emergency: deque[tuple[bytes, tuple[bytes, ...]]] = deque()
+        self._normal: deque[tuple[bytes, tuple[bytes, ...]]] = deque()
+        self._ready = asyncio.Event()
+        self._handler: (
+            Callable[[bytes, tuple[bytes, ...]], Awaitable[object]] | None
+        ) = None
+        self._task: asyncio.Task[None] | None = None
+
+    def start(
+        self,
+        handler: Callable[[bytes, tuple[bytes, ...]], Awaitable[object]],
+    ) -> None:
+        if self._task is not None:
+            return
+        self._handler = handler
+        self._task = asyncio.create_task(self._run())
+
+    async def stop(self) -> None:
+        task = self._task
+        self._task = None
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        self._handler = None
+        self._emergency.clear()
+        self._normal.clear()
+        self._ready.clear()
+
+    def enqueue(
+        self,
+        frame: bytes,
+        path: tuple[bytes, ...],
+        *,
+        emergency: bool,
+    ) -> bool:
+        size = len(self._emergency) + len(self._normal)
+        if size >= self.capacity:
+            if not emergency or not self._normal:
+                return False
+            self._normal.popleft()
+        target = self._emergency if emergency else self._normal
+        target.append((bytes(frame), tuple(path)))
+        self._ready.set()
+        return True
+
+    async def _run(self) -> None:
+        while True:
+            await self._ready.wait()
+            while self._emergency or self._normal:
+                frame, path = (
+                    self._emergency.popleft()
+                    if self._emergency
+                    else self._normal.popleft()
+                )
+                handler = self._handler
+                if handler is None:
+                    return
+                try:
+                    await handler(frame, path)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    LOGGER.exception("external bridge ingress failed")
+            self._ready.clear()
 
 
 @dataclass(frozen=True, slots=True)

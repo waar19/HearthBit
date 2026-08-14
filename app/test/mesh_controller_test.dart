@@ -375,6 +375,32 @@ void main() {
     };
   }
 
+  test('un evento inválido no cancela los eventos posteriores', () async {
+    platform.emit({
+      'type': 'message',
+      'message': {'id': 7, 'content': Object()},
+    });
+    platform.emit({
+      'type': 'message',
+      'message': {
+        'id': 'valid-after-invalid',
+        'sender': 'Ana',
+        'content': 'Seguimos conectados',
+        'senderPeerId': 'peer-1234',
+        'private': false,
+        'mine': false,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      },
+    });
+
+    await pumpEvents();
+
+    expect(
+      controller.messages.any((message) => message.id == 'valid-after-invalid'),
+      isTrue,
+    );
+  });
+
   test('limita mensajes en memoria y conserva los más recientes', () async {
     final initialMessages = List.generate(
       520,

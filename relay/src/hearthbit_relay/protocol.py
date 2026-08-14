@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import struct
 import zlib
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 VERSION = 1
 SUPPORTED_VERSIONS = (1, 2)
@@ -226,9 +226,19 @@ def encode_packet(
 
 
 def relay_fingerprint(packet: Packet) -> bytes:
-    canonical = canonical_relay_bytes(packet)
+    """Return the v2 relay fingerprint: SHA-256(canonical) truncated to 16 bytes.
+
+    SHA-256 is available through PSA Crypto on the embedded anchor. The
+    firmware uses the first 8 bytes for its bounded RAM cache while relays keep
+    16 bytes in persistent storage.
+    """
+    return hashlib.sha256(canonical_relay_bytes(packet)).digest()[:16]
+
+
+def legacy_relay_fingerprint(packet: Packet) -> bytes:
+    """Return the pre-v2 BLAKE2s fingerprint for SQLite migration reads."""
     digest = hashlib.blake2s(digest_size=16, person=b"HBitRly")
-    digest.update(canonical)
+    digest.update(canonical_relay_bytes(packet))
     return digest.digest()
 
 
@@ -339,7 +349,7 @@ class FragmentReassembler:
             or decoded.recipient_id != packet.recipient_id
         ):
             return None
-        return replace(decoded, ttl=0)
+        return decoded
 
     def _remove(self, key: tuple[bytes, bytes]) -> None:
         removed = self._sets.pop(key, None)

@@ -19,6 +19,8 @@
     {"id":"packet.invalid.deflate_trailing","operation":"packet.decode","blob":"blobs/packet-deflate-trailing.hex","valid":false},
     {"id":"packet.invalid.expanded_size","operation":"packet.decode","blob":"blobs/packet-deflate-wrong-size.hex","valid":false},
     {"id":"signature.canonical.v1_announce","operation":"packet.canonical","blob":"blobs/canonical-v1-announce.hex","valid":true,"expect":{"sha256":"db232b00f54f6c161ab71e8756af799b2165d9f021cd4309aeb9ab203f2028af","bytes":256,"ttl":0,"signed":false}},
+    {"id":"fingerprint.v1.message","operation":"packet.fingerprint","blob":"blobs/packet-v1-message.hex","valid":true,"expect":{"algorithm":"sha256","canonical":"wire-no-padding,ttl-zero,rsr-cleared","relay16":"d2960f980cd5983d2feadf811d9109a2","firmware8":"d2960f980cd5983d"}},
+    {"id":"fingerprint.v2.route_signed","operation":"packet.fingerprint","blob":"blobs/packet-v2-route-signed.hex","valid":true,"expect":{"algorithm":"sha256","canonical":"wire-no-padding,ttl-zero,rsr-cleared","relay16":"988b3fd49212d7fea7a0494c68574c91","firmware8":"988b3fd49212d7fe"}},
     {"id":"fragment.payload.valid","operation":"fragment.decode","blob":"blobs/fragment-payload-valid.hex","valid":true,"expect":{"id":"0102030405060708","index":258,"total":772,"originalType":2,"data":"5566"}},
     {"id":"fragment.invalid.total_zero","operation":"fragment.decode","blob":"blobs/fragment-total-zero.hex","valid":false},
     {"id":"fragment.invalid.index_equal_total","operation":"fragment.decode","blob":"blobs/fragment-index-equal-total.hex","valid":false},

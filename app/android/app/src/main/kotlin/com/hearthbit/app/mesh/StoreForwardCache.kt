@@ -2,30 +2,20 @@ package com.hearthbit.app.mesh
 
 import android.content.Context
 import android.util.Base64
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 
 internal class StoreForwardCache(context: Context) {
     private val legacyPreferences = context.getSharedPreferences(
         LEGACY_PREFERENCES,
         Context.MODE_PRIVATE,
     )
-    private val preferences = EncryptedSharedPreferences.create(
-        context,
-        ENCRYPTED_PREFERENCES,
-        MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build(),
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-    )
+    private val preferences = KeystoreSecureStore.open(context, ENCRYPTED_PREFERENCES)
 
     init {
         val legacyEntries = legacyPreferences.getStringSet(KEY_ENTRIES, emptySet()).orEmpty()
         if (legacyEntries.isNotEmpty() &&
-            preferences.getStringSet(KEY_ENTRIES, emptySet()).isNullOrEmpty()
+            preferences.getStringSet(KEY_ENTRIES).isEmpty()
         ) {
-            preferences.edit().putStringSet(KEY_ENTRIES, legacyEntries).commit()
+            check(preferences.putStringSet(KEY_ENTRIES, legacyEntries))
         }
         legacyPreferences.edit().clear().commit()
     }
@@ -110,7 +100,7 @@ internal class StoreForwardCache(context: Context) {
     fun entryCount(now: Long = System.currentTimeMillis()): Int = readValid(now).size
 
     fun clear() {
-        preferences.edit().clear().commit()
+        preferences.clear()
         legacyPreferences.edit().clear().commit()
     }
 
@@ -127,10 +117,12 @@ internal class StoreForwardCache(context: Context) {
         .sortedBy(Entry::expiry)
 
     private fun write(entries: List<Entry>) {
-        preferences.edit().putStringSet(
-            KEY_ENTRIES,
-            entries.mapTo(mutableSetOf()) { "${it.expiry}:${it.encoded}" },
-        ).apply()
+        check(
+            preferences.putStringSet(
+                KEY_ENTRIES,
+                entries.mapTo(mutableSetOf()) { "${it.expiry}:${it.encoded}" },
+            ),
+        )
     }
 
     private data class Entry(val expiry: Long, val encoded: String)

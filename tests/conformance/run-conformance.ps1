@@ -52,6 +52,10 @@ python (Join-Path $PSScriptRoot "generate_firmware_header.py") --check
 if ($LASTEXITCODE -ne 0) {
     throw "conformance_vectors.h no coincide con los fixtures neutrales"
 }
+python -m pytest (Join-Path $PSScriptRoot "test_firmware_header.py")
+if ($LASTEXITCODE -ne 0) {
+    throw "La cobertura del header firmware no coincide con el manifiesto"
+}
 
 if ($RunAll -or $Target -contains "kotlin") {
     Invoke-InDirectory (Join-Path $Repository "app\android") {

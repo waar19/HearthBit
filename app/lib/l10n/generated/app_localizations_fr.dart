@@ -1193,6 +1193,70 @@ class AppLocalizationsFr extends AppLocalizations {
   String get gatewayTls => 'Utiliser une connexion TLS chiffrée';
 
   @override
+  String get gatewayTrustTitle => 'Confiance du certificat TLS';
+
+  @override
+  String get gatewayTrustSystem => 'Système';
+
+  @override
+  String get gatewayTrustSystemBody =>
+      'Utilise les autorités de certification approuvées par l’appareil. Compatible avec les services publics, sans verrouiller la passerelle sur un certificat.';
+
+  @override
+  String get gatewayTrustTofu => 'TOFU';
+
+  @override
+  String get gatewayTrustTofuBody =>
+      'Approuve le premier certificat vu pour ce service et refuse les changements ultérieurs. Vérifiez que la première connexion n’est pas interceptée.';
+
+  @override
+  String get gatewayTrustPinned => 'Épinglé';
+
+  @override
+  String get gatewayTrustPinnedBody =>
+      'Seule l’empreinte SHA-256 exacte est acceptée. Un renouvellement de certificat bloquera l’envoi jusqu’à la mise à jour de cette valeur.';
+
+  @override
+  String get gatewayFingerprint => 'Empreinte SHA-256 du certificat';
+
+  @override
+  String get gatewayFingerprintHint =>
+      '64 caractères hexadécimaux ; séparateurs autorisés';
+
+  @override
+  String get gatewayFingerprintInvalid =>
+      'Saisissez une empreinte SHA-256 valide de 64 caractères.';
+
+  @override
+  String get gatewayResetTofu => 'Oublier le premier certificat';
+
+  @override
+  String get gatewayResetTofuDone =>
+      'Le certificat TOFU enregistré a été supprimé.';
+
+  @override
+  String get gatewayPrivacyScopeTitle => 'Données partagées avec la passerelle';
+
+  @override
+  String get gatewaySensitiveContentConsent =>
+      'Partager le contenu et l’identité de l’expéditeur';
+
+  @override
+  String get gatewaySensitiveContentConsentBody =>
+      'Inclut la description d’urgence, le nom affiché et l’identifiant du pair. Désactivé par défaut.';
+
+  @override
+  String get gatewayCoordinatesConsent => 'Partager les coordonnées précises';
+
+  @override
+  String get gatewayCoordinatesConsentBody =>
+      'Inclut latitude et longitude lorsqu’elles existent. Ce consentement est distinct du contenu.';
+
+  @override
+  String get gatewayPrivacyScopeWarning =>
+      'La passerelle envoie les données sélectionnées à un service Internet hors du maillage local. Activez chaque catégorie uniquement avec un consentement éclairé.';
+
+  @override
   String get mapOpen => 'Ouvrir la carte hors ligne';
 
   @override

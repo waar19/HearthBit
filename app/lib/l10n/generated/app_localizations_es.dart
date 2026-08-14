@@ -1195,6 +1195,69 @@ class AppLocalizationsEs extends AppLocalizations {
   String get gatewayTls => 'Usar conexión TLS cifrada';
 
   @override
+  String get gatewayTrustTitle => 'Confianza del certificado TLS';
+
+  @override
+  String get gatewayTrustSystem => 'Sistema';
+
+  @override
+  String get gatewayTrustSystemBody =>
+      'Usa las autoridades certificadoras confiables del dispositivo. Es compatible con servicios públicos, pero no fija el gateway a un certificado.';
+
+  @override
+  String get gatewayTrustTofu => 'TOFU';
+
+  @override
+  String get gatewayTrustTofuBody =>
+      'Confía en el primer certificado visto para este destino y rechaza cambios posteriores. Verifica que la primera conexión no esté interceptada.';
+
+  @override
+  String get gatewayTrustPinned => 'Fijado';
+
+  @override
+  String get gatewayTrustPinnedBody =>
+      'Solo acepta la huella SHA-256 exacta del certificado. Una rotación bloqueará los envíos hasta actualizar este valor.';
+
+  @override
+  String get gatewayFingerprint => 'Huella SHA-256 del certificado';
+
+  @override
+  String get gatewayFingerprintHint =>
+      '64 caracteres hexadecimales; se permiten separadores';
+
+  @override
+  String get gatewayFingerprintInvalid =>
+      'Introduce una huella SHA-256 válida de 64 caracteres.';
+
+  @override
+  String get gatewayResetTofu => 'Olvidar primer certificado';
+
+  @override
+  String get gatewayResetTofuDone => 'Se eliminó el certificado TOFU guardado.';
+
+  @override
+  String get gatewayPrivacyScopeTitle => 'Datos compartidos con el gateway';
+
+  @override
+  String get gatewaySensitiveContentConsent =>
+      'Compartir contenido e identidad del remitente';
+
+  @override
+  String get gatewaySensitiveContentConsentBody =>
+      'Incluye la descripción de emergencia, nombre visible e identificador del peer. Desactivado por defecto.';
+
+  @override
+  String get gatewayCoordinatesConsent => 'Compartir coordenadas precisas';
+
+  @override
+  String get gatewayCoordinatesConsentBody =>
+      'Incluye latitud y longitud cuando estén presentes. Este consentimiento es independiente del contenido.';
+
+  @override
+  String get gatewayPrivacyScopeWarning =>
+      'El gateway envía los datos seleccionados a un servicio de internet fuera de la malla local. Activa cada categoría solo con consentimiento informado.';
+
+  @override
   String get mapOpen => 'Abrir mapa offline';
 
   @override

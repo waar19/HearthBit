@@ -1185,6 +1185,69 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gatewayTls => 'Use encrypted TLS connection';
 
   @override
+  String get gatewayTrustTitle => 'TLS certificate trust';
+
+  @override
+  String get gatewayTrustSystem => 'System';
+
+  @override
+  String get gatewayTrustSystemBody =>
+      'Uses the certificate authorities trusted by your device. This is compatible with public services, but does not lock the gateway to one certificate.';
+
+  @override
+  String get gatewayTrustTofu => 'TOFU';
+
+  @override
+  String get gatewayTrustTofuBody =>
+      'Trusts the first certificate seen for this endpoint and rejects later changes. Verify the first connection is not being intercepted.';
+
+  @override
+  String get gatewayTrustPinned => 'Pinned';
+
+  @override
+  String get gatewayTrustPinnedBody =>
+      'Only the exact SHA-256 certificate fingerprint is accepted. Certificate rotation will block delivery until this value is updated.';
+
+  @override
+  String get gatewayFingerprint => 'Certificate SHA-256 fingerprint';
+
+  @override
+  String get gatewayFingerprintHint =>
+      '64 hexadecimal characters; separators are allowed';
+
+  @override
+  String get gatewayFingerprintInvalid =>
+      'Enter a valid 64-character SHA-256 certificate fingerprint.';
+
+  @override
+  String get gatewayResetTofu => 'Forget first certificate';
+
+  @override
+  String get gatewayResetTofuDone => 'The saved TOFU certificate was removed.';
+
+  @override
+  String get gatewayPrivacyScopeTitle => 'Data shared with the gateway';
+
+  @override
+  String get gatewaySensitiveContentConsent =>
+      'Share message content and sender identity';
+
+  @override
+  String get gatewaySensitiveContentConsentBody =>
+      'Includes the emergency description, display name and peer identifier. Off by default.';
+
+  @override
+  String get gatewayCoordinatesConsent => 'Share precise coordinates';
+
+  @override
+  String get gatewayCoordinatesConsentBody =>
+      'Includes latitude and longitude when present. This consent is separate from message content.';
+
+  @override
+  String get gatewayPrivacyScopeWarning =>
+      'The gateway sends selected data to an internet service outside the local mesh. Enable each category only with informed consent.';
+
+  @override
   String get mapOpen => 'Open offline map';
 
   @override

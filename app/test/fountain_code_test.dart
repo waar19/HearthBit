@@ -78,12 +78,33 @@ void main() {
     expect(decoder.assemble(data.length), data);
   });
 
+  test('codifica y decodifica lotes fuera del isolate UI', () async {
+    final data = _randomData(2048, 31);
+    final encoder = FountainEncoder(data: data, chunkSize: 128, seed: 77);
+    final encoded = await encoder.encodeSymbolsInIsolate(
+      startIndex: 0,
+      count: 64,
+    );
+    var decoder = FountainDecoder(
+      chunkCount: encoder.chunkCount,
+      chunkSize: 128,
+      seed: 77,
+    );
+    decoder = await FountainDecoder.addSymbolsInIsolate(decoder, [
+      for (var index = 0; index < encoded.length; index++)
+        (index, encoded[index]),
+    ]);
+
+    expect(decoder.isComplete, isTrue);
+    expect(decoder.assemble(data.length), data);
+  });
+
   group('protocolo óptico HBQ', () {
     test('la cabecera sobrevive al viaje de ida y vuelta', () {
       final header = OpticalHeader(
         transferId: Uint8List.fromList(List.generate(16, (i) => i)),
         seed: 0xdeadbeef,
-        fileSize: 123456789,
+        fileSize: 123456,
         chunkSize: 420,
         chunkCount: 294,
         sha256: Uint8List.fromList(List.generate(32, (i) => 255 - i)),
@@ -167,6 +188,34 @@ void main() {
       expect(OpticalProtocol.decode('https://example.com'), isNull);
       expect(OpticalProtocol.decode('SEJRAQ=='), isNull);
       expect(OpticalProtocol.decode(''), isNull);
+      expect(
+        OpticalProtocol.decode(
+          'A' * (OpticalProtocol.maximumEncodedFrameLength + 1),
+        ),
+        isNull,
+      );
+    });
+
+    test('rechaza cabeceras incoherentes antes de reservar el decoder', () {
+      final header = OpticalHeader(
+        transferId: Uint8List(16),
+        seed: 1,
+        fileSize: 1000,
+        chunkSize: 100,
+        chunkCount: 9,
+        sha256: Uint8List(32),
+        fileName: 'bad.bin',
+      );
+
+      expect(() => OpticalProtocol.encodeHeader(header), throwsArgumentError);
+      expect(
+        () => FountainDecoder(
+          chunkCount: OpticalProtocol.maximumChunkCount + 1,
+          chunkSize: 128,
+          seed: 1,
+        ),
+        throwsArgumentError,
+      );
     });
   });
 }

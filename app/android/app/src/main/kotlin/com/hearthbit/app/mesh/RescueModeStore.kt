@@ -1,8 +1,6 @@
 package com.hearthbit.app.mesh
 
 import android.content.Context
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 
 internal data class RescueModeState(
     val active: Boolean,
@@ -37,15 +35,7 @@ internal data class RescueModeState(
  * planificador; Flutter configura y refleja el estado, pero no mantiene timers.
  */
 internal class RescueModeStore(context: Context) {
-    private val preferences = EncryptedSharedPreferences.create(
-        context,
-        PREFERENCES,
-        MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build(),
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-    )
+    private val preferences = KeystoreSecureStore.open(context, PREFERENCES)
 
     @Synchronized
     fun read(now: Long = System.currentTimeMillis()): RescueModeState {
@@ -80,29 +70,25 @@ internal class RescueModeStore(context: Context) {
             .takeIf { it > now }
             ?.coerceAtMost(safeStartedAt + MAX_LIFETIME_MS)
             ?: (safeStartedAt + MAX_LIFETIME_MS)
-        preferences.edit()
-            .putBoolean(KEY_ACTIVE, true)
-            .putString(KEY_DESCRIPTION, description.trim().take(MAX_DESCRIPTION_LENGTH))
-            .putLong(KEY_STARTED_AT, safeStartedAt)
-            .putLong(KEY_LAST_PING_AT, lastPingAt.coerceAtLeast(0L))
-            .putLong(KEY_EXPIRES_AT, safeExpiresAt)
-            .putLong(KEY_INTERVAL_MS, intervalMs.coerceIn(MIN_INTERVAL_MS, MAX_INTERVAL_MS))
-            .putLong(KEY_PING_COUNT, if (lastPingAt > 0L) 1L else 0L)
-            .commit()
+        check(preferences.putBoolean(KEY_ACTIVE, true))
+        check(preferences.putString(KEY_DESCRIPTION, description.trim().take(MAX_DESCRIPTION_LENGTH)))
+        check(preferences.putLong(KEY_STARTED_AT, safeStartedAt))
+        check(preferences.putLong(KEY_LAST_PING_AT, lastPingAt.coerceAtLeast(0L)))
+        check(preferences.putLong(KEY_EXPIRES_AT, safeExpiresAt))
+        check(preferences.putLong(KEY_INTERVAL_MS, intervalMs.coerceIn(MIN_INTERVAL_MS, MAX_INTERVAL_MS)))
+        check(preferences.putLong(KEY_PING_COUNT, if (lastPingAt > 0L) 1L else 0L))
         return read(now)
     }
 
     @Synchronized
     fun recordPing(timestamp: Long) {
-        preferences.edit()
-            .putLong(KEY_LAST_PING_AT, timestamp)
-            .putLong(KEY_PING_COUNT, preferences.getLong(KEY_PING_COUNT, 0L) + 1)
-            .apply()
+        check(preferences.putLong(KEY_LAST_PING_AT, timestamp))
+        check(preferences.putLong(KEY_PING_COUNT, preferences.getLong(KEY_PING_COUNT, 0L) + 1))
     }
 
     @Synchronized
     fun disable() {
-        preferences.edit().clear().commit()
+        check(preferences.clear())
     }
 
     companion object {

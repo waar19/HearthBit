@@ -16,6 +16,7 @@ from hearthbit_relay.protocol import (
     decode_gcs,
     decode_packet,
     decode_sync_request,
+    relay_fingerprint,
 )
 
 ROOT = Path(__file__).resolve().parents[2] / "tests" / "conformance"
@@ -70,6 +71,18 @@ def test_canonical_signature_bytes_and_padding() -> None:
     )
 
 
+def test_relay_fingerprint_matches_shared_v1_v2_vectors() -> None:
+    for fixture_id in (
+        "fingerprint.v1.message",
+        "fingerprint.v2.route_signed",
+    ):
+        entry = FIXTURES[fixture_id]
+        packet = decode_packet(fixture(fixture_id))
+        actual = relay_fingerprint(packet)
+        assert actual.hex() == entry["expect"]["relay16"]
+        assert actual[:8].hex() == entry["expect"]["firmware8"]
+
+
 def test_fragment_payload_limits_and_out_of_order_reassembly() -> None:
     fragment = decode_fragment_payload(fixture("fragment.payload.valid"))
     assert (fragment.index, fragment.total, fragment.data) == (
@@ -90,7 +103,7 @@ def test_fragment_payload_limits_and_out_of_order_reassembly() -> None:
     assert reassembler.accept(second) is None
     result = reassembler.accept(first)
     assert result is not None
-    assert result.ttl == 0
+    assert result.ttl == 7
     assert result.payload == b"abc"
 
 

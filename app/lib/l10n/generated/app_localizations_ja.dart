@@ -1146,6 +1146,67 @@ class AppLocalizationsJa extends AppLocalizations {
   String get gatewayTls => '暗号化TLS接続を使用';
 
   @override
+  String get gatewayTrustTitle => 'TLS証明書の信頼方式';
+
+  @override
+  String get gatewayTrustSystem => 'システム';
+
+  @override
+  String get gatewayTrustSystemBody =>
+      '端末が信頼する認証局を使用します。公開サービスと互換性がありますが、ゲートウェイを特定の証明書には固定しません。';
+
+  @override
+  String get gatewayTrustTofu => 'TOFU';
+
+  @override
+  String get gatewayTrustTofuBody =>
+      'この接続先で最初に確認した証明書を信頼し、その後の変更を拒否します。初回接続が傍受されていないことを確認してください。';
+
+  @override
+  String get gatewayTrustPinned => '固定';
+
+  @override
+  String get gatewayTrustPinnedBody =>
+      '完全に一致するSHA-256証明書フィンガープリントだけを許可します。証明書更新時は値を更新するまで送信できません。';
+
+  @override
+  String get gatewayFingerprint => '証明書のSHA-256フィンガープリント';
+
+  @override
+  String get gatewayFingerprintHint => '16進数64文字。区切り文字も使用できます';
+
+  @override
+  String get gatewayFingerprintInvalid =>
+      '有効な64文字のSHA-256証明書フィンガープリントを入力してください。';
+
+  @override
+  String get gatewayResetTofu => '最初の証明書を忘れる';
+
+  @override
+  String get gatewayResetTofuDone => '保存されたTOFU証明書を削除しました。';
+
+  @override
+  String get gatewayPrivacyScopeTitle => 'ゲートウェイと共有するデータ';
+
+  @override
+  String get gatewaySensitiveContentConsent => 'メッセージ内容と送信者情報を共有';
+
+  @override
+  String get gatewaySensitiveContentConsentBody =>
+      '緊急内容、表示名、ピア識別子を含みます。初期状態ではオフです。';
+
+  @override
+  String get gatewayCoordinatesConsent => '正確な位置情報を共有';
+
+  @override
+  String get gatewayCoordinatesConsentBody =>
+      '存在する場合に緯度と経度を含めます。メッセージ内容とは別の同意です。';
+
+  @override
+  String get gatewayPrivacyScopeWarning =>
+      'ゲートウェイは選択したデータをローカルメッシュ外のインターネットサービスへ送信します。十分な同意がある項目だけを有効にしてください。';
+
+  @override
   String get mapOpen => 'オフライン地図を開く';
 
   @override

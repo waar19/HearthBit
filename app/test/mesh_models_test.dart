@@ -110,4 +110,32 @@ void main() {
     expect(presence.rssi, -72);
     expect(presence.id, hasLength(24));
   });
+
+  test('tryParse rechaza peers y mensajes malformados sin lanzar', () {
+    expect(MeshPeer.tryParse({'id': 7, 'nickname': 'Ana'}), isNull);
+    expect(
+      MeshPeer.tryParse({'id': 'peer', 'nickname': 'x' * 81, 'lastSeen': 1234}),
+      isNull,
+    );
+    expect(
+      MeshMessage.tryParse({
+        'id': 'message',
+        'sender': 'Ana',
+        'content': 'x' * (MeshMessage.maximumContentBytes + 1),
+        'senderPeerId': 'peer',
+        'timestamp': 1234,
+      }),
+      isNull,
+    );
+    expect(
+      MeshMessage.tryParse({
+        'id': 'message',
+        'sender': 'Ana',
+        'content': 'ok',
+        'senderPeerId': 'peer',
+        'timestamp': 'ayer',
+      }),
+      isNull,
+    );
+  });
 }

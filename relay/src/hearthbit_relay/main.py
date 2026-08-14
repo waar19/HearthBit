@@ -14,6 +14,7 @@ from .lan import LanTransport
 from .matrix import HttpMatrixApi, MatrixBridge
 from .mqtt import MqttBridge, PahoMqttBroker
 from .store import PacketStore
+from .trust import TrustStore
 
 
 async def run(config_path: str | None) -> None:
@@ -22,9 +23,10 @@ async def run(config_path: str | None) -> None:
         level=getattr(logging, config.log_level, logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    store = PacketStore(config.store)
+    store = await asyncio.to_thread(PacketStore, config.store)
     identity = RelayIdentity.load_or_create(config.identity_path)
-    core = RelayCore(config, store, identity)
+    trust_store = await asyncio.to_thread(TrustStore, config.trust_store_path)
+    core = RelayCore(config, store, identity, trust_store=trust_store)
     transport = BlueZTransport(config, core)
     lan_transport = (
         LanTransport(
@@ -84,7 +86,7 @@ async def run(config_path: str | None) -> None:
         if lan_transport is not None:
             await lan_transport.stop()
         await transport.stop()
-        store.close()
+        await asyncio.to_thread(store.close)
 
 
 def main() -> None:

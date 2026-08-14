@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../controllers/emergency_gateway_controller.dart';
 import '../l10n/l10n.dart';
 import '../services/app_preferences.dart';
+import '../services/tls_peer_verifier.dart';
 
 class EmergencyGatewayCard extends StatelessWidget {
   const EmergencyGatewayCard({
@@ -120,6 +121,10 @@ class _GatewayConfigDialogState extends State<_GatewayConfigDialog> {
   late final TextEditingController _username;
   late final TextEditingController _port;
   late final TextEditingController _secret;
+  late final TextEditingController _fingerprint;
+  late TlsTrustMode _trustMode;
+  var _includeSensitiveContent = false;
+  var _includeCoordinates = false;
   var _saving = false;
   String? _error;
 
@@ -133,6 +138,10 @@ class _GatewayConfigDialogState extends State<_GatewayConfigDialog> {
     _username = TextEditingController(text: config?.username ?? '');
     _port = TextEditingController(text: '${config?.port ?? 443}');
     _secret = TextEditingController();
+    _fingerprint = TextEditingController(text: config?.certificateSha256 ?? '');
+    _trustMode = config?.trustMode ?? TlsTrustMode.system;
+    _includeSensitiveContent = config?.includeSensitiveContent ?? false;
+    _includeCoordinates = config?.includeCoordinates ?? false;
   }
 
   @override
@@ -142,10 +151,51 @@ class _GatewayConfigDialogState extends State<_GatewayConfigDialog> {
     _username.dispose();
     _port.dispose();
     _secret.dispose();
+    _fingerprint.dispose();
     super.dispose();
   }
 
+  EmergencyGatewayConfig _draftConfig(int port) => EmergencyGatewayConfig(
+    kind: _kind,
+    server: _server.text,
+    destination: _destination.text,
+    username: _username.text,
+    port: port,
+    tls: true,
+    trustMode: _trustMode,
+    certificateSha256: _trustMode == TlsTrustMode.pinned
+        ? _fingerprint.text
+        : null,
+    includeSensitiveContent: _includeSensitiveContent,
+    includeCoordinates: _includeCoordinates,
+  );
+
   Future<void> _save() async {
+    final port = int.tryParse(_port.text);
+    if (port == null || port <= 0) return;
+    if (_trustMode == TlsTrustMode.pinned &&
+        !TlsPeerVerifier.isValidFingerprint(_fingerprint.text)) {
+      setState(() => _error = context.l10n.gatewayFingerprintInvalid);
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.controller.saveConfig(_draftConfig(port), _secret.text);
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = error.toString();
+        });
+      }
+    }
+  }
+
+  Future<void> _resetTofuTrust() async {
     final port = int.tryParse(_port.text);
     if (port == null || port <= 0) return;
     setState(() {
@@ -153,18 +203,13 @@ class _GatewayConfigDialogState extends State<_GatewayConfigDialog> {
       _error = null;
     });
     try {
-      await widget.controller.saveConfig(
-        EmergencyGatewayConfig(
-          kind: _kind,
-          server: _server.text,
-          destination: _destination.text,
-          username: _username.text,
-          port: port,
-          tls: true,
-        ),
-        _secret.text,
-      );
-      if (mounted) Navigator.pop(context);
+      await widget.controller.resetTofuTrust(_draftConfig(port));
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = context.l10n.gatewayResetTofuDone;
+        });
+      }
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -250,6 +295,123 @@ class _GatewayConfigDialogState extends State<_GatewayConfigDialog> {
               title: Text(context.l10n.gatewayTls),
               subtitle: Text(context.l10n.gatewayTlsRequired),
             ),
+            const Divider(),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                context.l10n.gatewayTrustTitle,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                ChoiceChip(
+                  key: const Key('gateway-trust-system'),
+                  selected: _trustMode == TlsTrustMode.system,
+                  onSelected: _saving
+                      ? null
+                      : (_) {
+                          setState(() => _trustMode = TlsTrustMode.system);
+                        },
+                  avatar: const Icon(Icons.verified_user_outlined),
+                  label: Text(context.l10n.gatewayTrustSystem),
+                ),
+                ChoiceChip(
+                  key: const Key('gateway-trust-tofu'),
+                  selected: _trustMode == TlsTrustMode.tofu,
+                  onSelected: _saving
+                      ? null
+                      : (_) {
+                          setState(() => _trustMode = TlsTrustMode.tofu);
+                        },
+                  avatar: const Icon(Icons.fingerprint),
+                  label: Text(context.l10n.gatewayTrustTofu),
+                ),
+                ChoiceChip(
+                  key: const Key('gateway-trust-pinned'),
+                  selected: _trustMode == TlsTrustMode.pinned,
+                  onSelected: _saving
+                      ? null
+                      : (_) {
+                          setState(() => _trustMode = TlsTrustMode.pinned);
+                        },
+                  avatar: const Icon(Icons.push_pin_outlined),
+                  label: Text(context.l10n.gatewayTrustPinned),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(switch (_trustMode) {
+                TlsTrustMode.system => context.l10n.gatewayTrustSystemBody,
+                TlsTrustMode.tofu => context.l10n.gatewayTrustTofuBody,
+                TlsTrustMode.pinned => context.l10n.gatewayTrustPinnedBody,
+              }, style: Theme.of(context).textTheme.bodySmall),
+            ),
+            if (_trustMode == TlsTrustMode.pinned)
+              TextField(
+                key: const Key('gateway-fingerprint'),
+                controller: _fingerprint,
+                autocorrect: false,
+                enableSuggestions: false,
+                keyboardType: TextInputType.visiblePassword,
+                decoration: InputDecoration(
+                  labelText: context.l10n.gatewayFingerprint,
+                  helperText: context.l10n.gatewayFingerprintHint,
+                ),
+              ),
+            if (_trustMode == TlsTrustMode.tofu)
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton.icon(
+                  key: const Key('gateway-reset-tofu'),
+                  onPressed: _saving ? null : _resetTofuTrust,
+                  icon: const Icon(Icons.restart_alt),
+                  label: Text(context.l10n.gatewayResetTofu),
+                ),
+              ),
+            const Divider(),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                context.l10n.gatewayPrivacyScopeTitle,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+            SwitchListTile(
+              key: const Key('gateway-sensitive-consent'),
+              contentPadding: EdgeInsets.zero,
+              value: _includeSensitiveContent,
+              onChanged: _saving
+                  ? null
+                  : (value) {
+                      setState(() => _includeSensitiveContent = value);
+                    },
+              title: Text(context.l10n.gatewaySensitiveContentConsent),
+              subtitle: Text(context.l10n.gatewaySensitiveContentConsentBody),
+            ),
+            SwitchListTile(
+              key: const Key('gateway-coordinates-consent'),
+              contentPadding: EdgeInsets.zero,
+              value: _includeCoordinates,
+              onChanged: _saving
+                  ? null
+                  : (value) {
+                      setState(() => _includeCoordinates = value);
+                    },
+              title: Text(context.l10n.gatewayCoordinatesConsent),
+              subtitle: Text(context.l10n.gatewayCoordinatesConsentBody),
+            ),
+            Text(
+              context.l10n.gatewayPrivacyScopeWarning,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
             if (_error != null)
               Text(
                 _error!,
@@ -264,6 +426,7 @@ class _GatewayConfigDialogState extends State<_GatewayConfigDialog> {
           child: Text(context.l10n.actionCancel),
         ),
         FilledButton(
+          key: const Key('gateway-save'),
           onPressed: _saving ? null : _save,
           child: Text(context.l10n.actionSave),
         ),

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
@@ -19,6 +20,30 @@ class TransferCrypto {
   static Future<Uint8List> publicKeyBytes(SimpleKeyPair keyPair) async {
     final publicKey = await keyPair.extractPublicKey();
     return Uint8List.fromList(publicKey.bytes);
+  }
+
+  static Future<({Uint8List privateKey, Uint8List publicKey})> exportKeyPair(
+    SimpleKeyPair keyPair,
+  ) async {
+    final extracted = await keyPair.extract();
+    return (
+      privateKey: Uint8List.fromList(extracted.bytes),
+      publicKey: Uint8List.fromList(extracted.publicKey.bytes),
+    );
+  }
+
+  static SimpleKeyPair restoreKeyPair({
+    required Uint8List privateKey,
+    required Uint8List publicKey,
+  }) {
+    if (privateKey.length != 32 || publicKey.length != 32) {
+      throw const FormatException('Invalid persisted X25519 key material');
+    }
+    return SimpleKeyPairData(
+      privateKey,
+      publicKey: SimplePublicKey(publicKey, type: KeyPairType.x25519),
+      type: KeyPairType.x25519,
+    );
   }
 
   static Future<TransferCipher> deriveCipher({
@@ -48,15 +73,18 @@ class TransferCrypto {
   }
 
   /// SHA-256 de un archivo, leyendo por bloques para no cargarlo en memoria.
-  static Future<String> hashFile(File file) async {
-    final output = _DigestSink();
-    final input = crypto.sha256.startChunkedConversion(output);
-    await for (final block in file.openRead()) {
-      input.add(block);
-    }
-    input.close();
-    return output.digest.toString();
+  static Future<String> hashFile(File file) =>
+      Isolate.run(() => _hashFilePath(file.path));
+}
+
+Future<String> _hashFilePath(String path) async {
+  final output = _DigestSink();
+  final input = crypto.sha256.startChunkedConversion(output);
+  await for (final block in File(path).openRead()) {
+    input.add(block);
   }
+  input.close();
+  return output.digest.toString();
 }
 
 class TransferCipher {

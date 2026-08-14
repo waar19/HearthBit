@@ -67,6 +67,9 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
   Timer? _timer;
   int _frameCounter = 0;
   int _symbolIndex = 0;
+  int _nextEncodedIndex = 0;
+  final List<Uint8List> _encodedSymbols = [];
+  bool _encodingBatch = false;
   double _fps = 8;
   _Density _density = _Density.medium;
   String? _currentQr;
@@ -159,7 +162,28 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
     );
     _frameCounter = 0;
     _symbolIndex = 0;
+    _nextEncodedIndex = 0;
+    _encodedSymbols.clear();
+    await _fillSymbolBatch();
     _restartTimer();
+  }
+
+  Future<void> _fillSymbolBatch() async {
+    final encoder = _encoder;
+    if (encoder == null || _encodingBatch || _confirmed) return;
+    _encodingBatch = true;
+    final start = _nextEncodedIndex;
+    try {
+      final symbols = await encoder.encodeSymbolsInIsolate(
+        startIndex: start,
+        count: 12,
+      );
+      if (!mounted || !identical(encoder, _encoder)) return;
+      _encodedSymbols.addAll(symbols);
+      _nextEncodedIndex += symbols.length;
+    } finally {
+      _encodingBatch = false;
+    }
   }
 
   void _restartTimer() {
@@ -178,12 +202,17 @@ class _OpticalSendScreenState extends State<OpticalSendScreen> {
     if (_frameCounter % _headerEvery == 0) {
       content = _headerContent!;
     } else {
+      if (_encodedSymbols.isEmpty) {
+        unawaited(_fillSymbolBatch());
+        return;
+      }
       content = OpticalProtocol.encodeData(
         transferId: _transferId,
         symbolIndex: _symbolIndex,
-        payload: encoder.encodeSymbol(_symbolIndex),
+        payload: _encodedSymbols.removeAt(0),
       );
       _symbolIndex += 1;
+      if (_encodedSymbols.length < 4) unawaited(_fillSymbolBatch());
     }
     _frameCounter += 1;
     setState(() => _currentQr = content);

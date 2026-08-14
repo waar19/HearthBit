@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/lan_mesh_gateway.dart';
+import '../services/secure_storage_config.dart';
 
 class LanGatewayController extends ChangeNotifier {
   LanGatewayController({
@@ -15,7 +16,7 @@ class LanGatewayController extends ChangeNotifier {
     FlutterSecureStorage? secureStorage,
   }) : _service = service ?? LanMeshGatewayService(),
        _preferences = preferences ?? SharedPreferencesAsync(),
-       _secureStorage = secureStorage ?? const FlutterSecureStorage();
+       _secureStorage = secureStorage ?? hearthBitSecureStorage;
 
   static const _enabledKey = 'lanGateway.enabled.v1';
   static const _pskKey = 'lanGateway.psk.v1';

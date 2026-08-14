@@ -1125,6 +1125,62 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gatewayTls => '使用加密 TLS 连接';
 
   @override
+  String get gatewayTrustTitle => 'TLS 证书信任方式';
+
+  @override
+  String get gatewayTrustSystem => '系统';
+
+  @override
+  String get gatewayTrustSystemBody => '使用设备信任的证书颁发机构。兼容公共服务，但不会将网关锁定到某一张证书。';
+
+  @override
+  String get gatewayTrustTofu => 'TOFU';
+
+  @override
+  String get gatewayTrustTofuBody => '信任此端点首次出现的证书，并拒绝之后的变化。请确认首次连接未被拦截。';
+
+  @override
+  String get gatewayTrustPinned => '固定';
+
+  @override
+  String get gatewayTrustPinnedBody =>
+      '只接受完全匹配的 SHA-256 证书指纹。证书轮换后，更新此值前将无法发送。';
+
+  @override
+  String get gatewayFingerprint => '证书 SHA-256 指纹';
+
+  @override
+  String get gatewayFingerprintHint => '64 个十六进制字符；允许分隔符';
+
+  @override
+  String get gatewayFingerprintInvalid => '请输入有效的 64 字符 SHA-256 证书指纹。';
+
+  @override
+  String get gatewayResetTofu => '忘记首次证书';
+
+  @override
+  String get gatewayResetTofuDone => '已删除保存的 TOFU 证书。';
+
+  @override
+  String get gatewayPrivacyScopeTitle => '与网关共享的数据';
+
+  @override
+  String get gatewaySensitiveContentConsent => '共享消息内容和发送者身份';
+
+  @override
+  String get gatewaySensitiveContentConsentBody => '包括紧急情况描述、显示名称和节点标识符。默认关闭。';
+
+  @override
+  String get gatewayCoordinatesConsent => '共享精确坐标';
+
+  @override
+  String get gatewayCoordinatesConsentBody => '在存在时包括纬度和经度。此同意与消息内容相互独立。';
+
+  @override
+  String get gatewayPrivacyScopeWarning =>
+      '网关会将所选数据发送到本地网状网络之外的互联网服务。仅在获得知情同意后启用相应类别。';
+
+  @override
   String get mapOpen => '打开离线地图';
 
   @override

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -38,6 +39,7 @@ class TransferController extends ChangeNotifier {
   static const int maximumTransfersInMemory = 200;
   static const Duration defaultOfferLifetime = Duration(minutes: 10);
   static const Duration priorityHold = Duration(seconds: 20);
+  static const bool secureResumeSupported = true;
   static const String voiceNoteMimeType = 'audio/x-hearthbit-voice';
   static const String androidPackageMimeType =
       'application/vnd.android.package-archive';
@@ -83,13 +85,69 @@ class TransferController extends ChangeNotifier {
       ..clear()
       ..addAll(await _repository.load());
     _trimTransfersInMemory();
-    // Las transferencias que quedaron a medias en una sesión anterior no
-    // tienen ya sesión criptográfica en memoria: se marcan como fallidas.
+    final resumableIncoming = <TransferRecord>[];
     for (final record in _transfers) {
-      if (record.isActive) {
+      if (!record.isActive) continue;
+      final material = await _repository.loadResumeMaterial(record.id);
+      final bitmapBytes = await _repository.loadBitmap(record.id);
+      final filePath = record.filePath;
+      final canRestore =
+          material != null &&
+          filePath != null &&
+          await File(filePath).exists() &&
+          (record.direction == TransferDirection.outgoing ||
+              bitmapBytes != null);
+      if (!canRestore) {
         record.state = TransferState.failed;
         record.error = currentL10n.terrInterrupted;
-        await _repository.save(record);
+        await _repository.save(
+          record,
+          clearResumeMaterial: true,
+          clearBitmap: true,
+        );
+        continue;
+      }
+      try {
+        final restoredMaterial = material;
+        final keyPair = TransferCrypto.restoreKeyPair(
+          privateKey: restoredMaterial.localPrivateKey,
+          publicKey: restoredMaterial.localPublicKey,
+        );
+        final cipher = await TransferCrypto.deriveCipher(
+          localKeyPair: keyPair,
+          remotePublicKey: restoredMaterial.remotePublicKey,
+          transferId: _fromHex(record.id),
+        );
+        final restoredBitmap = ChunkBitmap.fromBytes(
+          record.chunkCount,
+          bitmapBytes ?? Uint8List((record.chunkCount + 7) ~/ 8),
+        );
+        _sessions[record.id] =
+            _TransferSession(
+                keyPair: keyPair,
+                remoteEphemeral: restoredMaterial.remotePublicKey,
+                offeredTransports: restoredMaterial.offeredTransports,
+              )
+              ..cipher = cipher
+              ..bitmap = restoredBitmap;
+        record
+          ..state = TransferState.connecting
+          ..bytesDone = min(
+            restoredBitmap.count * record.chunkSize,
+            record.fileSize,
+          )
+          ..error = null;
+        if (record.direction == TransferDirection.incoming) {
+          resumableIncoming.add(record);
+        }
+      } catch (_) {
+        record.state = TransferState.failed;
+        record.error = currentL10n.terrInterrupted;
+        await _repository.save(
+          record,
+          clearResumeMaterial: true,
+          clearBitmap: true,
+        );
       }
     }
     _meshSubscription = _mesh.events.listen(_handleMeshEvent);
@@ -102,6 +160,9 @@ class TransferController extends ChangeNotifier {
     nearbySupported = capabilities['nearby'] as bool? ?? false;
     wifiAwareSupported =
         wifiAwareFeatureFlag && (capabilities['wifiAware'] as bool? ?? false);
+    for (final record in resumableIncoming) {
+      await _requestResume(record);
+    }
     notifyListeners();
   }
 
@@ -154,7 +215,10 @@ class TransferController extends ChangeNotifier {
       state: TransferState.offered,
       filePath: filePath,
     );
-    final session = _TransferSession(keyPair: keyPair);
+    final session = _TransferSession(
+      keyPair: keyPair,
+      offeredTransports: transports,
+    );
     session.expiryTimer = Timer(offerLifetime, () {
       DiagnosticsLog.instance.warning(
         'transfer.offer.expired',
@@ -236,7 +300,7 @@ class TransferController extends ChangeNotifier {
       'transfer.offer.accepted',
       data: {'transport': record.transport!},
     );
-    await _repository.save(record);
+    await _saveResumeState(record, session, bitmap: session.bitmap);
     notifyListeners();
 
     final frame = TransferFrame(TransferProtocol.typeAccept)
@@ -428,6 +492,9 @@ class TransferController extends ChangeNotifier {
           frame.u32(TransferProtocol.tagReceivedCount) ?? 0,
         );
         break;
+      case TransferProtocol.typeResumeRequest:
+        await _handleResumeRequest(peerId, transferId, frame);
+        break;
       default:
         break;
     }
@@ -447,14 +514,23 @@ class TransferController extends ChangeNotifier {
     final expiresAt = frame.u64(TransferProtocol.tagExpiresAt);
     final fileName = frame.utf8Value(TransferProtocol.tagFileName);
     if (signature == null ||
+        signature.length != 64 ||
         ephemeral == null ||
+        ephemeral.length != 32 ||
         fileSize == null ||
         chunkSize == null ||
         sha256 == null ||
+        sha256.length != 32 ||
         fileName == null) {
       return;
     }
-    if (fileSize <= 0 || fileSize > maxFileBytes) return;
+    if (fileSize <= 0 ||
+        fileSize > maxFileBytes ||
+        chunkSize <= 0 ||
+        chunkSize > defaultChunkSize ||
+        utf8.encode(fileName).length > 255) {
+      return;
+    }
     if (expiresAt != null &&
         DateTime.now().millisecondsSinceEpoch > expiresAt) {
       return;
@@ -472,7 +548,7 @@ class TransferController extends ChangeNotifier {
     final record = TransferRecord(
       id: transferId,
       peerId: peerId,
-      peerNickname: peerId.substring(0, 8),
+      peerNickname: peerId.substring(0, min(8, peerId.length)),
       direction: TransferDirection.incoming,
       fileName: sanitizeFileName(fileName),
       mimeType:
@@ -513,6 +589,7 @@ class TransferController extends ChangeNotifier {
     final transport = frame.u8(TransferProtocol.tagTransport);
     if (ephemeral == null || transport == null) return;
     session.expiryTimer?.cancel();
+    session.remoteEphemeral = Uint8List.fromList(ephemeral);
     session.cipher = await TransferCrypto.deriveCipher(
       localKeyPair: session.keyPair!,
       remotePublicKey: ephemeral,
@@ -520,7 +597,8 @@ class TransferController extends ChangeNotifier {
     );
     record.state = TransferState.connecting;
     record.transport = _transportFromId(transport);
-    await _repository.save(record);
+    session.bitmap ??= ChunkBitmap(record.chunkCount);
+    await _saveResumeState(record, session, bitmap: session.bitmap);
     notifyListeners();
 
     switch (record.transport) {
@@ -540,6 +618,99 @@ class TransferController extends ChangeNotifier {
       case null:
         _fail(record, currentL10n.terrUnsupportedTransport);
         break;
+    }
+  }
+
+  Future<void> resume(String transferId) async {
+    final record = _find(transferId);
+    if (record == null ||
+        record.direction != TransferDirection.incoming ||
+        !_sessions.containsKey(transferId)) {
+      return;
+    }
+    await _requestResume(record);
+  }
+
+  Future<void> _requestResume(TransferRecord record) async {
+    final session = _sessions[record.id];
+    final bitmap = session?.bitmap;
+    if (session == null || bitmap == null || session.cipher == null) return;
+    final offered = session.offeredTransports;
+    TransferTransport? transport;
+    if (record.transport == TransferTransport.lan &&
+        offered & TransferProtocol.transportLan != 0) {
+      transport = TransferTransport.lan;
+    } else if (record.transport == TransferTransport.ble &&
+        offered & TransferProtocol.transportBle != 0) {
+      transport = TransferTransport.ble;
+    } else if (offered & TransferProtocol.transportLan != 0) {
+      transport = TransferTransport.lan;
+    } else if (offered & TransferProtocol.transportBle != 0 &&
+        allowsBleTransfer(mimeType: record.mimeType, bytes: record.fileSize)) {
+      transport = TransferTransport.ble;
+    }
+    if (transport == null) {
+      _fail(record, currentL10n.terrNoTransport);
+      return;
+    }
+    record
+      ..transport = transport
+      ..state = TransferState.connecting
+      ..error = null;
+    await _saveResumeState(record, session, bitmap: bitmap);
+    final frame = TransferFrame(TransferProtocol.typeResumeRequest)
+      ..setBytes(TransferProtocol.tagTransferId, _fromHex(record.id))
+      ..setBytes(TransferProtocol.tagChunkBitmap, bitmap.toBytes())
+      ..setU8(TransferProtocol.tagTransport, _transportId(transport));
+    try {
+      await _sendFrame(
+        record.peerId,
+        frame,
+        record,
+        failTransferOnError: false,
+      );
+      _armConnectTimeout(record, session);
+    } catch (error) {
+      lastError = currentL10n.terrNoMeshSession('$error');
+    }
+  }
+
+  Future<void> _handleResumeRequest(
+    String peerId,
+    String transferId,
+    TransferFrame frame,
+  ) async {
+    final record = _find(transferId);
+    final session = _sessions[transferId];
+    final bitmapBytes = frame.bytes(TransferProtocol.tagChunkBitmap);
+    final transportId = frame.u8(TransferProtocol.tagTransport);
+    if (record == null ||
+        session == null ||
+        record.peerId != peerId ||
+        record.direction != TransferDirection.outgoing ||
+        session.cipher == null ||
+        bitmapBytes == null ||
+        bitmapBytes.length != (record.chunkCount + 7) ~/ 8 ||
+        transportId == null) {
+      return;
+    }
+    final transport = _transportFromId(transportId);
+    final allowed =
+        (transport == TransferTransport.lan &&
+            session.offeredTransports & TransferProtocol.transportLan != 0) ||
+        (transport == TransferTransport.ble &&
+            session.offeredTransports & TransferProtocol.transportBle != 0);
+    if (!allowed) return;
+    final remoteBitmap = ChunkBitmap.fromBytes(record.chunkCount, bitmapBytes);
+    record
+      ..transport = transport
+      ..state = TransferState.connecting
+      ..error = null;
+    await _saveResumeState(record, session);
+    if (transport == TransferTransport.lan) {
+      await _startLanSend(record, session);
+    } else {
+      await _startBleSend(record, session, remoteBitmap: remoteBitmap);
     }
   }
 
@@ -772,8 +943,9 @@ class TransferController extends ChangeNotifier {
 
   Future<void> _startBleSend(
     TransferRecord record,
-    _TransferSession session,
-  ) async {
+    _TransferSession session, {
+    ChunkBitmap? remoteBitmap,
+  }) async {
     record.state = TransferState.transferring;
     notifyListeners();
     final file = File(record.filePath!);
@@ -781,6 +953,13 @@ class TransferController extends ChangeNotifier {
     var acked = 0;
     try {
       for (var index = 0; index < record.chunkCount; index++) {
+        if (remoteBitmap?[index] ?? false) {
+          record.bytesDone = min(
+            remoteBitmap!.count * record.chunkSize,
+            record.fileSize,
+          );
+          continue;
+        }
         await raf.setPosition(index * record.chunkSize);
         final remaining = record.fileSize - index * record.chunkSize;
         final plain = await raf.read(min(record.chunkSize, remaining));
@@ -980,12 +1159,13 @@ class TransferController extends ChangeNotifier {
   Future<void> _sendFrame(
     String peerId,
     TransferFrame frame,
-    TransferRecord record,
-  ) async {
+    TransferRecord record, {
+    bool failTransferOnError = true,
+  }) async {
     try {
       await _mesh.sendTransferFrame(peerId, frame.encode());
     } catch (error) {
-      if (record.isActive) {
+      if (failTransferOnError && record.isActive) {
         _fail(record, currentL10n.terrNoMeshSession('$error'));
       }
       rethrow;
@@ -1109,10 +1289,33 @@ class TransferController extends ChangeNotifier {
   }
 
   void _persistProgress(TransferRecord record, ChunkBitmap bitmap) {
-    // Persistencia periódica para poder reanudar: cada 64 chunks.
-    if (bitmap.count % 64 == 0 || bitmap.isComplete) {
+    // Acota la repetición tras un cierre sin escribir por cada paquete BLE.
+    if (bitmap.count % 8 == 0 || bitmap.isComplete) {
       unawaited(_repository.save(record, bitmap: bitmap.toBytes()));
     }
+  }
+
+  Future<void> _saveResumeState(
+    TransferRecord record,
+    _TransferSession session, {
+    ChunkBitmap? bitmap,
+  }) async {
+    final keyPair = session.keyPair;
+    final remote = session.remoteEphemeral;
+    if (keyPair == null || remote == null || remote.length != 32) {
+      throw StateError('Transfer session cannot be persisted safely');
+    }
+    final local = await TransferCrypto.exportKeyPair(keyPair);
+    await _repository.save(
+      record,
+      bitmap: bitmap?.toBytes(),
+      resumeMaterial: TransferResumeMaterial(
+        localPrivateKey: local.privateKey,
+        localPublicKey: local.publicKey,
+        remotePublicKey: Uint8List.fromList(remote),
+        offeredTransports: session.offeredTransports,
+      ),
+    );
   }
 
   void _fail(TransferRecord record, String message) {
@@ -1144,7 +1347,11 @@ class TransferController extends ChangeNotifier {
     await _platform.nearbyStop(record.id);
     await _platform.wifiAwareStop(record.id);
     _trimTransfersInMemory();
-    await _repository.save(record);
+    await _repository.save(
+      record,
+      clearResumeMaterial: true,
+      clearBitmap: true,
+    );
     notifyListeners();
   }
 

@@ -80,16 +80,18 @@ producción. No duplica el codec de malla nativo de Android/iOS.
 
 El self-test C de firmware cubre:
 
-- `packet.v1.message`
+- `packet.v1.message`, `packet.v2.route_signed` (v2 opaco, solo relay)
 - `packet.v1.raw_deflate`, `packet.v1.zlib_read`
 - `packet.invalid.version`, `packet.invalid.header_truncated`,
   `packet.invalid.payload_truncated`, `packet.invalid.signature_truncated`,
+  `packet.invalid.route_truncated`,
   `packet.invalid.padding`, `packet.invalid.deflate_truncated`,
   `packet.invalid.deflate_trailing` y `packet.invalid.expanded_size`
+- ambos vectores compartidos de fingerprint de relay.
 
-El firmware no declara v2/rutas porque su estructura de paquete de producción
-es v1. La cobertura v2 queda en Kotlin, Swift y Python; la matriz evita
-presentar una prueba de otro lenguaje como capacidad del firmware.
+El header generado también incluye todos los blobs aplicables de fragmentos,
+GCS y Courier, y CI comprueba cobertura exacta del manifiesto. No incluye
+extensiones ni HBT que el anchor no implementa.
 
 ## Integración continua
 

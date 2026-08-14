@@ -81,16 +81,19 @@ It does not duplicate the Android/iOS native mesh codec.
 
 The firmware C self-test covers:
 
-- `packet.v1.message`
+- `packet.v1.message`, `packet.v2.route_signed` (v2 is relay-only/opaque)
 - `packet.v1.raw_deflate`, `packet.v1.zlib_read`
 - `packet.invalid.version`, `packet.invalid.header_truncated`,
   `packet.invalid.payload_truncated`, `packet.invalid.signature_truncated`,
+  `packet.invalid.route_truncated`,
   `packet.invalid.padding`, `packet.invalid.deflate_truncated`,
   `packet.invalid.deflate_trailing`, and `packet.invalid.expanded_size`
+- both shared relay fingerprint vectors.
 
-Firmware does not declare v2/routes because its production packet structure is
-v1. Kotlin, Swift, and Python provide v2 coverage; the matrix avoids presenting
-another language's test as a firmware capability.
+The generated header also includes every applicable fragment, GCS, and Courier
+blob. CI checks exact manifest coverage. Those auxiliary vectors document
+features already present in firmware; they do not claim support for extension
+or HBT codecs that the anchor does not implement.
 
 ## Continuous integration
 

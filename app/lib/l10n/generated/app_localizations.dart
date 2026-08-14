@@ -2121,6 +2121,114 @@ abstract class AppLocalizations {
   /// **'Use encrypted TLS connection'**
   String get gatewayTls;
 
+  /// No description provided for @gatewayTrustTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'TLS certificate trust'**
+  String get gatewayTrustTitle;
+
+  /// No description provided for @gatewayTrustSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get gatewayTrustSystem;
+
+  /// No description provided for @gatewayTrustSystemBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Uses the certificate authorities trusted by your device. This is compatible with public services, but does not lock the gateway to one certificate.'**
+  String get gatewayTrustSystemBody;
+
+  /// No description provided for @gatewayTrustTofu.
+  ///
+  /// In en, this message translates to:
+  /// **'TOFU'**
+  String get gatewayTrustTofu;
+
+  /// No description provided for @gatewayTrustTofuBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Trusts the first certificate seen for this endpoint and rejects later changes. Verify the first connection is not being intercepted.'**
+  String get gatewayTrustTofuBody;
+
+  /// No description provided for @gatewayTrustPinned.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned'**
+  String get gatewayTrustPinned;
+
+  /// No description provided for @gatewayTrustPinnedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Only the exact SHA-256 certificate fingerprint is accepted. Certificate rotation will block delivery until this value is updated.'**
+  String get gatewayTrustPinnedBody;
+
+  /// No description provided for @gatewayFingerprint.
+  ///
+  /// In en, this message translates to:
+  /// **'Certificate SHA-256 fingerprint'**
+  String get gatewayFingerprint;
+
+  /// No description provided for @gatewayFingerprintHint.
+  ///
+  /// In en, this message translates to:
+  /// **'64 hexadecimal characters; separators are allowed'**
+  String get gatewayFingerprintHint;
+
+  /// No description provided for @gatewayFingerprintInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid 64-character SHA-256 certificate fingerprint.'**
+  String get gatewayFingerprintInvalid;
+
+  /// No description provided for @gatewayResetTofu.
+  ///
+  /// In en, this message translates to:
+  /// **'Forget first certificate'**
+  String get gatewayResetTofu;
+
+  /// No description provided for @gatewayResetTofuDone.
+  ///
+  /// In en, this message translates to:
+  /// **'The saved TOFU certificate was removed.'**
+  String get gatewayResetTofuDone;
+
+  /// No description provided for @gatewayPrivacyScopeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Data shared with the gateway'**
+  String get gatewayPrivacyScopeTitle;
+
+  /// No description provided for @gatewaySensitiveContentConsent.
+  ///
+  /// In en, this message translates to:
+  /// **'Share message content and sender identity'**
+  String get gatewaySensitiveContentConsent;
+
+  /// No description provided for @gatewaySensitiveContentConsentBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Includes the emergency description, display name and peer identifier. Off by default.'**
+  String get gatewaySensitiveContentConsentBody;
+
+  /// No description provided for @gatewayCoordinatesConsent.
+  ///
+  /// In en, this message translates to:
+  /// **'Share precise coordinates'**
+  String get gatewayCoordinatesConsent;
+
+  /// No description provided for @gatewayCoordinatesConsentBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Includes latitude and longitude when present. This consent is separate from message content.'**
+  String get gatewayCoordinatesConsentBody;
+
+  /// No description provided for @gatewayPrivacyScopeWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'The gateway sends selected data to an internet service outside the local mesh. Enable each category only with informed consent.'**
+  String get gatewayPrivacyScopeWarning;
+
   /// No description provided for @mapOpen.
   ///
   /// In en, this message translates to:

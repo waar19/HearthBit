@@ -9,6 +9,8 @@ import 'dart:typed_data';
 /// Ver `docs/transfer-protocol.md`.
 class TransferProtocol {
   static const int version = 0x01;
+  static const int maximumFrameLength = 128 * 1024;
+  static const int maximumTlvCount = 32;
 
   // Tipos de trama.
   static const int typeOffer = 0x01;
@@ -67,14 +69,24 @@ class TransferFrame {
   final Map<int, Uint8List> tags;
 
   static TransferFrame? decode(Uint8List input) {
-    if (input.length < 2 || input[0] != TransferProtocol.version) return null;
+    if (input.length < 2 ||
+        input.length > TransferProtocol.maximumFrameLength ||
+        input[0] != TransferProtocol.version) {
+      return null;
+    }
     final frame = TransferFrame(input[1]);
     var offset = 2;
+    var tlvCount = 0;
     while (offset + 3 <= input.length) {
       final tag = input[offset];
       final length = (input[offset + 1] << 8) | input[offset + 2];
       offset += 3;
-      if (offset + length > input.length) return null;
+      tlvCount += 1;
+      if (tlvCount > TransferProtocol.maximumTlvCount ||
+          frame.tags.containsKey(tag) ||
+          offset + length > input.length) {
+        return null;
+      }
       frame.tags[tag] = Uint8List.sublistView(input, offset, offset + length);
       offset += length;
     }
@@ -88,7 +100,7 @@ class TransferFrame {
     final orderedTags = tags.keys.toList()..sort();
     for (final tag in orderedTags) {
       final value = tags[tag]!;
-      if (value.length > 0xFFFF) {
+      if (tag < 0 || tag > 0xff || value.length > 0xFFFF) {
         throw ArgumentError('TLV $tag exceeds 65535 bytes');
       }
       builder
@@ -97,7 +109,11 @@ class TransferFrame {
         ..addByte(value.length & 0xFF)
         ..add(value);
     }
-    return builder.toBytes();
+    final encoded = builder.toBytes();
+    if (encoded.length > TransferProtocol.maximumFrameLength) {
+      throw ArgumentError('HBT frame exceeds maximum length');
+    }
+    return encoded;
   }
 
   /// Bytes que cubre la firma Ed25519: la trama sin el TLV SIGNATURE.
@@ -114,7 +130,12 @@ class TransferFrame {
 
   String? utf8Value(int tag) {
     final value = tags[tag];
-    return value == null ? null : utf8.decode(value);
+    if (value == null) return null;
+    try {
+      return utf8.decode(value);
+    } on FormatException {
+      return null;
+    }
   }
 
   int? u8(int tag) {

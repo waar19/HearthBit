@@ -1,18 +1,11 @@
 package com.hearthbit.app.mesh
 
 import android.content.Context
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 
 internal class EmergencyFingerprintCache(context: Context) {
-    private val preferences = EncryptedSharedPreferences.create(
+    private val preferences = KeystoreSecureStore.open(
         context,
         "hearthbit_emergency_fingerprints",
-        MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build(),
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
     )
 
     @Synchronized
@@ -21,24 +14,25 @@ internal class EmergencyFingerprintCache(context: Context) {
         now: Long = System.currentTimeMillis(),
     ): Boolean {
         val normalized = fingerprint.lowercase()
-        val valid = preferences.getStringSet(KEY_ENTRIES, emptySet())
-            .orEmpty()
+        val valid = preferences.getStringSet(KEY_ENTRIES)
             .mapNotNull(::decode)
             .filter { now - it.timestamp <= LIFETIME_MS }
             .sortedBy(Entry::timestamp)
             .toMutableList()
         val duplicate = valid.any { it.fingerprint == normalized }
         if (!duplicate) valid += Entry(now, normalized)
-        preferences.edit().putStringSet(
-            KEY_ENTRIES,
-            valid.takeLast(MAX_ENTRIES)
-                .mapTo(mutableSetOf()) { "${it.timestamp}:${it.fingerprint}" },
-        ).commit()
+        check(
+            preferences.putStringSet(
+                KEY_ENTRIES,
+                valid.takeLast(MAX_ENTRIES)
+                    .mapTo(mutableSetOf()) { "${it.timestamp}:${it.fingerprint}" },
+            ),
+        )
         return duplicate
     }
 
     fun clear() {
-        preferences.edit().clear().commit()
+        check(preferences.clear())
     }
 
     private fun decode(value: String): Entry? {

@@ -396,9 +396,19 @@ HearthBit aplica una regla más conservadora: un rol relay **MUST** exigir
 dirigido al nodo local. Los paquetes dirigidos a otro nodo **MAY** relayarse.
 Los roles `PHONE_BEACON` **MUST NOT** relayar.
 
-La deduplicación HearthBit normaliza TTL a cero y excluye su marca local RSR
-antes de calcular el fingerprint. Esta es una política local y no amplía el
-contrato upstream.
+El fingerprint de relay HearthBit v2 se calcula de forma idéntica en Python y
+firmware:
+
+1. se toma el frame transmitido hasta el final de la firma, excluyendo padding;
+2. se reemplaza el octeto TTL por `0x00`;
+3. se limpia únicamente el bit local RSR (`flags & ~0x10`);
+4. se calcula SHA-256 sobre esos bytes, sin re-encode ni descompresión.
+
+El relay persistente usa `digest[0..16)` y el firmware, por su caché RAM
+acotada, usa `digest[0..8)`. Durante la migración, el relay Python consulta
+también la huella BLAKE2s anterior en la tabla `seen`, pero toda inserción y
+todo envelope externo nuevo usa SHA-256. Esta es una política local y no
+amplía el contrato upstream.
 
 ## 14. Courier **[HB]**
 

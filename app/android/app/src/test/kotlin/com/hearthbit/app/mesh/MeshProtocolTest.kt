@@ -216,6 +216,30 @@ class MeshProtocolTest {
     }
 
     @Test
+    fun `fingerprint canonico usa representacion sin padding`() {
+        val packet = MeshProtocol.Packet(
+            type = MeshProtocol.TYPE_MESSAGE,
+            ttl = 4,
+            timestamp = 42,
+            senderId = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8),
+            payload = "SOS|canonical".toByteArray(),
+        )
+        val canonical = MeshProtocol.encode(
+            packet.copy(ttl = 0, isRsr = false),
+            padded = false,
+        )
+        val expected = MeshProtocol.hex(
+            MessageDigest.getInstance("SHA-256").digest(canonical).copyOfRange(0, 12),
+        )
+
+        assertEquals(expected, MeshProtocol.fingerprint(packet))
+        assertEquals(
+            MeshProtocol.fingerprint(MeshProtocol.decode(MeshProtocol.encode(packet, false))!!),
+            MeshProtocol.fingerprint(MeshProtocol.decode(MeshProtocol.encode(packet, true))!!),
+        )
+    }
+
+    @Test
     fun `la forma canonica coincide con el golden BitChat actual`() {
         val announcement = byteArrayOf(0x01, 0x03) +
             "bob".toByteArray() +

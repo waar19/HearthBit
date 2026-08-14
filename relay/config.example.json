@@ -10,6 +10,17 @@
   "max_central_links": 4,
   "max_packet_size": 2048,
   "log_level": "INFO",
+  "identity_verification": {
+    "unknown_signed_policy": "relay-live"
+  },
+  "flood": {
+    "sender_rate_per_second": 8,
+    "sender_burst": 32,
+    "emergency_rate_per_second": 2,
+    "emergency_burst": 8,
+    "bridge_rate_per_second": 20,
+    "bridge_burst": 64
+  },
   "lan": {
     "enabled": false,
     "listen_host": "0.0.0.0",
@@ -42,7 +53,9 @@
     "max_message_age_seconds": 3600,
     "announce_max_age_seconds": 600,
     "future_skew_seconds": 120,
-    "max_bridge_hops": 8
+    "max_bridge_hops": 8,
+    "bridge_allowlist": [],
+    "inbound_queue_size": 128
   },
   "matrix": {
     "enabled": false,
@@ -66,6 +79,7 @@
     "announce_max_age_seconds": 600,
     "future_skew_seconds": 120,
     "max_bridge_hops": 8,
+    "inbound_queue_size": 128,
     "allow_insecure_localhost_for_tests": false,
     "private_opaque": {
       "enabled": false,

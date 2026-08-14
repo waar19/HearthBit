@@ -1,16 +1,21 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/mesh_models.dart';
 import '../services/app_preferences.dart';
+import '../services/secure_storage_config.dart';
+import '../services/tls_peer_verifier.dart';
 import 'mesh_controller.dart';
 
 enum EmergencyGatewayKind { matrix, mqtt }
@@ -23,6 +28,10 @@ class EmergencyGatewayConfig {
     required this.username,
     required this.port,
     required this.tls,
+    this.trustMode = TlsTrustMode.system,
+    this.certificateSha256,
+    this.includeSensitiveContent = false,
+    this.includeCoordinates = false,
   });
 
   final EmergencyGatewayKind kind;
@@ -31,10 +40,18 @@ class EmergencyGatewayConfig {
   final String username;
   final int port;
   final bool tls;
+  final TlsTrustMode trustMode;
+  final String? certificateSha256;
+  final bool includeSensitiveContent;
+  final bool includeCoordinates;
 
   String? get validationError {
     if (port < 1 || port > 65535) return 'Gateway port is invalid';
     if (!tls) return 'TLS is required for emergency gateways';
+    if (trustMode == TlsTrustMode.pinned &&
+        !TlsPeerVerifier.isValidFingerprint(certificateSha256)) {
+      return 'Pinned TLS requires a SHA-256 certificate fingerprint';
+    }
     if (destination.trim().isEmpty) return 'Gateway destination is empty';
     if (kind == EmergencyGatewayKind.matrix) {
       final uri = Uri.tryParse(server.trim());
@@ -70,7 +87,7 @@ class EmergencyGatewayController extends ChangeNotifier {
     http.Client? httpClient,
   }) : _connectivity = connectivity ?? Connectivity(),
        _storage = storage ?? SharedPreferencesAsync(),
-       _secureStorage = secureStorage ?? const FlutterSecureStorage(),
+       _secureStorage = secureStorage ?? hearthBitSecureStorage,
        _httpClient = httpClient ?? http.Client();
 
   static const _kindKey = 'gateway.kind';
@@ -79,6 +96,10 @@ class EmergencyGatewayController extends ChangeNotifier {
   static const _usernameKey = 'gateway.username';
   static const _portKey = 'gateway.port';
   static const _tlsKey = 'gateway.tls';
+  static const _trustModeKey = 'gateway.tlsTrustMode.v1';
+  static const _certificateKey = 'gateway.certificateSha256.v1';
+  static const _includeSensitiveKey = 'gateway.includeSensitiveContent.v1';
+  static const _includeCoordinatesKey = 'gateway.includeCoordinates.v1';
   static const _publishedKey = 'gateway.publishedIds';
   static const _secretKey = 'gateway.secret';
   static const _pendingMessagesKey = 'gateway.pendingMessages.v1';
@@ -91,6 +112,9 @@ class EmergencyGatewayController extends ChangeNotifier {
   final http.Client _httpClient;
   final Set<String> _publishedIds = {};
   final Map<String, MeshMessage> _pendingMessages = {};
+  final Map<String, String> _tofuClaims = {};
+  final Map<String, Future<void>> _tofuWrites = {};
+  final Map<String, (Object, StackTrace)> _tofuWriteErrors = {};
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   Timer? _retryTimer;
@@ -122,6 +146,12 @@ class EmergencyGatewayController extends ChangeNotifier {
         username: await _storage.getString(_usernameKey) ?? '',
         port: await _storage.getInt(_portKey) ?? 443,
         tls: await _storage.getBool(_tlsKey) ?? true,
+        trustMode: _trustModeFromName(await _storage.getString(_trustModeKey)),
+        certificateSha256: await _storage.getString(_certificateKey),
+        includeSensitiveContent:
+            await _storage.getBool(_includeSensitiveKey) ?? false,
+        includeCoordinates:
+            await _storage.getBool(_includeCoordinatesKey) ?? false,
       );
     }
     _publishedIds.addAll(
@@ -149,7 +179,18 @@ class EmergencyGatewayController extends ChangeNotifier {
       _storage.setString(_usernameKey, value.username.trim()),
       _storage.setInt(_portKey, value.port),
       _storage.setBool(_tlsKey, value.tls),
-      _secureStorage.write(key: _secretKey, value: secret),
+      _storage.setString(_trustModeKey, value.trustMode.name),
+      if (value.certificateSha256 == null)
+        _storage.remove(_certificateKey)
+      else
+        _storage.setString(
+          _certificateKey,
+          TlsPeerVerifier.normalizeFingerprint(value.certificateSha256)!,
+        ),
+      _storage.setBool(_includeSensitiveKey, value.includeSensitiveContent),
+      _storage.setBool(_includeCoordinatesKey, value.includeCoordinates),
+      if (secret.isNotEmpty)
+        _secureStorage.write(key: _secretKey, value: secret),
     ]);
     notifyListeners();
     _schedulePublish();
@@ -163,6 +204,10 @@ class EmergencyGatewayController extends ChangeNotifier {
       _storage.remove(_usernameKey),
       _storage.remove(_portKey),
       _storage.remove(_tlsKey),
+      _storage.remove(_trustModeKey),
+      _storage.remove(_certificateKey),
+      _storage.remove(_includeSensitiveKey),
+      _storage.remove(_includeCoordinatesKey),
       _storage.remove(_publishedKey),
       _secureStorage.delete(key: _secretKey),
       _secureStorage.delete(key: _pendingMessagesKey),
@@ -264,15 +309,42 @@ class EmergencyGatewayController extends ChangeNotifier {
   static bool isEmergencyEligible(MeshMessage message) =>
       !message.isDrill && (message.isSos || message.isCheckIn);
 
-  Map<String, Object?> _payload(MeshMessage message) => {
-    'schema': 'org.hearthbit.emergency.v1',
-    'id': message.id,
-    'sender': message.sender,
-    'senderPeerId': message.senderPeerId,
-    'timestamp': message.timestamp.toUtc().toIso8601String(),
-    'type': message.isSos ? 'sos' : 'checkIn',
-    'content': message.content,
-  };
+  static Map<String, Object?> _payload(
+    EmergencyGatewayConfig config,
+    MeshMessage message,
+  ) {
+    final payload = <String, Object?>{
+      'schema': 'org.hearthbit.emergency.v1',
+      'id': message.id,
+      'timestamp': message.timestamp.toUtc().toIso8601String(),
+      'type': message.isSos ? 'sos' : 'checkIn',
+    };
+    if (config.includeSensitiveContent) {
+      payload
+        ..['sender'] = message.sender
+        ..['senderPeerId'] = message.senderPeerId
+        ..['content'] = message.content;
+    }
+    if (config.includeCoordinates) {
+      final checkIn = message.checkIn;
+      final latitude = message.isSos ? message.sosLatitude : checkIn?.latitude;
+      final longitude = message.isSos
+          ? message.sosLongitude
+          : checkIn?.longitude;
+      if (latitude != null && longitude != null) {
+        payload
+          ..['latitude'] = latitude
+          ..['longitude'] = longitude;
+      }
+    }
+    return payload;
+  }
+
+  @visibleForTesting
+  static Map<String, Object?> buildPayloadForTest(
+    EmergencyGatewayConfig config,
+    MeshMessage message,
+  ) => _payload(config, message);
 
   Future<void> _persistPendingMessages() {
     final encoded = jsonEncode([
@@ -353,22 +425,41 @@ class EmergencyGatewayController extends ChangeNotifier {
         message.id,
       ],
     );
-    final response = await _httpClient
-        .put(
-          uri,
-          headers: {
-            'authorization': 'Bearer $accessToken',
-            'content-type': 'application/json',
-          },
-          body: jsonEncode({
-            'msgtype': 'm.notice',
-            'body': jsonEncode(_payload(message)),
-            'org.hearthbit.emergency': _payload(message),
-          }),
-        )
-        .timeout(const Duration(seconds: 15));
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('Matrix gateway returned ${response.statusCode}');
+    final verifier = await _tlsVerifier(config);
+    IOClient? pinnedClient;
+    http.Client client = _httpClient;
+    if (config.trustMode != TlsTrustMode.system) {
+      final ioClient = HttpClient(context: verifier.createSecurityContext())
+        ..badCertificateCallback = (certificate, host, port) {
+          final endpointMatches = host == uri.host && port == uri.port;
+          return endpointMatches &&
+              _verifyAndClaimCertificate(config, verifier, certificate);
+        };
+      pinnedClient = IOClient(ioClient);
+      client = pinnedClient;
+    }
+    try {
+      final response = await client
+          .put(
+            uri,
+            headers: {
+              'authorization': 'Bearer $accessToken',
+              'content-type': 'application/json',
+            },
+            body: jsonEncode({
+              'msgtype': 'm.notice',
+              'body': jsonEncode(_payload(config, message)),
+              'org.hearthbit.emergency': _payload(config, message),
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StateError('Matrix gateway returned ${response.statusCode}');
+      }
+      await _persistObservedTofu(config, verifier);
+    } finally {
+      pinnedClient?.close();
+      await _awaitTofuPersistence(config);
     }
   }
 
@@ -377,6 +468,7 @@ class EmergencyGatewayController extends ChangeNotifier {
     String password,
     MeshMessage message,
   ) async {
+    final verifier = await _tlsVerifier(config);
     final client =
         MqttServerClient.withPort(
             config.server,
@@ -386,6 +478,12 @@ class EmergencyGatewayController extends ChangeNotifier {
           ..secure = config.tls
           ..logging(on: false)
           ..keepAlivePeriod = 20;
+    if (config.trustMode != TlsTrustMode.system) {
+      client
+        ..securityContext = verifier.createSecurityContext()
+        ..onBadCertificate = (certificate) =>
+            _verifyAndClaimCertificate(config, verifier, certificate);
+    }
     var connection = MqttConnectMessage()
         .withClientIdentifier('hearthbit-${_shortPeerId()}')
         .startClean();
@@ -398,8 +496,9 @@ class EmergencyGatewayController extends ChangeNotifier {
       if (client.connectionStatus?.state != MqttConnectionState.connected) {
         throw StateError('MQTT gateway connection failed');
       }
+      await _persistObservedTofu(config, verifier);
       final builder = MqttClientPayloadBuilder()
-        ..addUTF8String(jsonEncode(_payload(message)));
+        ..addUTF8String(jsonEncode(_payload(config, message)));
       final published = client.published;
       if (published == null) {
         throw StateError('MQTT publish acknowledgements are unavailable');
@@ -424,7 +523,11 @@ class EmergencyGatewayController extends ChangeNotifier {
         await subscription.cancel();
       }
     } finally {
-      client.disconnect();
+      try {
+        await _awaitTofuPersistence(config);
+      } finally {
+        client.disconnect();
+      }
     }
   }
 
@@ -440,4 +543,107 @@ class EmergencyGatewayController extends ChangeNotifier {
 
   String _shortPeerId() =>
       mesh.peerId.length <= 12 ? mesh.peerId : mesh.peerId.substring(0, 12);
+
+  Future<TlsPeerVerifier> _tlsVerifier(EmergencyGatewayConfig config) async {
+    await _awaitTofuPersistence(config);
+    final stored = config.trustMode == TlsTrustMode.tofu
+        ? await _secureStorage.read(key: _tofuStorageKey(config))
+        : null;
+    return TlsPeerVerifier(
+      mode: config.trustMode,
+      configuredFingerprint: config.certificateSha256,
+      storedFingerprint: stored,
+    );
+  }
+
+  Future<void> _persistObservedTofu(
+    EmergencyGatewayConfig config,
+    TlsPeerVerifier verifier,
+  ) async {
+    final fingerprint = verifier.observedFingerprint;
+    if (config.trustMode == TlsTrustMode.tofu && fingerprint != null) {
+      if (!_claimTofuFingerprint(config, fingerprint)) {
+        throw StateError('Conflicting TLS certificate during TOFU persistence');
+      }
+      await _awaitTofuPersistence(config);
+    }
+  }
+
+  bool _verifyAndClaimCertificate(
+    EmergencyGatewayConfig config,
+    TlsPeerVerifier verifier,
+    X509Certificate certificate,
+  ) {
+    if (!verifier.verifyCertificate(certificate)) return false;
+    final fingerprint = verifier.observedFingerprint;
+    return fingerprint == null || _claimTofuFingerprint(config, fingerprint);
+  }
+
+  bool _claimTofuFingerprint(
+    EmergencyGatewayConfig config,
+    String fingerprint,
+  ) {
+    if (config.trustMode != TlsTrustMode.tofu) return true;
+    final normalized = TlsPeerVerifier.normalizeFingerprint(fingerprint);
+    if (normalized == null) return false;
+    final key = _tofuStorageKey(config);
+    final claimed = _tofuClaims[key];
+    if (claimed != null) return claimed == normalized;
+    _tofuClaims[key] = normalized;
+    _tofuWrites[key] = _secureStorage
+        .write(key: key, value: normalized)
+        .then<void>(
+          (_) {},
+          onError: (Object error, StackTrace stackTrace) {
+            _tofuWriteErrors[key] = (error, stackTrace);
+          },
+        );
+    return true;
+  }
+
+  Future<void> _awaitTofuPersistence(EmergencyGatewayConfig config) async {
+    if (config.trustMode != TlsTrustMode.tofu) return;
+    final key = _tofuStorageKey(config);
+    await _tofuWrites[key];
+    final failure = _tofuWriteErrors[key];
+    if (failure != null) {
+      Error.throwWithStackTrace(failure.$1, failure.$2);
+    }
+  }
+
+  Future<void> resetTofuTrust(EmergencyGatewayConfig config) async {
+    final key = _tofuStorageKey(config);
+    try {
+      await _tofuWrites[key];
+    } catch (_) {
+      // El reset explícito también debe recuperar una escritura previa fallida.
+    }
+    await _secureStorage.delete(key: key);
+    _tofuWrites.remove(key);
+    _tofuClaims.remove(key);
+    _tofuWriteErrors.remove(key);
+  }
+
+  @visibleForTesting
+  bool claimTofuFingerprintForTest(
+    EmergencyGatewayConfig config,
+    String fingerprint,
+  ) => _claimTofuFingerprint(config, fingerprint);
+
+  @visibleForTesting
+  Future<void> awaitTofuPersistenceForTest(EmergencyGatewayConfig config) =>
+      _awaitTofuPersistence(config);
+
+  static String _tofuStorageKey(EmergencyGatewayConfig config) {
+    final endpoint =
+        '${config.kind.name}|${config.server.trim()}|${config.port}';
+    return 'gateway.tls.tofu.${sha256.convert(utf8.encode(endpoint))}';
+  }
+
+  static TlsTrustMode _trustModeFromName(String? name) {
+    for (final mode in TlsTrustMode.values) {
+      if (mode.name == name) return mode;
+    }
+    return TlsTrustMode.system;
+  }
 }

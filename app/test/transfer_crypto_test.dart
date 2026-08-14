@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -66,5 +67,17 @@ void main() {
       restored.set(i);
     }
     expect(restored.isComplete, isTrue);
+  });
+
+  test('calcula SHA-256 de archivo fuera del isolate UI', () async {
+    final directory = await Directory.systemTemp.createTemp('hb-hash-test-');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}${Platform.pathSeparator}data.bin');
+    await file.writeAsBytes(List.generate(1024 * 1024, (i) => i & 0xff));
+
+    expect(
+      await TransferCrypto.hashFile(file),
+      'fbbab289f7f94b25736c58be46a994c441fd02552cc6022352e3d86d2fab7c83',
+    );
   });
 }

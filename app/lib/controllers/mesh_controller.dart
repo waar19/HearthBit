@@ -262,7 +262,7 @@ class MeshController extends ChangeNotifier {
       (first, second) => first.timestamp.compareTo(second.timestamp),
     );
     _trimMessagesInMemory();
-    _subscription = _platform.events.listen(_handleEvent);
+    _subscription = _platform.events.listen(_handleEventSafely);
     final capabilities = await _platform.getCapabilities();
     supportsBackgroundRelay = capabilities['backgroundRelay'] as bool? ?? false;
     await _restoreNativeRescueMode();
@@ -1412,7 +1412,8 @@ class MeshController extends ChangeNotifier {
       case 'message':
         final rawMessage = event['message'];
         if (rawMessage is Map<Object?, Object?>) {
-          final message = MeshMessage.fromMap(rawMessage);
+          final message = MeshMessage.tryParse(rawMessage);
+          if (message == null) break;
           if (message.isRadarLocation) {
             peerLocations.ingestLive(message);
             break;
@@ -1472,6 +1473,36 @@ class MeshController extends ChangeNotifier {
         break;
     }
     notifyListeners();
+  }
+
+  void _handleEventSafely(Map<Object?, Object?> event) {
+    try {
+      _handleEvent(event);
+    } on FormatException catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'mesh.event.invalid',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    } on TypeError catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'mesh.event.invalid_type',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    } on RangeError catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'mesh.event.invalid_range',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    } catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'mesh.event.rejected',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   Future<void> _recordEmergencyAcknowledgement(
@@ -1611,7 +1642,10 @@ class MeshController extends ChangeNotifier {
     _peers
       ..clear()
       ..addAll(
-        rawPeers.whereType<Map<Object?, Object?>>().map(MeshPeer.fromMap),
+        rawPeers
+            .whereType<Map<Object?, Object?>>()
+            .map(MeshPeer.tryParse)
+            .whereType<MeshPeer>(),
       );
     for (final peer in _peers) {
       _knownPeers[peer.id] = peer;

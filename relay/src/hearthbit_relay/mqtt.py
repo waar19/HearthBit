@@ -34,6 +34,7 @@ from .link import (
     RelayLink,
 )
 from .public_bridge import (
+    BoundedIngressQueue,
     PublicBridgePolicy,
     expiry_for,
     valid_expiry,
@@ -121,6 +122,7 @@ class MqttBridge(RelayLink):
             clock_ms=self._clock_ms,
         )
         self._imported: dict[bytes, int] = {}
+        self._ingress = BoundedIngressQueue(config.inbound_queue_size)
         self._started = False
         digest = hashlib.blake2s(digest_size=16, person=b"HBitMQTT")
         digest.update(identity_material)
@@ -144,19 +146,23 @@ class MqttBridge(RelayLink):
     async def start(self) -> None:
         if self._started:
             return
+        self._ingress.start(self._inject)
         await self._broker.start(self._receive)
         try:
             await self._core.register_link(self)
         except Exception:
             await self._broker.stop()
+            await self._ingress.stop()
             raise
         self._started = True
+        LOGGER.info("MQTT bridge ready with ID %s", self.bridge_id.hex())
 
     async def stop(self) -> None:
         if not self._started:
             return
         await self._core.remove_link(self.id)
         await self._broker.stop()
+        await self._ingress.stop()
         self._started = False
 
     async def send(self, frame: bytes) -> None:
@@ -222,6 +228,8 @@ class MqttBridge(RelayLink):
         )
         if envelope is None or envelope.expires_at_ms <= now_ms:
             return
+        if envelope.path[-1] not in self.config.bridge_allowlist:
+            return
         if self.bridge_id in envelope.path:
             return
 
@@ -248,10 +256,19 @@ class MqttBridge(RelayLink):
             return
 
         self._imported[fingerprint] = envelope.expires_at_ms
-        await self._core.inbound(
-            self.id,
+        if not self._ingress.enqueue(
             envelope.frame,
-            gateway_path=envelope.path,
+            envelope.path,
+            emergency=inspected.kind == "sos",
+        ):
+            self._imported.pop(fingerprint, None)
+            LOGGER.warning("MQTT ingress queue is full; frame dropped")
+
+    async def _inject(self, frame: bytes, path: tuple[bytes, ...]) -> object:
+        return await self._core.inbound(
+            self.id,
+            frame,
+            gateway_path=path,
         )
 
     def _purge(self, now_ms: int) -> None:
@@ -290,7 +307,9 @@ class PahoMqttBroker:
             protocol=paho.MQTTv5,
         )
         client.on_connect = self._on_connect
+        client.on_disconnect = self._on_disconnect
         client.on_message = self._on_message
+        client.reconnect_delay_set(min_delay=1, max_delay=60)
         client.tls_set(
             ca_certs=self.config.tls_ca_file or None,
             certfile=self.config.tls_client_cert_file or None,
@@ -380,6 +399,21 @@ class PahoMqttBroker:
             return
         loop.call_soon_threadsafe(_set_future_result, connected)
 
+    def _on_disconnect(
+        self,
+        client: Any,
+        userdata: object,
+        disconnect_flags: object,
+        reason_code: Any,
+        properties: object,
+    ) -> None:
+        del client, userdata, disconnect_flags, properties
+        if self._client is not None:
+            LOGGER.warning(
+                "MQTT disconnected (%s); Paho will reconnect with backoff",
+                reason_code,
+            )
+
     def _on_message(self, client: Any, userdata: object, message: Any) -> None:
         del client, userdata
         loop = self._loop
@@ -391,7 +425,8 @@ class PahoMqttBroker:
             payload=bytes(message.payload),
             retained=bool(message.retain),
         )
-        asyncio.run_coroutine_threadsafe(handler(broker_message), loop)
+        future = asyncio.run_coroutine_threadsafe(handler(broker_message), loop)
+        future.add_done_callback(_log_handler_result)
 
 
 def _encode_envelope(
@@ -544,6 +579,14 @@ def _set_future_exception(
 ) -> None:
     if not future.done():
         future.set_exception(error)
+
+
+def _log_handler_result(future: object) -> None:
+    try:
+        result = future.result()  # type: ignore[attr-defined]
+        del result
+    except Exception:
+        LOGGER.exception("MQTT message handler failed")
 
 
 def _now_ms() -> int:

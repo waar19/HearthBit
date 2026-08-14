@@ -1193,6 +1193,70 @@ class AppLocalizationsDe extends AppLocalizations {
   String get gatewayTls => 'Verschlüsselte TLS-Verbindung verwenden';
 
   @override
+  String get gatewayTrustTitle => 'Vertrauen in TLS-Zertifikate';
+
+  @override
+  String get gatewayTrustSystem => 'System';
+
+  @override
+  String get gatewayTrustSystemBody =>
+      'Verwendet die Zertifizierungsstellen des Geräts. Dies ist mit öffentlichen Diensten kompatibel, bindet das Gateway aber nicht an ein bestimmtes Zertifikat.';
+
+  @override
+  String get gatewayTrustTofu => 'TOFU';
+
+  @override
+  String get gatewayTrustTofuBody =>
+      'Vertraut dem ersten Zertifikat dieses Endpunkts und lehnt spätere Änderungen ab. Prüfe, dass die erste Verbindung nicht abgefangen wird.';
+
+  @override
+  String get gatewayTrustPinned => 'Festgelegt';
+
+  @override
+  String get gatewayTrustPinnedBody =>
+      'Nur der exakte SHA-256-Fingerabdruck wird akzeptiert. Ein Zertifikatswechsel blockiert die Zustellung, bis dieser Wert aktualisiert wird.';
+
+  @override
+  String get gatewayFingerprint => 'SHA-256-Fingerabdruck des Zertifikats';
+
+  @override
+  String get gatewayFingerprintHint =>
+      '64 Hexadezimalzeichen; Trennzeichen sind erlaubt';
+
+  @override
+  String get gatewayFingerprintInvalid =>
+      'Gib einen gültigen SHA-256-Fingerabdruck mit 64 Zeichen ein.';
+
+  @override
+  String get gatewayResetTofu => 'Erstes Zertifikat vergessen';
+
+  @override
+  String get gatewayResetTofuDone =>
+      'Das gespeicherte TOFU-Zertifikat wurde entfernt.';
+
+  @override
+  String get gatewayPrivacyScopeTitle => 'Mit dem Gateway geteilte Daten';
+
+  @override
+  String get gatewaySensitiveContentConsent =>
+      'Nachrichteninhalt und Absenderidentität teilen';
+
+  @override
+  String get gatewaySensitiveContentConsentBody =>
+      'Enthält Notfallbeschreibung, Anzeigename und Peer-ID. Standardmäßig deaktiviert.';
+
+  @override
+  String get gatewayCoordinatesConsent => 'Genaue Koordinaten teilen';
+
+  @override
+  String get gatewayCoordinatesConsentBody =>
+      'Enthält vorhandene Breiten- und Längengrade. Diese Einwilligung ist unabhängig vom Nachrichteninhalt.';
+
+  @override
+  String get gatewayPrivacyScopeWarning =>
+      'Das Gateway sendet ausgewählte Daten an einen Internetdienst außerhalb des lokalen Mesh. Aktiviere jede Kategorie nur mit informierter Einwilligung.';
+
+  @override
   String get mapOpen => 'Offline-Karte öffnen';
 
   @override
