@@ -19,12 +19,18 @@
     {
       "code": "CO", "name": "Colombie",
       "callingNote": "Le 123 est le numéro national gratuit, disponible 24 h/24. Réservez-le aux véritables urgences.",
-      "numbers": [{"id": "co-123", "kind": "general", "label": "Numéro national d’urgence", "number": "123", "note": "Police, santé, pompiers et autres services de l’État.", "sourceIds": ["co-123"]}],
+      "numbers": [
+        {"id": "co-123", "kind": "general", "label": "Numéro national d’urgence", "number": "123", "note": "Choix principal pour police, santé, pompiers et autres services de l’État.", "sourceIds": ["co-123"]},
+        {"id": "co-112", "kind": "police", "label": "Police", "number": "112", "note": "Code national dont l’acheminement peut varier localement. Préférez 123.", "sourceIds": ["co-short-codes"]},
+        {"id": "co-119", "kind": "fire", "label": "Pompiers", "number": "119", "note": "Code national dont l’acheminement peut varier localement. Préférez 123.", "sourceIds": ["co-short-codes"]},
+        {"id": "co-125", "kind": "medical", "label": "Ambulance", "number": "125", "note": "Code national dont l’acheminement peut varier localement. Préférez 123.", "sourceIds": ["co-short-codes"]},
+        {"id": "co-132", "kind": "general", "label": "Urgences Croix-Rouge colombienne", "number": "132", "note": "Attribution nationale à disponibilité locale variable. Utilisez 123 pour une réponse immédiate.", "sourceIds": ["co-short-codes"]}
+      ],
       "organizations": [
         {"id": "ungrd", "kind": "disaster-management", "name": "Unidad Nacional para la Gestión del Riesgo de Desastres (UNGRD)", "phone": "018000113200", "url": "https://portal.gestiondelriesgo.gov.co/Paginas/Atencion-a-la-Ciudadania.aspx", "note": "Information sur les risques et accueil en semaine ; ne dépêche pas les secours.", "sourceIds": ["co-ungrd"]},
         {"id": "crc", "kind": "red-cross", "name": "Cruz Roja Colombiana", "phone": "018005198534", "url": "https://cruzrojacolombiana.org/", "note": "Aide humanitaire et information ; appelez d’abord le 123 en danger immédiat.", "sourceIds": ["co-red-cross"]},
         {"id": "crc-family", "kind": "missing-persons", "name": "Cruz Roja Colombiana — Protección de Vínculos Familiares", "phone": "+573212139525", "url": "https://www.cruzrojacolombiana.org/cruz-roja-colombiana-despliega-equipo-humanitario-a-venezuela-y-activa-campana-de-recaudo-para-apoyar-a-las-comunidades-afectadas-por-los-sismos/", "note": "Canal WhatsApp en cas de perte de contact familial lors d’une urgence humanitaire.", "sourceIds": ["co-red-cross-family"]},
-        {"id": "ubpd", "kind": "missing-persons", "name": "Unidad de Búsqueda de Personas dadas por Desaparecidas (UBPD)", "phone": "018000162226", "url": "https://unidadbusqueda.gov.co/", "note": "Recherche limitée aux disparitions liées au conflit colombien avant le 1er décembre 2016.", "sourceIds": ["co-ubpd"]}
+        {"id": "fiscalia-missing", "kind": "missing-persons", "name": "Fiscalía General de la Nación — Mecanismo de Búsqueda Urgente", "phone": "122", "url": "https://www.fiscalia.gov.co/colombia/servicios-de-informacion-al-ciudadano/centro-de-contacto/", "note": "Signalez immédiatement une disparition sans attendre. Depuis un fixe : 01 8000 919748.", "sourceIds": ["co-missing"]}
       ]
     },
     {
@@ -34,7 +40,7 @@
       "organizations": [
         {"id": "fema", "kind": "disaster-management", "name": "Federal Emergency Management Agency (FEMA)", "phone": "18006213362", "url": "https://www.usa.gov/agencies/federal-emergency-management-agency", "note": "Aide et rétablissement après catastrophe ; pas de répartition des secours.", "sourceIds": ["us-fema"]},
         {"id": "american-red-cross", "kind": "red-cross", "name": "American Red Cross", "phone": "18007332767", "url": "https://www.redcross.org/contact-us.html", "note": "Aide aux sinistrés, refuges et services de la Croix-Rouge.", "sourceIds": ["us-red-cross"]},
-        {"id": "us-family", "kind": "missing-persons", "name": "USAGov — retrouver ses proches après une catastrophe", "phone": null, "url": "https://www.usa.gov/help-disaster-survivors", "note": "Conseils officiels pour reprendre contact ; 911 en cas de danger immédiat.", "sourceIds": ["us-family"]}
+        {"id": "us-family", "kind": "missing-persons", "name": "National Missing and Unidentified Persons System (NamUs)", "phone": null, "url": "https://www.nij.ojp.gov/namus", "note": "Ressource nationale officielle. Signalez d’abord au 911 ou à la police locale ; NamUs exige un rapport actif.", "sourceIds": ["us-family"]}
       ]
     },
     {
@@ -42,19 +48,23 @@
       "callingNote": "Le 911 est le numéro national unique et oriente police, santé, pompiers, protection civile et Croix-Rouge.",
       "numbers": [{"id": "mx-911", "kind": "general", "label": "Numéro national d’urgence", "number": "911", "note": "Gratuit, 24 h/24, uniquement pour les vraies urgences.", "sourceIds": ["mx-911"]}],
       "organizations": [
-        {"id": "cnpc", "kind": "disaster-management", "name": "Coordinación Nacional de Protección Civil", "phone": null, "url": "https://www.gob.mx/cnpc", "note": "Information officielle de protection civile ; utilisez 911 pour une réponse immédiate.", "sourceIds": ["mx-cnpc"]},
-        {"id": "crm", "kind": "red-cross", "name": "Cruz Roja Mexicana", "phone": null, "url": "https://www.cruzrojamexicana.org.mx/", "note": "Organisation humanitaire et ambulancière ; les urgences passent par 911.", "sourceIds": ["mx-red-cross"]},
+        {"id": "cnpc", "kind": "disaster-management", "name": "Coordinación Nacional de Protección Civil", "phone": null, "url": "https://www.gob.mx/sspc/acciones-y-programas/coordinacion-nacional-de-proteccion-civil-357857", "note": "Information officielle de protection civile ; utilisez 911 pour une réponse immédiate.", "sourceIds": ["mx-cnpc"]},
+        {"id": "crm", "kind": "red-cross", "name": "Cruz Roja Mexicana", "phone": "+525510849000", "url": "https://cruzrojamexicana.org.mx/contacto", "note": "Siège administratif, pas de répartition des secours. Utilisez 911 ou une délégation locale.", "sourceIds": ["mx-red-cross"]},
         {"id": "cnb", "kind": "missing-persons", "name": "Comisión Nacional de Búsqueda", "phone": "8000287783", "url": "https://comisionacionaldebusqueda.segob.gob.mx/reportar-desaparicion/", "note": "Signalez immédiatement une disparition ; ligne officielle 24 h/24.", "sourceIds": ["mx-cnb"]}
       ]
     },
     {
       "code": "ES", "name": "Espagne",
       "callingNote": "Le 112 est gratuit et couvre toute urgence en Espagne, y compris depuis un téléphone verrouillé ou sans SIM lorsque c’est techniquement possible.",
-      "numbers": [{"id": "es-112", "kind": "general", "label": "Numéro unique d’urgence", "number": "112", "note": "Police, ambulance, pompiers et secours dans toute l’Espagne.", "sourceIds": ["es-112"]}],
+      "numbers": [
+        {"id": "es-112", "kind": "general", "label": "Numéro unique d’urgence", "number": "112", "note": "Police, ambulance, pompiers et secours dans toute l’Espagne.", "sourceIds": ["es-112"]},
+        {"id": "es-091", "kind": "police", "label": "Police nationale", "number": "091", "note": "Assistance urgente de la Police nationale.", "sourceIds": ["es-missing"]},
+        {"id": "es-062", "kind": "police", "label": "Guardia Civil", "number": "062", "note": "Assistance urgente de la Guardia Civil.", "sourceIds": ["es-missing"]}
+      ],
       "organizations": [
         {"id": "dgpce", "kind": "disaster-management", "name": "Dirección General de Protección Civil y Emergencias", "phone": "+34915373171", "url": "https://www.proteccioncivil.es/", "note": "Information administrative et protection civile ; pas de répartition des secours.", "sourceIds": ["es-protection"]},
         {"id": "cre", "kind": "red-cross", "name": "Cruz Roja Española", "phone": "900221122", "url": "https://www2.cruzroja.es/contacto", "note": "Information et aide gratuites aux horaires publiés ; 112 en danger immédiat.", "sourceIds": ["es-red-cross"]},
-        {"id": "cndes", "kind": "missing-persons", "name": "Centro Nacional de Desaparecidos (CNDES)", "phone": null, "url": "https://cndes-web.ses.mir.es/publico/Desaparecidos/", "note": "Information officielle ; disparition urgente à signaler au 112 ou à la police.", "sourceIds": ["es-missing"]}
+        {"id": "cndes", "kind": "missing-persons", "name": "Centro Nacional de Desaparecidos (CNDES)", "phone": null, "url": "https://cndes-web.ses.mir.es/publico/Desaparecidos/Primeros-Pasos", "note": "Signalez immédiatement au 091, 062 ou en personne ; n’attendez pas 24 heures.", "sourceIds": ["es-missing"]}
       ]
     },
     {
@@ -67,7 +77,7 @@
       "organizations": [
         {"id": "bbk", "kind": "disaster-management", "name": "Bundesamt für Bevölkerungsschutz und Katastrophenhilfe (BBK)", "phone": null, "url": "https://www.bbk.bund.de/EN/Home/home_node.html", "note": "Information fédérale de protection civile et préparation.", "sourceIds": ["de-bbk"]},
         {"id": "drk", "kind": "red-cross", "name": "Deutsches Rotes Kreuz (DRK)", "phone": null, "url": "https://www.drk.de/en/", "note": "Services humanitaires ; 112 en danger immédiat.", "sourceIds": ["de-drk"]},
-        {"id": "drk-tracing", "kind": "missing-persons", "name": "DRK-Suchdienst", "phone": "+498968077311", "url": "https://www.drk-suchdienst.de/en/", "note": "Service de recherche pour familles séparées par conflit, migration ou catastrophe.", "sourceIds": ["de-tracing"]}
+        {"id": "drk-tracing", "kind": "missing-persons", "name": "DRK-Suchdienst", "phone": "+493085404300", "url": "https://www.drk-suchdienst.de/wie-wir-helfen/suchen/internationale-suche/faqs-zur-internationalen-suche", "note": "Service de recherche pour familles séparées par conflit, migration ou catastrophe.", "sourceIds": ["de-tracing"]}
       ]
     },
     {
@@ -81,8 +91,8 @@
         {"id": "fr-116000", "kind": "general", "label": "Enfants disparus", "number": "116000", "note": "Ligne européenne ; 17 ou 112 si le danger est immédiat.", "sourceIds": ["fr-emergency"]}
       ],
       "organizations": [
-        {"id": "dgscgc", "kind": "disaster-management", "name": "Direction générale de la sécurité civile et de la gestion des crises", "phone": "+33149274927", "url": "https://www.interieur.gouv.fr/ministere/securite-civile-0", "note": "Autorité administrative de sécurité civile ; ne dépêche pas les secours.", "sourceIds": ["fr-civil"]},
-        {"id": "crf", "kind": "red-cross", "name": "Croix-Rouge française", "phone": null, "url": "https://www.croix-rouge.fr/", "note": "Aide humanitaire ; utilisez 112, 15, 17 ou 18 en danger immédiat.", "sourceIds": ["fr-red-cross"]},
+        {"id": "dgscgc", "kind": "disaster-management", "name": "Direction générale de la sécurité civile et de la gestion des crises", "phone": null, "url": "https://www.securite-civile.interieur.gouv.fr/", "note": "Information officielle ; aucun téléphone national de répartition n’est publié.", "sourceIds": ["fr-civil"]},
+        {"id": "crf", "kind": "red-cross", "name": "Croix-Rouge française", "phone": "+33144431300", "url": "https://www.croix-rouge.fr/annuaire", "note": "Contact administratif national, pas de secours. Utilisez 112, 15, 17 ou 18 en danger.", "sourceIds": ["fr-red-cross"]},
         {"id": "fr-missing", "kind": "missing-persons", "name": "116 000 Enfants Disparus", "phone": "116000", "url": "https://www.116000enfantsdisparus.fr/", "note": "Soutien officiellement reconnu aux familles d’enfants disparus.", "sourceIds": ["fr-emergency"]}
       ]
     },
@@ -96,7 +106,7 @@
       ],
       "organizations": [
         {"id": "mem", "kind": "disaster-management", "name": "中华人民共和国应急管理部 (Ministère de la Gestion des urgences)", "phone": null, "url": "https://www.mem.gov.cn/", "note": "Information nationale ; utilisez les numéros ci-dessus pour une aide immédiate.", "sourceIds": ["cn-mem"]},
-        {"id": "rccs", "kind": "red-cross", "name": "中国红十字会总会 (Croix-Rouge chinoise)", "phone": null, "url": "https://www.redcross.org.cn/", "note": "Organisation humanitaire nationale.", "sourceIds": ["cn-red-cross"]}
+        {"id": "rccs", "kind": "red-cross", "name": "中国红十字会总会 (Croix-Rouge chinoise)", "phone": "+861084025890", "url": "https://www.redcross.org.cn/", "note": "Demandes administratives les jours ouvrables ; pas de répartition des secours.", "sourceIds": ["cn-red-cross"]}
       ]
     },
     {
@@ -115,32 +125,33 @@
   ],
   "sources": [
     {"id": "eu-112", "title": "112 — numéro d’urgence de l’UE", "publisher": "Commission européenne", "url": "https://digital-strategy.ec.europa.eu/en/policies/112", "accessed": "2026-08-13"},
-    {"id": "us-emergency", "title": "Emergency and disaster services", "publisher": "USAGov", "url": "https://www.usa.gov/emergency-services", "accessed": "2026-08-13"},
+    {"id": "us-emergency", "title": "Calling 911", "publisher": "National 911 Program", "url": "https://www.911.gov/calling-911", "accessed": "2026-08-13"},
     {"id": "ifrc-directory", "title": "Where we work", "publisher": "IFRC", "url": "https://www.ifrc.org/where-we-work", "accessed": "2026-08-13"},
     {"id": "icrc-family-links", "title": "Rétablissement des liens familiaux", "publisher": "CICR", "url": "https://familylinks.icrc.org/", "accessed": "2026-08-13"},
     {"id": "co-123", "title": "Línea única de emergencias Nacional 123", "publisher": "Función Pública de Colombia", "url": "https://www1.funcionpublica.gov.co/preguntas-frecuentes/-/asset_publisher/sqxafjubsrEu/content/linea-unica-de-emergencias-nacional-123/28585938", "accessed": "2026-08-13"},
+    {"id": "co-short-codes", "title": "Numérotation nationale des services 1XY", "publisher": "Comisión de Regulación de Comunicaciones", "url": "https://normograma.crcom.gov.co/crc/compilacion/docs/resolucion_crc_4901_2016.htm", "accessed": "2026-08-13"},
     {"id": "co-ungrd", "title": "Atención a la Ciudadanía", "publisher": "UNGRD", "url": "https://portal.gestiondelriesgo.gov.co/Paginas/Atencion-a-la-Ciudadania.aspx", "accessed": "2026-08-13"},
     {"id": "co-red-cross", "title": "Cruz Roja Colombiana", "publisher": "Cruz Roja Colombiana", "url": "https://cruzrojacolombiana.org/", "accessed": "2026-08-13"},
     {"id": "co-red-cross-family", "title": "Protección de Vínculos Familiares", "publisher": "Cruz Roja Colombiana", "url": "https://www.cruzrojacolombiana.org/cruz-roja-colombiana-despliega-equipo-humanitario-a-venezuela-y-activa-campana-de-recaudo-para-apoyar-a-las-comunidades-afectadas-por-los-sismos/", "accessed": "2026-08-13"},
-    {"id": "co-ubpd", "title": "Unidad de Búsqueda de Personas dadas por Desaparecidas", "publisher": "UBPD", "url": "https://unidadbusqueda.gov.co/", "accessed": "2026-08-13"},
+    {"id": "co-missing", "title": "Centre de contact", "publisher": "Fiscalía General de la Nación", "url": "https://www.fiscalia.gov.co/colombia/servicios-de-informacion-al-ciudadano/centro-de-contacto/", "accessed": "2026-08-13"},
     {"id": "us-fema", "title": "Federal Emergency Management Agency", "publisher": "USAGov", "url": "https://www.usa.gov/agencies/federal-emergency-management-agency", "accessed": "2026-08-13"},
     {"id": "us-red-cross", "title": "Contact Us", "publisher": "American Red Cross", "url": "https://www.redcross.org/contact-us.html", "accessed": "2026-08-13"},
-    {"id": "us-family", "title": "How to help survivors after a disaster", "publisher": "USAGov", "url": "https://www.usa.gov/help-disaster-survivors", "accessed": "2026-08-13"},
+    {"id": "us-family", "title": "National Missing and Unidentified Persons System", "publisher": "National Institute of Justice", "url": "https://www.nij.ojp.gov/namus", "accessed": "2026-08-13"},
     {"id": "mx-911", "title": "911", "publisher": "Gouvernement du Mexique", "url": "https://www.gob.mx/911", "accessed": "2026-08-13"},
-    {"id": "mx-cnpc", "title": "Coordinación Nacional de Protección Civil", "publisher": "Gouvernement du Mexique", "url": "https://www.gob.mx/cnpc", "accessed": "2026-08-13"},
-    {"id": "mx-red-cross", "title": "Cruz Roja Mexicana", "publisher": "Cruz Roja Mexicana", "url": "https://www.cruzrojamexicana.org.mx/", "accessed": "2026-08-13"},
+    {"id": "mx-cnpc", "title": "Coordinación Nacional de Protección Civil", "publisher": "Gouvernement du Mexique", "url": "https://www.gob.mx/sspc/acciones-y-programas/coordinacion-nacional-de-proteccion-civil-357857", "accessed": "2026-08-13"},
+    {"id": "mx-red-cross", "title": "Contact", "publisher": "Cruz Roja Mexicana", "url": "https://cruzrojamexicana.org.mx/contacto", "accessed": "2026-08-13"},
     {"id": "mx-cnb", "title": "Reportar desaparición", "publisher": "Comisión Nacional de Búsqueda", "url": "https://comisionacionaldebusqueda.segob.gob.mx/reportar-desaparicion/", "accessed": "2026-08-13"},
     {"id": "es-112", "title": "Services fournis par le 112", "publisher": "Gouvernement espagnol", "url": "https://administracion.gob.es/pag_Home/Tu-espacio-europeo/derechos-obligaciones/ciudadanos/asistencia-sanitaria/numeros-urgencia", "accessed": "2026-08-13"},
     {"id": "es-protection", "title": "Dirección General de Protección Civil y Emergencias", "publisher": "Gouvernement espagnol", "url": "https://administracion.gob.es/pagFront/espanaAdmon/directorioOrganigrama/fichaUnidadOrganica.htm?codigoUnidad=E00129002", "accessed": "2026-08-13"},
     {"id": "es-red-cross", "title": "Contacto", "publisher": "Cruz Roja Española", "url": "https://www2.cruzroja.es/contacto", "accessed": "2026-08-13"},
-    {"id": "es-missing", "title": "Centro Nacional de Desaparecidos", "publisher": "Ministère espagnol de l’Intérieur", "url": "https://cndes-web.ses.mir.es/publico/Desaparecidos/", "accessed": "2026-08-13"},
+    {"id": "es-missing", "title": "Premières démarches après une disparition", "publisher": "Ministère espagnol de l’Intérieur", "url": "https://cndes-web.ses.mir.es/publico/Desaparecidos/Primeros-Pasos", "accessed": "2026-08-13"},
     {"id": "de-emergency", "title": "Numéros d’urgence", "publisher": "Ministère fédéral allemand de la Santé", "url": "https://gesund.bund.de/en/notfallnummern", "accessed": "2026-08-13"},
     {"id": "de-bbk", "title": "Protection civile et aide en cas de catastrophe", "publisher": "BBK", "url": "https://www.bbk.bund.de/EN/Home/home_node.html", "accessed": "2026-08-13"},
     {"id": "de-drk", "title": "Croix-Rouge allemande", "publisher": "DRK", "url": "https://www.drk.de/en/", "accessed": "2026-08-13"},
-    {"id": "de-tracing", "title": "Service de recherche", "publisher": "DRK-Suchdienst", "url": "https://www.drk-suchdienst.de/en/", "accessed": "2026-08-13"},
+    {"id": "de-tracing", "title": "Service international de recherche", "publisher": "DRK-Suchdienst", "url": "https://www.drk-suchdienst.de/wie-wir-helfen/suchen/internationale-suche/faqs-zur-internationalen-suche", "accessed": "2026-08-13"},
     {"id": "fr-emergency", "title": "Numéros d’urgence", "publisher": "Service-Public.fr", "url": "https://lannuaire.service-public.fr/", "accessed": "2026-08-13"},
-    {"id": "fr-civil", "title": "Direction générale de la sécurité civile", "publisher": "Service-Public.fr", "url": "https://lannuaire.service-public.fr/gouvernement/07698e91-2d43-4e6d-aff4-2ad51780ece7", "accessed": "2026-08-13"},
-    {"id": "fr-red-cross", "title": "Croix-Rouge française", "publisher": "Croix-Rouge française", "url": "https://www.croix-rouge.fr/", "accessed": "2026-08-13"},
+    {"id": "fr-civil", "title": "Sécurité civile", "publisher": "Ministère de l’Intérieur", "url": "https://www.securite-civile.interieur.gouv.fr/", "accessed": "2026-08-13"},
+    {"id": "fr-red-cross", "title": "Annuaire", "publisher": "Croix-Rouge française", "url": "https://www.croix-rouge.fr/annuaire", "accessed": "2026-08-13"},
     {"id": "cn-emergency", "title": "Numéros d’urgence courants", "publisher": "Gouvernement central chinois", "url": "https://www.gov.cn/ztzl/yjzn/content_562406.htm", "accessed": "2026-08-13"},
     {"id": "cn-mem", "title": "Ministère de la Gestion des urgences", "publisher": "Gouvernement chinois", "url": "https://www.mem.gov.cn/", "accessed": "2026-08-13"},
     {"id": "cn-red-cross", "title": "Croix-Rouge chinoise", "publisher": "Croix-Rouge chinoise", "url": "https://www.redcross.org.cn/", "accessed": "2026-08-13"},
