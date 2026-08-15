@@ -38,6 +38,7 @@ import '../widgets/nickname_dialog.dart';
 import '../widgets/sensitive_screen.dart';
 import '../widgets/voice_waveform.dart';
 import 'emergency_screen.dart';
+import 'diagnostics_screen.dart';
 import 'family_screen.dart';
 import 'mesh_health_card.dart';
 import 'map_screen.dart';
@@ -48,6 +49,7 @@ import 'transfers_tab.dart';
 
 enum _AppMenuAction {
   family,
+  diagnostics,
   changeNickname,
   privacy,
   support,
@@ -365,6 +367,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.family_restroom),
                       title: Text(context.l10n.familyTitle),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: _AppMenuAction.diagnostics,
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.monitor_heart_outlined),
+                      title: Text(context.l10n.diagnosticsTitle),
                     ),
                   ),
                   PopupMenuItem(
@@ -947,6 +957,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
             builder: (_) => FamilyScreen(controller: widget.family),
+          ),
+        );
+        return;
+      case _AppMenuAction.diagnostics:
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => DiagnosticsScreen(controller: controller),
           ),
         );
         return;

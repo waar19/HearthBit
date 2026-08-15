@@ -112,6 +112,18 @@ class MeshController extends ChangeNotifier {
   String? lastError;
   bool supportsBackgroundRelay = false;
   bool supportsMeshtastic = false;
+  String platformName = 'unknown';
+  bool supportsAcousticSonar = false;
+  bool supportsRadioRanging = false;
+  bool meshAdvertising = false;
+  bool meshScanActive = false;
+  bool genericScanActive = false;
+  bool genericScanEnabled = false;
+  int bleDutyCyclePercent = 0;
+  int activeBleScans = 0;
+  int scanStarts = 0;
+  int storeForwardEntries = 0;
+  Set<String> activeTransports = const {};
   DateTime? radarConsentUntil;
   PendingBeaconRequest? pendingBeaconRequest;
   bool localBeaconActive = false;
@@ -278,8 +290,11 @@ class MeshController extends ChangeNotifier {
     _trimMessagesInMemory();
     _subscription = _platform.events.listen(_handleEventSafely);
     final capabilities = await _platform.getCapabilities();
+    platformName = capabilities['platform'] as String? ?? platformName;
     supportsBackgroundRelay = capabilities['backgroundRelay'] as bool? ?? false;
     supportsMeshtastic = capabilities['meshtastic'] as bool? ?? false;
+    supportsAcousticSonar = capabilities['acousticSonar'] as bool? ?? false;
+    supportsRadioRanging = capabilities['radioRanging'] as bool? ?? false;
     await _platform.configurePrivacyMode(
       privateMode: _privateMode,
       bitchatInteropEnabled: _bitchatInteropEnabled,
@@ -328,6 +343,43 @@ class MeshController extends ChangeNotifier {
     adaptivePowerSaving =
         power['adaptivePowerSaving'] as bool? ?? powerProfile.savesPower;
     notifyListeners();
+  }
+
+  Future<void> refreshDiagnostics({bool notify = true}) async {
+    final diagnostics = await _platform.getMeshDiagnostics();
+    if (diagnostics.isEmpty) return;
+    platformName = diagnostics['platform'] as String? ?? platformName;
+    meshAdvertising = diagnostics['advertising'] as bool? ?? meshAdvertising;
+    meshScanActive = diagnostics['meshScanActive'] as bool? ?? meshScanActive;
+    genericScanActive =
+        diagnostics['genericScanActive'] as bool? ?? genericScanActive;
+    genericScanEnabled =
+        diagnostics['genericScanEnabled'] as bool? ?? genericScanEnabled;
+    batteryLevel =
+        (diagnostics['batteryLevel'] as num?)?.toInt() ?? batteryLevel;
+    powerProfile = MeshPowerProfile.fromWire(
+      diagnostics['powerProfile'] ?? powerProfile.wireName,
+    );
+    adaptivePowerSaving =
+        diagnostics['adaptivePowerSaving'] as bool? ?? adaptivePowerSaving;
+    bleDutyCyclePercent =
+        (diagnostics['bleDutyCyclePercent'] as num?)?.toInt() ??
+        bleDutyCyclePercent;
+    activeBleScans =
+        (diagnostics['activeScans'] as num?)?.toInt() ?? activeBleScans;
+    scanStarts = (diagnostics['scanStarts'] as num?)?.toInt() ?? scanStarts;
+    storeForwardEntries =
+        (diagnostics['storeForwardEntries'] as num?)?.toInt() ??
+        storeForwardEntries;
+    final transports = diagnostics['transports'];
+    if (transports is List<Object?>) {
+      activeTransports = transports
+          .whereType<String>()
+          .map((value) => value.trim().toLowerCase())
+          .where((value) => value.isNotEmpty)
+          .toSet();
+    }
+    if (notify) notifyListeners();
   }
 
   /// Abre el diálogo de optimización de batería (Android). El resultado real
@@ -611,6 +663,48 @@ class MeshController extends ChangeNotifier {
     } else {
       DiagnosticsLog.instance.warning('sos.send.failed');
     }
+  }
+
+  Future<bool> composeEmergencySms({
+    required String recipient,
+    required String message,
+    SosLocationPrecision locationPrecision = SosLocationPrecision.approximate,
+  }) async {
+    final readable = message.trim().isEmpty
+        ? currentL10n.sosDefaultMessage
+        : message.trim();
+    final position = locationPrecision == SosLocationPrecision.none
+        ? null
+        : await _currentPosition();
+    final coordinates = position == null
+        ? null
+        : switch (locationPrecision) {
+            SosLocationPrecision.exact => (
+              position.latitude.toStringAsFixed(6),
+              position.longitude.toStringAsFixed(6),
+            ),
+            SosLocationPrecision.approximate => (
+              coarsenEmergencyCoordinate(position.latitude).toStringAsFixed(3),
+              coarsenEmergencyCoordinate(position.longitude).toStringAsFixed(3),
+            ),
+            SosLocationPrecision.none => null,
+          };
+    final body = coordinates == null
+        ? currentL10n.emergencySmsBodyWithoutLocation(readable)
+        : currentL10n.emergencySmsBodyWithLocation(
+            readable,
+            coordinates.$1,
+            coordinates.$2,
+          );
+    final opened = await _platform.composeEmergencySms(
+      recipient: recipient,
+      body: body,
+    );
+    DiagnosticsLog.instance.info(
+      'emergency.sms.composer',
+      data: {'opened': opened, 'locationPrecision': locationPrecision},
+    );
+    return opened;
   }
 
   Future<void> sendCheckIn(CheckInStatus status, String readableMessage) async {
@@ -1679,6 +1773,16 @@ class MeshController extends ChangeNotifier {
         event['adaptivePowerSaving'] as bool? ?? powerProfile.savesPower;
     final metrics = event['resourceMetrics'];
     if (metrics is Map<Object?, Object?>) {
+      bleDutyCyclePercent =
+          (metrics['bleDutyCyclePercent'] as num?)?.toInt() ??
+          bleDutyCyclePercent;
+      activeBleScans =
+          (metrics['activeScans'] as num?)?.toInt() ?? activeBleScans;
+      meshScanActive = activeBleScans > 0;
+      scanStarts = (metrics['scanStarts'] as num?)?.toInt() ?? scanStarts;
+      storeForwardEntries =
+          (metrics['storeForwardEntries'] as num?)?.toInt() ??
+          storeForwardEntries;
       DiagnosticsLog.instance.info(
         'mesh.resource.stats',
         data: {
@@ -1690,6 +1794,16 @@ class MeshController extends ChangeNotifier {
               (metrics['storeForwardEntries'] as num?)?.toInt() ?? -1,
         },
       );
+    }
+    final links = event['links'];
+    if (links is List<Object?>) {
+      activeTransports = links
+          .whereType<Map<Object?, Object?>>()
+          .map((link) => link['kind'])
+          .whereType<String>()
+          .map((value) => value.trim().toLowerCase())
+          .where((value) => value.isNotEmpty)
+          .toSet();
     }
     _applyRadarConsent(event);
     if (!couldSend && canSend) {

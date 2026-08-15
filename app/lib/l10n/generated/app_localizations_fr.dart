@@ -201,6 +201,51 @@ class AppLocalizationsFr extends AppLocalizations {
   String get sosDefaultMessage => 'J\'ai besoin d\'aide';
 
   @override
+  String get emergencySmsOpen => 'Prévenir un contact de confiance par SMS';
+
+  @override
+  String get emergencySmsTitle => 'SMS d\'urgence';
+
+  @override
+  String get emergencySmsBody =>
+      'Préparez un message pour un contact de confiance. Votre application de messagerie s\'ouvrira pour le vérifier et l\'envoyer.';
+
+  @override
+  String get emergencySmsRecipient => 'Téléphone du contact de confiance';
+
+  @override
+  String get emergencySmsMessage => 'Message d\'urgence';
+
+  @override
+  String get emergencySmsDisclaimer =>
+      'Le message n\'est pas envoyé automatiquement et ne remplace pas un appel aux services d\'urgence officiels.';
+
+  @override
+  String get emergencySmsCompose => 'OUVRIR LA MESSAGERIE';
+
+  @override
+  String get emergencySmsUnavailable =>
+      'Aucune application de messagerie compatible';
+
+  @override
+  String get emergencySmsInvalidRecipient =>
+      'Saisissez un numéro de téléphone valide';
+
+  @override
+  String emergencySmsBodyWithoutLocation(String message) {
+    return 'Alerte d\'urgence HearthBit : $message. Ce SMS ne remplace pas les services d\'urgence officiels.';
+  }
+
+  @override
+  String emergencySmsBodyWithLocation(
+    String message,
+    String latitude,
+    String longitude,
+  ) {
+    return 'Alerte d\'urgence HearthBit : $message. Coordonnées : $latitude, $longitude. Ce SMS ne remplace pas les services d\'urgence officiels.';
+  }
+
+  @override
   String get sosReceivedTitle => 'Alertes reçues';
 
   @override
@@ -662,6 +707,69 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get diagnosticsExportError =>
       'Impossible d\'exporter le rapport de diagnostic';
+
+  @override
+  String get diagnosticsTitle => 'Diagnostic';
+
+  @override
+  String get diagnosticsRefreshTooltip => 'Actualiser le diagnostic';
+
+  @override
+  String get diagnosticsMeshSection => 'Maillage';
+
+  @override
+  String get diagnosticsPlatform => 'Plateforme';
+
+  @override
+  String get diagnosticsStatus => 'État';
+
+  @override
+  String get diagnosticsNearbyDevices => 'Appareils à proximité';
+
+  @override
+  String get diagnosticsAdvertising => 'Annonce BLE';
+
+  @override
+  String get diagnosticsMeshScan => 'Balayage du maillage';
+
+  @override
+  String get diagnosticsGenericScan => 'Balayage des signaux génériques';
+
+  @override
+  String get diagnosticsEnergySection => 'Énergie';
+
+  @override
+  String get diagnosticsBattery => 'Batterie';
+
+  @override
+  String get diagnosticsPowerProfile => 'Profil énergétique';
+
+  @override
+  String get diagnosticsBleDutyCycle => 'Cycle d\'activité BLE';
+
+  @override
+  String get diagnosticsScanStarts => 'Démarrages du balayage';
+
+  @override
+  String get diagnosticsStoreForward => 'File de stockage et retransmission';
+
+  @override
+  String get diagnosticsTransportsSection => 'Transports actifs';
+
+  @override
+  String get diagnosticsNoActiveTransports => 'Aucun transport actif signalé';
+
+  @override
+  String get diagnosticsEventsSection => 'Événements récents';
+
+  @override
+  String get diagnosticsNoEvents => 'Aucun événement de diagnostic';
+
+  @override
+  String get diagnosticsEnabled => 'Actif';
+
+  @override
+  String get diagnosticsDisabled => 'Inactif';
 
   @override
   String get openLinkError => 'Impossible d\'ouvrir le lien';

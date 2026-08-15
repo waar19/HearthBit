@@ -30,6 +30,8 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
+internal const val ACTION_OPEN_EMERGENCY = "com.hearthbit.app.OPEN_EMERGENCY"
+
 class MainActivity : FlutterActivity() {
     private var permissionResult: MethodChannel.Result? = null
     private var backgroundLocationResult: MethodChannel.Result? = null
@@ -91,6 +93,9 @@ class MainActivity : FlutterActivity() {
                         ),
                     ),
                 )
+                "getMeshDiagnostics" -> runMethod(result) {
+                    MeshRuntime.engine(this).diagnosticSnapshot()
+                }
                 "getSimCountry" -> {
                     val country = runCatching {
                         getSystemService(TelephonyManager::class.java)
@@ -216,6 +221,20 @@ class MainActivity : FlutterActivity() {
                         requireNotNull(call.argument<String>("peerId")),
                     )
                     null
+                }
+                "composeEmergencySms" -> runMethod(result) {
+                    val recipient = requireNotNull(call.argument<String>("recipient"))
+                    val body = requireNotNull(call.argument<String>("body"))
+                    val intent = Intent(
+                        Intent.ACTION_SENDTO,
+                        Uri.parse("smsto:${Uri.encode(recipient, "+")}"),
+                    ).putExtra("sms_body", body)
+                    if (intent.resolveActivity(packageManager) == null) {
+                        false
+                    } else {
+                        startActivity(intent)
+                        true
+                    }
                 }
                 "sendSos" -> runMethod(result) {
                     MeshRuntime.engine(this).sendSos(
@@ -750,7 +769,6 @@ class MainActivity : FlutterActivity() {
         const val TRANSFER_METHOD_CHANNEL = "com.hearthbit.transfer/methods"
         const val TRANSFER_EVENT_CHANNEL = "com.hearthbit.transfer/events"
         const val EMERGENCY_SHORTCUT_CHANNEL = "com.hearthbit.emergency/shortcut"
-        const val ACTION_OPEN_EMERGENCY = "com.hearthbit.app.OPEN_EMERGENCY"
         const val PERMISSION_REQUEST = 7402
         const val BACKGROUND_LOCATION_REQUEST = 7403
         const val FAMILY_NOTIFICATION_PERMISSION_REQUEST = 7404

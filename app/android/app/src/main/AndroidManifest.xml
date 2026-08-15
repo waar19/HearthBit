@@ -44,6 +44,16 @@
             android:name=".mesh.MeshForegroundService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice|location" />
+        <service
+            android:name=".EmergencyTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_emergency_tile"
+            android:label="@string/shortcut_sos_short"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -87,6 +97,10 @@
         <intent>
             <action android:name="android.intent.action.DIAL"/>
             <data android:scheme="tel"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO"/>
+            <data android:scheme="smsto"/>
         </intent>
     </queries>
 </manifest>

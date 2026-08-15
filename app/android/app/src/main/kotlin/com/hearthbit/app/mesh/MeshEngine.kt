@@ -309,6 +309,35 @@ internal class MeshEngine(
         "resourceMetrics" to resourceMetrics(),
     )
 
+    fun diagnosticSnapshot(): Map<String, Any> {
+        val metrics = resourceMetrics()
+        return mapOf(
+            "platform" to "android",
+            "meshRunning" to running,
+            "meshStatus" to currentStatus,
+            "advertising" to advertising,
+            "meshScanActive" to meshScanRunning,
+            "genericScanActive" to genericPresenceScanRunning,
+            "genericScanEnabled" to genericPresenceScanEnabled,
+            "powerProfile" to powerProfile.wireName,
+            "adaptivePowerSaving" to adaptivePowerSaving,
+            "batteryLevel" to batteryLevel,
+            "bleDutyCyclePercent" to metrics.getValue("bleDutyCyclePercent"),
+            "activeScans" to metrics.getValue("activeScans"),
+            "scanStarts" to metrics.getValue("scanStarts"),
+            "storeForwardEntries" to metrics.getValue("storeForwardEntries"),
+            "linkCount" to activeLinks().size,
+            "nearbyCount" to nearbyPeerCount(),
+            "presenceCount" to genericPresenceTracker
+                .snapshot(System.currentTimeMillis())
+                .size,
+            "transports" to activeLinks()
+                .map { it.capabilities.kind.name.lowercase() }
+                .distinct()
+                .sorted(),
+        )
+    }
+
     private fun resourceMetrics(now: Long = System.currentTimeMillis()): Map<String, Any> {
         val meshMs = meshScanAccumulatedMs +
             if (meshScanActiveSince > 0L) now - meshScanActiveSince else 0L

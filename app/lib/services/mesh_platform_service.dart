@@ -5,6 +5,14 @@ import 'package:flutter/services.dart';
 import 'beacon_control_protocol.dart';
 import '../models/mesh_models.dart';
 
+String normalizeSmsRecipient(String value) {
+  final normalized = value.trim().replaceAll(RegExp(r'[\s()\-]'), '');
+  if (!RegExp(r'^\+?[0-9]{5,15}$').hasMatch(normalized)) {
+    throw const FormatException('invalid_sms_recipient');
+  }
+  return normalized;
+}
+
 class EmergencyTransmission {
   const EmergencyTransmission({required this.messageId, this.canonicalHash});
 
@@ -329,6 +337,39 @@ class MeshPlatformService {
       return const {};
     } on PlatformException {
       return const {};
+    }
+  }
+
+  /// Snapshot agregado para soporte en campo. No contiene identidades,
+  /// direcciones, mensajes, claves ni coordenadas.
+  Future<Map<Object?, Object?>> getMeshDiagnostics() async {
+    try {
+      final result = await _methods.invokeMapMethod<Object?, Object?>(
+        'getMeshDiagnostics',
+      );
+      return result ?? const {};
+    } on MissingPluginException {
+      return const {};
+    } on PlatformException {
+      return const {};
+    }
+  }
+
+  Future<bool> composeEmergencySms({
+    required String recipient,
+    required String body,
+  }) async {
+    final normalizedRecipient = normalizeSmsRecipient(recipient);
+    try {
+      return await _methods.invokeMethod<bool>('composeEmergencySms', {
+            'recipient': normalizedRecipient,
+            'body': body,
+          }) ??
+          false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
     }
   }
 

@@ -201,6 +201,50 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sosDefaultMessage => 'I need help';
 
   @override
+  String get emergencySmsOpen => 'Notify a trusted contact by SMS';
+
+  @override
+  String get emergencySmsTitle => 'Emergency SMS';
+
+  @override
+  String get emergencySmsBody =>
+      'Prepare a text message for a trusted contact. Your messaging app will open so you can review and send it.';
+
+  @override
+  String get emergencySmsRecipient => 'Trusted contact phone number';
+
+  @override
+  String get emergencySmsMessage => 'Emergency message';
+
+  @override
+  String get emergencySmsDisclaimer =>
+      'This does not send automatically and does not replace a call to official emergency services.';
+
+  @override
+  String get emergencySmsCompose => 'OPEN MESSAGING APP';
+
+  @override
+  String get emergencySmsUnavailable =>
+      'No compatible messaging app is available';
+
+  @override
+  String get emergencySmsInvalidRecipient => 'Enter a valid phone number';
+
+  @override
+  String emergencySmsBodyWithoutLocation(String message) {
+    return 'HearthBit emergency alert: $message. This SMS does not replace official emergency services.';
+  }
+
+  @override
+  String emergencySmsBodyWithLocation(
+    String message,
+    String latitude,
+    String longitude,
+  ) {
+    return 'HearthBit emergency alert: $message. Coordinates: $latitude, $longitude. This SMS does not replace official emergency services.';
+  }
+
+  @override
   String get sosReceivedTitle => 'Received alerts';
 
   @override
@@ -659,6 +703,69 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagnosticsExportError => 'Could not export the diagnostic report';
+
+  @override
+  String get diagnosticsTitle => 'Diagnostics';
+
+  @override
+  String get diagnosticsRefreshTooltip => 'Refresh diagnostics';
+
+  @override
+  String get diagnosticsMeshSection => 'Mesh';
+
+  @override
+  String get diagnosticsPlatform => 'Platform';
+
+  @override
+  String get diagnosticsStatus => 'Status';
+
+  @override
+  String get diagnosticsNearbyDevices => 'Nearby devices';
+
+  @override
+  String get diagnosticsAdvertising => 'BLE advertising';
+
+  @override
+  String get diagnosticsMeshScan => 'Mesh scan';
+
+  @override
+  String get diagnosticsGenericScan => 'Generic signal scan';
+
+  @override
+  String get diagnosticsEnergySection => 'Energy';
+
+  @override
+  String get diagnosticsBattery => 'Battery';
+
+  @override
+  String get diagnosticsPowerProfile => 'Power profile';
+
+  @override
+  String get diagnosticsBleDutyCycle => 'BLE duty cycle';
+
+  @override
+  String get diagnosticsScanStarts => 'Scan starts';
+
+  @override
+  String get diagnosticsStoreForward => 'Store-and-forward queue';
+
+  @override
+  String get diagnosticsTransportsSection => 'Active transports';
+
+  @override
+  String get diagnosticsNoActiveTransports => 'No active transport reported';
+
+  @override
+  String get diagnosticsEventsSection => 'Recent events';
+
+  @override
+  String get diagnosticsNoEvents => 'No diagnostic events yet';
+
+  @override
+  String get diagnosticsEnabled => 'Active';
+
+  @override
+  String get diagnosticsDisabled => 'Inactive';
 
   @override
   String get openLinkError => 'Could not open the link';

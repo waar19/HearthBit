@@ -193,6 +193,47 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sosDefaultMessage => '我需要帮助';
 
   @override
+  String get emergencySmsOpen => '通过短信通知可信联系人';
+
+  @override
+  String get emergencySmsTitle => '紧急短信';
+
+  @override
+  String get emergencySmsBody => '为可信联系人准备一条短信。系统将打开短信应用，供你检查并发送。';
+
+  @override
+  String get emergencySmsRecipient => '可信联系人的电话号码';
+
+  @override
+  String get emergencySmsMessage => '紧急消息';
+
+  @override
+  String get emergencySmsDisclaimer => '短信不会自动发送，也不能替代拨打官方紧急服务电话。';
+
+  @override
+  String get emergencySmsCompose => '打开短信应用';
+
+  @override
+  String get emergencySmsUnavailable => '没有兼容的短信应用';
+
+  @override
+  String get emergencySmsInvalidRecipient => '请输入有效的电话号码';
+
+  @override
+  String emergencySmsBodyWithoutLocation(String message) {
+    return 'HearthBit 紧急警报：$message。此短信不能替代官方紧急服务。';
+  }
+
+  @override
+  String emergencySmsBodyWithLocation(
+    String message,
+    String latitude,
+    String longitude,
+  ) {
+    return 'HearthBit 紧急警报：$message。坐标：$latitude, $longitude。此短信不能替代官方紧急服务。';
+  }
+
+  @override
   String get sosReceivedTitle => '收到的警报';
 
   @override
@@ -624,6 +665,69 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get diagnosticsExportError => '无法导出诊断报告';
+
+  @override
+  String get diagnosticsTitle => '诊断';
+
+  @override
+  String get diagnosticsRefreshTooltip => '刷新诊断信息';
+
+  @override
+  String get diagnosticsMeshSection => '网状网络';
+
+  @override
+  String get diagnosticsPlatform => '平台';
+
+  @override
+  String get diagnosticsStatus => '状态';
+
+  @override
+  String get diagnosticsNearbyDevices => '附近设备';
+
+  @override
+  String get diagnosticsAdvertising => 'BLE 广播';
+
+  @override
+  String get diagnosticsMeshScan => '网状网络扫描';
+
+  @override
+  String get diagnosticsGenericScan => '通用信号扫描';
+
+  @override
+  String get diagnosticsEnergySection => '电量';
+
+  @override
+  String get diagnosticsBattery => '电池';
+
+  @override
+  String get diagnosticsPowerProfile => '电源配置';
+
+  @override
+  String get diagnosticsBleDutyCycle => 'BLE 活跃占比';
+
+  @override
+  String get diagnosticsScanStarts => '扫描启动次数';
+
+  @override
+  String get diagnosticsStoreForward => '存储转发队列';
+
+  @override
+  String get diagnosticsTransportsSection => '活跃传输方式';
+
+  @override
+  String get diagnosticsNoActiveTransports => '未报告活跃传输方式';
+
+  @override
+  String get diagnosticsEventsSection => '最近事件';
+
+  @override
+  String get diagnosticsNoEvents => '尚无诊断事件';
+
+  @override
+  String get diagnosticsEnabled => '活跃';
+
+  @override
+  String get diagnosticsDisabled => '未活跃';
 
   @override
   String get openLinkError => '无法打开链接';

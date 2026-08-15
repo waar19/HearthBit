@@ -1,0 +1,19 @@
+default_platform(:android)
+
+platform :android do
+  desc "Publica un AAB firmado en la prueba interna de Google Play"
+  lane :internal do
+    upload_to_play_store(
+      package_name: "com.hearthbit.app",
+      aab: ENV.fetch("AAB_PATH"),
+      json_key: ENV.fetch("GOOGLE_PLAY_JSON_KEY_PATH"),
+      track: "internal",
+      release_status: "completed",
+      skip_upload_apk: true,
+      skip_upload_metadata: false,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+end

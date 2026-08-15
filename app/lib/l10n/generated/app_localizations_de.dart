@@ -201,6 +201,51 @@ class AppLocalizationsDe extends AppLocalizations {
   String get sosDefaultMessage => 'Ich brauche Hilfe';
 
   @override
+  String get emergencySmsOpen => 'Vertrauensperson per SMS benachrichtigen';
+
+  @override
+  String get emergencySmsTitle => 'Notfall-SMS';
+
+  @override
+  String get emergencySmsBody =>
+      'Bereite eine Nachricht für eine Vertrauensperson vor. Deine Nachrichten-App wird zum Prüfen und Senden geöffnet.';
+
+  @override
+  String get emergencySmsRecipient => 'Telefonnummer der Vertrauensperson';
+
+  @override
+  String get emergencySmsMessage => 'Notfallnachricht';
+
+  @override
+  String get emergencySmsDisclaimer =>
+      'Die Nachricht wird nicht automatisch gesendet und ersetzt keinen Anruf bei offiziellen Notdiensten.';
+
+  @override
+  String get emergencySmsCompose => 'NACHRICHTEN-APP ÖFFNEN';
+
+  @override
+  String get emergencySmsUnavailable =>
+      'Keine kompatible Nachrichten-App verfügbar';
+
+  @override
+  String get emergencySmsInvalidRecipient =>
+      'Gib eine gültige Telefonnummer ein';
+
+  @override
+  String emergencySmsBodyWithoutLocation(String message) {
+    return 'HearthBit-Notfallalarm: $message. Diese SMS ersetzt keine offiziellen Notdienste.';
+  }
+
+  @override
+  String emergencySmsBodyWithLocation(
+    String message,
+    String latitude,
+    String longitude,
+  ) {
+    return 'HearthBit-Notfallalarm: $message. Koordinaten: $latitude, $longitude. Diese SMS ersetzt keine offiziellen Notdienste.';
+  }
+
+  @override
   String get sosReceivedTitle => 'Empfangene Alarme';
 
   @override
@@ -664,6 +709,70 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get diagnosticsExportError =>
       'Der Diagnosebericht konnte nicht exportiert werden';
+
+  @override
+  String get diagnosticsTitle => 'Diagnose';
+
+  @override
+  String get diagnosticsRefreshTooltip => 'Diagnose aktualisieren';
+
+  @override
+  String get diagnosticsMeshSection => 'Mesh';
+
+  @override
+  String get diagnosticsPlatform => 'Plattform';
+
+  @override
+  String get diagnosticsStatus => 'Status';
+
+  @override
+  String get diagnosticsNearbyDevices => 'Geräte in der Nähe';
+
+  @override
+  String get diagnosticsAdvertising => 'BLE-Werbung';
+
+  @override
+  String get diagnosticsMeshScan => 'Mesh-Scan';
+
+  @override
+  String get diagnosticsGenericScan => 'Allgemeiner Signalscan';
+
+  @override
+  String get diagnosticsEnergySection => 'Energie';
+
+  @override
+  String get diagnosticsBattery => 'Akku';
+
+  @override
+  String get diagnosticsPowerProfile => 'Energieprofil';
+
+  @override
+  String get diagnosticsBleDutyCycle => 'BLE-Aktivitätszyklus';
+
+  @override
+  String get diagnosticsScanStarts => 'Scan-Starts';
+
+  @override
+  String get diagnosticsStoreForward => 'Zwischenspeicher-Warteschlange';
+
+  @override
+  String get diagnosticsTransportsSection => 'Aktive Übertragungswege';
+
+  @override
+  String get diagnosticsNoActiveTransports =>
+      'Kein aktiver Übertragungsweg gemeldet';
+
+  @override
+  String get diagnosticsEventsSection => 'Letzte Ereignisse';
+
+  @override
+  String get diagnosticsNoEvents => 'Noch keine Diagnoseereignisse';
+
+  @override
+  String get diagnosticsEnabled => 'Aktiv';
+
+  @override
+  String get diagnosticsDisabled => 'Inaktiv';
 
   @override
   String get openLinkError => 'Der Link konnte nicht geöffnet werden';

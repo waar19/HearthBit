@@ -20,6 +20,9 @@ de rescate:
 - Sonar acústico: distancia corta entre Android y iPhone usando tres rondas de
   chirridos y el método de dos vías tipo BeepBeep.
 
+La evaluación de UWB Android–iPhone y la limitación comprobada del S25 de prueba
+están documentadas en [uwb-interoperability.md](uwb-interoperability.md).
+
 El sonar acústico funciona mejor entre 1 y 25 metros, con ambos teléfonos
 descubiertos y sin obstáculos. No debe usarse junto al oído; las frecuencias
 altas pueden ser audibles para niños y animales.

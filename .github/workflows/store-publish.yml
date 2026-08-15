@@ -1,0 +1,144 @@
+name: Publicar en canales de prueba
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Canal que se publicará
+        required: true
+        type: choice
+        options:
+          - android
+          - ios
+          - both
+
+permissions:
+  contents: read
+
+concurrency:
+  group: store-publish-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  play-internal:
+    name: Google Play · prueba interna
+    if: inputs.target == 'android' || inputs.target == 'both'
+    runs-on: ubuntu-latest
+    environment: play-internal
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: app
+      - name: Preparar credenciales protegidas
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          PLAY_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64 }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64"
+          test -n "$STORE_PASSWORD"
+          test -n "$KEY_ALIAS"
+          test -n "$KEY_PASSWORD"
+          test -n "$PLAY_JSON_BASE64"
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > app/android/release.keystore
+          printf '%s' "$PLAY_JSON_BASE64" | base64 --decode > "$RUNNER_TEMP/google-play.json"
+          {
+            echo "storeFile=release.keystore"
+            echo "storePassword=$STORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > app/android/key.properties
+      - run: flutter pub get
+        working-directory: app
+      - name: Compilar AAB firmado
+        run: flutter build appbundle --release --build-number "$GITHUB_RUN_NUMBER"
+        working-directory: app
+      - name: Publicar en el track interno
+        env:
+          AAB_PATH: ${{ github.workspace }}/app/build/app/outputs/bundle/release/app-release.aab
+          GOOGLE_PLAY_JSON_KEY_PATH: ${{ runner.temp }}/google-play.json
+        run: bundle exec fastlane android internal
+        working-directory: app/android
+
+  testflight:
+    name: Apple · TestFlight
+    if: inputs.target == 'ios' || inputs.target == 'both'
+    runs-on: macos-latest
+    environment: testflight
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: app
+      - name: Instalar certificado y perfil
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          test -n "$CERTIFICATE_BASE64"
+          test -n "$CERTIFICATE_PASSWORD"
+          test -n "$PROVISIONING_PROFILE_BASE64"
+          CERTIFICATE_PATH="$RUNNER_TEMP/hearthbit-distribution.p12"
+          PROFILE_PATH="$RUNNER_TEMP/hearthbit.mobileprovision"
+          KEYCHAIN_PATH="$RUNNER_TEMP/hearthbit-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          umask 077
+          printf '%s' "$CERTIFICATE_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          printf '%s' "$PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          security cms -D -i "$PROFILE_PATH" > "$RUNNER_TEMP/profile.plist"
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$RUNNER_TEMP/profile.plist")
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          echo "HEARTHBIT_KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+      - run: flutter pub get
+        working-directory: app
+      - run: pod install
+        working-directory: app/ios
+      - name: Compilar y publicar en TestFlight
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_KEY_BASE64 }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID || '74V23JJ8B7' }}
+        run: bundle exec fastlane ios testflight
+        working-directory: app/ios
+      - name: Eliminar llavero temporal
+        if: always()
+        run: |
+          if [ -n "${HEARTHBIT_KEYCHAIN_PATH:-}" ]; then
+            security delete-keychain "$HEARTHBIT_KEYCHAIN_PATH" || true
+          fi

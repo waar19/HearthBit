@@ -1,0 +1,28 @@
+HearthBit mantiene a las personas comunicadas cuando internet y las redes móviles no están disponibles. Los teléfonos cercanos forman una malla Bluetooth de bajo consumo que permite enviar mensajes y retransmitirlos entre dispositivos compatibles.
+
+COMUNICACIÓN SIN INTERNET
+• Conversaciones públicas y privadas entre teléfonos cercanos.
+• Los mensajes pueden saltar entre varios dispositivos para ampliar el alcance.
+• Alertas SOS con información útil para personas y equipos de apoyo.
+• Funcionamiento diseñado para emergencias, apagones, zonas rurales y actividades al aire libre.
+
+AYUDA PARA ENCONTRAR A UNA PERSONA
+El radar de rescate utiliza la intensidad de la señal Bluetooth para indicar cercanía y tendencia. Cuando una alerta incluye ubicación, también puede mostrar la distancia GPS en línea recta. La vibración aumenta al acercarte y ayuda a mantener la atención en el entorno.
+
+El modo rescate puede volver a transmitir una alerta SOS con ubicación actualizada mientras permanece activo. La precisión depende del dispositivo, las condiciones del lugar y los permisos concedidos.
+
+ARCHIVOS SIN CONEXIÓN
+Comparte archivos directamente sin depender de servidores externos. HearthBit selecciona automáticamente una opción disponible según el dispositivo: conexión cercana, red local o punto de acceso, Wi‑Fi Aware, Bluetooth o códigos QR mostrados en pantalla.
+
+PRIVACIDAD Y SEGURIDAD
+• Cifrado de extremo a extremo para conversaciones privadas.
+• Firmas digitales para comprobar la procedencia e integridad de los mensajes.
+• Sin cuenta obligatoria para usar la comunicación local.
+• Controles para compartir ubicación únicamente cuando lo decidas.
+
+INFORMACIÓN ÚTIL SIN RED
+Consulta guías básicas de primeros auxilios y números de emergencia guardados en la aplicación. El contenido está disponible en español, inglés, alemán, francés, chino simplificado y japonés.
+
+HearthBit funciona mejor cuando varias personas lo instalan antes de una emergencia, mantienen Bluetooth activado y conceden los permisos necesarios. El alcance, la entrega y la actividad en segundo plano dependen del teléfono, el sistema operativo, los obstáculos y las condiciones de radio.
+
+HearthBit es una herramienta complementaria. No sustituye los servicios oficiales de emergencia, la atención médica profesional ni los sistemas certificados de localización. No garantiza la entrega de mensajes ni una medición exacta de distancia.

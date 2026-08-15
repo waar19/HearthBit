@@ -161,6 +161,23 @@ class _FakePlatform extends MeshPlatformService {
   };
 
   @override
+  Future<Map<Object?, Object?>> getMeshDiagnostics() async => {
+    'platform': 'android',
+    'advertising': true,
+    'meshScanActive': true,
+    'genericScanActive': false,
+    'genericScanEnabled': true,
+    'batteryLevel': 13,
+    'powerProfile': 'powerSaver',
+    'adaptivePowerSaving': true,
+    'bleDutyCyclePercent': 27,
+    'activeScans': 1,
+    'scanStarts': 8,
+    'storeForwardEntries': 3,
+    'transports': ['ble', 'lan', 'ble'],
+  };
+
+  @override
   Future<bool> requestBackgroundLocation() async => backgroundLocation;
 
   @override
@@ -392,6 +409,22 @@ void main() {
       ],
     };
   }
+
+  test('expone un diagnóstico agregado sin identidades de peers', () async {
+    await controller.refreshDiagnostics();
+    expect(controller.platformName, 'android');
+    expect(controller.meshAdvertising, isTrue);
+    expect(controller.meshScanActive, isTrue);
+    expect(controller.genericScanActive, isFalse);
+    expect(controller.genericScanEnabled, isTrue);
+    expect(controller.batteryLevel, 13);
+    expect(controller.powerProfile, MeshPowerProfile.powerSaver);
+    expect(controller.bleDutyCyclePercent, 27);
+    expect(controller.activeBleScans, 1);
+    expect(controller.scanStarts, 8);
+    expect(controller.storeForwardEntries, 3);
+    expect(controller.activeTransports, {'ble', 'lan'});
+  });
 
   test('un evento inválido no cancela los eventos posteriores', () async {
     platform.emit({

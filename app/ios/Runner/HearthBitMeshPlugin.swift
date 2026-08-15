@@ -4,6 +4,7 @@ import CryptoKit
 import Compression
 import Flutter
 import Foundation
+import MessageUI
 import Security
 import UIKit
 import UserNotifications
@@ -532,6 +533,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           "meshtastic": false,
           "nodeRoles": IOSMeshNodeRole.allCases.map(\.rawValue),
         ])
+      case "getMeshDiagnostics":
+        result(diagnosticSnapshot())
       case "getInstalledApkForShare":
         result(["status": "unsupported"])
       case "getSimCountry":
@@ -681,6 +684,24 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       case "ensurePrivateChannel":
         try ensurePrivateChannel(peerID: arguments["peerId"] as? String ?? "")
         result(nil)
+      case "composeEmergencySms":
+        guard MFMessageComposeViewController.canSendText() else {
+          result(false)
+          return
+        }
+        guard
+          let recipient = arguments["recipient"] as? String,
+          let body = arguments["body"] as? String,
+          let presenter = topViewController()
+        else {
+          throw IOSMeshError.invalidPayload
+        }
+        let composer = MFMessageComposeViewController()
+        composer.messageComposeDelegate = self
+        composer.recipients = [recipient]
+        composer.body = body
+        presenter.present(composer, animated: true)
+        result(true)
       case "sendSos":
         let description =
           arguments["content"] as? String ?? HearthBitL10n.string("sos_default")
@@ -3717,6 +3738,61 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     emit(event)
   }
 
+  private func diagnosticSnapshot() -> [String: Any] {
+    let scanning = central?.isScanning ?? false
+    let advertising = peripheralManager?.isAdvertising ?? false
+    let subscribedCount = localCharacteristic?.subscribedCentrals?.count ?? 0
+    let bleLinkCount = connectedPeripherals.count + subscribedCount
+    var transports: [String] = []
+    if scanning || advertising || bleLinkCount > 0 {
+      transports.append("ble")
+    }
+    if lanBridgeGatewayID != nil {
+      transports.append("lan")
+    }
+    return [
+      "platform": "ios",
+      "meshRunning": running,
+      "meshStatus": running ? "active" : "stopped",
+      "advertising": advertising,
+      "meshScanActive": scanning,
+      "genericScanActive": genericPresenceWindowActive && scanning,
+      "genericScanEnabled": genericPresenceScanEnabled,
+      "powerProfile": powerProfile.rawValue,
+      "adaptivePowerSaving": adaptivePowerSaving,
+      "batteryLevel": batteryLevel,
+      "bleDutyCyclePercent": 0,
+      "activeScans": scanning ? 1 : 0,
+      "scanStarts": 0,
+      "storeForwardEntries": 0,
+      "linkCount": bleLinkCount,
+      "nearbyCount": peerMaps().filter { ($0["online"] as? Bool) == true }.count,
+      "presenceCount": genericPresenceTracker
+        .snapshot(now: Int64(Date().timeIntervalSince1970 * 1000))
+        .count,
+      "transports": transports,
+    ]
+  }
+
+  private func topViewController() -> UIViewController? {
+    let root = UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .flatMap(\.windows)
+      .first(where: \.isKeyWindow)?
+      .rootViewController
+    var current = root
+    while let presented = current?.presentedViewController {
+      current = presented
+    }
+    if let navigation = current as? UINavigationController {
+      return navigation.visibleViewController ?? navigation
+    }
+    if let tabs = current as? UITabBarController {
+      return tabs.selectedViewController ?? tabs
+    }
+    return current
+  }
+
   private func emitMessage(
     id: String,
     sender: String,
@@ -3941,6 +4017,15 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
 
   private func emit(_ event: [String: Any]) {
     DispatchQueue.main.async { [weak self] in self?.eventSink?(event) }
+  }
+}
+
+extension HearthBitMeshPlugin: MFMessageComposeViewControllerDelegate {
+  func messageComposeViewController(
+    _ controller: MFMessageComposeViewController,
+    didFinishWith result: MessageComposeResult
+  ) {
+    controller.dismiss(animated: true)
   }
 }
 

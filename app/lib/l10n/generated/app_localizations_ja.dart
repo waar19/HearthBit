@@ -196,6 +196,48 @@ class AppLocalizationsJa extends AppLocalizations {
   String get sosDefaultMessage => '助けが必要です';
 
   @override
+  String get emergencySmsOpen => '信頼できる連絡先へSMSで知らせる';
+
+  @override
+  String get emergencySmsTitle => '緊急SMS';
+
+  @override
+  String get emergencySmsBody =>
+      '信頼できる連絡先向けのメッセージを準備します。内容を確認して送信できるようメッセージアプリを開きます。';
+
+  @override
+  String get emergencySmsRecipient => '信頼できる連絡先の電話番号';
+
+  @override
+  String get emergencySmsMessage => '緊急メッセージ';
+
+  @override
+  String get emergencySmsDisclaimer => '自動送信はされず、公的な緊急サービスへの通報の代わりにはなりません。';
+
+  @override
+  String get emergencySmsCompose => 'メッセージアプリを開く';
+
+  @override
+  String get emergencySmsUnavailable => '対応するメッセージアプリがありません';
+
+  @override
+  String get emergencySmsInvalidRecipient => '有効な電話番号を入力してください';
+
+  @override
+  String emergencySmsBodyWithoutLocation(String message) {
+    return 'HearthBit緊急アラート：$message。このSMSは公的な緊急サービスの代わりにはなりません。';
+  }
+
+  @override
+  String emergencySmsBodyWithLocation(
+    String message,
+    String latitude,
+    String longitude,
+  ) {
+    return 'HearthBit緊急アラート：$message。座標：$latitude, $longitude。このSMSは公的な緊急サービスの代わりにはなりません。';
+  }
+
+  @override
   String get sosReceivedTitle => '受信したアラート';
 
   @override
@@ -638,6 +680,69 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get diagnosticsExportError => '診断レポートをエクスポートできませんでした';
+
+  @override
+  String get diagnosticsTitle => '診断';
+
+  @override
+  String get diagnosticsRefreshTooltip => '診断情報を更新';
+
+  @override
+  String get diagnosticsMeshSection => 'メッシュ';
+
+  @override
+  String get diagnosticsPlatform => 'プラットフォーム';
+
+  @override
+  String get diagnosticsStatus => '状態';
+
+  @override
+  String get diagnosticsNearbyDevices => '近くのデバイス';
+
+  @override
+  String get diagnosticsAdvertising => 'BLE アドバタイズ';
+
+  @override
+  String get diagnosticsMeshScan => 'メッシュスキャン';
+
+  @override
+  String get diagnosticsGenericScan => '一般信号スキャン';
+
+  @override
+  String get diagnosticsEnergySection => '電力';
+
+  @override
+  String get diagnosticsBattery => 'バッテリー';
+
+  @override
+  String get diagnosticsPowerProfile => '電力プロファイル';
+
+  @override
+  String get diagnosticsBleDutyCycle => 'BLE 稼働率';
+
+  @override
+  String get diagnosticsScanStarts => 'スキャン開始回数';
+
+  @override
+  String get diagnosticsStoreForward => '蓄積転送キュー';
+
+  @override
+  String get diagnosticsTransportsSection => '有効な通信経路';
+
+  @override
+  String get diagnosticsNoActiveTransports => '有効な通信経路は報告されていません';
+
+  @override
+  String get diagnosticsEventsSection => '最近のイベント';
+
+  @override
+  String get diagnosticsNoEvents => '診断イベントはまだありません';
+
+  @override
+  String get diagnosticsEnabled => '有効';
+
+  @override
+  String get diagnosticsDisabled => '無効';
 
   @override
   String get openLinkError => 'リンクを開けませんでした';

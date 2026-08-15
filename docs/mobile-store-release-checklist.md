@@ -65,7 +65,22 @@ CycloneDX, `SHA256SUMS.txt` y un GitHub Release. Configure aprobación manual de
 environment de publicación y no exponga estos secretos a pull requests de
 forks.
 
+El workflow manual `.github/workflows/store-publish.yml` publica únicamente en
+canales de prueba. Configure los environments `play-internal` y `testflight`
+con aprobación obligatoria antes de guardar sus secretos.
+
 ## Google Play
+
+La opción `android` del workflow de tiendas compila con un `versionCode`
+derivado de `github.run_number` y usa Fastlane para el track `internal`.
+Además de los cuatro secretos de firma anteriores, exige:
+
+- `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64`: JSON de una cuenta de servicio con
+  acceso limitado a la aplicación en Play Console, codificado en Base64.
+
+La ficha de español latino usada por el pipeline está en
+`app/android/fastlane/metadata/android/es-419/`. Las imágenes siguen siendo una
+carga manual para que se revisen visualmente antes de publicarlas.
 
 - [ ] Crear un Android App Bundle de release firmado con la clave de carga.
 - [ ] Configurar Play App Signing y documentar por separado la clave de carga,
@@ -76,8 +91,25 @@ forks.
   split APKs, en las arquitecturas y densidades admitidas.
 - [ ] Verificar que HearthBit detecta una instalación split y no comparte solo
   `base.apk`, porque no sería un instalador completo.
+- [ ] Promover el mismo artefacto desde prueba interna a prueba cerrada, sin
+  recompilarlo, e invitar el número y duración de testers que Play Console
+  exija para el tipo de cuenta vigente.
 
 ## Apple App Store
+
+La opción `ios` del workflow compila un archive firmado y lo sube a TestFlight.
+El environment `testflight` exige:
+
+- `APPLE_DISTRIBUTION_CERTIFICATE_BASE64`
+- `APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD`
+- `APPLE_PROVISIONING_PROFILE_BASE64`
+- `APP_STORE_CONNECT_KEY_ID`
+- `APP_STORE_CONNECT_ISSUER_ID`
+- `APP_STORE_CONNECT_KEY_BASE64`
+
+La variable opcional `APPLE_TEAM_ID` permite sustituir el Team ID del proyecto.
+El certificado, perfil y llavero existen únicamente durante el job y se
+eliminan al finalizar.
 
 - [ ] Crear un archive de release con el identificador, certificados y perfiles
   de distribución correctos.

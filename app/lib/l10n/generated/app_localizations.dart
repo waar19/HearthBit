@@ -448,6 +448,76 @@ abstract class AppLocalizations {
   /// **'I need help'**
   String get sosDefaultMessage;
 
+  /// No description provided for @emergencySmsOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Notify a trusted contact by SMS'**
+  String get emergencySmsOpen;
+
+  /// No description provided for @emergencySmsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency SMS'**
+  String get emergencySmsTitle;
+
+  /// No description provided for @emergencySmsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Prepare a text message for a trusted contact. Your messaging app will open so you can review and send it.'**
+  String get emergencySmsBody;
+
+  /// No description provided for @emergencySmsRecipient.
+  ///
+  /// In en, this message translates to:
+  /// **'Trusted contact phone number'**
+  String get emergencySmsRecipient;
+
+  /// No description provided for @emergencySmsMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency message'**
+  String get emergencySmsMessage;
+
+  /// No description provided for @emergencySmsDisclaimer.
+  ///
+  /// In en, this message translates to:
+  /// **'This does not send automatically and does not replace a call to official emergency services.'**
+  String get emergencySmsDisclaimer;
+
+  /// No description provided for @emergencySmsCompose.
+  ///
+  /// In en, this message translates to:
+  /// **'OPEN MESSAGING APP'**
+  String get emergencySmsCompose;
+
+  /// No description provided for @emergencySmsUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No compatible messaging app is available'**
+  String get emergencySmsUnavailable;
+
+  /// No description provided for @emergencySmsInvalidRecipient.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid phone number'**
+  String get emergencySmsInvalidRecipient;
+
+  /// No description provided for @emergencySmsBodyWithoutLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'HearthBit emergency alert: {message}. This SMS does not replace official emergency services.'**
+  String emergencySmsBodyWithoutLocation(String message);
+
+  /// No description provided for @emergencySmsBodyWithLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'HearthBit emergency alert: {message}. Coordinates: {latitude}, {longitude}. This SMS does not replace official emergency services.'**
+  String emergencySmsBodyWithLocation(
+    String message,
+    String latitude,
+    String longitude,
+  );
+
   /// No description provided for @sosReceivedTitle.
   ///
   /// In en, this message translates to:
@@ -1220,6 +1290,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not export the diagnostic report'**
   String get diagnosticsExportError;
+
+  /// No description provided for @diagnosticsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics'**
+  String get diagnosticsTitle;
+
+  /// No description provided for @diagnosticsRefreshTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh diagnostics'**
+  String get diagnosticsRefreshTooltip;
+
+  /// No description provided for @diagnosticsMeshSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Mesh'**
+  String get diagnosticsMeshSection;
+
+  /// No description provided for @diagnosticsPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'Platform'**
+  String get diagnosticsPlatform;
+
+  /// No description provided for @diagnosticsStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get diagnosticsStatus;
+
+  /// No description provided for @diagnosticsNearbyDevices.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby devices'**
+  String get diagnosticsNearbyDevices;
+
+  /// No description provided for @diagnosticsAdvertising.
+  ///
+  /// In en, this message translates to:
+  /// **'BLE advertising'**
+  String get diagnosticsAdvertising;
+
+  /// No description provided for @diagnosticsMeshScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Mesh scan'**
+  String get diagnosticsMeshScan;
+
+  /// No description provided for @diagnosticsGenericScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Generic signal scan'**
+  String get diagnosticsGenericScan;
+
+  /// No description provided for @diagnosticsEnergySection.
+  ///
+  /// In en, this message translates to:
+  /// **'Energy'**
+  String get diagnosticsEnergySection;
+
+  /// No description provided for @diagnosticsBattery.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery'**
+  String get diagnosticsBattery;
+
+  /// No description provided for @diagnosticsPowerProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Power profile'**
+  String get diagnosticsPowerProfile;
+
+  /// No description provided for @diagnosticsBleDutyCycle.
+  ///
+  /// In en, this message translates to:
+  /// **'BLE duty cycle'**
+  String get diagnosticsBleDutyCycle;
+
+  /// No description provided for @diagnosticsScanStarts.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan starts'**
+  String get diagnosticsScanStarts;
+
+  /// No description provided for @diagnosticsStoreForward.
+  ///
+  /// In en, this message translates to:
+  /// **'Store-and-forward queue'**
+  String get diagnosticsStoreForward;
+
+  /// No description provided for @diagnosticsTransportsSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Active transports'**
+  String get diagnosticsTransportsSection;
+
+  /// No description provided for @diagnosticsNoActiveTransports.
+  ///
+  /// In en, this message translates to:
+  /// **'No active transport reported'**
+  String get diagnosticsNoActiveTransports;
+
+  /// No description provided for @diagnosticsEventsSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent events'**
+  String get diagnosticsEventsSection;
+
+  /// No description provided for @diagnosticsNoEvents.
+  ///
+  /// In en, this message translates to:
+  /// **'No diagnostic events yet'**
+  String get diagnosticsNoEvents;
+
+  /// No description provided for @diagnosticsEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get diagnosticsEnabled;
+
+  /// No description provided for @diagnosticsDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Inactive'**
+  String get diagnosticsDisabled;
 
   /// No description provided for @openLinkError.
   ///
