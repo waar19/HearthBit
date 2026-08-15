@@ -96,6 +96,17 @@ Según el transporte seleccionado, los dispositivos cercanos y proveedores de
 la plataforma pueden procesar identificadores del dispositivo, direcciones de
 red y metadatos de radio o transferencia.
 
+### Notificaciones
+
+HearthBit utiliza notificaciones locales para mostrar el estado de la malla,
+mensajes recibidos y alertas de emergencia, y para mantener visible el servicio
+en primer plano de malla/rescate de Android. HearthBit no utiliza un servicio de
+notificaciones push operado por el proyecto. Según la configuración del
+sistema, el contenido de una notificación puede aparecer en la pantalla de
+bloqueo o permanecer en el historial de notificaciones del sistema operativo.
+Puedes administrar el permiso y la visibilidad de las notificaciones desde la
+configuración de tu dispositivo.
+
 ### Diagnósticos
 
 HearthBit puede crear registros de diagnóstico en el dispositivo para ayudar a

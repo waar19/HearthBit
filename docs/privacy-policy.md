@@ -86,6 +86,15 @@ devices, relay messages, estimate proximity, and transfer files. Depending on
 the selected transport, nearby devices and platform providers may process
 device identifiers, network addresses, radio metadata, and transfer metadata.
 
+### Notifications
+
+HearthBit uses local notifications to show mesh status, incoming messages, and
+emergency alerts, and to keep Android's foreground mesh/rescue service visible.
+HearthBit does not use a project-operated push-notification service. Depending
+on your system settings, notification content may appear on the lock screen or
+remain in the operating system's notification history. You can manage
+notification permission and visibility in your device settings.
+
 ### Diagnostics
 
 HearthBit may create diagnostic logs on the device to help explain failures.
