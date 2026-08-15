@@ -355,6 +355,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   /// Peer objetivo del radar de rescate; nil cuando el radar está apagado.
   private var radarPeerID: String?
   private var radarTimer: Timer?
+  private var radarReportTimer: Timer?
+  private var lastRadarReportAtByPeer: [String: UInt64] = [:]
   private var secureScreenEnabled = false
   private var secureOverlay: UIView?
 
@@ -1178,6 +1180,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     stopLocalBeacon()
     running = false
     stopRadar()
+    stopRadarReportTimer()
     pendingBeaconRequests.removeAll()
     outgoingBeaconRequests.removeAll()
     seenBeaconActions.removeAll()
@@ -1224,6 +1227,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     syncResponseTimes.removeAll()
     lastSyncRequestBySource.removeAll()
     remoteRadarConsents.removeAll()
+    lastRadarReportAtByPeer.removeAll()
     fragmentReassembler.clear()
     genericPresenceEmitWorkItem?.cancel()
     genericPresenceEmitWorkItem = nil
@@ -1285,6 +1289,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     radarPeerID = nil
     radarTimer?.invalidate()
     radarTimer = nil
+    stopRadarReportTimer()
     adaptiveScanTimer?.invalidate()
     adaptiveScanTimer = nil
     linkLossScanTimer?.invalidate()
@@ -1336,6 +1341,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func enterDataRelayMode() {
     restartScan()
     configurePeripheralMode()
+    updateRadarReportTimer()
   }
 
   private func configurePeripheralMode() {
@@ -1389,8 +1395,45 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       ? Date().addingTimeInterval(boundedDuration).timeIntervalSince1970 * 1000
       : 0
     UserDefaults.standard.set(expiresAt, forKey: IOSRadarConsentProtocol.localConsentKey)
+    updateRadarReportTimer()
     broadcastRadarConsent(grant: enabled)
     emitRadarConsent()
+  }
+
+  private func updateRadarReportTimer() {
+    guard
+      running,
+      localRole.allowsDataPlane,
+      activeLocalRadarConsentUntil() > currentMilliseconds()
+    else {
+      stopRadarReportTimer()
+      return
+    }
+    guard radarReportTimer == nil else { return }
+    sampleLocalRadarConsentRssi()
+    radarReportTimer = Timer.scheduledTimer(
+      withTimeInterval: 1.0,
+      repeats: true
+    ) { [weak self] _ in
+      self?.sampleLocalRadarConsentRssi()
+    }
+  }
+
+  private func stopRadarReportTimer() {
+    radarReportTimer?.invalidate()
+    radarReportTimer = nil
+    lastRadarReportAtByPeer.removeAll()
+  }
+
+  private func sampleLocalRadarConsentRssi() {
+    guard activeLocalRadarConsentUntil() > currentMilliseconds() else {
+      stopRadarReportTimer()
+      return
+    }
+    for (identifier, peripheral) in connectedPeripherals
+    where peripheralPeers[identifier] != nil && peripheral.state == .connected {
+      peripheral.readRSSI()
+    }
   }
 
   private func startLocalBeacon(flags: UInt8, duration: TimeInterval) throws {
@@ -1852,12 +1895,18 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     }
   }
 
-  private func emitRssi(peerID: String, rssi: Int) {
+  private func emitRssi(
+    peerID: String,
+    rssi: Int,
+    remote: Bool = false,
+    measuredAt: UInt64? = nil
+  ) {
     emit([
       "type": "rssi",
       "peerId": peerID,
       "rssi": rssi,
-      "at": Int(Date().timeIntervalSince1970 * 1000),
+      "remote": remote,
+      "at": Int(measuredAt ?? currentMilliseconds()),
     ])
   }
 
@@ -2244,6 +2293,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     broadcastEmergencyCapability()
     broadcastNodeCapability()
     if activeLocalRadarConsentUntil() > currentMilliseconds() {
+      updateRadarReportTimer()
       broadcastRadarConsent(grant: true)
     }
   }
@@ -2320,6 +2370,31 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     broadcast(packet)
   }
 
+  private func sendRadarRssiReport(peerID: String, rssi: Int, measuredAt: UInt64) {
+    let lastSentAt = lastRadarReportAtByPeer[peerID] ?? 0
+    guard measuredAt >= lastSentAt + 800 else { return }
+    guard
+      let recipient = try? Data(hex: peerID),
+      recipient.count == 8,
+      let payload = IOSRadarConsentProtocol.rssiReport(
+        rssi: rssi,
+        measuredAt: measuredAt
+      )
+    else { return }
+    let packet = identity.sign(
+      IOSMeshPacket(
+        type: IOSMeshProtocol.radarControl,
+        ttl: 0,
+        timestamp: measuredAt,
+        senderID: identity.peerID,
+        recipientID: recipient,
+        payload: payload
+      )
+    )
+    lastRadarReportAtByPeer[peerID] = measuredAt
+    send(packet: packet, toPeerID: peerID)
+  }
+
   private func activeLocalRadarConsentUntil() -> UInt64 {
     let value = UserDefaults.standard.double(
       forKey: IOSRadarConsentProtocol.localConsentKey
@@ -2383,6 +2458,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       packet.senderID == identity.peerID &&
       IOSMeshInteropPolicy.identityPacketTypes.contains(packet.type)
     if (localRole.storesDirectedPackets || emergency && localRole.relaysPackets),
+       storedPacketType != IOSMeshProtocol.radarControl,
        storedPacketType != IOSMeshProtocol.beaconControl,
        storedPacketType != IOSMeshProtocol.rangingControl,
        directed || emergency {
@@ -3232,7 +3308,30 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func processRadarControl(_ packet: IOSMeshPacket, senderID: String) {
     guard
       let peer = peers[senderID],
-      IOSMeshIdentity.verify(packet, key: peer.signingPublicKey),
+      IOSMeshIdentity.verify(packet, key: peer.signingPublicKey)
+    else { return }
+    if packet.payload.dropFirst().first == IOSRadarConsentProtocol.rssiReportAction {
+      guard
+        packet.recipientID == identity.peerID,
+        packet.ttl <= 1,
+        radarPeerID == senderID,
+        isRadarAllowed(peerID: senderID),
+        let report = IOSRadarConsentProtocol.decodeRssiReport(packet.payload),
+        IOSRadarConsentProtocol.isValidReport(
+          report,
+          packetTimestamp: packet.timestamp,
+          now: currentMilliseconds()
+        )
+      else { return }
+      emitRssi(
+        peerID: senderID,
+        rssi: report.rssi,
+        remote: true,
+        measuredAt: report.measuredAt
+      )
+      return
+    }
+    guard
       let consent = IOSRadarConsentProtocol.decode(packet.payload),
       IOSRadarConsentProtocol.hasValidTimestamp(
         packet.timestamp,
@@ -4356,11 +4455,18 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
   func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
     guard
       error == nil,
-      let target = radarPeerID,
-      peripheralPeers[peripheral.identifier] == target,
+      let peerID = peripheralPeers[peripheral.identifier],
       RSSI.intValue != 127
     else { return }
-    emitRssi(peerID: target, rssi: RSSI.intValue)
+    if radarPeerID == peerID {
+      emitRssi(peerID: peerID, rssi: RSSI.intValue)
+    }
+    let now = currentMilliseconds()
+    if activeLocalRadarConsentUntil() > now {
+      sendRadarRssiReport(peerID: peerID, rssi: RSSI.intValue, measuredAt: now)
+    } else {
+      stopRadarReportTimer()
+    }
   }
 }
 
@@ -5163,8 +5269,10 @@ enum IOSRadarConsentProtocol {
   static let version: UInt8 = 1
   static let grantAction: UInt8 = 1
   static let revokeAction: UInt8 = 2
+  static let rssiReportAction: UInt8 = 3
   static let nonceSize = 16
   static let payloadSize = 26
+  static let rssiReportPayloadSize = 27
   static let manualDurationMilliseconds: UInt64 = 15 * 60 * 1000
   static let sosDurationMilliseconds: UInt64 = 30 * 60 * 1000
   static let maximumGrantMilliseconds: UInt64 = 30 * 60 * 1000
@@ -5176,12 +5284,33 @@ enum IOSRadarConsentProtocol {
     let nonce: Data
   }
 
+  struct RssiReport {
+    let rssi: Int
+    let measuredAt: UInt64
+    let nonce: Data
+  }
+
   static func grant(expiresAt: UInt64) -> Data? {
     encode(action: grantAction, expiresAt: expiresAt)
   }
 
   static func revoke() -> Data? {
     encode(action: revokeAction, expiresAt: 0)
+  }
+
+  static func rssiReport(rssi: Int, measuredAt: UInt64) -> Data? {
+    guard
+      (-127...20).contains(rssi),
+      let nonce = IOSSecureRandom.data(count: nonceSize)
+    else { return nil }
+    var output = Data([
+      version,
+      rssiReportAction,
+      UInt8(bitPattern: Int8(rssi)),
+    ])
+    output.appendInteger(measuredAt)
+    output.append(nonce)
+    return output
   }
 
   static func decode(_ payload: Data) -> Consent? {
@@ -5196,6 +5325,21 @@ enum IOSRadarConsentProtocol {
       (action != revokeAction || expiresAt == 0)
     else { return nil }
     return Consent(action: action, expiresAt: expiresAt, nonce: nonce)
+  }
+
+  static func decodeRssiReport(_ payload: Data) -> RssiReport? {
+    guard payload.count == rssiReportPayloadSize else { return nil }
+    var reader = DataReader(payload)
+    guard
+      reader.byte() == version,
+      reader.byte() == rssiReportAction,
+      let encodedRssi = reader.byte(),
+      let measuredAt: UInt64 = reader.integer(),
+      let nonce = reader.data(count: nonceSize)
+    else { return nil }
+    let rssi = Int(Int8(bitPattern: encodedRssi))
+    guard (-127...20).contains(rssi) else { return nil }
+    return RssiReport(rssi: rssi, measuredAt: measuredAt, nonce: nonce)
   }
 
   static func hasValidTimestamp(_ timestamp: UInt64, now: UInt64) -> Bool {
@@ -5215,6 +5359,15 @@ enum IOSRadarConsentProtocol {
         saturatingAdd(now, maximumGrantMilliseconds),
         clockSkewMilliseconds
       )
+  }
+
+  static func isValidReport(
+    _ report: RssiReport,
+    packetTimestamp: UInt64,
+    now: UInt64 = UInt64(Date().timeIntervalSince1970 * 1000)
+  ) -> Bool {
+    hasValidTimestamp(packetTimestamp, now: now) &&
+      hasValidTimestamp(report.measuredAt, now: now)
   }
 
   static func sosConsentExpiresAt(packetTimestamp: UInt64, now: UInt64) -> UInt64 {

@@ -1510,6 +1510,36 @@ final class ConformanceFixtureTests: XCTestCase {
     )
   }
 
+  func testRadarRssiReportKeepsSignedValueTimestampAndFreshness() throws {
+    let now: UInt64 = 10_000_000
+    let payload = try XCTUnwrap(
+      IOSRadarConsentProtocol.rssiReport(rssi: -67, measuredAt: now)
+    )
+    let report = try XCTUnwrap(IOSRadarConsentProtocol.decodeRssiReport(payload))
+
+    XCTAssertEqual(payload.count, IOSRadarConsentProtocol.rssiReportPayloadSize)
+    XCTAssertEqual(report.rssi, -67)
+    XCTAssertEqual(report.measuredAt, now)
+    XCTAssertEqual(report.nonce.count, IOSRadarConsentProtocol.nonceSize)
+    XCTAssertTrue(
+      IOSRadarConsentProtocol.isValidReport(
+        report,
+        packetTimestamp: now,
+        now: now
+      )
+    )
+    XCTAssertNil(
+      IOSRadarConsentProtocol.decodeRssiReport(Data(payload.prefix(5)))
+    )
+    XCTAssertFalse(
+      IOSRadarConsentProtocol.isValidReport(
+        report,
+        packetTimestamp: now - IOSRadarConsentProtocol.clockSkewMilliseconds - 1,
+        now: now
+      )
+    )
+  }
+
   func testRescueDefaultIntervalMatchesMethodChannelContract() {
     XCTAssertEqual(IOSRescueModeStore.defaultInterval, 300_000)
   }

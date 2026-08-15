@@ -148,6 +148,57 @@ class RadarConsentProtocolTest {
     }
 
     @Test
+    fun `reporte RSSI conserva signo tiempo y nonce unico`() {
+        val now = 10_000_000L
+        val first = requireNotNull(
+            RadarConsentProtocol.decodeRssiReport(
+                RadarConsentProtocol.rssiReport(rssi = -67, measuredAt = now),
+            ),
+        )
+        val second = requireNotNull(
+            RadarConsentProtocol.decodeRssiReport(
+                RadarConsentProtocol.rssiReport(rssi = -67, measuredAt = now),
+            ),
+        )
+
+        assertEquals(-67, first.rssi)
+        assertEquals(now, first.measuredAt)
+        assertNotEquals(first.nonce.toList(), second.nonce.toList())
+        assertTrue(
+            RadarConsentProtocol.isValidReport(
+                first,
+                packetTimestamp = now,
+                now = now,
+            ),
+        )
+    }
+
+    @Test
+    fun `reporte RSSI rechaza formato rango y reloj invalidos`() {
+        val now = 10_000_000L
+        val validPayload = RadarConsentProtocol.rssiReport(rssi = -80, measuredAt = now)
+        val invalidRssi = validPayload.copyOf().also { it[2] = 21 }
+        val stale = requireNotNull(
+            RadarConsentProtocol.decodeRssiReport(
+                RadarConsentProtocol.rssiReport(
+                    rssi = -80,
+                    measuredAt = now - RadarConsentProtocol.CLOCK_SKEW_MS - 1,
+                ),
+            ),
+        )
+
+        assertNull(RadarConsentProtocol.decodeRssiReport(validPayload.copyOf(5)))
+        assertNull(RadarConsentProtocol.decodeRssiReport(invalidRssi))
+        assertFalse(
+            RadarConsentProtocol.isValidReport(
+                stale,
+                packetTimestamp = now,
+                now = now,
+            ),
+        )
+    }
+
+    @Test
     fun `una firma no autoriza una carga modificada`() {
         val generator = Ed25519KeyPairGenerator().apply {
             init(Ed25519KeyGenerationParameters(SecureRandom()))

@@ -1270,7 +1270,13 @@ internal class MeshEngine(
         }
     }
 
-    private fun emitRssi(peerIdHex: String, rssi: Int, tentative: Boolean = false) {
+    private fun emitRssi(
+        peerIdHex: String,
+        rssi: Int,
+        tentative: Boolean = false,
+        remote: Boolean = false,
+        measuredAt: Long = System.currentTimeMillis(),
+    ) {
         radarReadPlanner.recordSampleEmitted(System.currentTimeMillis())
         emit(
             mapOf(
@@ -1278,7 +1284,8 @@ internal class MeshEngine(
                 "peerId" to peerIdHex,
                 "rssi" to rssi,
                 "tentative" to tentative,
-                "at" to System.currentTimeMillis(),
+                "remote" to remote,
+                "at" to measuredAt,
             ),
         )
     }
@@ -1726,6 +1733,7 @@ internal class MeshEngine(
             !packet.recipientId.contentEquals(MeshProtocol.broadcastRecipient)
         if ((localRole.storesDirectedPackets || emergency && localRole.relaysPackets) &&
             packet.type != MeshProtocol.TYPE_REQUEST_SYNC &&
+            packet.type != MeshProtocol.TYPE_RADAR_CONTROL &&
             packet.type != MeshProtocol.TYPE_BEACON_CONTROL &&
             packet.type != MeshProtocol.TYPE_RANGING_CONTROL &&
             (directed || emergency)
@@ -2531,6 +2539,26 @@ internal class MeshEngine(
     private fun processRadarControl(packet: MeshProtocol.Packet, senderHex: String) {
         val peer = peers[senderHex] ?: return
         if (!identity.verify(packet, peer.signingPublicKey)) return
+        if (packet.payload.getOrNull(1) == RadarConsentProtocol.ACTION_RSSI_REPORT) {
+            val report = RadarConsentProtocol.decodeRssiReport(packet.payload) ?: return
+            val directedToUs = packet.recipientId?.contentEquals(identity.peerId) == true
+            val lowTtl = (packet.ttl.toInt() and 0xFF) <= 1
+            if (!directedToUs ||
+                !lowTtl ||
+                radarPeerId != senderHex ||
+                !isRadarAllowed(senderHex) ||
+                !RadarConsentProtocol.isValidReport(report, packet.timestamp)
+            ) {
+                return
+            }
+            emitRssi(
+                peerIdHex = senderHex,
+                rssi = report.rssi,
+                remote = true,
+                measuredAt = report.measuredAt,
+            )
+            return
+        }
         val consent = RadarConsentProtocol.decode(packet.payload) ?: return
         if (!RadarConsentProtocol.hasValidTimestamp(packet.timestamp)) return
         if (consent.action == RadarConsentProtocol.ACTION_REVOKE) {

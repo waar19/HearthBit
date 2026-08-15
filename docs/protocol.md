@@ -200,6 +200,29 @@ nunca desbordar. Mientras Modo Rescate siga activo, cada ping renueva también
 el grant local por 30 minutos antes de emitir el SOS. El consentimiento manual
 de la UI permanece separado y dura 15 minutos.
 
+## Control y reporte RSSI del radar (`0x23`)
+
+Los controles de consentimiento tienen 26 bytes: versión `0x01`, acción
+`GRANT=0x01` o `REVOKE=0x02`, expiración Unix de 8 bytes y nonce aleatorio de
+16 bytes. Se firman con la identidad Ed25519 del emisor.
+
+`RSSI_REPORT=0x03` permite que el dispositivo que otorgó consentimiento mida
+el enlace desde su lado. Su payload de 27 bytes contiene:
+
+1. Versión `0x01`.
+2. Acción `0x03`.
+3. RSSI con signo de 8 bits, dentro de `-127...20`.
+4. Momento de medición Unix en milisegundos, 8 bytes big-endian.
+5. Nonce aleatorio de 16 bytes.
+
+El reporte **MUST** ir firmado, dirigido al peer receptor, con TTL 0, por un
+enlace directo y sin store-and-forward. El receptor solo lo publica como
+`rssi(remote=true)` cuando el emisor es el objetivo activo del radar, su
+consentimiento sigue vigente y tanto el timestamp del paquete como el de la
+medición están dentro de la tolerancia de reloj de dos minutos. iOS intenta
+muestrear una vez por segundo los periféricos conectados mientras su
+consentimiento local está vigente.
+
 ## Paquete dedicado de capacidad de nodo (`0x25`)
 
 Payload firmado:
