@@ -1,5 +1,9 @@
 # Transparencia y privacidad de HearthBit
 
+Consulta los términos formales dirigidos a usuarios en la
+[Política de Privacidad de HearthBit](https://waar19.github.io/HearthBit/privacy-policy.es)
+([English](https://waar19.github.io/HearthBit/privacy-policy)).
+
 HearthBit publica su implementación para que cualquier persona pueda verificar
 qué hace la aplicación durante una emergencia. La visibilidad del código es un
 mecanismo de privacidad y rendición de cuentas; no convierte el proyecto en

@@ -14,11 +14,11 @@ publicado en ninguna tienda ni repositorio.
   secretos protegidos si CI solo prepara artefactos sin publicar.
 - [ ] Probar instalación limpia y actualización desde la versión anterior con
   la misma firma. Una firma distinta impide actualizar Android.
-- [ ] Publicar una política de privacidad formal en una URL estable antes del
-  envío a tiendas, partiendo de [`docs/transparency.md`](transparency.md) y sus
-  traducciones, y declarar con precisión Bluetooth, ubicación, dispositivos
-  cercanos, notificaciones, cámara, micrófono, red local y almacenamiento
-  según la plataforma.
+- [x] Publicar una política de privacidad formal en una URL estable antes del
+  envío a tiendas. Está disponible en
+  [`waar19.github.io/HearthBit/privacy-policy`](https://waar19.github.io/HearthBit/privacy-policy)
+  y declara Bluetooth, ubicación, dispositivos cercanos, notificaciones,
+  cámara, micrófono, red local y almacenamiento según la plataforma.
 - [ ] Verificar que la licencia declarada en cada tienda coincide con
   [`LICENSE`](../LICENSE) y [`NOTICE.md`](../NOTICE.md); HearthBit es
   source-available (PolyForm Noncommercial 1.0.0), no open source OSI.
