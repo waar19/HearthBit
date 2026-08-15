@@ -1,5 +1,9 @@
 # HearthBit transparency and privacy
 
+For the formal, user-facing terms, see the
+[HearthBit Privacy Policy](https://waar19.github.io/HearthBit/privacy-policy)
+([Español](https://waar19.github.io/HearthBit/privacy-policy.es)).
+
 HearthBit publishes its implementation so people can verify what the app does
 during an emergency. Source visibility is a privacy and accountability
 mechanism; it does not make the project OSI-approved open source. Licensing is

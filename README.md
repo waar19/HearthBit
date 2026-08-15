@@ -100,6 +100,7 @@ operating system.
 
 HearthBit keeps protocol, architecture, privacy boundaries, limitations and
 validation procedures in the public repository. Start with
+[the Privacy Policy](https://waar19.github.io/HearthBit/privacy-policy),
 [NOTICE.md](NOTICE.md), [docs/transparency.md](docs/transparency.md),
 [docs/architecture.md](docs/architecture.md) and
 [docs/radar-ranging-validation.md](docs/radar-ranging-validation.md).
