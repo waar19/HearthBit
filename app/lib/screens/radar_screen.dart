@@ -161,8 +161,9 @@ class _RadarScreenState extends State<RadarScreen>
       case MeshRangingMeasurementEvent():
         if (!_isTarget(event.peerId)) return;
         final meters = event.meters;
-        if (!mounted || meters == null || !meters.isFinite || meters < 0)
+        if (!mounted || meters == null || !meters.isFinite || meters < 0) {
           return;
+        }
         setState(() {
           _radioRangingActive = true;
           _precisionDistanceMeters = meters;
