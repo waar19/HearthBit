@@ -31,6 +31,13 @@ import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 internal const val ACTION_OPEN_EMERGENCY = "com.hearthbit.app.OPEN_EMERGENCY"
+private val SMS_FORMATTING = Regex("""[\s()\-]""")
+private val SMS_RECIPIENT = Regex("""^\+?[0-9]{5,15}$""")
+
+internal fun normalizeNativeSmsRecipient(value: String): String? {
+    val normalized = value.trim().replace(SMS_FORMATTING, "")
+    return normalized.takeIf(SMS_RECIPIENT::matches)
+}
 
 class MainActivity : FlutterActivity() {
     private var permissionResult: MethodChannel.Result? = null
@@ -145,7 +152,7 @@ class MainActivity : FlutterActivity() {
                             lastPingAt = call.argument<Number>("lastPingAt")?.toLong() ?: 0L,
                             expiresAt = call.argument<Number>("expiresAt")?.toLong() ?: 0L,
                             intervalMs = call.argument<Number>("intervalMs")?.toLong()
-                                ?: 120_000L,
+                                ?: RescueModeStore.DEFAULT_INTERVAL_MS,
                             locationPrecision =
                                 call.argument<String>("locationPrecision")
                                     ?: RescueModeStore.LOCATION_APPROXIMATE,
@@ -223,7 +230,9 @@ class MainActivity : FlutterActivity() {
                     null
                 }
                 "composeEmergencySms" -> runMethod(result) {
-                    val recipient = requireNotNull(call.argument<String>("recipient"))
+                    val recipient = normalizeNativeSmsRecipient(
+                        requireNotNull(call.argument<String>("recipient")),
+                    ) ?: throw IllegalArgumentException("invalid_sms_recipient")
                     val body = requireNotNull(call.argument<String>("body"))
                     val intent = Intent(
                         Intent.ACTION_SENDTO,

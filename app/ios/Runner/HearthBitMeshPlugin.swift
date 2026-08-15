@@ -280,6 +280,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
   private let storeForward = IOSStoreForward()
   private let peerIdentityPins = IOSPeerIdentityPinStore()
+  private let unknownIngressRateLimiter = IOSUnknownIngressRateLimiter()
   private let emergencyFingerprints = IOSEmergencyFingerprintCache()
   private var central: CBCentralManager?
   private var peripheralManager: CBPeripheralManager?
@@ -323,7 +324,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var peripheralNotifyQueues: [UUID: IOSBLEPriorityQueue<Data>] = [:]
   private let packetFragmenter = IOSMeshPacketFragmenter()
   private let fragmentReassembler = IOSMeshFragmentReassembler()
-  private let genericPresenceTracker = IOSGenericBLEPresenceTracker()
+  private let genericPresenceTracker = IOSGenericBLEPresenceTracker.secure()
   private var genericPresenceEmitWorkItem: DispatchWorkItem?
   private var genericPresenceExpiryWorkItem: DispatchWorkItem?
   private var genericPresenceScanEnabled = false
@@ -588,7 +589,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
             startedAt: (arguments["startedAt"] as? NSNumber)?.int64Value ?? 0,
             lastPingAt: (arguments["lastPingAt"] as? NSNumber)?.int64Value ?? 0,
             expiresAt: (arguments["expiresAt"] as? NSNumber)?.int64Value ?? 0,
-            intervalMs: (arguments["intervalMs"] as? NSNumber)?.int64Value ?? 120_000,
+            intervalMs: (arguments["intervalMs"] as? NSNumber)?.int64Value ??
+              IOSRescueModeStore.defaultInterval,
             locationPrecision: arguments["locationPrecision"] as? String ?? "approximate"
           )
         } else {
@@ -690,7 +692,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           return
         }
         guard
-          let recipient = arguments["recipient"] as? String,
+          let rawRecipient = arguments["recipient"] as? String,
+          let recipient = IOSEmergencySMSPolicy.normalizeRecipient(rawRecipient),
           let body = arguments["body"] as? String,
           let presenter = topViewController()
         else {
@@ -856,7 +859,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         outgoingBeaconRequests.removeAll()
         seenBeaconActions.removeAll()
         fragmentReassembler.clear()
-        genericPresenceTracker.clear()
+        genericPresenceTracker?.clear()
         let wipedState: [String: Any] = [
           "type": "wiped",
           "status": "stopped",
@@ -1227,7 +1230,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     genericPresenceExpiryWorkItem?.cancel()
     genericPresenceExpiryWorkItem = nil
     cancelGenericPresenceScanWindows()
-    genericPresenceTracker.clear()
+    genericPresenceTracker?.clear()
     if IOSLanBridgeLifecyclePolicy.shouldClearOnStop(notify: notify) {
       lanBridgeGatewayID = nil
     }
@@ -1325,7 +1328,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     genericPresenceExpiryWorkItem?.cancel()
     genericPresenceExpiryWorkItem = nil
     cancelGenericPresenceScanWindows()
-    genericPresenceTracker.clear()
+    genericPresenceTracker?.clear()
     emit(["type": "presences", "presences": []])
     configurePeripheralMode()
   }
@@ -1435,7 +1438,12 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       UInt64(min(max(duration, 0.001), 300) * 1000)
     let now = currentMilliseconds()
     outgoingBeaconRequests = outgoingBeaconRequests.filter { $0.value.expiresAt > now }
-    let payload = IOSBeaconControlProtocol.request(expiresAt: expiresAt, flags: flags)
+    guard let payload = IOSBeaconControlProtocol.request(
+      expiresAt: expiresAt,
+      flags: flags
+    ) else {
+      throw IOSMeshError.secureRandomUnavailable
+    }
     guard let control = IOSBeaconControlProtocol.decode(payload) else {
       throw IOSMeshError.invalidPayload
     }
@@ -1618,7 +1626,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       genericPresenceEmitWorkItem = nil
       genericPresenceExpiryWorkItem?.cancel()
       genericPresenceExpiryWorkItem = nil
-      genericPresenceTracker.clear()
+      genericPresenceTracker?.clear()
       emit(["type": "presences", "presences": []])
     }
     if running {
@@ -2289,15 +2297,24 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     guard running else { return }
     let expiresAt = grant ? activeLocalRadarConsentUntil() : 0
     guard !grant || expiresAt > currentMilliseconds() else { return }
+    let payload = grant
+      ? IOSRadarConsentProtocol.grant(expiresAt: expiresAt)
+      : IOSRadarConsentProtocol.revoke()
+    guard let payload else {
+      emit([
+        "type": "error",
+        "code": "secure_random_unavailable",
+        "message": HearthBitL10n.string("secure_random_unavailable"),
+      ])
+      return
+    }
     let packet = identity.sign(
       IOSMeshPacket(
         type: IOSMeshProtocol.radarControl,
         ttl: 1,
         timestamp: currentMilliseconds(),
         senderID: identity.peerID,
-        payload: grant
-          ? IOSRadarConsentProtocol.grant(expiresAt: expiresAt)
-          : IOSRadarConsentProtocol.revoke()
+        payload: payload
       )
     )
     broadcast(packet)
@@ -2768,6 +2785,11 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     else { return }
     let senderID = packet.senderID.hex
     if senderID == identity.peerIDHex { return }
+    let pinnedIdentity = peerIdentityPins.pin(for: senderID)
+    if pinnedIdentity == nil {
+      let rateLimitKey = source?.uuidString ?? senderID
+      guard unknownIngressRateLimiter.allow(source: rateLimitKey) else { return }
+    }
     var validatedAnnouncement: IOSMeshProtocol.Announcement?
     if packet.type == IOSMeshProtocol.announce {
       guard let announcement = validateAnnouncementIdentity(
@@ -2775,6 +2797,20 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         senderID: senderID
       ) else { return }
       validatedAnnouncement = announcement
+    } else {
+      let originalType = packet.type == IOSMeshProtocol.fragment
+        ? IOSMeshProtocol.decodeFragmentPayload(packet.payload)?.originalType
+        : nil
+      let effectiveType = originalType ?? packet.type
+      if IOSMeshIngressPolicy.requiresPublicSignature(effectiveType) {
+        guard let pinnedIdentity else { return }
+        if packet.type != IOSMeshProtocol.fragment {
+          guard IOSMeshIngressPolicy.accepts(
+            packet,
+            signingPublicKey: pinnedIdentity.signingPublicKey
+          ) else { return }
+        }
+      }
     }
     if seen[fingerprint] != nil { return }
     seen[fingerprint] = Date()
@@ -3081,6 +3117,14 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
               packet.ttl == IOSMeshProtocol.defaultTTL), let source {
             peripheralPeers[source] = senderID
           }
+        } else if IOSMeshIngressPolicy.requiresPublicSignature(reassembled.type) {
+          guard
+            let pinnedIdentity = peerIdentityPins.pin(for: senderID),
+            IOSMeshIngressPolicy.accepts(
+              reassembled,
+              signingPublicKey: pinnedIdentity.signingPublicKey
+            )
+          else { return }
         }
         process(
           reassembled,
@@ -3767,9 +3811,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       "storeForwardEntries": 0,
       "linkCount": bleLinkCount,
       "nearbyCount": peerMaps().filter { ($0["online"] as? Bool) == true }.count,
-      "presenceCount": genericPresenceTracker
+      "presenceCount": genericPresenceTracker?
         .snapshot(now: Int64(Date().timeIntervalSince1970 * 1000))
-        .count,
+        .count ?? 0,
       "transports": transports,
     ]
   }
@@ -3966,7 +4010,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   ) {
     let material = genericAdvertisementMaterial(advertisementData)
     let now = Int64(Date().timeIntervalSince1970 * 1000)
-    guard genericPresenceTracker.record(material: material, rssi: rssi, now: now) else {
+    guard genericPresenceTracker?.record(material: material, rssi: rssi, now: now) == true else {
       return
     }
     if genericPresenceEmitWorkItem == nil {
@@ -4000,7 +4044,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let now = Int64(Date().timeIntervalSince1970 * 1000)
     emit([
       "type": "presences",
-      "presences": genericPresenceTracker.snapshot(now: now).map(\.eventMap),
+      "presences": genericPresenceTracker?.snapshot(now: now).map(\.eventMap) ?? [],
     ])
   }
 
@@ -4570,6 +4614,83 @@ enum IOSMeshNodeRole: String, CaseIterable {
   }
 }
 
+final class IOSUnknownIngressRateLimiter {
+  static let defaultMaximumPackets = 30
+  static let defaultWindow: TimeInterval = 10
+  static let maximumTrackedSources = 256
+
+  private struct Window {
+    var startedAt: TimeInterval
+    var packets: Int
+  }
+
+  private let maximumPackets: Int
+  private let window: TimeInterval
+  private var windows: [String: Window] = [:]
+  private let lock = NSLock()
+
+  init(
+    maximumPackets: Int = defaultMaximumPackets,
+    window: TimeInterval = defaultWindow
+  ) {
+    self.maximumPackets = maximumPackets
+    self.window = window
+  }
+
+  func allow(
+    source: String,
+    now: TimeInterval = Date().timeIntervalSince1970
+  ) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+
+    if var current = windows[source],
+       now >= current.startedAt,
+       now - current.startedAt < window {
+      guard current.packets < maximumPackets else { return false }
+      current.packets += 1
+      windows[source] = current
+      return true
+    }
+    if windows.count >= Self.maximumTrackedSources,
+       let oldest = windows.min(by: { $0.value.startedAt < $1.value.startedAt })?.key {
+      windows.removeValue(forKey: oldest)
+    }
+    windows[source] = Window(startedAt: now, packets: 1)
+    return true
+  }
+}
+
+enum IOSMeshIngressPolicy {
+  private static let publicSignatureTypes: Set<UInt8> = [
+    IOSMeshProtocol.message,
+    IOSMeshProtocol.courierEnvelope,
+    IOSMeshProtocol.requestSync,
+    IOSMeshProtocol.radarControl,
+    IOSMeshProtocol.legacyHbtCapability,
+    IOSMeshProtocol.hbtCapability,
+    IOSMeshProtocol.nodeCapability,
+    IOSMeshProtocol.beaconControl,
+    IOSMeshProtocol.rangingControl,
+    IOSMeshProtocol.emergencyCapability,
+    IOSMeshProtocol.legacyEmergencyAck,
+    IOSMeshProtocol.emergencyAck,
+  ]
+
+  static func requiresPublicSignature(_ packetType: UInt8) -> Bool {
+    publicSignatureTypes.contains(packetType)
+  }
+
+  static func accepts(
+    _ packet: IOSMeshPacket,
+    signingPublicKey: Data?
+  ) -> Bool {
+    guard requiresPublicSignature(packet.type) else { return true }
+    guard let signingPublicKey else { return false }
+    return IOSMeshIdentity.verify(packet, key: signingPublicKey)
+  }
+}
+
 enum IOSMeshRelayPolicy {
   static func shouldRelay(
     role: IOSMeshNodeRole,
@@ -4600,6 +4721,32 @@ struct IOSNodeCapability {
 
   var hasLongRangeTrunk: Bool {
     flags & IOSMeshNodeRole.longRangeTrunkFlag != 0
+  }
+}
+
+enum IOSSecureRandom {
+  static func data(count: Int) -> Data? {
+    guard count > 0 else { return nil }
+    var output = Data(count: count)
+    let status = output.withUnsafeMutableBytes { buffer in
+      guard let address = buffer.baseAddress else { return errSecParam }
+      return SecRandomCopyBytes(kSecRandomDefault, count, address)
+    }
+    return status == errSecSuccess ? output : nil
+  }
+}
+
+enum IOSEmergencySMSPolicy {
+  static func normalizeRecipient(_ value: String) -> String? {
+    let normalized = String(value.trimmingCharacters(in: .whitespacesAndNewlines).filter {
+      !$0.isWhitespace && $0 != "(" && $0 != ")" && $0 != "-"
+    })
+    let digits = normalized.hasPrefix("+") ? normalized.dropFirst() : normalized[...]
+    guard (5...15).contains(digits.count) else { return nil }
+    guard digits.unicodeScalars.allSatisfy({
+      $0.value >= 48 && $0.value <= 57
+    }) else { return nil }
+    return normalized
   }
 }
 
@@ -4640,20 +4787,24 @@ final class IOSGenericBLEPresenceTracker {
   private var observations: [String: Observation] = [:]
 
   init(
-    sessionSecret: Data? = nil,
+    sessionSecret: Data,
     rotationMilliseconds: Int64 = IOSGenericBLEPresenceTracker.rotationMilliseconds,
     staleMilliseconds: Int64 = IOSGenericBLEPresenceTracker.staleMilliseconds,
     maximumObservations: Int = IOSGenericBLEPresenceTracker.maximumObservations
   ) {
-    let secret = sessionSecret ?? Self.secureSessionSecret()
-    precondition(!secret.isEmpty)
+    precondition(!sessionSecret.isEmpty)
     precondition(rotationMilliseconds > 0)
     precondition(staleMilliseconds > 0)
     precondition(maximumObservations > 0)
-    self.sessionSecret = secret
+    self.sessionSecret = sessionSecret
     rotation = rotationMilliseconds
     stale = staleMilliseconds
     maximum = maximumObservations
+  }
+
+  static func secure() -> IOSGenericBLEPresenceTracker? {
+    guard let secret = IOSSecureRandom.data(count: 32) else { return nil }
+    return IOSGenericBLEPresenceTracker(sessionSecret: secret)
   }
 
   @discardableResult
@@ -4706,16 +4857,6 @@ final class IOSGenericBLEPresenceTracker {
     ))
   }
 
-  private static func secureSessionSecret() -> Data {
-    let secretSize = 32
-    var output = Data(count: secretSize)
-    let status = output.withUnsafeMutableBytes { buffer in
-      guard let address = buffer.baseAddress else { return errSecParam }
-      return SecRandomCopyBytes(kSecRandomDefault, secretSize, address)
-    }
-    if status == errSecSuccess { return output }
-    return Data(SHA256.hash(data: Data(UUID().uuidString.utf8)))
-  }
 }
 
 enum IOSGenericBLEAdvertisement {
@@ -4888,8 +5029,13 @@ enum IOSBeaconControlProtocol {
     let flags: UInt8
   }
 
-  static func request(expiresAt: UInt64, flags: UInt8, nonce: Data? = nil) -> Data {
-    encode(action: requestAction, expiresAt: expiresAt, nonce: nonce ?? randomNonce(), flags: flags)
+  static func request(expiresAt: UInt64, flags: UInt8) -> Data? {
+    guard let nonce = IOSSecureRandom.data(count: nonceSize) else { return nil }
+    return request(expiresAt: expiresAt, flags: flags, nonce: nonce)
+  }
+
+  static func request(expiresAt: UInt64, flags: UInt8, nonce: Data) -> Data {
+    encode(action: requestAction, expiresAt: expiresAt, nonce: nonce, flags: flags)
   }
 
   static func grant(expiresAt: UInt64, flags: UInt8, nonce: Data) -> Data {
@@ -4970,17 +5116,6 @@ enum IOSBeaconControlProtocol {
     return output
   }
 
-  private static func randomNonce() -> Data {
-    var nonce = Data(count: nonceSize)
-    let status = nonce.withUnsafeMutableBytes { buffer in
-      guard let address = buffer.baseAddress else { return errSecParam }
-      return SecRandomCopyBytes(kSecRandomDefault, nonceSize, address)
-    }
-    if status != errSecSuccess {
-      return Data(SHA256.hash(data: Data(UUID().uuidString.utf8))).prefix(nonceSize)
-    }
-    return nonce
-  }
 }
 
 enum IOSRangingControlProtocol {
@@ -5041,11 +5176,11 @@ enum IOSRadarConsentProtocol {
     let nonce: Data
   }
 
-  static func grant(expiresAt: UInt64) -> Data {
+  static func grant(expiresAt: UInt64) -> Data? {
     encode(action: grantAction, expiresAt: expiresAt)
   }
 
-  static func revoke() -> Data {
+  static func revoke() -> Data? {
     encode(action: revokeAction, expiresAt: 0)
   }
 
@@ -5094,17 +5229,10 @@ enum IOSRadarConsentProtocol {
     return overflow ? UInt64.max : result
   }
 
-  private static func encode(action: UInt8, expiresAt: UInt64) -> Data {
+  private static func encode(action: UInt8, expiresAt: UInt64) -> Data? {
+    guard let nonce = IOSSecureRandom.data(count: nonceSize) else { return nil }
     var output = Data([version, action])
     output.appendInteger(expiresAt)
-    var nonce = Data(count: nonceSize)
-    let randomStatus = nonce.withUnsafeMutableBytes { buffer in
-      guard let address = buffer.baseAddress else { return errSecParam }
-      return SecRandomCopyBytes(kSecRandomDefault, nonceSize, address)
-    }
-    if randomStatus != errSecSuccess {
-      nonce = Data(SHA256.hash(data: Data(UUID().uuidString.utf8))).prefix(nonceSize)
-    }
     output.append(nonce)
     return output
   }
@@ -6115,14 +6243,7 @@ final class IOSMeshPacketFragmenter {
   }
 
   private static func secureFragmentID() -> Data {
-    var output = Data(count: IOSMeshProtocol.fragmentIDSize)
-    let status = output.withUnsafeMutableBytes { buffer in
-      guard let address = buffer.baseAddress else { return errSecParam }
-      return SecRandomCopyBytes(kSecRandomDefault, IOSMeshProtocol.fragmentIDSize, address)
-    }
-    if status == errSecSuccess { return output }
-    return Data(SHA256.hash(data: Data(UUID().uuidString.utf8)))
-      .prefix(IOSMeshProtocol.fragmentIDSize)
+    IOSSecureRandom.data(count: IOSMeshProtocol.fragmentIDSize) ?? Data()
   }
 }
 
@@ -6693,6 +6814,7 @@ final class IOSPeerIdentityPinStore {
 enum IOSRescueModeStore {
   private static let service = "HearthBit.RescueMode"
   private static let account = "state.v1"
+  static let defaultInterval: Int64 = 5 * 60_000
   private static let minimumInterval: Int64 = 30_000
   private static let maximumInterval: Int64 = 15 * 60_000
   private static let maximumLifetime: Int64 = 24 * 60 * 60_000
@@ -6708,7 +6830,7 @@ enum IOSRescueModeStore {
         startedAt: 0,
         lastPingAt: 0,
         expiresAt: 0,
-        intervalMs: 120_000,
+        intervalMs: defaultInterval,
         pingCount: 0,
         locationPrecision: "approximate"
       )
@@ -7600,6 +7722,7 @@ private enum IOSMeshError: LocalizedError {
   case noise
   case noiseRekeyRequired
   case storageUnavailable
+  case secureRandomUnavailable
   case invalidPayload
   case radarConsentRequired
   case roleCannotChat
@@ -7614,6 +7737,7 @@ private enum IOSMeshError: LocalizedError {
     case .noise: return HearthBitL10n.string("noise_failed")
     case .noiseRekeyRequired: return HearthBitL10n.string("noise_rekey_required")
     case .storageUnavailable: return HearthBitL10n.string("storage_unavailable")
+    case .secureRandomUnavailable: return HearthBitL10n.string("secure_random_unavailable")
     case .invalidPayload: return HearthBitL10n.string("invalid_payload")
     case .radarConsentRequired: return HearthBitL10n.string("radar_consent_required")
     case .roleCannotChat: return HearthBitL10n.string("role_cannot_chat")
@@ -7655,6 +7779,7 @@ enum HearthBitL10n {
       "noise_failed": "The Noise encrypted channel failed",
       "noise_rekey_required": "The private channel must be renewed",
       "storage_unavailable": "Secure emergency storage is unavailable",
+      "secure_random_unavailable": "Secure randomness is unavailable; the operation was cancelled",
       "invalid_payload": "The transfer payload is not valid",
       "radar_consent_required": "This person has not allowed radar location",
       "role_cannot_chat": "Presence-only mode cannot send messages",
@@ -7680,6 +7805,7 @@ enum HearthBitL10n {
       "noise_failed": "Falló el canal cifrado Noise",
       "noise_rekey_required": "El canal privado debe renovarse",
       "storage_unavailable": "El almacenamiento seguro de emergencia no está disponible",
+      "secure_random_unavailable": "La aleatoriedad segura no está disponible; se canceló la operación",
       "invalid_payload": "La carga de la transferencia no es válida",
       "radar_consent_required": "Esta persona no ha permitido la ubicación por radar",
       "role_cannot_chat": "El modo de solo presencia no puede enviar mensajes",

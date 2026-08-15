@@ -6,8 +6,8 @@ internal object ReconnectBackoffPolicy {
     const val MAX_FAILED_ATTEMPTS = 6
     const val COOLDOWN_MS = 120_000L
 
-    fun delayMs(failedAttempts: Int): Long =
-        delaysMs[failedAttempts.coerceIn(0, delaysMs.lastIndex)]
+    fun delayMs(failedAttempts: Int, urgent: Boolean = false): Long =
+        if (urgent) 0L else delaysMs[failedAttempts.coerceIn(0, delaysMs.lastIndex)]
 
     fun shouldEnterCooldown(failedAttempts: Int): Boolean =
         failedAttempts >= MAX_FAILED_ATTEMPTS

@@ -160,11 +160,14 @@ internal class KeystoreSecureStore private constructor(
     }
 
     companion object {
-        private const val KEY_ALIAS = "hearthbit_secure_store_aes_v2"
-        private const val BACKING_SUFFIX = "_keystore_v2"
+        private const val KEY_ALIAS = "hearthbit_secure_store_aes_v3"
+        private const val LEGACY_V2_KEY_ALIAS = "hearthbit_secure_store_aes_v2"
+        private const val BACKING_SUFFIX = "_keystore_v3"
+        private const val LEGACY_V2_BACKING_SUFFIX = "_keystore_v2"
         private const val MIGRATION_MARKER_SUFFIX = "_migration"
         private const val KEY_MIGRATION_COMPLETE = "legacy_complete"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
+        private const val AES_KEY_SIZE_BITS = 256
         private const val IV_SIZE = 12
         private const val GCM_TAG_BITS = 128
         private const val MAX_SET_ENTRIES = 10_000
@@ -183,30 +186,87 @@ internal class KeystoreSecureStore private constructor(
                     Context.MODE_PRIVATE,
                 ),
                 namespace = namespace,
-                secretKey = getOrCreateSecretKey(),
+                secretKey = getOrCreateSecretKey(KEY_ALIAS),
             )
+            migrateV2KeystoreStore(appContext, namespace, store)
             migrateLegacyEncryptedPreferences(appContext, namespace, store)
             return store
         }
 
-        private fun getOrCreateSecretKey(): SecretKey {
+        private fun getOrCreateSecretKey(alias: String): SecretKey {
             val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-            (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
+            (keyStore.getKey(alias, null) as? SecretKey)?.let { return it }
             return KeyGenerator.getInstance(
                 KeyProperties.KEY_ALGORITHM_AES,
                 "AndroidKeyStore",
             ).run {
                 init(
                     KeyGenParameterSpec.Builder(
-                        KEY_ALIAS,
+                        alias,
                         KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
                     )
                         .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                         .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                        .setKeySize(AES_KEY_SIZE_BITS)
                         .setRandomizedEncryptionRequired(true)
                         .build(),
                 )
                 generateKey()
+            }
+        }
+
+        private fun migrateV2KeystoreStore(
+            context: Context,
+            namespace: String,
+            destination: KeystoreSecureStore,
+        ) {
+            val legacyPreferences = context.getSharedPreferences(
+                namespace + LEGACY_V2_BACKING_SUFFIX,
+                Context.MODE_PRIVATE,
+            )
+            if (legacyPreferences.all.isEmpty()) {
+                deleteLegacyV2KeyIfUnused(context)
+                return
+            }
+            val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            val legacyKey = keyStore.getKey(LEGACY_V2_KEY_ALIAS, null) as? SecretKey
+                ?: error("Falta la clave Keystore v2 para migrar $namespace")
+            val legacy = KeystoreSecureStore(
+                preferences = legacyPreferences,
+                namespace = namespace,
+                secretKey = legacyKey,
+            )
+            val entries = legacyPreferences.all.keys.associateWith { key ->
+                checkNotNull(legacy.read(key)) {
+                    "No se pudo leer $key durante la migración v2 de $namespace"
+                }
+            }
+            entries.forEach { (key, value) ->
+                check(destination.put(key, value)) {
+                    "No se pudo reescribir $key con AES-256 para $namespace"
+                }
+            }
+            check(legacyPreferences.edit().clear().commit()) {
+                "No se pudo borrar el almacén Keystore v2 $namespace"
+            }
+            deleteLegacyV2KeyIfUnused(context)
+        }
+
+        private fun deleteLegacyV2KeyIfUnused(context: Context) {
+            val sharedPreferencesDirectory = File(context.applicationInfo.dataDir, "shared_prefs")
+            val hasPendingV2Store = sharedPreferencesDirectory.listFiles()
+                ?.asSequence()
+                ?.filter { it.name.endsWith("$LEGACY_V2_BACKING_SUFFIX.xml") }
+                ?.map { it.name.removeSuffix(".xml") }
+                ?.any { preferenceName ->
+                    context.getSharedPreferences(preferenceName, Context.MODE_PRIVATE)
+                        .all
+                        .isNotEmpty()
+                } == true
+            if (hasPendingV2Store) return
+            val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            if (keyStore.containsAlias(LEGACY_V2_KEY_ALIAS)) {
+                keyStore.deleteEntry(LEGACY_V2_KEY_ALIAS)
             }
         }
 

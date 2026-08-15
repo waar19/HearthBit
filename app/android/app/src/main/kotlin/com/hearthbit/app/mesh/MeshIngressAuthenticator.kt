@@ -2,7 +2,6 @@ package com.hearthbit.app.mesh
 
 internal enum class MeshIngressDisposition {
     ACCEPT,
-    RELAY_ONLY_UNKNOWN,
     DEFER_FRAGMENT,
     REJECT,
 }
@@ -17,6 +16,37 @@ internal data class MeshIngressAuthentication(
     val localProcessingAllowed: Boolean
         get() = disposition == MeshIngressDisposition.ACCEPT ||
             disposition == MeshIngressDisposition.DEFER_FRAGMENT
+}
+
+internal class UnknownIngressRateLimiter(
+    private val maximumPackets: Int = DEFAULT_MAXIMUM_PACKETS,
+    private val windowMs: Long = DEFAULT_WINDOW_MS,
+) {
+    private data class Window(var startedAt: Long, var packets: Int)
+
+    private val windows = LinkedHashMap<String, Window>()
+
+    @Synchronized
+    fun allow(source: String, now: Long): Boolean {
+        val current = windows[source]
+        if (current == null || now - current.startedAt >= windowMs || now < current.startedAt) {
+            if (windows.size >= MAXIMUM_TRACKED_SOURCES) {
+                val oldest = windows.minByOrNull { it.value.startedAt }?.key
+                if (oldest != null) windows.remove(oldest)
+            }
+            windows[source] = Window(now, 1)
+            return true
+        }
+        if (current.packets >= maximumPackets) return false
+        current.packets += 1
+        return true
+    }
+
+    companion object {
+        const val DEFAULT_MAXIMUM_PACKETS = 30
+        const val DEFAULT_WINDOW_MS = 10_000L
+        const val MAXIMUM_TRACKED_SOURCES = 256
+    }
 }
 
 internal object AnnouncementClockPolicy {
@@ -53,18 +83,34 @@ internal object AnnouncementClockPolicy {
 
 /**
  * Authenticates relay-relevant identity before duplicate tracking or local
- * state changes. Unknown signed senders may traverse the live mesh but cannot
- * be processed or persisted until a valid ANNOUNCE establishes their pin.
+ * state changes. Unknown signed senders are rejected until a valid ANNOUNCE
+ * establishes their pin.
  */
 internal class MeshIngressAuthenticator(
     private val trustLookup: (String) -> PeerTrustLookup,
     private val validateAndPin: (String, PeerIdentityKeys) -> PeerIdentityDecision,
     private val verifySignature: (MeshProtocol.Packet, ByteArray) -> Boolean,
     private val nowMs: () -> Long = System::currentTimeMillis,
+    private val unknownRateLimiter: UnknownIngressRateLimiter = UnknownIngressRateLimiter(),
 ) {
-    fun authenticate(packet: MeshProtocol.Packet): MeshIngressAuthentication {
+    fun authenticate(
+        packet: MeshProtocol.Packet,
+        sourceAddress: String? = null,
+    ): MeshIngressAuthentication {
         val senderHex = MeshProtocol.hex(packet.senderId)
+        val trust = trustLookup(senderHex)
+        val now = nowMs()
+        if (trust == PeerTrustLookup.Unknown &&
+            !unknownRateLimiter.allow(sourceAddress ?: senderHex, now)
+        ) {
+            return rejected()
+        }
         if (packet.type == MeshProtocol.TYPE_FRAGMENT) {
+            val originalType = MeshProtocol.decodeFragmentPayload(packet.payload)?.originalType
+                ?: return rejected()
+            if (requiresPublicSignature(originalType) && trust !is PeerTrustLookup.Pinned) {
+                return rejected()
+            }
             return MeshIngressAuthentication(MeshIngressDisposition.DEFER_FRAGMENT)
         }
         if (packet.type == MeshProtocol.TYPE_ANNOUNCE) {
@@ -83,7 +129,7 @@ internal class MeshIngressAuthenticator(
             if (!AnnouncementClockPolicy.accepts(
                     packet.timestamp,
                     announcement.emergencyPreannounce,
-                    nowMs(),
+                    now,
                 ) ||
                 !validateAndPin(senderHex, announcedKeys).accepted
             ) {
@@ -97,9 +143,9 @@ internal class MeshIngressAuthenticator(
         if (!requiresPublicSignature(packet.type)) {
             return MeshIngressAuthentication(MeshIngressDisposition.ACCEPT)
         }
-        return when (val trust = trustLookup(senderHex)) {
+        return when (trust) {
             PeerTrustLookup.Unknown ->
-                MeshIngressAuthentication(MeshIngressDisposition.RELAY_ONLY_UNKNOWN)
+                rejected()
             PeerTrustLookup.Invalid -> rejected()
             is PeerTrustLookup.Pinned -> {
                 if (verifySignature(packet, trust.keys.signingPublicKey)) {

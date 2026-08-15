@@ -125,7 +125,7 @@ internal class RescueModeStore(context: Context) {
         )
         private const val MAX_DESCRIPTION_LENGTH = 500
         private const val MIN_INTERVAL_MS = 30_000L
-        private const val DEFAULT_INTERVAL_MS = 120_000L
+        const val DEFAULT_INTERVAL_MS = 5 * 60_000L
         private const val MAX_INTERVAL_MS = 15 * 60_000L
         private const val MAX_LIFETIME_MS = 24 * 60 * 60_000L
     }

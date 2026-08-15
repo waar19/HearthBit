@@ -25,6 +25,11 @@ class BleDiscoveryPolicyTest {
     }
 
     @Test
+    fun `radar reconnect bypasses accumulated backoff`() {
+        assertEquals(0L, ReconnectBackoffPolicy.delayMs(50, urgent = true))
+    }
+
+    @Test
     fun `radar and rescue may inspect first contact overflow candidates`() {
         assertFalse(
             OverflowDiscoveryPolicy.shouldConsiderCandidate(

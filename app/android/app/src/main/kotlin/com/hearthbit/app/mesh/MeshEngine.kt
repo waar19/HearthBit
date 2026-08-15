@@ -1196,6 +1196,7 @@ internal class MeshEngine(
         updatePowerState(batteryLevel, charging, screenOn, systemPowerSave)
         mainHandler.removeCallbacks(radarReadTask)
         cancelRecoveryScanBurst()
+        prioritizeRadarReconnect(normalized)
         startScanning(aggressive = true)
         sendAnnouncement()
         mainHandler.post(radarReadTask)
@@ -2202,7 +2203,7 @@ internal class MeshEngine(
                 "ttl=${packet.ttl.toUByte()} sender=${senderHex.take(8)}",
         )
         if (senderHex == peerId) return
-        val authentication = ingressAuthenticator.authenticate(packet)
+        val authentication = ingressAuthenticator.authenticate(packet, sourceAddress)
         if (!authentication.relayAllowed) {
             Log.w(
                 LOG_TAG,
@@ -2279,7 +2280,8 @@ internal class MeshEngine(
                         "FRAGMENT reassembled: type=${reassembled.type.toUByte()} " +
                             "sender=${senderHex.take(8)} bytes=${reassembled.payload.size}",
                     )
-                    val innerAuthentication = ingressAuthenticator.authenticate(reassembled)
+                    val innerAuthentication =
+                        ingressAuthenticator.authenticate(reassembled, sourceAddress)
                     if (!innerAuthentication.localProcessingAllowed) return
                     val innerBytes = MeshProtocol.encode(reassembled, padded = false)
                     val innerFingerprint = MeshProtocol.relayFingerprint(innerBytes) ?: return
@@ -3765,10 +3767,27 @@ internal class MeshEngine(
         rescheduleKeepAlive()
     }
 
-    private fun scheduleKnownPeerAutoReconnect(address: String, peerId: String) {
+    private fun prioritizeRadarReconnect(peerId: String) {
+        knownDevices.keys
+            .filter { address ->
+                addressToPeer[address] == peerId || reconnectPeerByAddress[address] == peerId
+            }
+            .forEach { address ->
+                clearAutoReconnectBackoff(address)
+                autoReconnectScheduledAddresses.remove(address)
+                scheduleKnownPeerAutoReconnect(address, peerId, immediate = true)
+            }
+    }
+
+    private fun scheduleKnownPeerAutoReconnect(
+        address: String,
+        peerId: String,
+        immediate: Boolean = false,
+    ) {
         if (!running || localRole == MeshNodeRole.PHONE_BEACON) return
         val device = knownDevices[address] ?: return
         val now = System.currentTimeMillis()
+        if (immediate) clearAutoReconnectBackoff(address)
         val expiry = autoReconnectExpiryByAddress.compute(address) { _, existing ->
             existing?.takeIf { it > now } ?: now + AUTO_RECONNECT_WINDOW_MS
         } ?: return
@@ -3786,7 +3805,12 @@ internal class MeshEngine(
 
         reconnectPeerByAddress[address] = peerId
         val cooldownUntil = autoReconnectCooldownUntil[address] ?: 0L
-        val reconnectDelayMs = if (cooldownUntil > now) {
+        val reconnectDelayMs = if (immediate) {
+            ReconnectBackoffPolicy.delayMs(
+                failedAttempts = autoReconnectFailuresByAddress[address] ?: 0,
+                urgent = true,
+            )
+        } else if (cooldownUntil > now) {
             cooldownUntil - now
         } else {
             autoReconnectCooldownUntil.remove(address)

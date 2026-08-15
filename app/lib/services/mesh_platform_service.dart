@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import 'beacon_control_protocol.dart';
 import '../models/mesh_models.dart';
+import 'mesh_native_event.dart';
 
 String normalizeSmsRecipient(String value) {
   final normalized = value.trim().replaceAll(RegExp(r'[\s()\-]'), '');
@@ -11,6 +12,10 @@ String normalizeSmsRecipient(String value) {
     throw const FormatException('invalid_sms_recipient');
   }
   return normalized;
+}
+
+abstract final class RescueModeContract {
+  static const Duration defaultInterval = Duration(minutes: 5);
 }
 
 class EmergencyTransmission {
@@ -81,6 +86,8 @@ class MeshPlatformService {
       .where((event) => event is Map)
       .cast<Map<Object?, Object?>>();
 
+  Stream<MeshNativeEvent> get nativeEvents => events.map(MeshNativeEvent.parse);
+
   Future<Map<Object?, Object?>> getCapabilities() async {
     final result = await _methods.invokeMapMethod<Object?, Object?>(
       'getCapabilities',
@@ -117,7 +124,7 @@ class MeshPlatformService {
     DateTime? startedAt,
     DateTime? lastPingAt,
     DateTime? expiresAt,
-    Duration interval = const Duration(minutes: 2),
+    Duration interval = RescueModeContract.defaultInterval,
     SosLocationPrecision locationPrecision = SosLocationPrecision.approximate,
   }) async {
     try {

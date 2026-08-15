@@ -57,7 +57,7 @@ class MeshIngressAuthenticatorTest {
     }
 
     @Test
-    fun `unknown signed peer is relay only and never trusted implicitly`() {
+    fun `unknown signed peer is rejected and never relayed`() {
         val packet = MeshProtocol.Packet(
             type = MeshProtocol.TYPE_MESSAGE,
             ttl = MeshProtocol.TTL,
@@ -70,9 +70,45 @@ class MeshIngressAuthenticatorTest {
 
         val result = authenticator.authenticate(packet)
 
-        assertEquals(MeshIngressDisposition.RELAY_ONLY_UNKNOWN, result.disposition)
-        assertTrue(result.relayAllowed)
+        assertEquals(MeshIngressDisposition.REJECT, result.disposition)
+        assertFalse(result.relayAllowed)
         assertFalse(result.localProcessingAllowed)
+    }
+
+    @Test
+    fun `fragment of signed type from unknown peer is rejected before relay`() {
+        val packet = MeshProtocol.Packet(
+            type = MeshProtocol.TYPE_FRAGMENT,
+            ttl = MeshProtocol.TTL,
+            timestamp = 1,
+            senderId = ByteArray(8) { 0x56 },
+            payload = MeshProtocol.encodeFragmentPayload(
+                MeshProtocol.FragmentPayload(
+                    fragmentId = ByteArray(MeshProtocol.FRAGMENT_ID_SIZE) { 0x12 },
+                    index = 0,
+                    total = 2,
+                    originalType = MeshProtocol.TYPE_MESSAGE,
+                    data = byteArrayOf(1),
+                ),
+            ),
+        )
+
+        val result = authenticator(emptyMap(), validSignatureKey = ByteArray(32))
+            .authenticate(packet, "AA:BB:CC:DD:EE:FF")
+
+        assertEquals(MeshIngressDisposition.REJECT, result.disposition)
+        assertFalse(result.relayAllowed)
+    }
+
+    @Test
+    fun `unknown ingress limiter is isolated per source and resets after window`() {
+        val limiter = UnknownIngressRateLimiter(maximumPackets = 2, windowMs = 100)
+
+        assertTrue(limiter.allow("source-a", now = 1_000))
+        assertTrue(limiter.allow("source-a", now = 1_001))
+        assertFalse(limiter.allow("source-a", now = 1_002))
+        assertTrue(limiter.allow("source-b", now = 1_002))
+        assertTrue(limiter.allow("source-a", now = 1_100))
     }
 
     @Test

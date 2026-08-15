@@ -9,6 +9,7 @@ import '../models/mesh_models.dart';
 import '../services/app_preferences.dart';
 import '../services/beacon_control_protocol.dart';
 import '../services/diagnostics_log.dart';
+import '../services/mesh_native_event.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/message_repository.dart';
 import '../services/peer_location_tracker.dart';
@@ -74,7 +75,7 @@ class MeshController extends ChangeNotifier {
   /// Intervalo entre reenvíos de SOS con GPS fresco en modo rescate: lo
   /// bastante frecuente para seguir a una persona que se mueve, lo bastante
   /// espaciado para no agotar batería ni saturar la malla.
-  static const Duration rescueInterval = Duration(minutes: 5);
+  static const Duration rescueInterval = RescueModeContract.defaultInterval;
   static const Duration radarLocationInterval = Duration(seconds: 20);
   static const int radarLocationDistanceMeters = 15;
   static const Duration peerReachabilityWindow = Duration(minutes: 4);
@@ -96,7 +97,7 @@ class MeshController extends ChangeNotifier {
   final List<EmergencyDelivery> _emergencyDeliveries = [];
   final Random _random = Random.secure();
 
-  StreamSubscription<Map<Object?, Object?>>? _subscription;
+  StreamSubscription<MeshNativeEvent>? _subscription;
   bool _drainingPrivateMessageOutbox = false;
   bool _privateMessageOutboxDrainRequested = false;
   bool _drainingEmergencyOutbox = false;
@@ -288,7 +289,7 @@ class MeshController extends ChangeNotifier {
       (first, second) => first.timestamp.compareTo(second.timestamp),
     );
     _trimMessagesInMemory();
-    _subscription = _platform.events.listen(_handleEventSafely);
+    _subscription = _platform.nativeEvents.listen(_handleEventSafely);
     final capabilities = await _platform.getCapabilities();
     platformName = capabilities['platform'] as String? ?? platformName;
     supportsBackgroundRelay = capabilities['backgroundRelay'] as bool? ?? false;
@@ -1566,67 +1567,56 @@ class MeshController extends ChangeNotifier {
     );
   }
 
-  void _handleEvent(Map<Object?, Object?> event) {
-    switch (event['type']) {
-      case 'snapshot':
-        _applyStatus(event);
-        _replacePeers(event['peers']);
-        _replacePresences(event['presences']);
-        break;
-      case 'status':
-        _applyStatus(event);
-        break;
-      case 'power':
-        batteryLevel = (event['batteryLevel'] as num?)?.toInt() ?? batteryLevel;
-        powerProfile = MeshPowerProfile.fromWire(event['powerProfile']);
+  void _handleEvent(MeshNativeEvent event) {
+    switch (event) {
+      case MeshSnapshotEvent():
+        _applyStatus(event.raw);
+        _replacePeers(event.raw['peers']);
+        _replacePresences(event.raw['presences']);
+      case MeshStatusEvent():
+        _applyStatus(event.raw);
+      case MeshPowerEvent():
+        batteryLevel = event.batteryLevel ?? batteryLevel;
+        powerProfile = MeshPowerProfile.fromWire(event.powerProfile);
         adaptivePowerSaving =
-            event['adaptivePowerSaving'] as bool? ?? powerProfile.savesPower;
-        break;
-      case 'peers':
-        _replacePeers(event['peers']);
+            event.adaptivePowerSaving ?? powerProfile.savesPower;
+      case MeshPeersEvent():
+        _replacePeers(event.peers);
         _scheduleTopologyNotification();
         return;
-      case 'presences':
-        _replacePresences(event['presences']);
+      case MeshPresencesEvent():
+        _replacePresences(event.presences);
         _scheduleTopologyNotification();
         return;
-      case 'radarConsent':
-        _applyRadarConsent(event);
-        _replacePeers(event['peers']);
-        break;
-      case 'beaconRequest':
-        _applyBeaconRequest(event);
-        break;
-      case 'beaconRequestResolved':
-        if (pendingBeaconRequest?.requestId == event['requestId']) {
+      case MeshRadarConsentEvent():
+        _applyRadarConsent(event.raw);
+        _replacePeers(event.raw['peers']);
+      case MeshBeaconRequestEvent():
+        _applyBeaconRequest(event.raw);
+      case MeshBeaconRequestResolvedEvent():
+        if (pendingBeaconRequest?.requestId == event.requestId) {
           pendingBeaconRequest = null;
         }
-        break;
-      case 'beaconState':
-        if (event['scope'] == 'local') {
-          _applyLocalBeaconState(event);
+      case MeshBeaconStateEvent():
+        if (event.scope == 'local') {
+          _applyLocalBeaconState(event.raw);
         }
-        break;
-      case 'message':
-        final rawMessage = event['message'];
-        if (rawMessage is Map<Object?, Object?>) {
-          final message = MeshMessage.tryParse(rawMessage);
-          if (message == null) break;
-          if (message.isRadarLocation) {
-            peerLocations.ingestLive(message);
-            break;
-          }
-          if (_messages.every((existing) => existing.id != message.id)) {
-            _messages.add(message);
-            _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-            _trimMessagesInMemory();
-            peerLocations.ingestPersisted(message);
-            unawaited(_repository.save(message));
-          }
+      case MeshMessageEvent():
+        final message = event.message;
+        if (message == null) break;
+        if (message.isRadarLocation) {
+          peerLocations.ingestLive(message);
+          break;
         }
-        break;
-      case 'error':
-        lastError = event['message'] as String? ?? currentL10n.errorUnknown;
+        if (_messages.every((existing) => existing.id != message.id)) {
+          _messages.add(message);
+          _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+          _trimMessagesInMemory();
+          peerLocations.ingestPersisted(message);
+          unawaited(_repository.save(message));
+        }
+      case MeshErrorEvent():
+        lastError = event.message ?? currentL10n.errorUnknown;
         DiagnosticsLog.instance.warning(
           'mesh.native.error',
           data: {'whileStarting': status == MeshConnectionStatus.starting},
@@ -1634,47 +1624,46 @@ class MeshController extends ChangeNotifier {
         if (status == MeshConnectionStatus.starting) {
           status = MeshConnectionStatus.error;
         }
-        break;
-      case 'wiped':
+      case MeshWipedEvent():
         _messages.clear();
         peerLocations.clear();
         _peers.clear();
         _presences.clear();
         _knownPeers.clear();
-        _applyStatus(event);
+        _applyStatus(event.raw);
         radarConsentUntil = null;
         pendingBeaconRequest = null;
         localBeaconActive = false;
         localBeaconExpiresAt = null;
         _stopRadarLocationSharing();
-        break;
-      case 'emergencyAck':
-        final canonicalHash = event['canonicalHash'] as String?;
-        final acknowledgingPeerId = event['peerId'] as String?;
+      case MeshEmergencyAckEvent():
+        final canonicalHash = event.canonicalHash;
+        final acknowledgingPeerId = event.peerId;
         if (canonicalHash != null && acknowledgingPeerId != null) {
           unawaited(
             _recordEmergencyAcknowledgement(canonicalHash, acknowledgingPeerId),
           );
         }
-        break;
-      case 'rescuePing':
-        final timestamp = (event['timestamp'] as num?)?.toInt();
+      case MeshRescuePingEvent():
+        final timestamp = event.timestamp;
         if (timestamp != null && timestamp > 0) {
           lastRescuePing = DateTime.fromMillisecondsSinceEpoch(timestamp);
         }
-        break;
-      case 'rssi':
-      case 'radarDiagnostic':
+      case MeshRssiEvent() || MeshRadarDiagnosticEvent():
         // Lecturas y avisos del radar de rescate: los consume RadarScreen
         // directamente del stream; evitar redibujar toda la app.
         return;
-      default:
+      case MeshRangingMeasurementEvent() ||
+          MeshRadioRangingStateEvent() ||
+          MeshRangingControlEvent() ||
+          MeshRadarExpiredEvent() ||
+          MeshUnknownEvent():
         break;
     }
     notifyListeners();
   }
 
-  void _handleEventSafely(Map<Object?, Object?> event) {
+  void _handleEventSafely(MeshNativeEvent event) {
     try {
       _handleEvent(event);
     } on FormatException catch (error, stackTrace) {

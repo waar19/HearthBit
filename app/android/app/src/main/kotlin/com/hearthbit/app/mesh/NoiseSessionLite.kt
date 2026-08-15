@@ -14,6 +14,7 @@ internal class NoiseSessionLite(
     private var receiveCipher: CipherState? = null
     private var patternCount = 0
     private var sendNonce = 0L
+    private var receivedMessages = 0L
     private val replayWindow = NoiseReplayWindow()
     private var establishedAt = 0L
 
@@ -31,7 +32,11 @@ internal class NoiseSessionLite(
 
     fun isTransportExpired(now: Long = nowMillis()): Boolean =
         established &&
-            (sendNonce > UInt.MAX_VALUE.toLong() || now - establishedAt >= MAX_TRANSPORT_AGE_MS)
+            (
+                sendNonce >= MAX_TRANSPORT_MESSAGES ||
+                    receivedMessages >= MAX_TRANSPORT_MESSAGES ||
+                    now - establishedAt >= MAX_TRANSPORT_AGE_MS
+                )
 
     fun start(): ByteArray {
         if (!initiator || handshake != null || established) {
@@ -83,7 +88,7 @@ internal class NoiseSessionLite(
 
     fun encrypt(plaintext: ByteArray): ByteArray {
         check(established)
-        require(sendNonce <= UInt.MAX_VALUE.toLong())
+        require(sendNonce < MAX_TRANSPORT_MESSAGES) { "Noise transport requires rekey" }
         val cipher = checkNotNull(sendCipher)
         cipher.setNonce(sendNonce)
         val ciphertext = ByteArray(plaintext.size + cipher.macLength)
@@ -109,6 +114,9 @@ internal class NoiseSessionLite(
     fun decrypt(input: ByteArray): ByteArray {
         check(established)
         require(input.size >= 20)
+        require(receivedMessages < MAX_TRANSPORT_MESSAGES) {
+            "Noise transport requires rekey"
+        }
         val nonce =
             ((input[0].toLong() and 0xFF) shl 24) or
                 ((input[1].toLong() and 0xFF) shl 16) or
@@ -128,6 +136,7 @@ internal class NoiseSessionLite(
             ciphertext.size,
         )
         replayWindow.recordAuthenticated(nonce)
+        receivedMessages += 1
         touch()
         return plaintext.copyOf(length)
     }
@@ -142,6 +151,8 @@ internal class NoiseSessionLite(
         established = false
         replayWindow.clear()
         establishedAt = 0L
+        sendNonce = 0L
+        receivedMessages = 0L
     }
 
     private fun initialize(role: Int) {
@@ -187,6 +198,7 @@ internal class NoiseSessionLite(
 
     private companion object {
         const val PROTOCOL = "Noise_XX_25519_ChaChaPoly_SHA256"
+        const val MAX_TRANSPORT_MESSAGES = 1L shl 20
         const val MAX_TRANSPORT_AGE_MS = 60 * 60 * 1_000L
     }
 }

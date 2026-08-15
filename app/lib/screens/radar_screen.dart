@@ -13,6 +13,7 @@ import '../services/acoustic_sonar_session.dart';
 import '../services/beacon_control_protocol.dart';
 import '../services/compass_calibration_gate.dart';
 import '../services/diagnostics_log.dart';
+import '../services/mesh_native_event.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/radar_fusion.dart';
 import '../services/radar_signal.dart';
@@ -59,7 +60,7 @@ class _RadarScreenState extends State<RadarScreen>
   final _headingFilter = CircularHeadingFilter();
   late final AcousticSonarSession _acousticSession;
 
-  StreamSubscription<Map<Object?, Object?>>? _events;
+  StreamSubscription<MeshNativeEvent>? _events;
   StreamSubscription<Position>? _positions;
   StreamSubscription<CompassEvent>? _compassEvents;
   Timer? _ticker;
@@ -121,7 +122,7 @@ class _RadarScreenState extends State<RadarScreen>
     _targetLatitude = widget.latitude;
     _targetLongitude = widget.longitude;
     unawaited(_startRadar());
-    _events = _platform.events.listen(_onEvent);
+    _events = _platform.nativeEvents.listen(_onEvent);
     _scheduleTick();
     if (_hasTargetCoordinates) _startCompassTracking();
     _watchGps();
@@ -155,90 +156,88 @@ class _RadarScreenState extends State<RadarScreen>
     }
   }
 
-  void _onEvent(Map<Object?, Object?> event) {
-    if (event['type'] == 'rangingMeasurement' &&
-        (event['peerId'] as String?)?.toLowerCase() ==
-            widget.peerId.toLowerCase()) {
-      final meters = (event['meters'] as num?)?.toDouble();
-      if (!mounted || meters == null || !meters.isFinite || meters < 0) return;
-      setState(() {
-        _radioRangingActive = true;
-        _precisionDistanceMeters = meters;
-        _precisionDistanceErrorMeters = (event['errorMeters'] as num?)
-            ?.toDouble();
-        _precisionDistanceConfidence =
-            ((event['confidence'] as num?)?.toDouble() ?? 0)
-                .clamp(0, 1)
-                .toDouble();
-        _precisionSource = RadarPrecisionSource.radio;
-      });
-      return;
-    }
-    if (event['type'] == 'radioRangingState') {
-      final state = event['state'] as String?;
-      if (!mounted) return;
-      setState(
-        () => _radioRangingActive = state == 'active' || state == 'opened',
-      );
-      return;
-    }
-    if (event['type'] == 'rangingControl' &&
-        (event['peerId'] as String?)?.toLowerCase() ==
-            widget.peerId.toLowerCase()) {
-      final raw = event['payload'];
-      if (raw is Uint8List) {
-        final control = RangingControlProtocol.decode(raw);
-        if (control != null &&
-            control.technology == RangingTechnology.acoustic) {
-          unawaited(_handleAcousticControl(control));
+  void _onEvent(MeshNativeEvent event) {
+    switch (event) {
+      case MeshRangingMeasurementEvent():
+        if (!_isTarget(event.peerId)) return;
+        final meters = event.meters;
+        if (!mounted || meters == null || !meters.isFinite || meters < 0)
+          return;
+        setState(() {
+          _radioRangingActive = true;
+          _precisionDistanceMeters = meters;
+          _precisionDistanceErrorMeters = event.errorMeters;
+          _precisionDistanceConfidence = (event.confidence ?? 0)
+              .clamp(0, 1)
+              .toDouble();
+          _precisionSource = RadarPrecisionSource.radio;
+        });
+        return;
+      case MeshRadioRangingStateEvent():
+        if (!mounted) return;
+        setState(
+          () => _radioRangingActive =
+              event.state == 'active' || event.state == 'opened',
+        );
+        return;
+      case MeshRangingControlEvent():
+        if (!_isTarget(event.peerId)) return;
+        final payload = event.payload;
+        if (payload != null) {
+          final control = RangingControlProtocol.decode(payload);
+          if (control != null &&
+              control.technology == RangingTechnology.acoustic) {
+            unawaited(_handleAcousticControl(control));
+          }
         }
-      }
-      return;
+        return;
+      case MeshBeaconStateEvent():
+        if (event.scope != 'remote' || !_isTarget(event.peerId) || !mounted) {
+          return;
+        }
+        setState(() {
+          _beaconRequestId = event.requestId ?? _beaconRequestId;
+          _beaconStatus = event.status;
+          final expiresAt = event.expiresAt ?? 0;
+          _beaconRequestExpiresAt = expiresAt > 0
+              ? DateTime.fromMillisecondsSinceEpoch(expiresAt)
+              : null;
+          _requestingBeacon = false;
+        });
+        return;
+      case MeshMessageEvent():
+        final message = event.message;
+        if (message != null) _handleLocationMessage(message);
+        return;
+      case MeshRadarExpiredEvent():
+        if (_isTarget(event.peerId) && mounted) {
+          setState(() => _permissionExpired = true);
+        }
+        return;
+      case MeshRadarDiagnosticEvent():
+        if (_isTarget(event.peerId) &&
+            mounted &&
+            _reading == null &&
+            !_noSignalHint) {
+          setState(() => _noSignalHint = true);
+        }
+        return;
+      case MeshRssiEvent():
+        if (!_isTarget(event.peerId)) return;
+        final rssi = event.rssi;
+        if (rssi == null) return;
+        _handleRssi(event, rssi);
+        return;
+      default:
+        return;
     }
-    if (event['type'] == 'beaconState' &&
-        event['scope'] == 'remote' &&
-        (event['peerId'] as String?)?.toLowerCase() ==
-            widget.peerId.toLowerCase()) {
-      if (!mounted) return;
-      setState(() {
-        _beaconRequestId = event['requestId'] as String? ?? _beaconRequestId;
-        _beaconStatus = event['status'] as String?;
-        final expiresAt = (event['expiresAt'] as num?)?.toInt() ?? 0;
-        _beaconRequestExpiresAt = expiresAt > 0
-            ? DateTime.fromMillisecondsSinceEpoch(expiresAt)
-            : null;
-        _requestingBeacon = false;
-      });
-      return;
-    }
-    if (event['type'] == 'message') {
-      final rawMessage = event['message'];
-      if (rawMessage is Map<Object?, Object?>) {
-        _handleLocationMessage(MeshMessage.fromMap(rawMessage));
-      }
-      return;
-    }
-    if (event['type'] == 'radarExpired' &&
-        (event['peerId'] as String?)?.toLowerCase() ==
-            widget.peerId.toLowerCase()) {
-      if (mounted) setState(() => _permissionExpired = true);
-      return;
-    }
-    if (event['type'] == 'radarDiagnostic' &&
-        (event['peerId'] as String?)?.toLowerCase() ==
-            widget.peerId.toLowerCase()) {
-      if (mounted && _reading == null && !_noSignalHint) {
-        setState(() => _noSignalHint = true);
-      }
-      return;
-    }
-    if (event['type'] != 'rssi') return;
-    if ((event['peerId'] as String?)?.toLowerCase() !=
-        widget.peerId.toLowerCase()) {
-      return;
-    }
-    final rssi = event['rssi'] as int?;
-    if (rssi == null) return;
+  }
+
+  bool _isTarget(String? peerId) {
+    return peerId?.toLowerCase() == widget.peerId.toLowerCase();
+  }
+
+  void _handleRssi(MeshRssiEvent event, int rssi) {
     final reading = _processor.addSample(rssi, DateTime.now());
     final heading = _headingDegrees;
     if (_sweepActive && heading != null) {
@@ -264,7 +263,7 @@ class _RadarScreenState extends State<RadarScreen>
       _reading = reading;
       _stale = false;
       _noSignalHint = false;
-      _tentativeSignal = event['tentative'] as bool? ?? false;
+      _tentativeSignal = event.tentative;
     });
     _pulse.forward(from: 0);
   }

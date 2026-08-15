@@ -8,6 +8,11 @@ import org.junit.Test
 
 class RescueAlarmPolicyTest {
     @Test
+    fun `native rescue default matches five minute channel contract`() {
+        assertEquals(300_000L, RescueModeStore.DEFAULT_INTERVAL_MS)
+    }
+
+    @Test
     fun `sticky restart immediately resumes overdue persisted ping`() {
         val dueAt = RescueAlarmPolicy.nextDue(
             lastPingAt = 1_000L,

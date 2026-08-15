@@ -695,6 +695,57 @@ class RunnerTests: XCTestCase {
     )
   }
 
+  func testSignedIngressRequiresPinnedKeyAndValidSignature() throws {
+    let privateKey = Curve25519.Signing.PrivateKey()
+    var packet = IOSMeshPacket(
+      type: IOSMeshProtocol.message,
+      ttl: IOSMeshProtocol.defaultTTL,
+      timestamp: 1,
+      senderID: sender,
+      payload: Data("hello".utf8)
+    )
+    packet.signature = try privateKey.signature(for: packet.canonical())
+
+    XCTAssertFalse(
+      IOSMeshIngressPolicy.accepts(packet, signingPublicKey: nil)
+    )
+    XCTAssertTrue(
+      IOSMeshIngressPolicy.accepts(
+        packet,
+        signingPublicKey: privateKey.publicKey.rawRepresentation
+      )
+    )
+    packet.payload = Data("tampered".utf8)
+    XCTAssertFalse(
+      IOSMeshIngressPolicy.accepts(
+        packet,
+        signingPublicKey: privateKey.publicKey.rawRepresentation
+      )
+    )
+  }
+
+  func testUnknownIngressRateLimitIsPerSourceAndResets() {
+    let limiter = IOSUnknownIngressRateLimiter(maximumPackets: 2, window: 10)
+
+    XCTAssertTrue(limiter.allow(source: "source-a", now: 100))
+    XCTAssertTrue(limiter.allow(source: "source-a", now: 101))
+    XCTAssertFalse(limiter.allow(source: "source-a", now: 102))
+    XCTAssertTrue(limiter.allow(source: "source-b", now: 102))
+    XCTAssertTrue(limiter.allow(source: "source-a", now: 110))
+  }
+
+  func testEmergencySMSRecipientIsRevalidatedNatively() {
+    XCTAssertEqual(
+      IOSEmergencySMSPolicy.normalizeRecipient(" (+56) 9-1234-5678 "),
+      "+56912345678"
+    )
+    XCTAssertEqual(IOSEmergencySMSPolicy.normalizeRecipient("13 100"), "13100")
+    XCTAssertNil(IOSEmergencySMSPolicy.normalizeRecipient("smsto:+56912345678"))
+    XCTAssertNil(IOSEmergencySMSPolicy.normalizeRecipient("+56CALLHELP"))
+    XCTAssertNil(IOSEmergencySMSPolicy.normalizeRecipient("1234"))
+    XCTAssertNil(IOSEmergencySMSPolicy.normalizeRecipient("+1234567890123456"))
+  }
+
   func testBeaconControlRelaysExactlyOnceOnlyToAnotherDirectedRecipient() {
     XCTAssertTrue(
       IOSMeshRelayPolicy.shouldRelay(
@@ -1386,6 +1437,34 @@ final class ConformanceFixtureTests: XCTestCase {
       IOSRadarConsentProtocol.decode(fixtures.bytes("extension.radar_grant"))
     )
     XCTAssertEqual(radar.action, IOSRadarConsentProtocol.grantAction)
+    let beacon = try XCTUnwrap(
+      IOSBeaconControlProtocol.decode(fixtures.bytes("extension.beacon_control.request"))
+    )
+    XCTAssertEqual(beacon.action, IOSBeaconControlProtocol.requestAction)
+    XCTAssertEqual(beacon.flags, IOSBeaconControlProtocol.allowedFlags)
+    let ranging = try XCTUnwrap(
+      IOSRangingControlProtocol.decode(fixtures.bytes("extension.ranging_control.request"))
+    )
+    XCTAssertEqual(ranging.action, 2)
+    XCTAssertEqual(ranging.technology, 4)
+    XCTAssertEqual(ranging.sessionNonce, Data((0..<16).map(UInt8.init)))
+    XCTAssertTrue(
+      IOSMeshProtocol.supportsEmergencyAcknowledgements(
+        fixtures.bytes("extension.emergency_capability.v1")
+      )
+    )
+    XCTAssertEqual(
+      IOSMeshProtocol.decodeEmergencyAcknowledgement(
+        fixtures.bytes("extension.emergency_ack.v1")
+      ),
+      Data((0..<32).map(UInt8.init))
+    )
+    XCTAssertEqual(fixtures.bytes("extension.hbt_capability.canonical"), Data([1]))
+    XCTAssertEqual(fixtures.bytes("extension.legacy_0x24.hbt_alias"), Data([1]))
+    XCTAssertNotEqual(
+      fixtures.bytes("extension.legacy_0x24.prekey_candidate"),
+      Data([1])
+    )
     let extensionEnvelope = try XCTUnwrap(
       IOSMeshProtocol.decodeExtensionEnvelope(fixtures.bytes("extension.envelope.hbit"))
     )
@@ -1429,6 +1508,10 @@ final class ConformanceFixtureTests: XCTestCase {
       ),
       secondPing + 30 * 60 * 1_000
     )
+  }
+
+  func testRescueDefaultIntervalMatchesMethodChannelContract() {
+    XCTAssertEqual(IOSRescueModeStore.defaultInterval, 300_000)
   }
 
   func testRadarConsentSOSExpirySaturatesTimestampOverflow() {

@@ -129,6 +129,44 @@ class ConformanceFixtureTest {
             RadarConsentProtocol.decode(fixtures.bytes("extension.radar_grant")),
         )
         assertEquals(RadarConsentProtocol.ACTION_GRANT, radar.action)
+        val beacon = requireNotNull(
+            BeaconControlProtocol.decode(fixtures.bytes("extension.beacon_control.request")),
+        )
+        assertEquals(BeaconControlProtocol.ACTION_REQUEST, beacon.action)
+        assertEquals(BeaconControlProtocol.ALLOWED_FLAGS, beacon.flags)
+        val ranging = requireNotNull(
+            RangingControlProtocol.decode(fixtures.bytes("extension.ranging_control.request")),
+        )
+        assertEquals(RangingControlProtocol.ACTION_REQUEST, ranging.action)
+        assertEquals(RangingControlProtocol.TECHNOLOGY_ACOUSTIC, ranging.technology)
+        assertEquals(3, ranging.round)
+        assertArrayEquals(
+            byteArrayOf(0xAA.toByte(), 0xBB.toByte(), 0xCC.toByte()),
+            ranging.opaqueData,
+        )
+        assertTrue(
+            MeshProtocol.supportsEmergencyAcknowledgements(
+                fixtures.bytes("extension.emergency_capability.v1"),
+            ),
+        )
+        assertArrayEquals(
+            ByteArray(32) { it.toByte() },
+            MeshProtocol.decodeEmergencyAcknowledgement(
+                fixtures.bytes("extension.emergency_ack.v1"),
+            ),
+        )
+        assertArrayEquals(
+            byteArrayOf(MeshProtocol.HBT_VERSION),
+            fixtures.bytes("extension.hbt_capability.canonical"),
+        )
+        assertArrayEquals(
+            byteArrayOf(MeshProtocol.HBT_VERSION),
+            fixtures.bytes("extension.legacy_0x24.hbt_alias"),
+        )
+        assertFalse(
+            fixtures.bytes("extension.legacy_0x24.prekey_candidate")
+                .contentEquals(byteArrayOf(MeshProtocol.HBT_VERSION)),
+        )
         val extension = requireNotNull(
             MeshProtocol.decodeExtensionEnvelope(fixtures.bytes("extension.envelope.hbit")),
         )

@@ -81,18 +81,22 @@ class DiagnosticsLog {
 
   static const _fileName = 'hearthbit-diagnostics.jsonl';
   static const _forbiddenKeys = <String>{
+    'address',
     'content',
     'coordinate',
     'identity',
     'key',
     'latitude',
     'longitude',
+    'mac',
     'message',
     'nickname',
     'payload',
     'peer',
     'private',
+    'recipient',
     'secret',
+    'sender',
     'token',
   };
 

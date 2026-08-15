@@ -35,4 +35,18 @@ void main() {
     messenger.setMockMethodCallHandler(channel, (call) async => false);
     expect(await service.retryEmergency('ABC123'), isNull);
   });
+
+  test('configureRescueMode usa cinco minutos en el contrato nativo', () async {
+    expect(RescueModeContract.defaultInterval, const Duration(minutes: 5));
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'configureRescueMode');
+      final arguments = call.arguments! as Map<Object?, Object?>;
+      expect(arguments['intervalMs'], 300000);
+      return {'active': true};
+    });
+
+    final state = await service.configureRescueMode(active: true);
+
+    expect(state.active, isTrue);
+  });
 }
