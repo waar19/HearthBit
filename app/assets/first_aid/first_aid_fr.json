@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "locale": "fr",
-  "reviewedAt": "2026-08-13",
+  "reviewedAt": "2026-08-15",
   "disclaimer": "Conseils généraux de premiers secours uniquement. Ils ne remplacent ni les secours ni une formation certifiée. Les pratiques locales varient : suivez l’opérateur et les autorités.",
   "topics": [
     {
@@ -81,6 +81,24 @@
       ],
       "warnings": ["N’allumez aucune flamme en cas de fuite de gaz possible.", "Déplacer des débris peut provoquer un effondrement ou aggraver des blessures cachées."],
       "sourceIds": ["ready-earthquake"]
+    },
+    {
+      "id": "android-earthquake-alerts",
+      "title": "Activer les alertes sismiques sur Android",
+      "summary": "Vérifiez maintenant les alertes, la localisation et la connexion ; pendant un séisme, il peut être trop tard.",
+      "steps": [
+        "Ouvrez les Paramètres et recherchez « Alertes de séisme ». Sur de nombreux téléphones : Sécurité et urgences > Alertes de séisme.",
+        "Activez les alertes et la localisation. Gardez le Wi‑Fi ou les données mobiles disponibles : une connexion est nécessaire.",
+        "Vérifiez aussi les alertes d’urgence sans fil et les applications ou canaux officiels de votre pays.",
+        "Si l’option manque, mettez à jour Android et les services Google Play. La disponibilité dépend du pays et de l’appareil."
+      ],
+      "warnings": [
+        "Aucun système ne peut prédire tous les séismes ni garantir une alerte.",
+        "Earthquake Network est un complément tiers ; privilégiez toujours les alertes officielles."
+      ],
+      "sourceIds": [
+        "android-earthquake-alerts"
+      ]
     }
   ],
   "sources": [
@@ -104,6 +122,13 @@
       "publisher": "FEMA / Ready.gov",
       "url": "https://www.ready.gov/earthquakes",
       "published": "Consulté le 2026-08-13"
+    },
+    {
+      "id": "android-earthquake-alerts",
+      "title": "Android Earthquake Alerts: A global system for early warning",
+      "publisher": "Google Research",
+      "url": "https://research.google/blog/android-earthquake-alerts-a-global-system-for-early-warning/",
+      "published": "Consulted 2026-08-15"
     }
   ]
 }

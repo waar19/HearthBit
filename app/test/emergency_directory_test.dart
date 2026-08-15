@@ -42,6 +42,38 @@ void main() {
       );
       expect(result.directory.country('CO').numbers, isNotEmpty);
       expect(result.directory.sources, isNotEmpty);
+      for (final countryCode in const {
+        'CL',
+        'PE',
+        'EC',
+        'ID',
+        'PH',
+        'TR',
+        'GT',
+        'NP',
+        'IT',
+        'TW',
+        'NZ',
+      }) {
+        final country = result.directory.country(countryCode);
+        expect(country.numbers, isNotEmpty);
+        expect(country.organizations, isNotEmpty);
+        expect(
+          country.organizations.every(
+            (organization) =>
+                organization.websiteUri.scheme == 'https' &&
+                organization.websiteUri.host.isNotEmpty,
+          ),
+          isTrue,
+        );
+      }
+      expect(
+        result.directory
+            .country('INT')
+            .organizations
+            .map((organization) => organization.id),
+        contains('sismo-detector'),
+      );
       for (final countryCode in EmergencyDirectory.countryCodes) {
         expect(
           result.directory
@@ -100,7 +132,7 @@ void main() {
 
     expect(result.usedFallback, isTrue);
     expect(result.directory.locale, 'en');
-    expect(result.directory.countries, hasLength(9));
+    expect(result.directory.countries, hasLength(20));
 
     final unsupported = await EmergencyDirectoryService(
       bundle: _StringBundle({
@@ -143,7 +175,7 @@ void main() {
       EmergencyCountryResolver.resolveCandidates(
         availableCountryCodes: countries,
         simCountry: 'BR',
-        localeCountry: 'IT',
+        localeCountry: 'BR',
       ),
       'INT',
     );

@@ -31,6 +31,11 @@ void main() {
         FirstAidGuide.topicIds,
       );
       expect(result.guide.sources, isNotEmpty);
+      final alerts = result.guide.topics.singleWhere(
+        (topic) => topic.id == 'android-earthquake-alerts',
+      );
+      expect(alerts.steps, hasLength(greaterThanOrEqualTo(4)));
+      expect(alerts.sourceIds, contains('android-earthquake-alerts'));
       expect(result.usedFallback, isFalse);
     }
   });
@@ -61,7 +66,7 @@ void main() {
 
     expect(result.usedFallback, isTrue);
     expect(result.guide.locale, 'en');
-    expect(result.guide.topics, hasLength(6));
+    expect(result.guide.topics, hasLength(7));
   });
 
   testWidgets('lista y detalle no desbordan con texto al 200 %', (

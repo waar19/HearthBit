@@ -918,6 +918,14 @@ class AppLocalizationsEs extends AppLocalizations {
       'No fue posible medir los chirridos. Reduce el ruido, deja ambos teléfonos descubiertos e inténtalo de nuevo.';
 
   @override
+  String get radarSonarRemoteMicrophoneRequired =>
+      'El otro teléfono no autorizó el uso del micrófono para el sonar.';
+
+  @override
+  String get radarSonarSelfChirpMissing =>
+      'Este teléfono no detectó su propia señal. Desconecta auriculares Bluetooth, descubre el altavoz y vuelve a intentarlo.';
+
+  @override
   String get radarSweepEstimateWarning =>
       'BLE solo permite estimar un sector amplio, no una dirección exacta. Confírmalo moviéndote y repitiendo el barrido.';
 

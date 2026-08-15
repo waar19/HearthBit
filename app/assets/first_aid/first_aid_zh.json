@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "locale": "zh",
-  "reviewedAt": "2026-08-13",
+  "reviewedAt": "2026-08-15",
   "disclaimer": "仅提供一般急救指引，不能替代急救服务或认证培训。各地做法不同，请听从急救接线员和当地部门的指示。",
   "topics": [
     {
@@ -81,6 +81,24 @@
       ],
       "warnings": ["可能有燃气泄漏时不要点火。", "移动瓦砾可能引发坍塌或加重隐藏伤情。"],
       "sourceIds": ["ready-earthquake"]
+    },
+    {
+      "id": "android-earthquake-alerts",
+      "title": "在 Android 上启用地震警报",
+      "summary": "现在检查警报、定位和网络；地震发生时再设置可能已经太晚。",
+      "steps": [
+        "打开“设置”并搜索“地震警报”。许多手机位于“安全和紧急情况 > 地震警报”。",
+        "启用地震警报和定位。保持 Wi‑Fi 或移动数据可用，接收警报需要网络。",
+        "同时检查无线紧急警报以及所在国家或地区的官方应用和信息渠道。",
+        "如果没有此选项，请更新 Android 和 Google Play 服务。可用性取决于国家和设备。"
+      ],
+      "warnings": [
+        "任何系统都无法预测所有地震或保证一定发出警报。",
+        "Earthquake Network 是第三方补充服务；应始终优先采用官方警报。"
+      ],
+      "sourceIds": [
+        "android-earthquake-alerts"
+      ]
     }
   ],
   "sources": [
@@ -104,6 +122,13 @@
       "publisher": "FEMA / Ready.gov",
       "url": "https://www.ready.gov/earthquakes",
       "published": "访问于 2026-08-13"
+    },
+    {
+      "id": "android-earthquake-alerts",
+      "title": "Android Earthquake Alerts: A global system for early warning",
+      "publisher": "Google Research",
+      "url": "https://research.google/blog/android-earthquake-alerts-a-global-system-for-early-warning/",
+      "published": "Consulted 2026-08-15"
     }
   ]
 }

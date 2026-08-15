@@ -9,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../services/acoustic_sonar.dart';
+import '../services/acoustic_sonar_session.dart';
 import '../services/beacon_control_protocol.dart';
 import '../services/compass_calibration_gate.dart';
 import '../services/diagnostics_log.dart';
@@ -56,13 +57,12 @@ class _RadarScreenState extends State<RadarScreen>
   final _sweepEstimator = SweepEstimator();
   final _calibrationGate = CompassCalibrationGate();
   final _headingFilter = CircularHeadingFilter();
-  final _acousticCapture = AcousticSonarCapture();
+  late final AcousticSonarSession _acousticSession;
 
   StreamSubscription<Map<Object?, Object?>>? _events;
   StreamSubscription<Position>? _positions;
   StreamSubscription<CompassEvent>? _compassEvents;
   Timer? _ticker;
-  Timer? _acousticTimeout;
 
   late final AnimationController _sweep = AnimationController(
     vsync: this,
@@ -102,12 +102,6 @@ class _RadarScreenState extends State<RadarScreen>
   bool _radioRangingAvailable = false;
   bool _radioRangingActive = false;
   bool _acousticActive = false;
-  bool _acousticInitiator = false;
-  Uint8List? _acousticNonce;
-  int _acousticRound = 0;
-  AcousticRoundObservation? _localAcousticObservation;
-  AcousticRoundObservation? _remoteAcousticObservation;
-  final List<AcousticDistanceMeasurement> _acousticMeasurements = [];
   double? _precisionDistanceMeters;
   double? _precisionDistanceErrorMeters;
   double _precisionDistanceConfidence = 0;
@@ -116,6 +110,14 @@ class _RadarScreenState extends State<RadarScreen>
   @override
   void initState() {
     super.initState();
+    _acousticSession = AcousticSonarSession(
+      capture: AcousticSonarCapture(),
+      sendControl: (payload) =>
+          _platform.sendRangingControl(widget.peerId, payload),
+      onStateChanged: _onAcousticStateChanged,
+      onMeasurement: _onAcousticMeasurement,
+      onFailure: _onAcousticFailure,
+    );
     _targetLatitude = widget.latitude;
     _targetLongitude = widget.longitude;
     unawaited(_startRadar());
@@ -302,238 +304,63 @@ class _RadarScreenState extends State<RadarScreen>
 
   Future<void> _toggleAcousticSonar() async {
     if (_acousticActive) {
-      await _stopAcousticSonar(notifyPeer: true);
+      await _acousticSession.stop();
       return;
     }
-    final nonce = RangingControlProtocol.randomNonce();
-    _acousticNonce = nonce;
-    _acousticInitiator = true;
-    _acousticRound = 0;
-    _acousticMeasurements.clear();
-    _localAcousticObservation = null;
-    _remoteAcousticObservation = null;
-    if (!await _acousticCapture.start()) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.radarSonarMicrophoneRequired),
-          action: SnackBarAction(
-            label: context.l10n.actionOpenSettings,
-            onPressed: Geolocator.openAppSettings,
-          ),
-        ),
-      );
-      return;
-    }
-    if (mounted) setState(() => _acousticActive = true);
-    _armAcousticTimeout();
-    await _sendAcoustic(RangingControlAction.request);
+    await _acousticSession.startInitiator();
   }
 
   Future<void> _handleAcousticControl(RangingControlMessage control) async {
-    _armAcousticTimeout();
-    if (control.action == RangingControlAction.request) {
-      await _acousticCapture.cancel();
-      _acousticNonce = control.sessionNonce;
-      _acousticInitiator = false;
-      _acousticRound = control.round;
-      _localAcousticObservation = null;
-      _remoteAcousticObservation = null;
-      if (!await _acousticCapture.start()) {
-        await _sendAcoustic(RangingControlAction.error);
-        return;
-      }
-      if (mounted) setState(() => _acousticActive = true);
-      await _sendAcoustic(RangingControlAction.accept);
-      return;
-    }
-    final nonce = _acousticNonce;
-    if (nonce == null || !_bytesEqual(nonce, control.sessionNonce)) return;
-    if (control.action == RangingControlAction.accept && _acousticInitiator) {
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      if (!_acousticActive) return;
-      await _acousticCapture.emitChirp();
-      await _sendAcoustic(RangingControlAction.acousticChirp, value: 0);
-      return;
-    }
-    if (control.action == RangingControlAction.acousticChirp &&
-        control.value == 0 &&
-        !_acousticInitiator) {
-      await Future<void>.delayed(const Duration(milliseconds: 450));
-      if (!_acousticActive) return;
-      await _acousticCapture.emitChirp();
-      await _sendAcoustic(RangingControlAction.acousticChirp, value: 1);
-      await Future<void>.delayed(const Duration(milliseconds: 700));
-      await _finishAcousticCapture(selfChirpFirst: false);
-      return;
-    }
-    if (control.action == RangingControlAction.acousticChirp &&
-        control.value == 1 &&
-        _acousticInitiator) {
-      await Future<void>.delayed(const Duration(milliseconds: 700));
-      await _finishAcousticCapture(selfChirpFirst: true);
-      return;
-    }
-    if (control.action == RangingControlAction.acousticObservation) {
-      _remoteAcousticObservation = AcousticRoundObservation(
-        selfChirpSample: 0,
-        remoteChirpSample: control.value.round(),
-        confidence: control.confidence,
-      );
-      await _tryFinalizeAcousticRound();
-      return;
-    }
-    if (control.action == RangingControlAction.result) {
-      if (!mounted) return;
-      setState(() {
-        _precisionDistanceMeters = control.value;
-        _precisionDistanceErrorMeters = control.errorMeters;
-        _precisionDistanceConfidence = control.confidence;
-        _precisionSource = RadarPrecisionSource.acoustic;
-        _acousticActive = false;
-      });
-      _acousticTimeout?.cancel();
-      await _acousticCapture.cancel();
-      return;
-    }
-    if (control.action == RangingControlAction.stop ||
-        control.action == RangingControlAction.error) {
-      await _stopAcousticSonar(notifyPeer: false);
-    }
+    await _acousticSession.handle(control);
   }
 
-  Future<void> _finishAcousticCapture({required bool selfChirpFirst}) async {
-    final detections = await _acousticCapture.stopAndAnalyze();
-    DiagnosticsLog.instance.info(
-      'radar.sonar.memory',
-      data: {'peakBufferedBytes': _acousticCapture.peakBufferedBytes},
-    );
-    if (detections.length < 2) {
-      await _sendAcoustic(RangingControlAction.error);
-      await _stopAcousticSonar(notifyPeer: false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.radarSonarTooNoisy)),
-        );
-      }
-      return;
-    }
-    final first = detections[0];
-    final second = detections[1];
-    _localAcousticObservation = AcousticRoundObservation(
-      selfChirpSample: selfChirpFirst ? first.sampleIndex : second.sampleIndex,
-      remoteChirpSample: selfChirpFirst
-          ? second.sampleIndex
-          : first.sampleIndex,
-      confidence: math.min(first.confidence, second.confidence),
-    );
-    await _sendAcoustic(
-      RangingControlAction.acousticObservation,
-      value: _localAcousticObservation!.signedDeltaSamples.toDouble(),
-      confidence: _localAcousticObservation!.confidence,
-    );
-    await _tryFinalizeAcousticRound();
+  void _onAcousticStateChanged(AcousticSonarSessionState state) {
+    if (!mounted) return;
+    final active =
+        state != AcousticSonarSessionState.idle &&
+        state != AcousticSonarSessionState.completed &&
+        state != AcousticSonarSessionState.failed;
+    setState(() => _acousticActive = active);
   }
 
-  Future<void> _tryFinalizeAcousticRound() async {
-    final local = _localAcousticObservation;
-    final remote = _remoteAcousticObservation;
-    if (local == null || remote == null) return;
-    final measurement = AcousticSonarDsp.combineRound(
-      local: local,
-      remote: remote,
-    );
-    if (measurement == null) {
-      await _sendAcoustic(RangingControlAction.error);
-      await _stopAcousticSonar(notifyPeer: false);
-      return;
-    }
-    _acousticMeasurements.add(measurement);
-    if (_acousticInitiator && _acousticRound < 2) {
-      _acousticRound += 1;
-      _localAcousticObservation = null;
-      _remoteAcousticObservation = null;
-      await Future<void>.delayed(const Duration(milliseconds: 600));
-      if (!await _acousticCapture.start()) {
-        await _stopAcousticSonar(notifyPeer: true);
-        return;
-      }
-      await _sendAcoustic(RangingControlAction.request);
-      return;
-    }
-    if (!_acousticInitiator) return;
-    final aggregate = AcousticSonarDsp.aggregate(_acousticMeasurements)!;
-    await _sendAcoustic(
-      RangingControlAction.result,
-      value: aggregate.distanceMeters,
-      errorMeters: aggregate.errorMeters,
-      confidence: aggregate.confidence,
-    );
-    _acousticTimeout?.cancel();
+  void _onAcousticMeasurement(AcousticDistanceMeasurement measurement) {
     if (!mounted) return;
     setState(() {
-      _precisionDistanceMeters = aggregate.distanceMeters;
-      _precisionDistanceErrorMeters = aggregate.errorMeters;
-      _precisionDistanceConfidence = aggregate.confidence;
+      _precisionDistanceMeters = measurement.distanceMeters;
+      _precisionDistanceErrorMeters = measurement.errorMeters;
+      _precisionDistanceConfidence = measurement.confidence;
       _precisionSource = RadarPrecisionSource.acoustic;
       _acousticActive = false;
     });
   }
 
-  Future<void> _sendAcoustic(
-    RangingControlAction action, {
-    double value = 0,
-    double errorMeters = 0,
-    double confidence = 0,
-  }) async {
-    final nonce = _acousticNonce;
-    if (nonce == null) return;
-    await _platform.sendRangingControl(
-      widget.peerId,
-      RangingControlProtocol.encode(
-        action: action,
-        technology: RangingTechnology.acoustic,
-        sessionNonce: nonce,
-        round: _acousticRound,
-        value: value,
-        errorMeters: errorMeters,
-        confidence: confidence,
+  void _onAcousticFailure(AcousticSonarFailure failure) {
+    if (!mounted) return;
+    final requiresSettings =
+        failure == AcousticSonarFailure.microphonePermission;
+    final message = switch (failure) {
+      AcousticSonarFailure.microphonePermission =>
+        context.l10n.radarSonarMicrophoneRequired,
+      AcousticSonarFailure.remoteMicrophonePermission =>
+        context.l10n.radarSonarRemoteMicrophoneRequired,
+      AcousticSonarFailure.selfChirpMissing =>
+        context.l10n.radarSonarSelfChirpMissing,
+      AcousticSonarFailure.tooNoisy ||
+      AcousticSonarFailure.timeout ||
+      AcousticSonarFailure.invalidMeasurement =>
+        context.l10n.radarSonarTooNoisy,
+    };
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: requiresSettings
+            ? SnackBarAction(
+                label: context.l10n.actionOpenSettings,
+                onPressed: Geolocator.openAppSettings,
+              )
+            : null,
       ),
     );
-  }
-
-  Future<void> _stopAcousticSonar({required bool notifyPeer}) async {
-    if (notifyPeer && _acousticNonce != null) {
-      await _sendAcoustic(RangingControlAction.stop);
-    }
-    await _acousticCapture.cancel();
-    _acousticTimeout?.cancel();
-    _acousticTimeout = null;
-    _acousticNonce = null;
-    _localAcousticObservation = null;
-    _remoteAcousticObservation = null;
-    if (mounted) setState(() => _acousticActive = false);
-  }
-
-  bool _bytesEqual(Uint8List first, Uint8List second) {
-    if (first.length != second.length) return false;
-    for (var index = 0; index < first.length; index++) {
-      if (first[index] != second[index]) return false;
-    }
-    return true;
-  }
-
-  void _armAcousticTimeout() {
-    _acousticTimeout?.cancel();
-    _acousticTimeout = Timer(const Duration(seconds: 15), () {
-      if (!_acousticActive) return;
-      unawaited(_stopAcousticSonar(notifyPeer: true));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.radarSonarTooNoisy)),
-        );
-      }
-    });
   }
 
   bool get _canRequestBeacon {
@@ -875,12 +702,11 @@ class _RadarScreenState extends State<RadarScreen>
     );
     unawaited(_platform.stopRadar());
     unawaited(_platform.stopRadioRanging());
-    unawaited(_acousticCapture.dispose());
+    unawaited(_acousticSession.dispose());
     _events?.cancel();
     _positions?.cancel();
     _compassEvents?.cancel();
     _ticker?.cancel();
-    _acousticTimeout?.cancel();
     _sweep.dispose();
     _pulse.dispose();
     super.dispose();

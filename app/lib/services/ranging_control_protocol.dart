@@ -48,6 +48,9 @@ class RangingControlProtocol {
   const RangingControlProtocol._();
 
   static const int version = 1;
+  static const int errorMicrophonePermission = 1;
+  static const int errorRoundFailed = 2;
+  static const int errorSelfChirpMissing = 3;
   static const int nonceSize = 16;
   static const int fixedSize = 38;
   static const int maximumOpaqueBytes = 1024;

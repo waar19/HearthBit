@@ -72,8 +72,23 @@ el consentimiento del radar.
 6. Comparar la distancia medida con una cinta métrica.
 7. Repetir a 5, 10 y 20 m y en presencia de ruido.
 
-Si no se detectan dos chirridos por ronda, HearthBit descarta la medición en vez
-de mostrar una distancia engañosa.
+La captura aplica un filtro Butterworth de 14–20,5 kHz antes de la correlación.
+El umbral usa el piso de ruido mediano dentro de esa banda y exige que el pico
+sea agudo respecto de sus lóbulos vecinos. La posición aproximada de la emisión
+local permite separar la señal propia, la cola completa del chirrido y sus ecos
+inmediatos (60 ms + 10 ms de guarda) de la señal remota, que el protocolo emite
+450 ms después.
+
+El receptor confirma `acousticReady` después de recibir el primer bloque real
+del micrófono. El iniciador espera esa confirmación antes de emitir; si el otro
+teléfono usa una versión anterior, continúa tras 1,5 s. Una ronda ruidosa se
+reintenta: se buscan tres rondas válidas, se aceptan al menos dos dentro de un
+máximo de cinco intentos y toda la sesión vence a los 25 s.
+
+Si no se alcanza ese mínimo, HearthBit descarta la medición en vez de mostrar
+una distancia engañosa. Si falta específicamente la señal propia, la interfaz
+indica revisar auriculares Bluetooth, altavoz y micrófono. La ausencia de
+permiso de micrófono se informa de forma distinta en cada teléfono.
 
 ## Notificación persistente Android
 

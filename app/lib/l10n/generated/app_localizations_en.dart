@@ -910,6 +910,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'The chirps could not be measured. Reduce noise, keep both phones uncovered, and try again.';
 
   @override
+  String get radarSonarRemoteMicrophoneRequired =>
+      'The other phone did not allow microphone access for sonar.';
+
+  @override
+  String get radarSonarSelfChirpMissing =>
+      'This phone could not detect its own signal. Disconnect Bluetooth headphones, uncover the speaker, and try again.';
+
+  @override
   String get radarSweepEstimateWarning =>
       'BLE can only estimate a broad sector, not an exact direction. Confirm it by moving and repeating the sweep.';
 

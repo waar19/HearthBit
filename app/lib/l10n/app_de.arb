@@ -271,6 +271,8 @@
   "radarSonarStop": "Akustisches Sonar beenden",
   "radarSonarMicrophoneRequired": "Das akustische Sonar benötigt Mikrofonzugriff.",
   "radarSonarTooNoisy": "Die Signaltöne konnten nicht gemessen werden. Reduziere Geräusche, decke die Telefone nicht ab und versuche es erneut.",
+  "radarSonarRemoteMicrophoneRequired": "Das andere Telefon hat den Mikrofonzugriff für das Sonar nicht erlaubt.",
+  "radarSonarSelfChirpMissing": "Dieses Telefon hat sein eigenes Signal nicht erkannt. Trenne Bluetooth-Kopfhörer, lege den Lautsprecher frei und versuche es erneut.",
   "radarSweepEstimateWarning": "BLE kann nur einen breiten Bereich schätzen, keine genaue Richtung. Bestätige ihn durch Bewegung und eine erneute Suche.",
   "radarCompassUnavailable": "Dieses Telefon hat keinen nutzbaren Kompasssensor. Das Näherungsradar bleibt verfügbar.",
   "radarCompassCalibration": "Entferne das Telefon von Metall oder Elektronik und bewege es zur Kompasskalibrierung in Form einer Acht.",

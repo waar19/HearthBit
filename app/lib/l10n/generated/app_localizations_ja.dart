@@ -881,6 +881,13 @@ class AppLocalizationsJa extends AppLocalizations {
       'チャープ音を測定できませんでした。周囲の騒音を減らし、両方の端末を覆わずに再試行してください。';
 
   @override
+  String get radarSonarRemoteMicrophoneRequired => '相手の端末でソナーのマイク使用が許可されていません。';
+
+  @override
+  String get radarSonarSelfChirpMissing =>
+      'この端末は自身の信号を検出できませんでした。Bluetoothイヤホンを外し、スピーカーを覆わずに再試行してください。';
+
+  @override
   String get radarSweepEstimateWarning =>
       'BLE で推定できるのは広い範囲だけで、正確な方向ではありません。移動して再度スイープし、確認してください。';
 

@@ -863,6 +863,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get radarSonarTooNoisy => '无法测量啁啾信号。请降低环境噪声，勿遮挡两部手机，然后重试。';
 
   @override
+  String get radarSonarRemoteMicrophoneRequired => '另一部手机未允许声纳使用麦克风。';
+
+  @override
+  String get radarSonarSelfChirpMissing => '此手机未检测到自身信号。请断开蓝牙耳机、勿遮挡扬声器，然后重试。';
+
+  @override
   String get radarSweepEstimateWarning =>
       'BLE 只能估计较宽的扇区，无法提供精确方向。请移动位置并重新扫描确认。';
 

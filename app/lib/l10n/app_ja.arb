@@ -271,6 +271,8 @@
   "radarSonarStop": "音響ソナーを停止",
   "radarSonarMicrophoneRequired": "音響ソナーにはマイクの許可が必要です。",
   "radarSonarTooNoisy": "チャープ音を測定できませんでした。周囲の騒音を減らし、両方の端末を覆わずに再試行してください。",
+  "radarSonarRemoteMicrophoneRequired": "相手の端末でソナーのマイク使用が許可されていません。",
+  "radarSonarSelfChirpMissing": "この端末は自身の信号を検出できませんでした。Bluetoothイヤホンを外し、スピーカーを覆わずに再試行してください。",
   "radarSweepEstimateWarning": "BLE で推定できるのは広い範囲だけで、正確な方向ではありません。移動して再度スイープし、確認してください。",
   "radarCompassUnavailable": "このスマートフォンではコンパスを利用できません。近接レーダーは引き続き使用できます。",
   "radarCompassCalibration": "金属や電子機器から離れ、スマートフォンを8の字に動かしてコンパスを調整してください。",

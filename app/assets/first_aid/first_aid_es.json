@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "locale": "es",
-  "reviewedAt": "2026-08-13",
+  "reviewedAt": "2026-08-15",
   "disclaimer": "Orientación general de primeros auxilios. No sustituye a emergencias ni a la formación certificada. Las prácticas locales varían: sigue al operador y a las autoridades locales.",
   "topics": [
     {
@@ -81,6 +81,24 @@
       ],
       "warnings": ["No enciendas llamas si puede haber una fuga de gas.", "Mover escombros puede causar derrumbes o agravar lesiones ocultas."],
       "sourceIds": ["ready-earthquake"]
+    },
+    {
+      "id": "android-earthquake-alerts",
+      "title": "Activar alertas sísmicas en Android",
+      "summary": "Comprueba ahora las alertas, la ubicación y la conexión; durante un sismo puede ser demasiado tarde.",
+      "steps": [
+        "Abre Ajustes y busca «Alertas de terremotos». En muchos teléfonos está en Seguridad y emergencias > Alertas de terremotos.",
+        "Activa Alertas de terremotos y la ubicación. Mantén Wi‑Fi o datos móviles disponibles: las alertas necesitan conexión.",
+        "Comprueba también las alertas inalámbricas de emergencia y las aplicaciones o canales oficiales de tu país.",
+        "Si la opción no aparece, actualiza Android y los Servicios de Google Play. La disponibilidad depende del país y del dispositivo."
+      ],
+      "warnings": [
+        "Ningún sistema puede predecir todos los terremotos ni garantizar una alerta.",
+        "Sismo Detector es un complemento de terceros; prioriza siempre las alertas oficiales."
+      ],
+      "sourceIds": [
+        "android-earthquake-alerts"
+      ]
     }
   ],
   "sources": [
@@ -104,6 +122,13 @@
       "publisher": "FEMA / Ready.gov",
       "url": "https://www.ready.gov/earthquakes",
       "published": "Consultado el 2026-08-13"
+    },
+    {
+      "id": "android-earthquake-alerts",
+      "title": "Android Earthquake Alerts: A global system for early warning",
+      "publisher": "Google Research",
+      "url": "https://research.google/blog/android-earthquake-alerts-a-global-system-for-early-warning/",
+      "published": "Consulted 2026-08-15"
     }
   ]
 }

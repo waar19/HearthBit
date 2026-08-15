@@ -828,6 +828,30 @@ puede acelerar considerablemente la descarga; registre el consumo y conecte el
 cargador cuando sea posible. El rol explícito `PHONE_BEACON` conserva su modo de
 supervivencia sin escaneo.
 
+### P0-SONAR-NOISE-01 — Escucha acústica con ruido y ecos
+
+Requiere Android e iPhone, cinta métrica y una fuente de música o voz:
+
+1. Conceda micrófono en ambos teléfonos, desconecte auriculares Bluetooth y
+   coloque los dispositivos descubiertos a 1, 3, 5 y 10 m.
+2. Mida tres veces en silencio y registre distancia, error y confianza.
+3. Repita con conversación y música grave a volumen normal junto a uno de los
+   teléfonos. Deben completarse al menos dos rondas válidas de cinco intentos,
+   sin mostrar distancias fuera del margen declarado.
+4. Coloque uno de los teléfonos a 30–50 cm de una pared para provocar eco. El
+   eco posterior a la señal local no debe reemplazar la señal remota.
+5. Cubra el altavoz local o conecte auriculares Bluetooth. La app debe indicar
+   que falta la señal propia, no confundirlo con ruido ambiental.
+6. Quite el permiso de micrófono primero al iniciador y luego al receptor. El
+   iniciador debe ofrecer abrir ajustes; cuando falla el receptor, el otro
+   teléfono debe informar que el permiso remoto no fue concedido.
+7. Repita con una versión anterior en un extremo. La sesión debe iniciar por el
+   fallback de 1,5 s aunque no reciba `acousticReady`.
+
+Criterio P0: ninguna ejecución puede producir una distancia válida a partir de
+un eco, ni quedar activa más de 25 s. Compare tasa de éxito, error absoluto y
+confianza con la compilación anterior.
+
 ## Evidencia a registrar
 
 - Modelos y versiones de Android/iOS.

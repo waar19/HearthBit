@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "locale": "en",
-  "reviewedAt": "2026-08-13",
+  "reviewedAt": "2026-08-15",
   "disclaimer": "General first-aid guidance only. It does not replace emergency services or certified training. Local practices vary: follow the emergency operator and local authorities.",
   "topics": [
     {
@@ -99,6 +99,24 @@
         "Moving debris can cause collapse or worsen hidden injuries."
       ],
       "sourceIds": ["ready-earthquake"]
+    },
+    {
+      "id": "android-earthquake-alerts",
+      "title": "Enable earthquake alerts on Android",
+      "summary": "Check alerts, location and connectivity now; during an earthquake it may be too late.",
+      "steps": [
+        "Open Settings and search for “Earthquake alerts”. On many phones it is under Safety & emergency > Earthquake alerts.",
+        "Turn on Earthquake alerts and location. Keep Wi‑Fi or mobile data available: alerts require connectivity.",
+        "Also check wireless emergency alerts and the official applications or channels for your country.",
+        "If the option is missing, update Android and Google Play services. Availability depends on country and device."
+      ],
+      "warnings": [
+        "No system can predict every earthquake or guarantee an alert.",
+        "Earthquake Network is a third-party supplement; always prioritize official alerts."
+      ],
+      "sourceIds": [
+        "android-earthquake-alerts"
+      ]
     }
   ],
   "sources": [
@@ -122,6 +140,13 @@
       "publisher": "FEMA / Ready.gov",
       "url": "https://www.ready.gov/earthquakes",
       "published": "Accessed 2026-08-13"
+    },
+    {
+      "id": "android-earthquake-alerts",
+      "title": "Android Earthquake Alerts: A global system for early warning",
+      "publisher": "Google Research",
+      "url": "https://research.google/blog/android-earthquake-alerts-a-global-system-for-early-warning/",
+      "published": "Consulted 2026-08-15"
     }
   ]
 }

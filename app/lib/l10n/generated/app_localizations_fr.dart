@@ -917,6 +917,14 @@ class AppLocalizationsFr extends AppLocalizations {
       'Les signaux n’ont pas pu être mesurés. Réduisez le bruit, laissez les téléphones découverts et réessayez.';
 
   @override
+  String get radarSonarRemoteMicrophoneRequired =>
+      'L’autre téléphone n’a pas autorisé l’accès au microphone pour le sonar.';
+
+  @override
+  String get radarSonarSelfChirpMissing =>
+      'Ce téléphone n’a pas détecté son propre signal. Déconnectez les écouteurs Bluetooth, dégagez le haut-parleur et réessayez.';
+
+  @override
   String get radarSweepEstimateWarning =>
       'Le BLE estime seulement un secteur large, pas une direction exacte. Confirmez-le en vous déplaçant et en recommençant.';
 

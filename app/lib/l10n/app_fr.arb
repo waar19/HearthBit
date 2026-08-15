@@ -271,6 +271,8 @@
   "radarSonarStop": "Arrêter le sonar acoustique",
   "radarSonarMicrophoneRequired": "Le sonar acoustique nécessite l’accès au microphone.",
   "radarSonarTooNoisy": "Les signaux n’ont pas pu être mesurés. Réduisez le bruit, laissez les téléphones découverts et réessayez.",
+  "radarSonarRemoteMicrophoneRequired": "L’autre téléphone n’a pas autorisé l’accès au microphone pour le sonar.",
+  "radarSonarSelfChirpMissing": "Ce téléphone n’a pas détecté son propre signal. Déconnectez les écouteurs Bluetooth, dégagez le haut-parleur et réessayez.",
   "radarSweepEstimateWarning": "Le BLE estime seulement un secteur large, pas une direction exacte. Confirmez-le en vous déplaçant et en recommençant.",
   "radarCompassUnavailable": "Ce téléphone ne dispose pas d’une boussole utilisable. Le radar de proximité reste disponible.",
   "radarCompassCalibration": "Éloignez le téléphone du métal ou des appareils électroniques et décrivez un huit pour calibrer la boussole.",

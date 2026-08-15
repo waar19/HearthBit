@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "locale": "de",
-  "reviewedAt": "2026-08-13",
+  "reviewedAt": "2026-08-15",
   "disclaimer": "Nur allgemeine Erste-Hilfe-Hinweise. Kein Ersatz für Rettungsdienst oder zertifizierte Ausbildung. Örtliche Vorgehensweisen unterscheiden sich: Befolge Leitstelle und Behörden.",
   "topics": [
     {
@@ -81,6 +81,24 @@
       ],
       "warnings": ["Keine Flamme entzünden, wenn Gas austreten könnte.", "Trümmerbewegung kann Einsturz verursachen oder verborgene Verletzungen verschlimmern."],
       "sourceIds": ["ready-earthquake"]
+    },
+    {
+      "id": "android-earthquake-alerts",
+      "title": "Erdbebenwarnungen unter Android aktivieren",
+      "summary": "Prüfe Warnungen, Standort und Verbindung jetzt; während eines Erdbebens kann es zu spät sein.",
+      "steps": [
+        "Öffne Einstellungen und suche nach „Erdbebenwarnungen“. Oft findest du sie unter Sicherheit und Notfälle > Erdbebenwarnungen.",
+        "Aktiviere Erdbebenwarnungen und den Standort. WLAN oder mobile Daten müssen verfügbar sein.",
+        "Prüfe auch drahtlose Notfallwarnungen sowie amtliche Apps und Kanäle deines Landes.",
+        "Fehlt die Option, aktualisiere Android und Google Play-Dienste. Die Verfügbarkeit hängt von Land und Gerät ab."
+      ],
+      "warnings": [
+        "Kein System kann jedes Erdbeben vorhersagen oder eine Warnung garantieren.",
+        "Earthquake Network ist nur eine Ergänzung eines Drittanbieters; amtliche Warnungen haben Vorrang."
+      ],
+      "sourceIds": [
+        "android-earthquake-alerts"
+      ]
     }
   ],
   "sources": [
@@ -104,6 +122,13 @@
       "publisher": "FEMA / Ready.gov",
       "url": "https://www.ready.gov/earthquakes",
       "published": "Abgerufen am 2026-08-13"
+    },
+    {
+      "id": "android-earthquake-alerts",
+      "title": "Android Earthquake Alerts: A global system for early warning",
+      "publisher": "Google Research",
+      "url": "https://research.google/blog/android-earthquake-alerts-a-global-system-for-early-warning/",
+      "published": "Consulted 2026-08-15"
     }
   ]
 }

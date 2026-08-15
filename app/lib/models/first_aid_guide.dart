@@ -15,6 +15,7 @@ class FirstAidGuide {
     'burns',
     'choking',
     'earthquake-debris',
+    'android-earthquake-alerts',
   };
 
   final int schemaVersion;

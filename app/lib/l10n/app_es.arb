@@ -271,6 +271,8 @@
   "radarSonarStop": "Detener sonar acústico",
   "radarSonarMicrophoneRequired": "El sonar acústico necesita permiso para usar el micrófono.",
   "radarSonarTooNoisy": "No fue posible medir los chirridos. Reduce el ruido, deja ambos teléfonos descubiertos e inténtalo de nuevo.",
+  "radarSonarRemoteMicrophoneRequired": "El otro teléfono no autorizó el uso del micrófono para el sonar.",
+  "radarSonarSelfChirpMissing": "Este teléfono no detectó su propia señal. Desconecta auriculares Bluetooth, descubre el altavoz y vuelve a intentarlo.",
   "radarSweepEstimateWarning": "BLE solo permite estimar un sector amplio, no una dirección exacta. Confírmalo moviéndote y repitiendo el barrido.",
   "radarCompassUnavailable": "Este teléfono no tiene una brújula utilizable. El radar de proximidad sigue disponible.",
   "radarCompassCalibration": "Aleja el teléfono de metales o equipos electrónicos y muévelo en forma de 8 para calibrar la brújula.",

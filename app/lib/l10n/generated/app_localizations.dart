@@ -1629,6 +1629,18 @@ abstract class AppLocalizations {
   /// **'The chirps could not be measured. Reduce noise, keep both phones uncovered, and try again.'**
   String get radarSonarTooNoisy;
 
+  /// No description provided for @radarSonarRemoteMicrophoneRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'The other phone did not allow microphone access for sonar.'**
+  String get radarSonarRemoteMicrophoneRequired;
+
+  /// No description provided for @radarSonarSelfChirpMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone could not detect its own signal. Disconnect Bluetooth headphones, uncover the speaker, and try again.'**
+  String get radarSonarSelfChirpMissing;
+
   /// No description provided for @radarSweepEstimateWarning.
   ///
   /// In en, this message translates to:
