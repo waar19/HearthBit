@@ -53,16 +53,17 @@
 	<array>
 		<string>_hearthbit._tcp</string>
 	</array>
-	<!-- iOS 26 Wi-Fi Aware declaration. Runtime transfer support remains
-	     disabled until DeviceDiscoveryUI pairing and real-device gates pass. -->
+	<!-- iOS 26 Wi-Fi Aware: servicio alineado con el nombre Android
+	     `hearthbit-hbt` (formato RFC 6763). Los valores Publishable y
+	     Subscribable deben ser diccionarios vacíos según Apple. -->
 	<key>WiFiAwareServices</key>
 	<dict>
-		<key>_hearthbit-transfer._tcp</key>
+		<key>_hearthbit-hbt._tcp</key>
 		<dict>
 			<key>Publishable</key>
-			<true/>
+			<dict/>
 			<key>Subscribable</key>
-			<true/>
+			<dict/>
 		</dict>
 	</dict>
 	<key>UIBackgroundModes</key>

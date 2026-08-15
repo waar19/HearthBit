@@ -361,18 +361,35 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       binaryMessenger: messenger
     ).setStreamHandler(plugin)
 
-    // Canal de transferencias: en iOS todavía no hay Nearby Connections ni
-    // Wi-Fi Aware (requiere iOS 26 + entitlement + DeviceDiscoveryUI), así
-    // que se responde con capacidades vacías y el selector Dart usa LAN/BLE.
+    // Canal de transferencias: Nearby Connections no existe en iOS, así que
+    // `nearby` sigue en false. Wi-Fi Aware está disponible en iOS 26+ vía
+    // HearthBitWiFiAwareTransport (solo entre dispositivos emparejados; Apple
+    // no ofrece data path por passphrase PSK, por lo que no interopera con
+    // Android). Si no está soportado, Dart cae automáticamente a LAN/BLE.
+    let transferEvents = HearthBitTransferEventHandler()
+    let wifiAwareTransport = HearthBitWiFiAwareTransport { event in
+      DispatchQueue.main.async {
+        transferEvents.emit(event)
+      }
+    }
     let transferMethods = FlutterMethodChannel(
       name: "com.hearthbit.transfer/methods",
       binaryMessenger: messenger
     )
     transferMethods.setMethodCallHandler { call, result in
+      let arguments = call.arguments as? [String: Any]
       switch call.method {
       case "getTransferCapabilities":
-        result(["nearby": false, "wifiAware": false])
-      case "nearbyStop", "wifiAwareStop":
+        result([
+          "nearby": false,
+          "wifiAware": HearthBitWiFiAwareTransport.isSupported,
+        ])
+      case "nearbyStop":
+        result(nil)
+      case "wifiAwareStop":
+        if let transferId = arguments?["transferId"] as? String {
+          wifiAwareTransport.stop(transferId: transferId)
+        }
         result(nil)
       case "nearbySendFile", "nearbyReceiveFile":
         result(
@@ -382,14 +399,61 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
             details: nil
           )
         )
-      case "wifiAwareSendFile", "wifiAwareReceiveFile":
-        result(
-          FlutterError(
-            code: "wifi_aware_unavailable",
-            message: HearthBitL10n.string("wifi_aware_unavailable"),
-            details: nil
+      case "wifiAwareSendFile":
+        guard HearthBitWiFiAwareTransport.isSupported else {
+          result(
+            FlutterError(
+              code: "wifi_aware_unavailable",
+              message: HearthBitL10n.string("wifi_aware_unavailable"),
+              details: nil
+            )
           )
+          return
+        }
+        guard
+          let transferId = arguments?["transferId"] as? String,
+          let filePath = arguments?["filePath"] as? String
+        else {
+          result(
+            FlutterError(
+              code: "bad_arguments",
+              message: "wifiAwareSendFile requires transferId and filePath",
+              details: nil
+            )
+          )
+          return
+        }
+        wifiAwareTransport.sendFile(transferId: transferId, filePath: filePath)
+        result(nil)
+      case "wifiAwareReceiveFile":
+        guard HearthBitWiFiAwareTransport.isSupported else {
+          result(
+            FlutterError(
+              code: "wifi_aware_unavailable",
+              message: HearthBitL10n.string("wifi_aware_unavailable"),
+              details: nil
+            )
+          )
+          return
+        }
+        guard
+          let transferId = arguments?["transferId"] as? String,
+          let destinationPath = arguments?["destinationPath"] as? String
+        else {
+          result(
+            FlutterError(
+              code: "bad_arguments",
+              message: "wifiAwareReceiveFile requires transferId and destinationPath",
+              details: nil
+            )
+          )
+          return
+        }
+        wifiAwareTransport.receiveFile(
+          transferId: transferId,
+          destinationPath: destinationPath
         )
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -397,7 +461,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     FlutterEventChannel(
       name: "com.hearthbit.transfer/events",
       binaryMessenger: messenger
-    ).setStreamHandler(HearthBitTransferEventStub())
+    ).setStreamHandler(transferEvents)
     return plugin
   }
 
@@ -7232,14 +7296,30 @@ private extension Data {
   }
 }
 
-/// Stream handler vacío para el canal de eventos de transferencia en iOS.
-final class HearthBitTransferEventStub: NSObject, FlutterStreamHandler {
+/// Stream handler del canal de eventos de transferencia: conserva el sink de
+/// Flutter y reenvía los eventos del transporte Wi-Fi Aware
+/// (`wifiAwareProgress`/`wifiAwareDone`/`wifiAwareError`). Debe usarse desde el
+/// hilo principal.
+final class HearthBitTransferEventHandler: NSObject, FlutterStreamHandler {
+  private var eventSink: FlutterEventSink?
+
+  /// Reenvía un evento a Dart; se descarta si nadie escucha el canal.
+  func emit(_ event: [String: Any]) {
+    eventSink?(event)
+  }
+
   func onListen(
     withArguments arguments: Any?,
     eventSink events: @escaping FlutterEventSink
-  ) -> FlutterError? { nil }
+  ) -> FlutterError? {
+    eventSink = events
+    return nil
+  }
 
-  func onCancel(withArguments arguments: Any?) -> FlutterError? { nil }
+  func onCancel(withArguments arguments: Any?) -> FlutterError? {
+    eventSink = nil
+    return nil
+  }
 }
 
 private enum IOSMeshError: LocalizedError {

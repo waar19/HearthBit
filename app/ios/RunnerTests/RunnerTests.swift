@@ -511,16 +511,29 @@ class RunnerTests: XCTestCase {
   }
 
   func testNoiseReplayWindowRejectsDuplicatesAndNoncesOlderThan1024() {
+    // Misma semántica que NoiseReplayWindow.kt en Android: los duplicados
+    // dentro de la ventana de 1024 se rechazan y los más antiguos quedan
+    // obsoletos.
     var window = IOSNoiseReplayWindow()
     for nonce in UInt32(0)...UInt32(1_100) {
       XCTAssertTrue(window.canAccept(nonce))
       window.markAccepted(nonce)
     }
     XCTAssertFalse(window.canAccept(1_100))
-    XCTAssertTrue(window.canAccept(77))
-    window.markAccepted(77)
+    // 77 está a distancia 1023: sigue dentro de la ventana y ya fue visto.
     XCTAssertFalse(window.canAccept(77))
+    // 76 está a distancia 1024: más antiguo que la ventana.
     XCTAssertFalse(window.canAccept(76))
+    XCTAssertFalse(window.canAccept(0))
+
+    // Fuera de orden: un nonce no visto dentro de la ventana se acepta una
+    // sola vez (espejo del caso Android con 1100/100/76).
+    var sparse = IOSNoiseReplayWindow()
+    sparse.markAccepted(1_100)
+    XCTAssertTrue(sparse.canAccept(100))
+    sparse.markAccepted(100)
+    XCTAssertFalse(sparse.canAccept(100))
+    XCTAssertFalse(sparse.canAccept(76))
   }
 
   func testNoiseCipherRejectsReplayAfterMoreThan1024AuthenticatedNonces() throws {
@@ -1230,5 +1243,252 @@ private final class TestSecurePinBackend {
         self?.data = nil
       }
     )
+  }
+}
+
+/// Grabador thread-safe de eventos emitidos por el transporte Wi-Fi Aware.
+private final class TransferEventRecorder {
+  private let lock = NSLock()
+  private var storage: [[String: Any]] = []
+
+  func record(_ event: [String: Any]) {
+    lock.lock()
+    storage.append(event)
+    lock.unlock()
+  }
+
+  var events: [[String: Any]] {
+    lock.lock()
+    defer { lock.unlock() }
+    return storage
+  }
+}
+
+final class WiFiAwareTransportTests: XCTestCase {
+  // MARK: Gating de capacidades
+
+  func testComputeSupportRequiresAllGates() {
+    XCTAssertTrue(
+      HearthBitWiFiAwareTransport.computeSupport(
+        osAvailable: true,
+        hardwareSupported: true,
+        servicePublishable: true,
+        serviceSubscribable: true,
+        entitlementPresent: true
+      )
+    )
+    for missingGate in 0..<5 {
+      XCTAssertFalse(
+        HearthBitWiFiAwareTransport.computeSupport(
+          osAvailable: missingGate != 0,
+          hardwareSupported: missingGate != 1,
+          servicePublishable: missingGate != 2,
+          serviceSubscribable: missingGate != 3,
+          entitlementPresent: missingGate != 4
+        ),
+        "El gate \(missingGate) en false debe desactivar el soporte"
+      )
+    }
+  }
+
+  func testServiceNameMatchesAndroidService() {
+    // Android publica `hearthbit-hbt`; en iOS el nombre RFC 6763 completo
+    // lleva prefijo `_` y sufijo `._tcp`.
+    XCTAssertEqual(HearthBitWiFiAwareTransport.serviceName, "_hearthbit-hbt._tcp")
+  }
+
+  func testSimulatorReportsUnsupported() throws {
+    #if targetEnvironment(simulator)
+      // La radio Wi-Fi Aware no existe en el simulador: el gating completo
+      // debe reportar false y el canal Dart caer a LAN/BLE.
+      XCTAssertFalse(HearthBitWiFiAwareTransport.isSupported)
+    #else
+      throw XCTSkip("Solo aplica al simulador")
+    #endif
+  }
+
+  // MARK: Framing compatible con Android
+
+  func testLengthHeaderIsBigEndianEightBytes() {
+    let header = HearthBitWiFiAwareTransport.encodeLengthHeader(0x0102_0304_0506_0708)
+    XCTAssertEqual([UInt8](header), [1, 2, 3, 4, 5, 6, 7, 8])
+    XCTAssertEqual(
+      [UInt8](HearthBitWiFiAwareTransport.encodeLengthHeader(0)),
+      [0, 0, 0, 0, 0, 0, 0, 0]
+    )
+  }
+
+  func testLengthHeaderRoundTrip() {
+    for length: UInt64 in [0, 1, 255, 256, 65_535, 0xFFFF_FFFF, .max] {
+      let encoded = HearthBitWiFiAwareTransport.encodeLengthHeader(length)
+      XCTAssertEqual(encoded.count, 8)
+      XCTAssertEqual(HearthBitWiFiAwareTransport.decodeLengthHeader(encoded), length)
+    }
+  }
+
+  func testLengthHeaderRejectsWrongSizes() {
+    XCTAssertNil(HearthBitWiFiAwareTransport.decodeLengthHeader(Data()))
+    XCTAssertNil(HearthBitWiFiAwareTransport.decodeLengthHeader(Data(count: 7)))
+    XCTAssertNil(HearthBitWiFiAwareTransport.decodeLengthHeader(Data(count: 9)))
+  }
+
+  // MARK: Contrato de eventos con Dart
+
+  func testEventContractMatchesDartKeys() {
+    let progress = HearthBitWiFiAwareTransport.progressEvent(
+      transferId: "t1",
+      bytes: 42
+    )
+    XCTAssertEqual(progress["type"] as? String, "wifiAwareProgress")
+    XCTAssertEqual(progress["transferId"] as? String, "t1")
+    XCTAssertEqual(progress["bytes"] as? Int, 42)
+    XCTAssertEqual(progress.count, 3)
+
+    let done = HearthBitWiFiAwareTransport.doneEvent(transferId: "t2")
+    XCTAssertEqual(done["type"] as? String, "wifiAwareDone")
+    XCTAssertEqual(done["transferId"] as? String, "t2")
+    XCTAssertEqual(done.count, 2)
+
+    let failure = HearthBitWiFiAwareTransport.errorEvent(
+      transferId: "t3",
+      message: "boom"
+    )
+    XCTAssertEqual(failure["type"] as? String, "wifiAwareError")
+    XCTAssertEqual(failure["transferId"] as? String, "t3")
+    XCTAssertEqual(failure["message"] as? String, "boom")
+    XCTAssertEqual(failure.count, 3)
+  }
+
+  // MARK: Comportamiento sin soporte (simulador / iOS < 26)
+
+  func testUnsupportedSendAndReceiveEmitErrorWithoutTasks() throws {
+    guard !HearthBitWiFiAwareTransport.isSupported else {
+      throw XCTSkip("El dispositivo soporta Wi-Fi Aware; este caso cubre el fallback")
+    }
+    let recorder = TransferEventRecorder()
+    let transport = HearthBitWiFiAwareTransport(
+      emit: recorder.record,
+      observeBackground: false
+    )
+    transport.sendFile(transferId: "send-1", filePath: "/tmp/none.hbt")
+    transport.receiveFile(transferId: "recv-1", destinationPath: "/tmp/out.hbt")
+
+    let events = recorder.events
+    XCTAssertEqual(events.count, 2)
+    XCTAssertTrue(events.allSatisfy { ($0["type"] as? String) == "wifiAwareError" })
+    XCTAssertEqual(events.first?["transferId"] as? String, "send-1")
+    XCTAssertEqual(events.last?["transferId"] as? String, "recv-1")
+    XCTAssertTrue(transport.activeTransferIds.isEmpty)
+  }
+
+  // MARK: Lifecycle y cancelación
+
+  func testStopCancelsOperationWithoutFurtherEvents() {
+    let recorder = TransferEventRecorder()
+    let transport = HearthBitWiFiAwareTransport(
+      emit: recorder.record,
+      observeBackground: false
+    )
+    let started = expectation(description: "operación iniciada")
+    let cancelled = expectation(description: "operación cancelada")
+    transport.startTransferOperation(transferId: "t1") {
+      started.fulfill()
+      while !Task.isCancelled {
+        try? await Task.sleep(nanoseconds: 5_000_000)
+      }
+      cancelled.fulfill()
+    }
+    wait(for: [started], timeout: 5)
+    XCTAssertEqual(transport.activeTransferIds, ["t1"])
+
+    transport.stop(transferId: "t1")
+    wait(for: [cancelled], timeout: 5)
+    XCTAssertTrue(transport.activeTransferIds.isEmpty)
+    // stop() no debe producir eventos posteriores hacia Dart.
+    XCTAssertTrue(recorder.events.isEmpty)
+  }
+
+  func testStopUnknownTransferIsNoOp() {
+    let recorder = TransferEventRecorder()
+    let transport = HearthBitWiFiAwareTransport(
+      emit: recorder.record,
+      observeBackground: false
+    )
+    transport.stop(transferId: "missing")
+    XCTAssertTrue(recorder.events.isEmpty)
+    XCTAssertTrue(transport.activeTransferIds.isEmpty)
+  }
+
+  func testCancelAllTransfersEmitsOneErrorPerActiveTransfer() {
+    let recorder = TransferEventRecorder()
+    let transport = HearthBitWiFiAwareTransport(
+      emit: recorder.record,
+      observeBackground: false
+    )
+    let startedA = expectation(description: "A iniciada")
+    let startedB = expectation(description: "B iniciada")
+    transport.startTransferOperation(transferId: "a") {
+      startedA.fulfill()
+      while !Task.isCancelled {
+        try? await Task.sleep(nanoseconds: 5_000_000)
+      }
+    }
+    transport.startTransferOperation(transferId: "b") {
+      startedB.fulfill()
+      while !Task.isCancelled {
+        try? await Task.sleep(nanoseconds: 5_000_000)
+      }
+    }
+    wait(for: [startedA, startedB], timeout: 5)
+    XCTAssertEqual(Set(transport.activeTransferIds), ["a", "b"])
+
+    transport.cancelAllTransfers(reason: "wifi_aware_background")
+    XCTAssertTrue(transport.activeTransferIds.isEmpty)
+
+    let events = recorder.events
+    XCTAssertEqual(events.count, 2)
+    XCTAssertTrue(events.allSatisfy { ($0["type"] as? String) == "wifiAwareError" })
+    XCTAssertTrue(
+      events.allSatisfy { ($0["message"] as? String) == "wifi_aware_background" }
+    )
+    XCTAssertEqual(
+      Set(events.compactMap { $0["transferId"] as? String }),
+      ["a", "b"]
+    )
+
+    // Sin transferencias activas, cancelar de nuevo no emite nada.
+    transport.cancelAllTransfers(reason: "wifi_aware_background")
+    XCTAssertEqual(recorder.events.count, 2)
+  }
+
+  // MARK: Stream handler del canal de eventos
+
+  func testTransferEventHandlerForwardsOnlyWhileListening() {
+    let handler = HearthBitTransferEventHandler()
+    var received: [Any?] = []
+
+    // Sin listener: los eventos se descartan sin fallar.
+    handler.emit(HearthBitTransferProtocolTestSupport.sampleEvent(id: "drop"))
+
+    XCTAssertNil(
+      handler.onListen(withArguments: nil) { event in
+        received.append(event)
+      }
+    )
+    handler.emit(HearthBitTransferProtocolTestSupport.sampleEvent(id: "live"))
+    XCTAssertEqual(received.count, 1)
+    let event = received.first as? [String: Any]
+    XCTAssertEqual(event?["transferId"] as? String, "live")
+
+    XCTAssertNil(handler.onCancel(withArguments: nil))
+    handler.emit(HearthBitTransferProtocolTestSupport.sampleEvent(id: "late"))
+    XCTAssertEqual(received.count, 1)
+  }
+}
+
+/// Utilidades compartidas por las pruebas del canal de transferencias.
+private enum HearthBitTransferProtocolTestSupport {
+  static func sampleEvent(id: String) -> [String: Any] {
+    HearthBitWiFiAwareTransport.doneEvent(transferId: id)
   }
 }
