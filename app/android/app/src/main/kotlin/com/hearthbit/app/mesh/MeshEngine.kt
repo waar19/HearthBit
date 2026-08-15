@@ -154,6 +154,26 @@ internal class MeshEngine(
     private val genericPresenceTracker = GenericBlePresenceTracker()
     @Volatile
     private var lanBridge: LinkAdapter? = null
+    @Volatile
+    private var meshtasticEnabled = false
+    private val meshtasticBridge = MeshtasticBleLinkAdapter(
+        context = context,
+        onFrame = { frame, sourceAddress -> receive(frame, sourceAddress) },
+        onState = { ready, deviceName ->
+            emit(
+                mapOf(
+                    "type" to "longRangeTrunk",
+                    "transport" to "meshtastic",
+                    "active" to ready,
+                    "deviceName" to deviceName,
+                ),
+            )
+            if (running) {
+                sendNodeCapability()
+                emit(stateSnapshot())
+            }
+        },
+    )
 
     /**
      * Dirección MAC -> peerId de vecinos directos. Se alimenta con el peerId
@@ -320,6 +340,7 @@ internal class MeshEngine(
         scheduleKeepAlive()
         radioRangingManager.registerCapabilities()
         startAdvertising()
+        if (meshtasticEnabled) meshtasticBridge.start()
     }
 
     fun ensureStarted() {
@@ -425,6 +446,22 @@ internal class MeshEngine(
         emit(stateSnapshot())
     }
 
+    /**
+     * Habilita explícitamente un radio Meshtastic cercano como troncal LoRa.
+     * Está apagado por defecto para no escanear ni conectarse a accesorios sin
+     * consentimiento de la persona.
+     */
+    fun configureMeshtasticBridge(enabled: Boolean) {
+        meshtasticEnabled = enabled
+        if (!enabled) {
+            meshtasticBridge.stop()
+        } else if (running) {
+            meshtasticBridge.start()
+        }
+        sendNodeCapability()
+        emit(stateSnapshot())
+    }
+
     fun injectRawMeshFrame(gatewayId: String, frame: ByteArray) {
         val normalized = gatewayId.lowercase()
         val bridge = lanBridge
@@ -451,6 +488,7 @@ internal class MeshEngine(
         stopRadar()
         beaconActuator.stop()
         radioRangingManager.stop()
+        meshtasticBridge.stop()
         pendingBeaconRequests.clear()
         outgoingBeaconRequests.clear()
         seenBeaconActions.clear()
@@ -1232,7 +1270,10 @@ internal class MeshEngine(
                     ttl = MeshProtocol.TTL,
                     timestamp = System.currentTimeMillis(),
                     senderId = identity.peerId,
-                    payload = NodeCapabilityProtocol.encode(localRole),
+                    payload = NodeCapabilityProtocol.encode(
+                        role = localRole,
+                        hasLongRangeTrunk = meshtasticBridge.isReady,
+                    ),
                 ),
             ),
         )
@@ -1688,6 +1729,7 @@ internal class MeshEngine(
             }
         }
         lanBridge?.let(links::add)
+        if (meshtasticBridge.isReady) links += meshtasticBridge
         return links
     }
 

@@ -75,6 +75,13 @@ class AppLocalizationsFr extends AppLocalizations {
       'Activée. Des observateurs proches peuvent corréler cet appareil grâce à un identifiant radio stable et les messages publics restent lisibles par le réseau.';
 
   @override
+  String get meshtasticInteropTitle => 'Radio Meshtastic longue portée';
+
+  @override
+  String get meshtasticInteropBody =>
+      'Désactivée par défaut. Une fois activée, HearthBit se connecte à une radio Meshtastic proche. Le contenu privé reste chiffré de bout en bout sur le maillage LoRa.';
+
+  @override
   String get externalPresenceNoChat =>
       'Présence réseau externe · sans discussion';
 

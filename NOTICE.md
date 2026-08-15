@@ -42,6 +42,10 @@ Git submodules. In particular:
   copyright and license headers.
 - Flutter packages, Android/iOS frameworks, Google Play Services and other
   dependencies remain governed by their respective licenses and terms.
+- `org.meshtastic:protobufs` and the Meshtastic protocol definitions retain
+  their upstream copyright and Apache-2.0 notices.
+- The optional `lxmf`/`rns` Python packages retain the upstream Reticulum
+  License; operators must review those terms before enabling that extra.
 
 When a directory or file contains its own license or copyright notice, that
 notice takes precedence for that material.

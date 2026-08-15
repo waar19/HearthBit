@@ -75,6 +75,13 @@ class AppLocalizationsZh extends AppLocalizations {
       '已开启。附近观察者可通过固定无线标识符关联此设备，网状网络仍可读取公开消息。';
 
   @override
+  String get meshtasticInteropTitle => 'Meshtastic 远距离无线电';
+
+  @override
+  String get meshtasticInteropBody =>
+      '默认关闭。启用后，HearthBit 会连接附近的一台 Meshtastic 无线电。私密内容在 LoRa 网状网络中仍保持端到端加密。';
+
+  @override
   String get externalPresenceNoChat => '外部网络设备 · 无法聊天';
 
   @override

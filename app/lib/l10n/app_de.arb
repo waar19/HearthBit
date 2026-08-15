@@ -21,6 +21,8 @@
   "privacyBitchatInteropTitle": "BitChat-Kompatibilität",
   "privacyBitchatInteropOffBody": "Aus. Öffentliche BitChat-Chats werden ausgeblendet. Externe Geräte bleiben ohne Chat sichtbar; nur ihre öffentlichen SOS-Alarme werden angezeigt.",
   "privacyBitchatInteropWarning": "An. Beobachter in der Nähe können dieses Gerät über eine stabile Funkkennung verfolgen; öffentliche Nachrichten bleiben für das Mesh lesbar.",
+  "meshtasticInteropTitle": "Meshtastic-Langstreckenfunk",
+  "meshtasticInteropBody": "Standardmäßig aus. Wenn aktiviert, verbindet HearthBit ein nahes Meshtastic-Funkgerät. Private Inhalte bleiben im LoRa-Mesh Ende-zu-Ende verschlüsselt.",
   "externalPresenceNoChat": "Externes Netzwerk · kein Chat",
   "externalNetworkBadge": "EXTERNES NETZWERK",
 

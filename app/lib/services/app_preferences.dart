@@ -15,6 +15,7 @@ class AppPreferences extends ChangeNotifier {
   static const _emergencyCountryKey = 'emergency.countryOverride.v1';
   static const _privacyPrivateModeKey = 'privacy.privateMode.v1';
   static const _bitchatInteropKey = 'privacy.bitchatInterop.v1';
+  static const _meshtasticEnabledKey = 'radio.meshtasticEnabled.v1';
 
   final SharedPreferencesAsync _preferences;
 
@@ -29,6 +30,7 @@ class AppPreferences extends ChangeNotifier {
   String? emergencyCountryOverride;
   bool privacyPrivateMode = true;
   bool bitchatInteropEnabled = false;
+  bool meshtasticEnabled = false;
 
   Future<void> initialize() async {
     onboardingComplete = await _preferences.getBool(_onboardingKey) ?? false;
@@ -57,6 +59,8 @@ class AppPreferences extends ChangeNotifier {
         await _preferences.getBool(_bitchatInteropKey) ?? false;
     final storedPrivateMode =
         await _preferences.getBool(_privacyPrivateModeKey) ?? true;
+    meshtasticEnabled =
+        await _preferences.getBool(_meshtasticEnabledKey) ?? false;
     // Mantener una sola política efectiva incluso si una versión anterior
     // escribió preferencias contradictorias.
     bitchatInteropEnabled = storedInterop;
@@ -152,6 +156,13 @@ class AppPreferences extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setMeshtasticEnabled(bool enabled) async {
+    if (meshtasticEnabled == enabled) return;
+    meshtasticEnabled = enabled;
+    await _preferences.setBool(_meshtasticEnabledKey, enabled);
+    notifyListeners();
+  }
+
   Future<void> panicWipe() async {
     await Future.wait([
       _preferences.remove(_onboardingKey),
@@ -164,6 +175,7 @@ class AppPreferences extends ChangeNotifier {
       _preferences.remove(_emergencyCountryKey),
       _preferences.remove(_privacyPrivateModeKey),
       _preferences.remove(_bitchatInteropKey),
+      _preferences.remove(_meshtasticEnabledKey),
     ]);
     onboardingComplete = false;
     amoledTheme = false;
@@ -175,6 +187,7 @@ class AppPreferences extends ChangeNotifier {
     emergencyCountryOverride = null;
     privacyPrivateMode = true;
     bitchatInteropEnabled = false;
+    meshtasticEnabled = false;
     notifyListeners();
   }
 }

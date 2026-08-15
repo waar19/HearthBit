@@ -24,6 +24,8 @@
   "privacyBitchatInteropTitle": "BitChat compatibility",
   "privacyBitchatInteropOffBody": "Off. BitChat public chat is hidden. External devices remain visible without chat, and only their public SOS alerts are shown.",
   "privacyBitchatInteropWarning": "On. Nearby observers can correlate this device through a stable radio identifier, and public messages remain readable by the mesh.",
+  "meshtasticInteropTitle": "Meshtastic long-range radio",
+  "meshtasticInteropBody": "Off by default. When enabled, HearthBit connects to one nearby Meshtastic radio. Private content stays end-to-end encrypted over its LoRa mesh.",
   "externalPresenceNoChat": "External network presence · no chat",
   "externalNetworkBadge": "EXTERNAL NETWORK",
 

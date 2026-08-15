@@ -13,6 +13,7 @@ from .identity import RelayIdentity
 from .lan import LanTransport
 from .matrix import HttpMatrixApi, MatrixBridge
 from .mqtt import MqttBridge, PahoMqttBroker
+from .reticulum import LxmfBackend, ReticulumBridge
 from .store import PacketStore
 from .trust import TrustStore
 
@@ -62,6 +63,16 @@ async def run(config_path: str | None) -> None:
         if config.matrix.enabled
         else None
     )
+    reticulum_transport = (
+        ReticulumBridge(
+            config.reticulum,
+            core,
+            LxmfBackend(config.reticulum),
+            identity_material=identity.noise_public_key,
+        )
+        if config.reticulum.enabled
+        else None
+    )
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -78,9 +89,13 @@ async def run(config_path: str | None) -> None:
             await mqtt_transport.start()
         if matrix_transport is not None:
             await matrix_transport.start()
+        if reticulum_transport is not None:
+            await reticulum_transport.start()
         await core.start()
         await stopped.wait()
     finally:
+        if reticulum_transport is not None:
+            await reticulum_transport.stop()
         if matrix_transport is not None:
             await matrix_transport.stop()
         if mqtt_transport is not None:

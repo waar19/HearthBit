@@ -42,6 +42,36 @@ insignia «red externa». El peer permanece visible como presencia externa sin
 chat. El `ANNOUNCE` de alcance completo previo al SOS también conserva su
 excepción de envío a enlaces no probados.
 
+## Matriz de transportes e interoperabilidad
+
+HearthBit mantiene el frame binario y su criptografía separados del medio de
+radio. Un transporte externo mueve bytes opacos: no puede eliminar firmas,
+terminar Noise ni reinterpretar identidades.
+
+- **BLE/BitChat:** transporte base disponible en Android e iOS. En modo privado
+  usa el token rotatorio y la prueba `HB-LINK1` descritos arriba.
+- **Wi-Fi Aware:** transporte de archivos grandes negociado dentro de una
+  sesión Noise ya autenticada. Android requiere API 29 para el data path con
+  puerto. El `transferId` no se anuncia: se derivan con SHA-256 y dominios
+  distintos un token de descubrimiento de 16 bytes y una passphrase WPA3. Si
+  Aware no está disponible, el selector cae a Nearby, LAN, BLE u óptico. iOS
+  26 requiere emparejamiento del sistema y permanece deshabilitado hasta pasar
+  los gates en Xcode y hardware real.
+- **Meshtastic:** integración Android opt-in con la Device API BLE oficial
+  (`6ba1b218-15a8-461f-9fa8-5dcae273eafd`). Los frames HearthBit fragmentados
+  caben en payloads de hasta 180 bytes y viajan en `PortNum.PRIVATE_APP` (256).
+  Meshtastic aporta radio LoRa y cifrado de canal; las firmas y sesiones
+  HearthBit siguen siendo la autoridad extremo a extremo. No se escanea ni se
+  conecta a un radio Meshtastic hasta que la persona activa el control.
+- **Reticulum/LXMF:** enlace opcional entre relays. LXMF cifra el transporte y
+  solo acepta hashes de destino y origen configurados explícitamente. Los
+  mensajes públicos HearthBit deben conservar una firma válida y una prueba de
+  identidad; los privados no salen de la malla local. Una ruta de bridges fuera
+  del frame corta bucles y las coordenadas de emergencia se bloquean por defecto.
+- **Ancla Bitle LoRa:** `LONG_RANGE_TRUNK` (`0x10`) solo se anuncia cuando el
+  troncal está operativo. La validación física `D1-LORA-01` sigue siendo
+  obligatoria antes de afirmar alcance entre barrios.
+
 ## Paquete v1
 
 Los enteros usan orden big-endian.

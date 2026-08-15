@@ -21,6 +21,8 @@
   "privacyBitchatInteropTitle": "BitChat 互換性",
   "privacyBitchatInteropOffBody": "無効です。BitChat の公開チャットは表示されません。外部端末はチャット不可の状態で表示され、公開 SOS のみ受信します。",
   "privacyBitchatInteropWarning": "有効です。近くの第三者が固定無線識別子でこの端末を追跡でき、公開メッセージはメッシュから読み取れます。",
+  "meshtasticInteropTitle": "Meshtastic 長距離無線",
+  "meshtasticInteropBody": "既定では無効です。有効にすると、近くの Meshtastic 無線機に接続します。プライベートな内容は LoRa メッシュ上でもエンドツーエンド暗号化されたままです。",
   "externalPresenceNoChat": "外部ネットワーク端末 · チャット不可",
   "externalNetworkBadge": "外部ネットワーク",
 

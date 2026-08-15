@@ -82,6 +82,7 @@ class MainActivity : FlutterActivity() {
                         "peripheralMode" to true,
                         "acousticSonar" to true,
                         "radioRanging" to (Build.VERSION.SDK_INT >= 36),
+                        "meshtastic" to true,
                         "nodeRoles" to listOf(
                             "PHONE_RELAY",
                             "PHONE_BEACON",
@@ -160,6 +161,12 @@ class MainActivity : FlutterActivity() {
                         enabled = call.argument<Boolean>("enabled") == true,
                         gatewayId = call.argument<String>("gatewayId"),
                         maxFrameSize = call.argument<Number>("maxFrameSize")?.toInt() ?: 2_048,
+                    )
+                    null
+                }
+                "configureMeshtasticBridge" -> runMethod(result) {
+                    MeshRuntime.engine(this).configureMeshtasticBridge(
+                        enabled = call.argument<Boolean>("enabled") == true,
                     )
                     null
                 }

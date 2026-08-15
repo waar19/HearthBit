@@ -16,7 +16,7 @@ The core app does not require an analytics service. Network access can still
 occur when a user:
 
 - loads online map tiles;
-- enables an MQTT, Matrix or LAN gateway;
+- enables an MQTT, Matrix, Reticulum/LXMF or LAN gateway;
 - follows an external link or donation link;
 - uses an operating-system or third-party transport such as Google Play
   Services Nearby.
@@ -47,6 +47,15 @@ still shown and labeled as external-network alerts. Such devices remain visible
 as external presence without chat actions. HearthBit identity and capability
 packets are not sent over an unproven BLE link; the full-reach announcement
 required for a public SOS is the documented exception.
+
+Wi-Fi Aware transfers do not publish the Noise-negotiated transfer ID. Android
+announces a one-way, transfer-specific discovery token and derives the WPA3
+data-path passphrase independently. The service name still lets a nearby
+observer infer that compatible software is active. Meshtastic support is
+disabled by default and requires explicit opt-in; once enabled, the phone scans
+for and connects to one compatible nearby radio. The radio and other nodes on
+its configured channel can observe Meshtastic routing metadata even though
+HearthBit private payloads remain Noise-encrypted.
 
 Public-channel messages are intended for channel participants and must not be
 treated as confidential. They are signed to detect tampering. Private messages
@@ -97,13 +106,16 @@ participant's device.
 
 ## Optional gateways
 
-MQTT, Matrix and LAN gateways intentionally move messages beyond the local BLE
-mesh. Enabling one changes the trust boundary: gateway operators and remote
-servers may process identifiers, message content and timestamps. Administrators
-must disclose that deployment and protect credentials, logs and broker/server
-access. External bridges block emergency frames carrying coordinates by
-default; forwarding them requires explicit operator consent. LAN binds to
-loopback by default, and MQTT egress requires a non-empty bridge allowlist.
+MQTT, Matrix, Reticulum/LXMF and LAN gateways intentionally move messages
+beyond the local BLE mesh. Enabling one changes the trust boundary: gateway
+operators and remote systems may process identifiers, message content and
+timestamps. Administrators must disclose that deployment and protect
+credentials, identities, logs and access. External bridges block emergency
+frames carrying coordinates by default; forwarding them requires explicit
+operator consent. LAN binds to loopback by default, MQTT egress requires a
+non-empty bridge allowlist, and Reticulum requires explicit 16-byte destination
+hashes and source allowlists. LXMF adds encrypted transport but does not hide
+packet timing or the fact that two Reticulum destinations communicate.
 
 ## Background behavior and battery
 

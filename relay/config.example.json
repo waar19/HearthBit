@@ -89,6 +89,16 @@
       "peer_ids": []
     }
   },
+  "reticulum": {
+    "enabled": false,
+    "storage_path": "/var/lib/hearthbit-relay/reticulum",
+    "rns_config_path": "",
+    "destination_hashes": [],
+    "source_allowlist": [],
+    "max_frame_size": 2048,
+    "max_gateway_hops": 8,
+    "allow_sensitive_emergency_coordinates": false
+  },
   "store": {
     "path": "/var/lib/hearthbit-relay/relay.db",
     "max_bytes": 67108864,

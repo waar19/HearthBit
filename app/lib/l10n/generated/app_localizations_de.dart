@@ -75,6 +75,13 @@ class AppLocalizationsDe extends AppLocalizations {
       'An. Beobachter in der Nähe können dieses Gerät über eine stabile Funkkennung verfolgen; öffentliche Nachrichten bleiben für das Mesh lesbar.';
 
   @override
+  String get meshtasticInteropTitle => 'Meshtastic-Langstreckenfunk';
+
+  @override
+  String get meshtasticInteropBody =>
+      'Standardmäßig aus. Wenn aktiviert, verbindet HearthBit ein nahes Meshtastic-Funkgerät. Private Inhalte bleiben im LoRa-Mesh Ende-zu-Ende verschlüsselt.';
+
+  @override
   String get externalPresenceNoChat => 'Externes Netzwerk · kein Chat';
 
   @override

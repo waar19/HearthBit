@@ -22,6 +22,8 @@ devices exposing the compatible service.
   `_hearthbit._tcp.local`, and loop prevention outside the BitChat frame.
 - Opt-in MQTT 5 and Matrix bridges for signed public messages; neither carries
   private data.
+- Opt-in Reticulum/LXMF bridge for verified signed public messages between
+  explicitly allowlisted relay destinations; private traffic is never exported.
 - systemd service, container, and local Home Assistant add-on.
 
 Relay rules match the anchor firmware: packets are not forwarded when TTL is
@@ -101,6 +103,11 @@ as central and peripheral simultaneously.
   See [`../docs/mqtt-bridge.md`](../docs/mqtt-bridge.md).
 - `matrix`: disabled bridge requiring HTTPS and a sender allowlist. See
   [`../docs/matrix-bridge.md`](../docs/matrix-bridge.md).
+- `reticulum`: disabled LXMF bridge requiring explicit 16-byte destination
+  hashes and source allowlists. Install it with
+  `pip install -e ".[reticulum]"`. Only verified signed public messages cross
+  the bridge, and emergency coordinates remain blocked unless the operator
+  opts in.
 - `store.max_bytes`, `store.max_packets`, and `store.packet_ttl_seconds`: hard
   persistence limits.
 - `store.require_signature`: requires the signature flag before persistence.

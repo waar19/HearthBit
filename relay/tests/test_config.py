@@ -21,6 +21,36 @@ def test_privacy_defaults_bind_lan_to_loopback() -> None:
     assert config.lan.listen_host == "127.0.0.1"
     assert not config.mqtt.allow_sensitive_emergency_coordinates
     assert not config.matrix.allow_sensitive_emergency_coordinates
+    assert not config.reticulum.allow_sensitive_emergency_coordinates
+    assert not config.reticulum.enabled
+
+
+def test_reticulum_requires_explicit_bidirectional_allowlists(tmp_path) -> None:
+    path = tmp_path / "config.json"
+    path.write_text(
+        json.dumps({"reticulum": {"enabled": True}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="destination_hashes"):
+        load_config(path)
+
+    path.write_text(
+        json.dumps(
+            {
+                "reticulum": {
+                    "enabled": True,
+                    "destination_hashes": ["11" * 16],
+                    "source_allowlist": ["22" * 16],
+                    "storage_path": str(tmp_path / "rns"),
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(path)
+    assert config.reticulum.destination_hashes == frozenset({b"\x11" * 16})
+    assert config.reticulum.source_allowlist == frozenset({b"\x22" * 16})
 
 
 def test_identity_role_and_presence_interval_are_configurable(tmp_path) -> None:

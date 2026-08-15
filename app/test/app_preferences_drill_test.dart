@@ -50,12 +50,15 @@ void main() {
     await defaults.initialize();
     expect(defaults.privacyPrivateMode, isTrue);
     expect(defaults.bitchatInteropEnabled, isFalse);
+    expect(defaults.meshtasticEnabled, isFalse);
 
     await defaults.setBitchatInteropEnabled(true);
+    await defaults.setMeshtasticEnabled(true);
     final restored = AppPreferences();
     await restored.initialize();
     expect(restored.privacyPrivateMode, isFalse);
     expect(restored.bitchatInteropEnabled, isTrue);
+    expect(restored.meshtasticEnabled, isTrue);
 
     await restored.setPrivacyPrivateMode(true);
     final privateAgain = AppPreferences();
@@ -76,6 +79,7 @@ void main() {
     await preferences.setGatewayOptIn(true);
     await preferences.setEmergencyCountryOverride('CO');
     await preferences.setBitchatInteropEnabled(true);
+    await preferences.setMeshtasticEnabled(true);
 
     await preferences.panicWipe();
 
@@ -87,6 +91,7 @@ void main() {
     expect(restored.emergencyCountryOverride, isNull);
     expect(restored.privacyPrivateMode, isTrue);
     expect(restored.bitchatInteropEnabled, isFalse);
+    expect(restored.meshtasticEnabled, isFalse);
 
     preferences.dispose();
     restored.dispose();

@@ -441,6 +441,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           "peripheralMode": true,
           "acousticSonar": true,
           "radioRanging": false,
+          "meshtastic": false,
           "nodeRoles": IOSMeshNodeRole.allCases.map(\.rawValue),
         ])
       case "getInstalledApkForShare":

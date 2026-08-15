@@ -1,6 +1,8 @@
 import asyncio
 from dataclasses import replace
 
+import pytest
+
 from hearthbit_relay.config import (
     FloodConfig,
     IdentityVerificationConfig,
@@ -532,7 +534,13 @@ async def test_rate_limit_reserves_capacity_for_emergency() -> None:
     store.close()
 
 
-async def test_external_bridge_has_independent_bucket_and_sos_reserve() -> None:
+@pytest.mark.parametrize(
+    "bridge_id",
+    ("mqtt:bridge-a", "matrix:bridge-a", "reticulum:bridge-a"),
+)
+async def test_external_bridge_has_independent_bucket_and_sos_reserve(
+    bridge_id: str,
+) -> None:
     config = replace(
         relay_config(),
         flood=FloodConfig(
@@ -558,19 +566,19 @@ async def test_external_bridge_has_independent_bucket_and_sos_reserve() -> None:
 
     assert (
         await core.inbound(
-            "mqtt:bridge-a",
+            bridge_id,
             packet(b"sender01", b"normal", 1),
         )
     ).accepted
     assert (
         await core.inbound(
-            "mqtt:bridge-a",
+            bridge_id,
             packet(b"sender02", b"normal", 2),
         )
     ).reason == "rate-limited"
     assert (
         await core.inbound(
-            "mqtt:bridge-a",
+            bridge_id,
             packet(b"sender03", b"SOS|help||", 3),
         )
     ).accepted

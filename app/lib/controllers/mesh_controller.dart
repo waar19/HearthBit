@@ -65,6 +65,7 @@ class MeshController extends ChangeNotifier {
        _drillModeEnabled = preferences?.drillModeEnabled ?? false,
        _privateMode = preferences?.privacyPrivateMode ?? true,
        _bitchatInteropEnabled = preferences?.bitchatInteropEnabled ?? false,
+       _meshtasticEnabled = preferences?.meshtasticEnabled ?? false,
        peerLocations = locationTracker ?? PeerLocationTracker() {
     peerLocations.addListener(_notifyLocationChanged);
     preferences?.addListener(_handlePreferencesChanged);
@@ -110,6 +111,7 @@ class MeshController extends ChangeNotifier {
   MeshNodeRole localRole = MeshNodeRole.phoneRelay;
   String? lastError;
   bool supportsBackgroundRelay = false;
+  bool supportsMeshtastic = false;
   DateTime? radarConsentUntil;
   PendingBeaconRequest? pendingBeaconRequest;
   bool localBeaconActive = false;
@@ -146,9 +148,11 @@ class MeshController extends ChangeNotifier {
   bool _drillModeEnabled;
   bool _privateMode;
   bool _bitchatInteropEnabled;
+  bool _meshtasticEnabled;
 
   List<MeshMessage> get messages => List.unmodifiable(_messages);
   bool get bitchatInteropEnabled => _bitchatInteropEnabled;
+  bool get meshtasticEnabled => _meshtasticEnabled;
   List<EmergencyDelivery> get emergencyDeliveries =>
       List.unmodifiable(_emergencyDeliveries);
   bool get drillModeEnabled => _drillModeEnabled;
@@ -275,10 +279,14 @@ class MeshController extends ChangeNotifier {
     _subscription = _platform.events.listen(_handleEventSafely);
     final capabilities = await _platform.getCapabilities();
     supportsBackgroundRelay = capabilities['backgroundRelay'] as bool? ?? false;
+    supportsMeshtastic = capabilities['meshtastic'] as bool? ?? false;
     await _platform.configurePrivacyMode(
       privateMode: _privateMode,
       bitchatInteropEnabled: _bitchatInteropEnabled,
     );
+    if (_meshtasticEnabled && supportsMeshtastic) {
+      await _platform.configureMeshtasticBridge(enabled: true);
+    }
     await _restoreNativeRescueMode();
     await refreshPowerStatus();
     if (_preferences?.meshDesiredActive == true) {
@@ -1835,6 +1843,14 @@ class MeshController extends ChangeNotifier {
           bitchatInteropEnabled: interop,
         ),
       );
+      changed = true;
+    }
+    final meshtastic = _preferences?.meshtasticEnabled ?? false;
+    if (meshtastic != _meshtasticEnabled) {
+      _meshtasticEnabled = meshtastic;
+      if (supportsMeshtastic) {
+        unawaited(_platform.configureMeshtasticBridge(enabled: meshtastic));
+      }
       changed = true;
     }
     if (changed) notifyListeners();

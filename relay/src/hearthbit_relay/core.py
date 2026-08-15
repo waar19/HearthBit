@@ -410,7 +410,7 @@ class RelayCore:
             capacity=sender_capacity,
         ):
             return False
-        if source_id.startswith(("mqtt:", "matrix:")):
+        if source_id.startswith(("mqtt:", "matrix:", "reticulum:")):
             return self._consume_bucket(
                 (
                     "bridge-emergency" if emergency else "bridge",

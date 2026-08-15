@@ -75,6 +75,13 @@ class AppLocalizationsJa extends AppLocalizations {
       '有効です。近くの第三者が固定無線識別子でこの端末を追跡でき、公開メッセージはメッシュから読み取れます。';
 
   @override
+  String get meshtasticInteropTitle => 'Meshtastic 長距離無線';
+
+  @override
+  String get meshtasticInteropBody =>
+      '既定では無効です。有効にすると、近くの Meshtastic 無線機に接続します。プライベートな内容は LoRa メッシュ上でもエンドツーエンド暗号化されたままです。';
+
+  @override
   String get externalPresenceNoChat => '外部ネットワーク端末 · チャット不可';
 
   @override

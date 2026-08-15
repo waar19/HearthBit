@@ -75,6 +75,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'On. Nearby observers can correlate this device through a stable radio identifier, and public messages remain readable by the mesh.';
 
   @override
+  String get meshtasticInteropTitle => 'Meshtastic long-range radio';
+
+  @override
+  String get meshtasticInteropBody =>
+      'Off by default. When enabled, HearthBit connects to one nearby Meshtastic radio. Private content stays end-to-end encrypted over its LoRa mesh.';
+
+  @override
   String get externalPresenceNoChat => 'External network presence · no chat';
 
   @override

@@ -155,6 +155,20 @@ class MeshPlatformService {
     });
   }
 
+  /// Conecta, con consentimiento explícito, un nodo Meshtastic cercano como
+  /// troncal LoRa. En plataformas sin soporte el método es un no-op seguro.
+  Future<void> configureMeshtasticBridge({required bool enabled}) async {
+    try {
+      await _methods.invokeMethod<void>('configureMeshtasticBridge', {
+        'enabled': enabled,
+      });
+    } on MissingPluginException {
+      // Plataforma sin cliente Meshtastic nativo.
+    } on PlatformException {
+      // El controlador mostrará la ausencia del enlace mediante el snapshot.
+    }
+  }
+
   Future<void> setLanDiscoveryEnabled(bool enabled) {
     return _methods.invokeMethod<void>('setLanDiscoveryEnabled', {
       'enabled': enabled,

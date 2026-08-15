@@ -220,6 +220,18 @@ abstract class AppLocalizations {
   /// **'On. Nearby observers can correlate this device through a stable radio identifier, and public messages remain readable by the mesh.'**
   String get privacyBitchatInteropWarning;
 
+  /// No description provided for @meshtasticInteropTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Meshtastic long-range radio'**
+  String get meshtasticInteropTitle;
+
+  /// No description provided for @meshtasticInteropBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Off by default. When enabled, HearthBit connects to one nearby Meshtastic radio. Private content stays end-to-end encrypted over its LoRa mesh.'**
+  String get meshtasticInteropBody;
+
   /// No description provided for @externalPresenceNoChat.
   ///
   /// In en, this message translates to:

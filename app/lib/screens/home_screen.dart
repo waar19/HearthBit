@@ -954,7 +954,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         await _changeNickname(controller);
         return;
       case _AppMenuAction.privacy:
-        await _showPrivacy();
+        await _showPrivacy(controller);
         return;
       case _AppMenuAction.support:
         await _openExternal(InviteShareService.donationUri);
@@ -968,8 +968,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _showPrivacy() async {
+  Future<void> _showPrivacy(MeshController controller) async {
     var interopEnabled = widget.preferences.bitchatInteropEnabled;
+    var meshtasticEnabled = widget.preferences.meshtasticEnabled;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -998,6 +999,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     setDialogState(() => interopEnabled = enabled);
                   },
                 ),
+                if (controller.supportsMeshtastic) ...[
+                  const Divider(),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(context.l10n.meshtasticInteropTitle),
+                    subtitle: Text(context.l10n.meshtasticInteropBody),
+                    value: meshtasticEnabled,
+                    onChanged: (enabled) async {
+                      await widget.preferences.setMeshtasticEnabled(enabled);
+                      if (!mounted) return;
+                      setDialogState(() => meshtasticEnabled = enabled);
+                    },
+                  ),
+                ],
               ],
             ),
           ),
