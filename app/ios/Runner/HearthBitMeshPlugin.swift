@@ -307,6 +307,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var genericPresenceWindowStartTimer: Timer?
   private var genericPresenceWindowEndTimer: Timer?
   private var restoredPeripheralService = false
+  private var configuredPeripheralRole: IOSMeshNodeRole?
   private var lastSubscriptionAnnouncement: [UUID: Date] = [:]
   private var lifecycleObservers: [NSObjectProtocol] = []
   private var eventSink: FlutterEventSink?
@@ -1066,6 +1067,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     peripheralManager?.removeAllServices()
     localCharacteristic = nil
     restoredPeripheralService = false
+    configuredPeripheralRole = nil
     sessions.removeAll()
     responderCandidates.removeAll()
     securePeerIDs.removeAll()
@@ -1199,6 +1201,14 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
 
   private func configurePeripheralMode() {
     guard let peripheralManager, peripheralManager.state == .poweredOn else { return }
+    if configuredPeripheralRole == localRole {
+      if !peripheralManager.isAdvertising {
+        peripheralManager.startAdvertising([
+          CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID]
+        ])
+      }
+      return
+    }
     restoredPeripheralService = false
     peripheralManager.stopAdvertising()
     peripheralManager.removeAllServices()
@@ -1211,6 +1221,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       peripheralManager.startAdvertising([
         CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID]
       ])
+      configuredPeripheralRole = localRole
       return
     }
 
@@ -1224,6 +1235,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     service.characteristics = [characteristic]
     localCharacteristic = characteristic
     peripheralManager.add(service)
+    configuredPeripheralRole = localRole
     peripheralManager.startAdvertising([
       CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID]
     ])
@@ -2383,7 +2395,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     }
   }
 
-  private func sendSubscriptionAnnouncement(to central: CBCentral) {
+  private func sendSubscriptionAnnouncement(
+    to central: CBCentral,
+    bypassCooldown: Bool = false
+  ) {
     guard
       running,
       localRole.allowsDataPlane,
@@ -2398,7 +2413,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       return
     }
     let now = Date()
-    if let previous = lastSubscriptionAnnouncement[central.identifier],
+    if !bypassCooldown,
+       let previous = lastSubscriptionAnnouncement[central.identifier],
        now.timeIntervalSince(previous) < Self.subscriptionAnnouncementCooldown {
       return
     }
@@ -2587,7 +2603,13 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func receive(_ data: Data, source: UUID?) {
     if data == IOSMeshInteropPolicy.linkProof, let source {
       if hearthbitProvenLinks.insert(source).inserted {
-        sendAnnouncement()
+        if let central = localCharacteristic?.subscribedCentrals?.first(where: {
+          $0.identifier == source
+        }) {
+          sendSubscriptionAnnouncement(to: central, bypassCooldown: true)
+        } else {
+          sendAnnouncement()
+        }
       }
       return
     }
@@ -4098,6 +4120,7 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
       running
     else { return }
     guard peripheral.state == .poweredOn else {
+      configuredPeripheralRole = nil
       if peripheral.state == .unsupported || peripheral.state == .unauthorized {
         emitError(HearthBitL10n.string("no_advertising"))
         emitStatus("degraded")
@@ -4110,6 +4133,7 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
       localCharacteristic != nil
     {
       restoredPeripheralService = false
+      configuredPeripheralRole = localRole
       peripheral.startAdvertising([
         CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID]
       ])
@@ -4241,6 +4265,7 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
     guard localRole.allowsDataPlane else {
       localCharacteristic = nil
       restoredPeripheralService = false
+      configuredPeripheralRole = localRole
       peripheral.stopAdvertising()
       peripheral.removeAllServices()
       return
@@ -4251,6 +4276,9 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
         .compactMap { $0 as? CBMutableCharacteristic }
         .first(where: { $0.uuid == Self.characteristicUUID })
       restoredPeripheralService = localCharacteristic != nil
+      if restoredPeripheralService {
+        configuredPeripheralRole = localRole
+      }
     }
   }
 }
