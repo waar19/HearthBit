@@ -58,6 +58,53 @@ void main() {
       expect(reading!.trend, RadarTrend.steady);
     });
 
+    test('un pico aislado no saca la tendencia de estable', () {
+      final processor = RadarSignalProcessor(
+        smoothingFactor: 1,
+        medianWindowSize: 1,
+        trendWindow: const Duration(seconds: 2),
+        trendThresholdDb: 2,
+      );
+      final start = DateTime(2026, 8, 12, 10);
+      final samples = [-70, -70, -70, -66, -70, -70];
+      final trends = <RadarTrend>[];
+
+      for (var i = 0; i < samples.length; i++) {
+        trends.add(
+          processor
+              .addSample(samples[i], start.add(Duration(seconds: i)))
+              .trend,
+        );
+      }
+
+      expect(trends.skip(2), everyElement(RadarTrend.steady));
+    });
+
+    test('exige dos ventanas antes de confirmar alejamiento', () {
+      final processor = RadarSignalProcessor(
+        smoothingFactor: 1,
+        medianWindowSize: 1,
+        trendWindow: const Duration(seconds: 2),
+        trendThresholdDb: 2,
+      );
+      final start = DateTime(2026, 8, 12, 10);
+      for (var i = 0; i < 3; i++) {
+        processor.addSample(-60, start.add(Duration(seconds: i)));
+      }
+
+      final firstDrop = processor.addSample(
+        -65,
+        start.add(const Duration(seconds: 3)),
+      );
+      final sustainedDrop = processor.addSample(
+        -70,
+        start.add(const Duration(seconds: 4)),
+      );
+
+      expect(firstDrop.trend, RadarTrend.steady);
+      expect(sustainedDrop.trend, RadarTrend.receding);
+    });
+
     test('clasifica bandas de proximidad según el RSSI', () {
       expect(
         RadarSignalProcessor().addSample(-45, DateTime.now()).proximity,
