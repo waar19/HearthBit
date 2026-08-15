@@ -98,6 +98,8 @@ internal class MeshEngine(
     private val knownDeviceLastSeenAt = ConcurrentHashMap<String, Long>()
     private val reconnectPeerByAddress = ConcurrentHashMap<String, String>()
     private val autoReconnectExpiryByAddress = ConcurrentHashMap<String, Long>()
+    private val autoReconnectFailuresByAddress = ConcurrentHashMap<String, Int>()
+    private val autoReconnectCooldownUntil = ConcurrentHashMap<String, Long>()
     private val autoReconnectAddresses = ConcurrentHashMap.newKeySet<String>()
     private val autoReconnectScheduledAddresses = ConcurrentHashMap.newKeySet<String>()
     private val overflowCandidateAddresses = ConcurrentHashMap.newKeySet<String>()
@@ -516,6 +518,8 @@ internal class MeshEngine(
         knownDeviceLastSeenAt.clear()
         reconnectPeerByAddress.clear()
         autoReconnectExpiryByAddress.clear()
+        autoReconnectFailuresByAddress.clear()
+        autoReconnectCooldownUntil.clear()
         autoReconnectAddresses.clear()
         autoReconnectScheduledAddresses.clear()
         overflowCandidateAddresses.clear()
@@ -662,6 +666,8 @@ internal class MeshEngine(
         clientGatts.clear()
         reconnectPeerByAddress.clear()
         autoReconnectExpiryByAddress.clear()
+        autoReconnectFailuresByAddress.clear()
+        autoReconnectCooldownUntil.clear()
         autoReconnectAddresses.clear()
         autoReconnectScheduledAddresses.clear()
         overflowCandidateAddresses.clear()
@@ -1026,6 +1032,8 @@ internal class MeshEngine(
         hearthbitProvenAddresses.clear()
         reconnectPeerByAddress.clear()
         autoReconnectExpiryByAddress.clear()
+        autoReconnectFailuresByAddress.clear()
+        autoReconnectCooldownUntil.clear()
         autoReconnectAddresses.clear()
         autoReconnectScheduledAddresses.clear()
         overflowCandidateAddresses.clear()
@@ -1834,6 +1842,8 @@ internal class MeshEngine(
         }
         autoReconnectAddresses.remove(address)
         autoReconnectExpiryByAddress.remove(address)
+        autoReconnectFailuresByAddress.remove(address)
+        autoReconnectCooldownUntil.remove(address)
         overflowCandidateAddresses.remove(address)
         notifyNotificationObserver()
         rescheduleKeepAlive()
@@ -3430,9 +3440,18 @@ internal class MeshEngine(
 
     @SuppressLint("MissingPermission")
     private fun handleIosOverflowCandidate(result: ScanResult, mask: ByteArray) {
+        val discoveryUrgent = isDiscoveryUrgent()
+        val overflowSettings = OverflowDiscoveryPolicy.settings(
+            radarActive = radarPeerId != null,
+            rescueActive = discoveryUrgent && radarPeerId == null,
+        )
         if (!OverflowAreaMatcher.hasAnyService(mask) ||
             result.rssi < MIN_OVERFLOW_CANDIDATE_RSSI ||
-            !hasDisconnectedKnownPeer()
+            !OverflowDiscoveryPolicy.shouldConsiderCandidate(
+                hasDisconnectedKnownPeer = hasDisconnectedKnownPeer(),
+                radarActive = radarPeerId != null,
+                rescueActive = discoveryUrgent && radarPeerId == null,
+            )
         ) {
             return
         }
@@ -3444,7 +3463,7 @@ internal class MeshEngine(
         overflowCandidateCooldownUntil.entries.removeIf { it.value <= now }
         if ((overflowCandidateCooldownUntil[address] ?: 0L) > now ||
             clientGatts.containsKey(address) ||
-            overflowCandidateAddresses.size >= MAX_OVERFLOW_CANDIDATES
+            overflowCandidateAddresses.size >= overflowSettings.maximumCandidates
         ) {
             return
         }
@@ -3464,6 +3483,15 @@ internal class MeshEngine(
         )
         if (!connected) overflowMaskByAddress.remove(address)
     }
+
+    private fun isDiscoveryUrgent(): Boolean =
+        radarPeerId != null || RescueModeStore(context).read().active
+
+    private fun overflowCandidateCooldownMs(): Long =
+        OverflowDiscoveryPolicy.settings(
+            radarActive = radarPeerId != null,
+            rescueActive = radarPeerId == null && RescueModeStore(context).read().active,
+        ).cooldownMs
 
     private fun hasDisconnectedKnownPeer(): Boolean {
         val knownPeerIds = peersWithSessionHistory.toSet() + peers.keys
@@ -3522,9 +3550,10 @@ internal class MeshEngine(
         overflowMaskByAddress.remove(address)
         if (wasOverflowCandidate) {
             overflowCandidateCooldownUntil[address] =
-                System.currentTimeMillis() + OVERFLOW_CANDIDATE_COOLDOWN_MS
+                System.currentTimeMillis() + overflowCandidateCooldownMs()
         }
-        autoReconnectAddresses.remove(address)
+        val wasAutoReconnect = autoReconnectAddresses.remove(address)
+        recordAutoReconnectFailure(address, wasAutoReconnect)
         clientGatts.remove(address, gatt)
         clientCharacteristics.remove(address)
         clientMaximumGattValueSizes.remove(address)
@@ -3565,7 +3594,11 @@ internal class MeshEngine(
         val expiry = autoReconnectExpiryByAddress.compute(address) { _, existing ->
             existing?.takeIf { it > now } ?: now + AUTO_RECONNECT_WINDOW_MS
         } ?: return
-        if (expiry <= now ||
+        if (expiry <= now) {
+            clearAutoReconnectBackoff(address)
+            return
+        }
+        if (
             clientGatts.containsKey(address) ||
             autoReconnectAddresses.size >= MAX_AUTO_RECONNECTS ||
             !autoReconnectScheduledAddresses.add(address)
@@ -3574,6 +3607,13 @@ internal class MeshEngine(
         }
 
         reconnectPeerByAddress[address] = peerId
+        val cooldownUntil = autoReconnectCooldownUntil[address] ?: 0L
+        val reconnectDelayMs = if (cooldownUntil > now) {
+            cooldownUntil - now
+        } else {
+            autoReconnectCooldownUntil.remove(address)
+            ReconnectBackoffPolicy.delayMs(autoReconnectFailuresByAddress[address] ?: 0)
+        }
         mainHandler.postDelayed({
             autoReconnectScheduledAddresses.remove(address)
             val currentExpiry = autoReconnectExpiryByAddress[address] ?: return@postDelayed
@@ -3599,9 +3639,28 @@ internal class MeshEngine(
                 clientGatts.remove(address, pendingGatt)
                 autoReconnectAddresses.remove(address)
                 autoReconnectExpiryByAddress.remove(address, currentExpiry)
+                clearAutoReconnectBackoff(address)
                 runCatching { pendingGatt.close() }
             }, (currentExpiry - System.currentTimeMillis()).coerceAtLeast(1L))
-        }, AUTO_RECONNECT_DELAY_MS)
+        }, reconnectDelayMs)
+    }
+
+    private fun recordAutoReconnectFailure(address: String, wasAutoReconnect: Boolean) {
+        if (!wasAutoReconnect) return
+        val failures = autoReconnectFailuresByAddress.merge(address, 1, Int::plus) ?: 1
+        if (!ReconnectBackoffPolicy.shouldEnterCooldown(failures)) return
+        autoReconnectFailuresByAddress[address] = 0
+        autoReconnectCooldownUntil[address] =
+            System.currentTimeMillis() + ReconnectBackoffPolicy.COOLDOWN_MS
+        Log.w(
+            LOG_TAG,
+            "GATT reconnect ${address.takeLast(5)} cooling down after $failures failures",
+        )
+    }
+
+    private fun clearAutoReconnectBackoff(address: String) {
+        autoReconnectFailuresByAddress.remove(address)
+        autoReconnectCooldownUntil.remove(address)
     }
 
     private fun pruneNativeMemory(now: Long) {
@@ -3691,6 +3750,8 @@ internal class MeshEngine(
             addressToPeer.remove(address)
             reconnectPeerByAddress.remove(address)
             autoReconnectExpiryByAddress.remove(address)
+            autoReconnectFailuresByAddress.remove(address)
+            autoReconnectCooldownUntil.remove(address)
             autoReconnectAddresses.remove(address)
             autoReconnectScheduledAddresses.remove(address)
             overflowCandidateAddresses.remove(address)
@@ -3745,23 +3806,31 @@ internal class MeshEngine(
                 )
                 if (!gatt.requestMtu(MeshPacketFragmenter.MAX_ATT_MTU)) gatt.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                val wasOverflowCandidate = overflowCandidateAddresses.remove(gatt.device.address)
-                overflowMaskByAddress.remove(gatt.device.address)
+                val address = gatt.device.address
+                val wasOverflowCandidate = overflowCandidateAddresses.remove(address)
+                overflowMaskByAddress.remove(address)
                 if (wasOverflowCandidate) {
-                    overflowCandidateCooldownUntil[gatt.device.address] =
-                        System.currentTimeMillis() + OVERFLOW_CANDIDATE_COOLDOWN_MS
+                    overflowCandidateCooldownUntil[address] =
+                        System.currentTimeMillis() + overflowCandidateCooldownMs()
                 }
-                autoReconnectAddresses.remove(gatt.device.address)
-                clientCharacteristics.remove(gatt.device.address)
-                clientGatts.remove(gatt.device.address, gatt)
-                clientMaximumGattValueSizes.remove(gatt.device.address)
-                clientReady.remove(gatt.device.address)
-                lastSyncRequestByAddress.remove(gatt.device.address)
-                syncResponseTimes.remove(gatt.device.address)
+                val wasAutoReconnect = autoReconnectAddresses.remove(address)
+                recordAutoReconnectFailure(address, wasAutoReconnect)
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    Log.w(
+                        LOG_TAG,
+                        "GATT ${address.takeLast(5)} disconnected status=$status",
+                    )
+                }
+                clientCharacteristics.remove(address)
+                clientGatts.remove(address, gatt)
+                clientMaximumGattValueSizes.remove(address)
+                clientReady.remove(address)
+                lastSyncRequestByAddress.remove(address)
+                syncResponseTimes.remove(address)
                 synchronized(clientWriteLock) {
-                    clientWritesInFlight.remove(gatt.device.address)
+                    clientWritesInFlight.remove(address)
                 }
-                handleDirectLinkLost(gatt.device.address)
+                handleDirectLinkLost(address)
                 rescheduleKeepAlive()
                 gatt.close()
             }
@@ -4145,11 +4214,8 @@ internal class MeshEngine(
         const val RECOVERY_SCAN_BURST_MS = 15_000L
         const val SCAN_REARM_DELAY_MS = 750L
         const val MAX_SCAN_RETRY_ATTEMPTS = 5
-        const val AUTO_RECONNECT_DELAY_MS = 750L
         const val AUTO_RECONNECT_WINDOW_MS = 12 * 60_000L
         const val MAX_AUTO_RECONNECTS = 3
-        const val MAX_OVERFLOW_CANDIDATES = 1
-        const val OVERFLOW_CANDIDATE_COOLDOWN_MS = 5 * 60_000L
         const val MIN_OVERFLOW_CANDIDATE_RSSI = -90
         const val IOS_OVERFLOW_TYPE: Byte = 0x01
         const val MAX_REMEMBERED_SESSION_PEERS = 256
