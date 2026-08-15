@@ -1,11 +1,14 @@
 package com.hearthbit.app.mesh
 
 import android.Manifest
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -22,6 +25,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.hearthbit.app.MainActivity
@@ -38,6 +42,30 @@ class MeshForegroundService : Service() {
     private var rescueRunnable: Runnable? = null
     private var rescueLocationCancellation: CancellationSignal? = null
     private var rescuePingInProgress = false
+    private var rescueGeneration = 0L
+    private var bluetoothReceiverRegistered = false
+    private var bluetoothAvailable = false
+    private var alarmSecurityDiagnosticReported = false
+    private val rescueAlarmManager by lazy {
+        getSystemService(AlarmManager::class.java)
+    }
+
+    private val bluetoothStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
+            when (
+                intent.getIntExtra(
+                    BluetoothAdapter.EXTRA_STATE,
+                    BluetoothAdapter.ERROR,
+                )
+            ) {
+                BluetoothAdapter.STATE_TURNING_OFF,
+                BluetoothAdapter.STATE_OFF,
+                -> suspendForBluetoothOff()
+                BluetoothAdapter.STATE_ON -> resumeAfterBluetoothOn()
+            }
+        }
+    }
 
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -71,6 +99,10 @@ class MeshForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        bluetoothAvailable = runCatching {
+            getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled == true
+        }.getOrDefault(false)
+        registerBluetoothStateReceiver()
         registerReceiver(
             batteryReceiver,
             IntentFilter().apply {
@@ -122,6 +154,7 @@ class MeshForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            cancelRescueScheduling(cancelAlarm = true)
             MeshRuntime.destroy()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -142,9 +175,53 @@ class MeshForegroundService : Service() {
             lastNotificationUpdateAt = SystemClock.elapsedRealtime()
             return START_STICKY
         }
-        if (intent?.action == ACTION_RESCUE_CHANGED) {
+        if (bluetoothAvailable) {
+            startMeshEngine()
+        } else {
+            MeshRuntime.engine(this).suspendForBluetoothUnavailable()
+        }
+        if (intent?.action == ACTION_RESCUE_ALARM) {
+            handleRescueAlarm()
+        } else {
             scheduleRescueMode()
         }
+        return START_STICKY
+    }
+
+    override fun onDestroy() {
+        if (bluetoothReceiverRegistered) {
+            runCatching { unregisterReceiver(bluetoothStateReceiver) }
+            bluetoothReceiverRegistered = false
+        }
+        runCatching { unregisterReceiver(batteryReceiver) }
+        if (MeshRuntime.notificationListener === notificationObserver) {
+            MeshRuntime.notificationListener = null
+        }
+        notificationUpdateRunnable?.let(mainHandler::removeCallbacks)
+        notificationUpdateRunnable = null
+        cancelRescueScheduling(cancelAlarm = false)
+        MeshRuntime.destroy()
+        super.onDestroy()
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun registerBluetoothStateReceiver() {
+        if (bluetoothReceiverRegistered) return
+        val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(
+                bluetoothStateReceiver,
+                filter,
+                Context.RECEIVER_NOT_EXPORTED,
+            )
+        } else {
+            registerReceiver(bluetoothStateReceiver, filter)
+        }
+        bluetoothReceiverRegistered = true
+    }
+
+    private fun startMeshEngine() {
         runCatching { MeshRuntime.engine(this).ensureStarted() }.onFailure {
             val message = it.message ?: getString(R.string.error_ble_start)
             MeshRuntime.eventListener?.invoke(
@@ -164,26 +241,34 @@ class MeshForegroundService : Service() {
                 ),
             )
         }
-        scheduleRescueMode()
-        return START_STICKY
     }
 
-    override fun onDestroy() {
-        runCatching { unregisterReceiver(batteryReceiver) }
-        if (MeshRuntime.notificationListener === notificationObserver) {
-            MeshRuntime.notificationListener = null
-        }
-        notificationUpdateRunnable?.let(mainHandler::removeCallbacks)
-        notificationUpdateRunnable = null
+    private fun suspendForBluetoothOff() {
+        if (!bluetoothAvailable) return
+        bluetoothAvailable = false
+        cancelRescueScheduling(cancelAlarm = false)
+        MeshRuntime.engine(this).suspendForBluetoothUnavailable()
+        scheduleRescueMode()
+    }
+
+    private fun resumeAfterBluetoothOn() {
+        if (bluetoothAvailable) return
+        bluetoothAvailable = true
+        startMeshEngine()
+        scheduleRescueMode()
+    }
+
+    private fun cancelRescueScheduling(cancelAlarm: Boolean) {
+        rescueGeneration += 1
         rescueRunnable?.let(mainHandler::removeCallbacks)
         rescueRunnable = null
         rescueLocationCancellation?.cancel()
         rescueLocationCancellation = null
-        MeshRuntime.destroy()
-        super.onDestroy()
+        rescuePingInProgress = false
+        if (cancelAlarm) {
+            cancelRescueAlarm()
+        }
     }
-
-    override fun onBind(intent: Intent?): IBinder? = null
 
     private fun createChannel() {
         val channel = NotificationChannel(
@@ -256,31 +341,102 @@ class MeshForegroundService : Service() {
     private fun scheduleRescueMode() {
         rescueRunnable?.let(mainHandler::removeCallbacks)
         rescueRunnable = null
-        val state = rescueStore.read()
-        if (!state.active || rescuePingInProgress) return
         val now = System.currentTimeMillis()
-        val nextAt = if (state.lastPingAt > 0L) {
-            state.lastPingAt + state.intervalMs
-        } else {
-            now
+        val state = rescueStore.read(now)
+        MeshRuntime.engine(this).updateRescueModeState(state)
+        if (!state.active) {
+            cancelRescueScheduling(cancelAlarm = true)
+            return
         }
+        if (rescuePingInProgress) return
+        if (!bluetoothAvailable) {
+            RescueAlarmPolicy.retryWhenRadioUnavailable(
+                now = now,
+                intervalMs = state.intervalMs,
+                expiresAt = state.expiresAt,
+            )?.let(::scheduleRescueAlarm)
+            return
+        }
+        val nextAt = RescueAlarmPolicy.nextDue(
+            lastPingAt = state.lastPingAt,
+            intervalMs = state.intervalMs,
+            now = now,
+        )
+        val wakeAt = RescueAlarmPolicy.nextWakeAt(
+            active = state.active,
+            expiresAt = state.expiresAt,
+            nextDueAt = nextAt,
+            now = now,
+        ) ?: return
+        scheduleRescueAlarm(wakeAt)
         rescueRunnable = Runnable {
             rescueRunnable = null
             runRescuePing()
-        }.also { mainHandler.postDelayed(it, (nextAt - now).coerceAtLeast(0L)) }
+        }.also {
+            mainHandler.postDelayed(it, (wakeAt - now).coerceAtLeast(0L))
+        }
+    }
+
+    private fun handleRescueAlarm() {
+        val now = System.currentTimeMillis()
+        val state = rescueStore.read(now)
+        MeshRuntime.engine(this).updateRescueModeState(state)
+        if (!state.active) {
+            cancelRescueScheduling(cancelAlarm = true)
+            return
+        }
+        if (!bluetoothAvailable) {
+            rescueRunnable?.let(mainHandler::removeCallbacks)
+            rescueRunnable = null
+            RescueAlarmPolicy.retryWhenRadioUnavailable(
+                now = now,
+                intervalMs = state.intervalMs,
+                expiresAt = state.expiresAt,
+            )?.let(::scheduleRescueAlarm)
+            return
+        }
+        val nextAt = RescueAlarmPolicy.nextDue(
+            lastPingAt = state.lastPingAt,
+            intervalMs = state.intervalMs,
+            now = now,
+        )
+        if (RescueAlarmPolicy.shouldPing(state.active, state.expiresAt, nextAt, now)) {
+            runRescuePing()
+        } else {
+            scheduleRescueMode()
+        }
     }
 
     private fun runRescuePing() {
         if (rescuePingInProgress) return
-        val state = rescueStore.read()
-        if (!state.active) return
+        val now = System.currentTimeMillis()
+        val state = rescueStore.read(now)
+        MeshRuntime.engine(this).updateRescueModeState(state)
+        if (!state.active || !bluetoothAvailable) {
+            scheduleRescueMode()
+            return
+        }
+        val nextAt = RescueAlarmPolicy.nextDue(
+            lastPingAt = state.lastPingAt,
+            intervalMs = state.intervalMs,
+            now = now,
+        )
+        if (!RescueAlarmPolicy.shouldPing(state.active, state.expiresAt, nextAt, now)) {
+            scheduleRescueMode()
+            return
+        }
+        val generation = rescueGeneration
         rescuePingInProgress = true
-        val deliver: (Location?) -> Unit = { location ->
+        val deliver: (Location?) -> Unit = deliver@{ location ->
+            if (generation != rescueGeneration) return@deliver
             val timestamp = System.currentTimeMillis()
             runCatching {
                 val engine = MeshRuntime.engine(this)
                 engine.ensureStarted()
-                engine.setRadarConsent(enabled = true, durationMs = 10 * 60_000L)
+                engine.setRadarConsent(
+                    enabled = true,
+                    durationMs = RadarConsentProtocol.SOS_DURATION_MS,
+                )
                 val latitude = when (state.locationPrecision) {
                     RescueModeStore.LOCATION_NONE -> null
                     RescueModeStore.LOCATION_APPROXIMATE ->
@@ -315,6 +471,48 @@ class MeshForegroundService : Service() {
         } else {
             currentRescueLocation(deliver)
         }
+    }
+
+    private fun scheduleRescueAlarm(triggerAtMillis: Long) {
+        try {
+            rescueAlarmManager.setAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                triggerAtMillis,
+                rescueAlarmPendingIntent(),
+            )
+        } catch (exception: SecurityException) {
+            reportAlarmSecurityException("schedule", exception)
+        }
+    }
+
+    private fun cancelRescueAlarm() {
+        try {
+            rescueAlarmManager.cancel(rescueAlarmPendingIntent())
+        } catch (exception: SecurityException) {
+            reportAlarmSecurityException("cancel", exception)
+        }
+    }
+
+    private fun rescueAlarmPendingIntent(): PendingIntent = PendingIntent.getForegroundService(
+        this,
+        RESCUE_ALARM_REQUEST_CODE,
+        Intent(this, MeshForegroundService::class.java).setAction(ACTION_RESCUE_ALARM),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+    private fun reportAlarmSecurityException(operation: String, exception: SecurityException) {
+        if (alarmSecurityDiagnosticReported) return
+        alarmSecurityDiagnosticReported = true
+        val detail = exception.message.orEmpty().take(MAX_ALARM_DIAGNOSTIC_LENGTH)
+        val message = "Rescue alarm $operation unavailable: $detail"
+        Log.w(TAG, message, exception)
+        MeshRuntime.eventListener?.invoke(
+            mapOf(
+                "type" to "diagnostic",
+                "component" to "rescueAlarm",
+                "message" to message,
+            ),
+        )
     }
 
     private fun coarsenEmergencyCoordinate(value: Double): Double =
@@ -372,9 +570,13 @@ class MeshForegroundService : Service() {
         const val ACTION_STOP = "com.hearthbit.app.STOP_MESH"
         const val ACTION_RENOTIFY = "com.hearthbit.app.RENOTIFY_MESH"
         const val ACTION_RESCUE_CHANGED = "com.hearthbit.app.RESCUE_CHANGED"
+        const val ACTION_RESCUE_ALARM = "com.hearthbit.app.RESCUE_ALARM"
         private const val CHANNEL_ID = "emergency_mesh"
         private const val NOTIFICATION_ID = 7401
+        private const val RESCUE_ALARM_REQUEST_CODE = 2
         private const val MIN_NOTIFICATION_UPDATE_INTERVAL_MS = 2_000L
         private const val RESCUE_LOCATION_TIMEOUT_MS = 10_000L
+        private const val MAX_ALARM_DIAGNOSTIC_LENGTH = 160
+        private const val TAG = "MeshForegroundService"
     }
 }

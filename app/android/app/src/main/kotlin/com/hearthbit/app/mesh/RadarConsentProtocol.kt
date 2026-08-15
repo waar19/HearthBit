@@ -9,8 +9,8 @@ internal object RadarConsentProtocol {
     const val NONCE_SIZE = 16
     const val PAYLOAD_SIZE = 1 + 1 + Long.SIZE_BYTES + NONCE_SIZE
     const val MANUAL_DURATION_MS = 15 * 60 * 1_000L
-    const val SOS_DURATION_MS = 10 * 60 * 1_000L
-    const val MAX_GRANT_DURATION_MS = 20 * 60 * 1_000L
+    const val SOS_DURATION_MS = 30 * 60 * 1_000L
+    const val MAX_GRANT_DURATION_MS = 30 * 60 * 1_000L
     const val CLOCK_SKEW_MS = 2 * 60 * 1_000L
 
     data class Consent(
@@ -49,11 +49,22 @@ internal object RadarConsentProtocol {
         if (consent.action != ACTION_GRANT) return false
         if (!hasValidTimestamp(packetTimestamp, now)) return false
         if (consent.expiresAt <= now) return false
-        return consent.expiresAt <= now + MAX_GRANT_DURATION_MS + CLOCK_SKEW_MS
+        return consent.expiresAt <= saturatedAdd(
+            saturatedAdd(now, MAX_GRANT_DURATION_MS),
+            CLOCK_SKEW_MS,
+        )
     }
 
     fun hasValidTimestamp(timestamp: Long, now: Long = System.currentTimeMillis()): Boolean =
-        timestamp in (now - CLOCK_SKEW_MS)..(now + CLOCK_SKEW_MS)
+        timestamp in saturatedSubtract(now, CLOCK_SKEW_MS)..saturatedAdd(now, CLOCK_SKEW_MS)
+
+    fun sosConsentExpiresAt(
+        packetTimestamp: Long,
+        now: Long = System.currentTimeMillis(),
+    ): Long = minOf(
+        saturatedAdd(packetTimestamp, SOS_DURATION_MS),
+        saturatedAdd(now, SOS_DURATION_MS),
+    )
 
     private fun encode(action: Byte, expiresAt: Long, nonce: ByteArray): ByteArray {
         require(nonce.size == NONCE_SIZE)
@@ -70,4 +81,10 @@ internal object RadarConsentProtocol {
 
     private fun randomNonce(): ByteArray =
         ByteArray(NONCE_SIZE).also(SecureRandom()::nextBytes)
+
+    private fun saturatedAdd(value: Long, increment: Long): Long =
+        if (value > Long.MAX_VALUE - increment) Long.MAX_VALUE else value + increment
+
+    private fun saturatedSubtract(value: Long, decrement: Long): Long =
+        if (value < Long.MIN_VALUE + decrement) Long.MIN_VALUE else value - decrement
 }

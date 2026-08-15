@@ -10,6 +10,87 @@ class RunnerTests: XCTestCase {
   private let sender = Data([1, 2, 3, 4, 5, 6, 7, 8])
   private let fragmentID = Data([9, 8, 7, 6, 5, 4, 3, 2])
 
+  func testEmergencyRetriesRenewTimestampFingerprintAndHash() throws {
+    let original = IOSMeshPacket(
+      type: IOSMeshProtocol.message,
+      ttl: 1,
+      timestamp: 100,
+      senderID: sender,
+      payload: Data("SOS|Ayuda||".utf8),
+      signature: Data(repeating: 1, count: 64),
+      isRSR: true
+    )
+    let sign: (IOSMeshPacket) -> IOSMeshPacket = { packet in
+      var signed = packet
+      let digest = Data(SHA256.hash(data: packet.canonical()))
+      signed.signature = digest + digest
+      return signed
+    }
+
+    let first = try XCTUnwrap(
+      IOSEmergencyRetryPolicy.rebuild(
+        packet: original,
+        localSenderID: sender,
+        now: 100,
+        sign: sign
+      )
+    )
+    let second = try XCTUnwrap(
+      IOSEmergencyRetryPolicy.rebuild(
+        packet: first,
+        localSenderID: sender,
+        now: 100,
+        sign: sign
+      )
+    )
+
+    XCTAssertEqual(first.timestamp, 101)
+    XCTAssertEqual(second.timestamp, 102)
+    XCTAssertEqual(first.ttl, IOSMeshProtocol.defaultTTL)
+    XCTAssertEqual(second.ttl, IOSMeshProtocol.defaultTTL)
+    XCTAssertFalse(first.isRSR)
+    XCTAssertFalse(second.isRSR)
+    XCTAssertNotEqual(
+      IOSMeshProtocol.fingerprint(original),
+      IOSMeshProtocol.fingerprint(first)
+    )
+    XCTAssertNotEqual(
+      IOSMeshProtocol.fingerprint(first),
+      IOSMeshProtocol.fingerprint(second)
+    )
+    XCTAssertNotEqual(
+      IOSMeshProtocol.emergencyCanonicalHash(original),
+      IOSMeshProtocol.emergencyCanonicalHash(first)
+    )
+    XCTAssertNotEqual(
+      IOSMeshProtocol.emergencyCanonicalHash(first),
+      IOSMeshProtocol.emergencyCanonicalHash(second)
+    )
+    XCTAssertNil(
+      IOSEmergencyRetryPolicy.rebuild(
+        packet: original,
+        localSenderID: Data(repeating: 0, count: 8),
+        now: 101,
+        sign: sign
+      )
+    )
+    XCTAssertNil(
+      IOSEmergencyRetryPolicy.rebuild(
+        packet: IOSMeshPacket(
+          type: original.type,
+          ttl: original.ttl,
+          timestamp: UInt64.max,
+          senderID: original.senderID,
+          payload: original.payload,
+          signature: original.signature
+        ),
+        localSenderID: sender,
+        now: UInt64.max,
+        sign: sign
+      )
+    )
+  }
+
   func testFragmentPayloadMatchesBitChatWireFormat() {
     let encoded = IOSMeshProtocol.encodeFragmentPayload(
       IOSMeshProtocol.FragmentPayload(
@@ -339,6 +420,149 @@ class RunnerTests: XCTestCase {
     )
   }
 
+  func testAnnouncementClockPolicyAppliesStandardWindowBothDirections() {
+    let now: UInt64 = 100_000_000
+    let window = IOSAnnouncementClockPolicy.standardWindowMilliseconds
+
+    XCTAssertTrue(
+      IOSAnnouncementClockPolicy.accepts(
+        timestamp: now,
+        emergencyPreannounce: false,
+        now: now
+      )
+    )
+    XCTAssertTrue(
+      IOSAnnouncementClockPolicy.accepts(
+        timestamp: now - window,
+        emergencyPreannounce: false,
+        now: now
+      )
+    )
+    XCTAssertTrue(
+      IOSAnnouncementClockPolicy.accepts(
+        timestamp: now + window,
+        emergencyPreannounce: false,
+        now: now
+      )
+    )
+    XCTAssertFalse(
+      IOSAnnouncementClockPolicy.accepts(
+        timestamp: now - window - 1,
+        emergencyPreannounce: false,
+        now: now
+      )
+    )
+    XCTAssertFalse(
+      IOSAnnouncementClockPolicy.accepts(
+        timestamp: now + window + 1,
+        emergencyPreannounce: false,
+        now: now
+      )
+    )
+  }
+
+  func testEmergencyMarkerExtendsOnlyPastWindow() {
+    let now: UInt64 = 100_000_000
+    let emergencyWindow = IOSAnnouncementClockPolicy.emergencyPastWindowMilliseconds
+    let futureWindow = IOSAnnouncementClockPolicy.standardWindowMilliseconds
+
+    XCTAssertTrue(
+      IOSAnnouncementClockPolicy.accepts(
+        timestamp: now - emergencyWindow,
+        emergencyPreannounce: true,
+        now: now
+      )
+    )
+    XCTAssertFalse(
+      IOSAnnouncementClockPolicy.accepts(
+        timestamp: now - emergencyWindow - 1,
+        emergencyPreannounce: true,
+        now: now
+      )
+    )
+    XCTAssertFalse(
+      IOSAnnouncementClockPolicy.accepts(
+        timestamp: now + futureWindow + 1,
+        emergencyPreannounce: true,
+        now: now
+      )
+    )
+  }
+
+  func testAnnouncementClockPolicyHandlesUInt64Extremes() {
+    XCTAssertFalse(
+      IOSAnnouncementClockPolicy.accepts(
+        timestamp: UInt64.max,
+        emergencyPreannounce: true,
+        now: 0
+      )
+    )
+    XCTAssertFalse(
+      IOSAnnouncementClockPolicy.accepts(
+        timestamp: 0,
+        emergencyPreannounce: true,
+        now: UInt64.max
+      )
+    )
+  }
+
+  func testEmergencyPreannounceRequiresExactSignedTLVValue() throws {
+    let marked = IOSMeshProtocol.announcement(
+      nickname: "Ana",
+      noisePublicKey: Data(repeating: 2, count: 32),
+      signingPublicKey: Data(repeating: 3, count: 32),
+      emergencyPreannounce: true
+    )
+    var unknownValue = marked
+    unknownValue[unknownValue.index(before: unknownValue.endIndex)] = 0x02
+    let corrupt = marked.dropLast()
+
+    XCTAssertTrue(try XCTUnwrap(IOSMeshProtocol.decodeAnnouncement(marked)).emergencyPreannounce)
+    XCTAssertFalse(
+      try XCTUnwrap(IOSMeshProtocol.decodeAnnouncement(unknownValue)).emergencyPreannounce
+    )
+    XCTAssertFalse(
+      try XCTUnwrap(IOSMeshProtocol.decodeAnnouncement(Data(corrupt))).emergencyPreannounce
+    )
+  }
+
+  func testTTLMutationCannotExtendOrdinaryAnnouncementWindow() {
+    let now: UInt64 = 100_000_000
+    let signedAtTTL1 = IOSMeshPacket(
+      type: IOSMeshProtocol.announce,
+      ttl: 1,
+      timestamp: now - IOSAnnouncementClockPolicy.standardWindowMilliseconds - 1,
+      senderID: sender,
+      payload: Data()
+    )
+    var relayed = signedAtTTL1
+    relayed.ttl = IOSMeshProtocol.defaultTTL
+
+    XCTAssertFalse(
+      IOSAnnouncementClockPolicy.accepts(
+        timestamp: relayed.timestamp,
+        emergencyPreannounce: false,
+        now: now
+      )
+    )
+  }
+
+  func testEmergencyMarkerRejectsThirtyMinutesInFuture() {
+    let now: UInt64 = 100_000_000
+    XCTAssertFalse(
+      IOSAnnouncementClockPolicy.accepts(
+        timestamp: now + 30 * 60 * 1_000,
+        emergencyPreannounce: true,
+        now: now
+      )
+    )
+  }
+
+  func testOnlyExplicitStopClearsLanBridge() {
+    XCTAssertFalse(IOSLanBridgeLifecyclePolicy.shouldClearOnStop(notify: false))
+    XCTAssertTrue(IOSLanBridgeLifecyclePolicy.shouldClearOnStop(notify: true))
+  }
+
   func testPhoneBeaconDisablesDataPlanePolicy() {
     XCTAssertFalse(IOSMeshNodeRole.phoneBeacon.allowsDataPlane)
     XCTAssertFalse(IOSMeshNodeRole.phoneBeacon.relaysPackets)
@@ -444,7 +668,7 @@ class RunnerTests: XCTestCase {
 
     let packet = IOSMeshPacket(
       type: IOSMeshProtocol.beaconControl,
-      ttl: 1,
+      ttl: IOSBeaconControlProtocol.initialTTL,
       timestamp: now,
       senderID: sender,
       recipientID: Data(repeating: 2, count: 8),
@@ -455,9 +679,13 @@ class RunnerTests: XCTestCase {
       IOSMeshProtocol.decode(IOSMeshProtocol.encode(packet, padded: false))
     )
     XCTAssertEqual(decoded.type, 0x26)
-    XCTAssertEqual(decoded.ttl, 1)
+    XCTAssertEqual(decoded.ttl, 2)
     XCTAssertNotNil(decoded.recipientID)
     XCTAssertNotNil(decoded.signature)
+    XCTAssertFalse(IOSBeaconControlProtocol.isValidTTL(0))
+    XCTAssertTrue(IOSBeaconControlProtocol.isValidTTL(1))
+    XCTAssertTrue(IOSBeaconControlProtocol.isValidTTL(2))
+    XCTAssertFalse(IOSBeaconControlProtocol.isValidTTL(3))
     XCTAssertFalse(IOSNoiseReplayPolicy.isStoreForwardSafe(decoded))
     XCTAssertFalse(
       IOSBeaconControlProtocol.shouldAutoAccept(localRadarConsentUntil: now, now: now)
@@ -465,6 +693,113 @@ class RunnerTests: XCTestCase {
     XCTAssertTrue(
       IOSBeaconControlProtocol.shouldAutoAccept(localRadarConsentUntil: now + 1, now: now)
     )
+  }
+
+  func testBeaconControlRelaysExactlyOnceOnlyToAnotherDirectedRecipient() {
+    XCTAssertTrue(
+      IOSMeshRelayPolicy.shouldRelay(
+        role: .phoneRelay,
+        packetType: IOSMeshProtocol.beaconControl,
+        ttl: 2,
+        addressedToLocalNode: false,
+        hasDirectedRecipient: true
+      )
+    )
+    XCTAssertFalse(
+      IOSMeshRelayPolicy.shouldRelay(
+        role: .phoneRelay,
+        packetType: IOSMeshProtocol.beaconControl,
+        ttl: 1,
+        addressedToLocalNode: false,
+        hasDirectedRecipient: true
+      )
+    )
+    XCTAssertFalse(
+      IOSMeshRelayPolicy.shouldRelay(
+        role: .phoneRelay,
+        packetType: IOSMeshProtocol.beaconControl,
+        ttl: 2,
+        addressedToLocalNode: true,
+        hasDirectedRecipient: true
+      )
+    )
+    XCTAssertFalse(
+      IOSMeshRelayPolicy.shouldRelay(
+        role: .phoneRelay,
+        packetType: IOSMeshProtocol.beaconControl,
+        ttl: 2,
+        addressedToLocalNode: false,
+        hasDirectedRecipient: false
+      )
+    )
+    XCTAssertFalse(
+      IOSMeshRelayPolicy.shouldRelay(
+        role: .phoneRelay,
+        packetType: IOSMeshProtocol.beaconControl,
+        ttl: 3,
+        addressedToLocalNode: false,
+        hasDirectedRecipient: true
+      )
+    )
+    XCTAssertFalse(
+      IOSMeshRelayPolicy.shouldRelay(
+        role: .phoneRelay,
+        packetType: IOSMeshProtocol.rangingControl,
+        ttl: 2,
+        addressedToLocalNode: false,
+        hasDirectedRecipient: true
+      )
+    )
+  }
+
+  func testFragmentedBeaconControlPreservesDirectOrRelayedTTL() throws {
+    let now: UInt64 = 1_000_000
+    let original = IOSMeshPacket(
+      type: IOSMeshProtocol.beaconControl,
+      ttl: IOSBeaconControlProtocol.initialTTL,
+      timestamp: now,
+      senderID: sender,
+      recipientID: Data(repeating: 2, count: 8),
+      payload: IOSBeaconControlProtocol.request(
+        expiresAt: now + 60_000,
+        flags: IOSBeaconControlProtocol.flashFlag,
+        nonce: Data((0..<IOSBeaconControlProtocol.nonceSize).map(UInt8.init))
+      ),
+      signature: Data(repeating: 3, count: 64)
+    )
+    let frames = try XCTUnwrap(
+      IOSMeshPacketFragmenter(fragmentIDGenerator: { self.fragmentID }).prepare(
+        packet: original,
+        encoded: IOSMeshProtocol.encodeForBLE(original),
+        maximumValueLength: 100
+      )
+    )
+    XCTAssertGreaterThan(frames.count, 1)
+
+    func reassemble(ttl: UInt8) throws -> IOSMeshPacket? {
+      let reassembler = IOSMeshFragmentReassembler()
+      var result: IOSMeshPacket?
+      for frame in frames {
+        var fragment = try XCTUnwrap(IOSMeshProtocol.decode(frame))
+        fragment.ttl = ttl
+        result = reassembler.accept(fragment) ?? result
+      }
+      return result
+    }
+
+    XCTAssertEqual(try XCTUnwrap(reassemble(ttl: 2)).ttl, 2)
+    XCTAssertEqual(try XCTUnwrap(reassemble(ttl: 1)).ttl, 1)
+    XCTAssertNil(try reassemble(ttl: 0))
+    XCTAssertNil(try reassemble(ttl: 3))
+
+    let mixedReassembler = IOSMeshFragmentReassembler()
+    var mixedResult: IOSMeshPacket?
+    for (index, frame) in frames.enumerated() {
+      var fragment = try XCTUnwrap(IOSMeshProtocol.decode(frame))
+      fragment.ttl = index == 0 ? 2 : 1
+      mixedResult = mixedReassembler.accept(fragment) ?? mixedResult
+    }
+    XCTAssertEqual(try XCTUnwrap(mixedResult).ttl, 1)
   }
 
   func testBLEPriorityQueuePrioritizesEmergencyWithoutStarvingNormalFrames() throws {
@@ -1060,6 +1395,59 @@ final class ConformanceFixtureTests: XCTestCase {
     XCTAssertNil(
       IOSMeshProtocol.decodeExtensionEnvelope(fixtures.bytes("extension.envelope.truncated"))
     )
+  }
+
+  func testRadarConsentKeepsManualFifteenAndRenewsRescueForThirtyMinutes() {
+    let firstPing: UInt64 = 1_000_000
+    let secondPing = firstPing + 120_000
+    let rescueConsent = IOSRadarConsentProtocol.Consent(
+      action: IOSRadarConsentProtocol.grantAction,
+      expiresAt: firstPing + IOSRadarConsentProtocol.sosDurationMilliseconds,
+      nonce: Data(repeating: 1, count: IOSRadarConsentProtocol.nonceSize)
+    )
+
+    XCTAssertEqual(IOSRadarConsentProtocol.manualDurationMilliseconds, 15 * 60 * 1_000)
+    XCTAssertEqual(IOSRadarConsentProtocol.sosDurationMilliseconds, 30 * 60 * 1_000)
+    XCTAssertTrue(
+      IOSRadarConsentProtocol.isValidGrant(
+        rescueConsent,
+        packetTimestamp: firstPing,
+        now: firstPing
+      )
+    )
+    XCTAssertEqual(
+      IOSRadarConsentProtocol.sosConsentExpiresAt(
+        packetTimestamp: firstPing,
+        now: firstPing
+      ),
+      firstPing + 30 * 60 * 1_000
+    )
+    XCTAssertEqual(
+      IOSRadarConsentProtocol.sosConsentExpiresAt(
+        packetTimestamp: secondPing,
+        now: secondPing
+      ),
+      secondPing + 30 * 60 * 1_000
+    )
+  }
+
+  func testRadarConsentSOSExpirySaturatesTimestampOverflow() {
+    let now: UInt64 = 10_000_000
+    XCTAssertEqual(
+      IOSRadarConsentProtocol.sosConsentExpiresAt(
+        packetTimestamp: UInt64.max - IOSRadarConsentProtocol.sosDurationMilliseconds + 1,
+        now: now
+      ),
+      now + IOSRadarConsentProtocol.sosDurationMilliseconds
+    )
+    XCTAssertEqual(
+      IOSRadarConsentProtocol.sosConsentExpiresAt(
+        packetTimestamp: UInt64.max,
+        now: UInt64.max
+      ),
+      UInt64.max
+    )
+    XCTAssertTrue(IOSRadarConsentProtocol.hasValidTimestamp(UInt64.max, now: UInt64.max))
   }
 
   func testHBTUsesProductionCodecWithPositiveAndNegativeFixtures() throws {

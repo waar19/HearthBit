@@ -74,6 +74,48 @@ class MeshFragmentReassemblerTest {
         assertNull(reassembler.accept(inconsistent))
     }
 
+    @Test
+    fun `beacon fragmentado conserva el ttl minimo entre dos y uno`() {
+        val sender = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)
+        val recipient = ByteArray(8) { 2 }
+        val original = MeshProtocol.Packet(
+            type = MeshProtocol.TYPE_BEACON_CONTROL,
+            ttl = BeaconControlProtocol.INITIAL_TTL.toByte(),
+            timestamp = 1234,
+            senderId = sender,
+            recipientId = recipient,
+            payload = ByteArray(80) { it.toByte() },
+            signature = ByteArray(64) { 3 },
+        )
+        val chunks = MeshProtocol.encode(original, padded = false)
+            .asList()
+            .chunked(80)
+            .map { it.toByteArray() }
+        val id = ByteArray(8) { 9 }
+        val fragments = chunks.mapIndexed { index, chunk ->
+            MeshProtocol.Packet(
+                type = MeshProtocol.TYPE_FRAGMENT,
+                ttl = if (index == 0) 2 else 1,
+                timestamp = 1234,
+                senderId = sender,
+                recipientId = recipient,
+                payload = fragmentPayload(
+                    id,
+                    index,
+                    chunks.size,
+                    MeshProtocol.TYPE_BEACON_CONTROL,
+                    chunk,
+                ),
+            )
+        }
+        val reassembler = MeshFragmentReassembler()
+        var result: MeshProtocol.Packet? = null
+
+        fragments.forEach { result = reassembler.accept(it) ?: result }
+
+        assertEquals(1, requireNotNull(result).ttl.toInt())
+    }
+
     private fun fragmentPayload(
         id: ByteArray,
         index: Int,

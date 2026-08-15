@@ -219,14 +219,24 @@ async def test_export_rejects_invalid_signature_and_gateway_loop(tmp_path) -> No
     assert broker.published == []
 
 
-async def test_sos_uses_qos_one_expiry_and_never_retains(tmp_path) -> None:
+async def test_sos_without_gps_exports_and_real_gps_is_blocked_by_default(
+    tmp_path,
+) -> None:
     identity = RelayIdentity.load_or_create(tmp_path / "identity.json")
     core = FakeCore()
     broker = FakeBroker()
     mqtt = bridge(core, broker, material=b"bridge-a", clock=lambda: NOW_MS)
     await mqtt.send(announcement(identity))
 
-    await mqtt.send(signed_packet(identity, payload=b"SOS|Necesito ayuda||"))
+    await mqtt.send(
+        signed_packet(identity, payload=b"SOS|Necesito|agua||")
+    )
+    await mqtt.send(
+        signed_packet(
+            identity,
+            payload=b"SOS|Necesito|agua|4.711|-74.072",
+        )
+    )
 
     [published] = broker.published
     envelope = json.loads(published["payload"])

@@ -314,7 +314,7 @@ class MainActivity : FlutterActivity() {
                     val minutes = (call.argument<Number>("minutes")?.toLong() ?: 15L)
                     MeshRuntime.engine(this).setRadarConsent(
                         enabled = call.argument<Boolean>("enabled") == true,
-                        durationMs = minutes.coerceIn(1L, 20L) * 60_000L,
+                        durationMs = minutes.coerceIn(1L, 30L) * 60_000L,
                     )
                     null
                 }

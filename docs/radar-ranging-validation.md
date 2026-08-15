@@ -24,6 +24,17 @@ El sonar acústico funciona mejor entre 1 y 25 metros, con ambos teléfonos
 descubiertos y sin obstáculos. No debe usarse junto al oído; las frecuencias
 altas pueden ser audibles para niños y animales.
 
+## Consentimiento y Modo Rescate
+
+1. Conceder radar desde el botón manual y confirmar una vigencia de 15 minutos.
+2. Activar Modo Rescate y comprobar que el primer SOS concede 30 minutos.
+3. Esperar al siguiente ping y confirmar que la expiración vuelve a quedar 30
+   minutos por delante del nuevo ping, también con Flutter suspendido.
+4. Desactivar Modo Rescate antes del siguiente ping nativo y confirmar que no
+   vuelve a habilitarse el radar.
+5. En el receptor, confirmar que cada SOS renueva la ventana remota durante 30
+   minutos y que timestamps cercanos al máximo representable no desbordan.
+
 ## Prueba de layout
 
 1. Abrir el radar en una pantalla estrecha.

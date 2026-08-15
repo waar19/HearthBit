@@ -121,7 +121,10 @@ importantes son:
   persisten.
 
 La expiración TLV de un `CourierEnvelope` siempre reduce, nunca amplía, la
-retención configurada.
+retención configurada. `EMERGENCY_ACK 0x2B` solo se persiste si es dirigido,
+firmado y tiene el payload registrado; su retención nunca supera 48 horas
+aunque `store.packet_ttl_seconds` sea mayor. El ACK ambiguo legado `0x29`
+siempre se purga.
 
 ### Administración de confianza
 

@@ -96,6 +96,29 @@ enum IOSGenericBLEScanPolicy {
   }
 }
 
+enum IOSAnnouncementClockPolicy {
+  static let standardWindowMilliseconds: UInt64 = 10 * 60 * 1_000
+  static let emergencyPastWindowMilliseconds: UInt64 = 24 * 60 * 60 * 1_000
+
+  static func accepts(
+    timestamp: UInt64,
+    emergencyPreannounce: Bool,
+    now: UInt64
+  ) -> Bool {
+    if timestamp > now {
+      return timestamp - now <= standardWindowMilliseconds
+    }
+    let pastWindow = emergencyPreannounce
+      ? emergencyPastWindowMilliseconds
+      : standardWindowMilliseconds
+    return now - timestamp <= pastWindow
+  }
+}
+
+enum IOSLanBridgeLifecyclePolicy {
+  static func shouldClearOnStop(notify: Bool) -> Bool { notify }
+}
+
 enum IOSPeerReachabilityPolicy {
   static let window: TimeInterval = 4 * 60
 
@@ -665,12 +688,11 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         let longitude = arguments["longitude"] as? Double
         let location = latitude != nil && longitude != nil
           ? "|\(latitude!)|\(longitude!)" : "||"
-        if privateMode {
-          sendAnnouncement(
-            ttl: IOSMeshProtocol.defaultTTL,
-            allowUnprovenIdentity: true
-          )
-        }
+        sendAnnouncement(
+          ttl: IOSMeshProtocol.defaultTTL,
+          allowUnprovenIdentity: true,
+          emergencyPreannounce: true
+        )
         result(try sendPublic(content: "SOS|\(description)\(location)", channel: "sos"))
       case "sendEmergency":
         let messageID = arguments["messageId"] as? String ?? ""
@@ -682,12 +704,11 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         guard content.hasPrefix("SOS|") || content.contains("[HB-CHECKIN|") else {
           throw IOSMeshError.invalidPayload
         }
-        if privateMode {
-          sendAnnouncement(
-            ttl: IOSMeshProtocol.defaultTTL,
-            allowUnprovenIdentity: true
-          )
-        }
+        sendAnnouncement(
+          ttl: IOSMeshProtocol.defaultTTL,
+          allowUnprovenIdentity: true,
+          emergencyPreannounce: true
+        )
         let transmitted = try transmitPublic(
           messageID: String(messageID.prefix(255)),
           content: content,
@@ -700,12 +721,24 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         ])
       case "retryEmergency":
         let canonicalHash = arguments["canonicalHash"] as? String ?? ""
-        guard let packet = try storeForward.emergency(hash: canonicalHash) else {
-          result(false)
+        guard
+          let identity,
+          let packet = try storeForward.emergency(hash: canonicalHash),
+          let retry = IOSEmergencyRetryPolicy.rebuild(
+            packet: packet,
+            localSenderID: identity.peerID,
+            now: currentMilliseconds(),
+            sign: identity.sign
+          )
+        else {
+          result(nil)
           return
         }
-        broadcast(packet)
-        result(true)
+        try storeForward.put(retry)
+        broadcast(retry)
+        result([
+          "canonicalHash": IOSMeshProtocol.emergencyCanonicalHash(retry).hex,
+        ])
       case "setNickname":
         guard identity != nil else { throw identityFailure ?? IOSMeshError.identityUnavailable }
         identity.nickname = String((arguments["nickname"] as? String ?? "").prefix(31))
@@ -771,8 +804,6 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       case "panicWipe":
         // Limpiar también si Flutter cree que la malla ya estaba detenida.
         stopInternal(notify: true)
-        beaconActuator.stop()
-        activeBeaconRequest = nil
         try peerIdentityPins.clear()
         identity = nil
         do {
@@ -864,7 +895,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         result(nil)
       case "setRadarConsent":
         let enabled = arguments["enabled"] as? Bool ?? false
-        let minutes = min(max(arguments["minutes"] as? Int ?? 15, 1), 20)
+        let minutes = min(max(arguments["minutes"] as? Int ?? 15, 1), 30)
         setRadarConsent(enabled: enabled, duration: TimeInterval(minutes * 60))
         result(nil)
       case "startLocalBeacon":
@@ -964,7 +995,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func handleRescueLocation(_ location: CLLocation) {
-    let state: IOSRescueModeState
+    var state: IOSRescueModeState
     do {
       state = try IOSRescueModeStore.load()
     } catch {
@@ -988,6 +1019,16 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         return
       }
     }
+    do {
+      state = try IOSRescueModeStore.load(now: now)
+    } catch {
+      emit(["type": "error", "code": "rescue_storage_failed", "message": error.localizedDescription])
+      return
+    }
+    guard state.active else {
+      configureRescueLocationUpdates(for: state)
+      return
+    }
     let locationSuffix: String
     switch state.locationPrecision ?? "approximate" {
     case "none":
@@ -1000,6 +1041,15 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       locationSuffix = "|\(latitude)|\(longitude)"
     }
     do {
+      setRadarConsent(
+        enabled: true,
+        duration: TimeInterval(IOSRadarConsentProtocol.sosDurationMilliseconds / 1_000)
+      )
+      sendAnnouncement(
+        ttl: IOSMeshProtocol.defaultTTL,
+        allowUnprovenIdentity: true,
+        emergencyPreannounce: true
+      )
       _ = try sendPublic(
         content: "SOS|\(state.description)\(locationSuffix)",
         channel: "sos"
@@ -1101,13 +1151,12 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func stopInternal(notify: Bool) {
+    stopLocalBeacon()
     running = false
     stopRadar()
-    beaconActuator.stop()
     pendingBeaconRequests.removeAll()
     outgoingBeaconRequests.removeAll()
     seenBeaconActions.removeAll()
-    activeBeaconRequest = nil
     adaptiveScanTimer?.invalidate()
     adaptiveScanTimer = nil
     linkLossScanTimer?.invalidate()
@@ -1158,7 +1207,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     genericPresenceExpiryWorkItem = nil
     cancelGenericPresenceScanWindows()
     genericPresenceTracker.clear()
-    lanBridgeGatewayID = nil
+    if IOSLanBridgeLifecyclePolicy.shouldClearOnStop(notify: notify) {
+      lanBridgeGatewayID = nil
+    }
     suppressLanBridge = false
     lifecycleObservers.forEach { NotificationCenter.default.removeObserver($0) }
     lifecycleObservers.removeAll()
@@ -1306,8 +1357,12 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func setRadarConsent(enabled: Bool, duration: TimeInterval) {
+    let boundedDuration = min(
+      max(duration, 0.001),
+      TimeInterval(IOSRadarConsentProtocol.maximumGrantMilliseconds) / 1_000
+    )
     let expiresAt = enabled
-      ? Date().addingTimeInterval(duration).timeIntervalSince1970 * 1000
+      ? Date().addingTimeInterval(boundedDuration).timeIntervalSince1970 * 1000
       : 0
     UserDefaults.standard.set(expiresAt, forKey: IOSRadarConsentProtocol.localConsentKey)
     broadcastRadarConsent(grant: enabled)
@@ -1322,17 +1377,28 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     }
   }
 
-  private func stopLocalBeacon() {
+  private func stopLocalBeacon(
+    status: String = "stopped",
+    sendRemoteStop: Bool = true,
+    actuationAlreadyStopped: Bool = false
+  ) {
     let active = activeBeaconRequest
+    let shouldEmit = actuationAlreadyStopped || active != nil || beaconActuator.isActive
     beaconActuator.stop()
-    activeBeaconRequest = nil
-    if let active {
+    if let active, sendRemoteStop, running {
       try? sendBeaconControl(
         peerID: active.peerID,
         payload: IOSBeaconControlProtocol.stop(nonce: active.control.nonce)
       )
     }
-    emitLocalBeaconState(status: "stopped")
+    if let active,
+       activeBeaconRequest?.peerID == active.peerID,
+       activeBeaconRequest?.control.nonce == active.control.nonce {
+      activeBeaconRequest = nil
+    }
+    if shouldEmit {
+      emitLocalBeaconState(status: status)
+    }
   }
 
   private func requestRemoteBeacon(
@@ -1411,7 +1477,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let packet = identity.sign(
       IOSMeshPacket(
         type: IOSMeshProtocol.beaconControl,
-        ttl: 1,
+        ttl: IOSBeaconControlProtocol.initialTTL,
         timestamp: currentMilliseconds(),
         senderID: identity.peerID,
         recipientID: try Data(hex: peerID),
@@ -1483,15 +1549,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func startBeaconActuator(flags: UInt8, expiresAt: UInt64) -> Bool {
     let started = beaconActuator.start(flags: flags, expiresAt: expiresAt) { [weak self] in
       guard let self else { return }
-      let expired = self.activeBeaconRequest
-      self.activeBeaconRequest = nil
-      if let expired, self.running {
-        try? self.sendBeaconControl(
-          peerID: expired.peerID,
-          payload: IOSBeaconControlProtocol.stop(nonce: expired.control.nonce)
-        )
-      }
-      self.emitLocalBeaconState(status: "expired")
+      self.stopLocalBeacon(status: "expired", actuationAlreadyStopped: true)
     }
     if started {
       emitLocalBeaconState(status: "active", flags: flags, expiresAt: expiresAt)
@@ -2130,13 +2188,15 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
 
   private func sendAnnouncement(
     ttl: UInt8? = nil,
-    allowUnprovenIdentity: Bool = false
+    allowUnprovenIdentity: Bool = false,
+    emergencyPreannounce: Bool = false
   ) {
     guard running, identity != nil else { return }
     let payload = IOSMeshProtocol.announcement(
       nickname: identity.nickname,
       noisePublicKey: identity.noisePrivateKey.publicKey.rawRepresentation,
-      signingPublicKey: identity.signingPrivateKey.publicKey.rawRepresentation
+      signingPublicKey: identity.signingPrivateKey.publicKey.rawRepresentation,
+      emergencyPreannounce: emergencyPreannounce
     )
     broadcast(
       identity.sign(
@@ -2150,6 +2210,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       ),
       allowUnprovenIdentity: allowUnprovenIdentity
     )
+    if emergencyPreannounce { return }
     broadcastHbtCapability()
     broadcastEmergencyCapability()
     broadcastNodeCapability()
@@ -2276,13 +2337,16 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let directed = packet.recipientID.map {
       $0 != Data(repeating: 0xff, count: 8)
     } ?? false
+    let storedPacketType = packet.type == IOSMeshProtocol.fragment
+      ? IOSMeshProtocol.decodeFragmentPayload(packet.payload)?.originalType ?? packet.type
+      : packet.type
     let restrictIdentity = privateMode &&
       !allowUnprovenIdentity &&
       packet.senderID == identity.peerID &&
       IOSMeshInteropPolicy.identityPacketTypes.contains(packet.type)
     if (localRole.storesDirectedPackets || emergency && localRole.relaysPackets),
-       packet.type != IOSMeshProtocol.beaconControl,
-       packet.type != IOSMeshProtocol.rangingControl,
+       storedPacketType != IOSMeshProtocol.beaconControl,
+       storedPacketType != IOSMeshProtocol.rangingControl,
        directed || emergency {
       do {
         try storeForward.put(packet)
@@ -2710,16 +2774,18 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let fragmentOriginalType = packet.type == IOSMeshProtocol.fragment
       ? IOSMeshProtocol.decodeFragmentPayload(packet.payload)?.originalType
       : nil
-    let controlForUs = forUs &&
-      (packet.type == IOSMeshProtocol.noiseHandshake ||
-       packet.type == IOSMeshProtocol.noiseEncrypted ||
-       fragmentOriginalType == IOSMeshProtocol.noiseHandshake ||
-       fragmentOriginalType == IOSMeshProtocol.noiseEncrypted)
-    if localRole.relaysPackets &&
-       packet.type != IOSMeshProtocol.beaconControl &&
-       packet.type != IOSMeshProtocol.rangingControl &&
-       packet.ttl > 1 &&
-       !controlForUs {
+    let effectiveType = fragmentOriginalType ?? packet.type
+    let addressedToLocalNode = packet.recipientID == identity.peerID
+    let directedRecipient = packet.recipientID.map {
+      $0 != Data(repeating: 0xff, count: 8)
+    } ?? false
+    if IOSMeshRelayPolicy.shouldRelay(
+      role: localRole,
+      packetType: effectiveType,
+      ttl: packet.ttl,
+      addressedToLocalNode: addressedToLocalNode,
+      hasDirectedRecipient: directedRecipient
+    ) {
       var relayed = packet
       relayed.ttl -= 1
       broadcast(relayed, excluding: source)
@@ -2731,13 +2797,14 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     senderID: String
   ) -> IOSMeshProtocol.Announcement? {
     let now = currentMilliseconds()
-    let age = packet.timestamp > now
-      ? packet.timestamp - now
-      : now - packet.timestamp
     guard
-      age <= 10 * 60 * 1_000,
       let announcement = IOSMeshProtocol.decodeAnnouncement(packet.payload),
-      IOSMeshIdentity.verify(packet, key: announcement.signingPublicKey)
+      IOSMeshIdentity.verify(packet, key: announcement.signingPublicKey),
+      IOSAnnouncementClockPolicy.accepts(
+        timestamp: packet.timestamp,
+        emergencyPreannounce: announcement.emergencyPreannounce,
+        now: now
+      )
     else { return nil }
 
     if let previous = peers[senderID] {
@@ -2934,8 +3001,12 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         )
       rememberSyncPacket(packet)
       if message.channel == "sos" {
-        let expiresAt = packet.timestamp + IOSRadarConsentProtocol.sosDurationMilliseconds
-        if expiresAt > currentMilliseconds() {
+        let now = currentMilliseconds()
+        let expiresAt = IOSRadarConsentProtocol.sosConsentExpiresAt(
+          packetTimestamp: packet.timestamp,
+          now: now
+        )
+        if expiresAt > now {
           remoteRadarConsents[senderID] = IOSRemoteRadarConsent(
             expiresAt: expiresAt,
             source: "sos"
@@ -2964,7 +3035,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       if let source { processSyncRequest(packet, senderID: senderID, source: source) }
     case IOSMeshProtocol.radarControl:
       processRadarControl(packet, senderID: senderID)
-    case IOSMeshProtocol.hbtCapability:
+    case IOSMeshProtocol.hbtCapability, IOSMeshProtocol.legacyHbtCapability:
       processHbtCapability(packet, senderID: senderID, source: source)
     case IOSMeshProtocol.nodeCapability:
       processNodeCapability(packet, senderID: senderID)
@@ -2974,24 +3045,14 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       processRangingControl(packet, senderID: senderID)
     case IOSMeshProtocol.emergencyCapability:
       processEmergencyCapability(packet, senderID: senderID)
-    case IOSMeshProtocol.emergencyAck:
+    case IOSMeshProtocol.emergencyAck, IOSMeshProtocol.legacyEmergencyAck:
       processEmergencyAcknowledgement(packet, senderID: senderID)
     case IOSMeshProtocol.fragment:
       if let reassembled = fragmentReassembler.accept(packet) {
-        if (reassembled.type == IOSMeshProtocol.beaconControl ||
-            reassembled.type == IOSMeshProtocol.rangingControl),
-           packet.ttl != 1 {
-          return
-        }
-        var accepted = reassembled
-        if accepted.type == IOSMeshProtocol.beaconControl ||
-           accepted.type == IOSMeshProtocol.rangingControl {
-          accepted.ttl = 1
-        }
         var validatedAnnouncement: IOSMeshProtocol.Announcement?
-        if accepted.type == IOSMeshProtocol.announce {
+        if reassembled.type == IOSMeshProtocol.announce {
           guard let announcement = validateAnnouncementIdentity(
-            accepted,
+            reassembled,
             senderID: senderID
           ) else { return }
           validatedAnnouncement = announcement
@@ -3001,7 +3062,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           }
         }
         process(
-          accepted,
+          reassembled,
           senderID: senderID,
           source: source,
           validatedAnnouncement: validatedAnnouncement
@@ -3132,7 +3193,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
 
   private func processBeaconControl(_ packet: IOSMeshPacket, senderID: String) {
     guard
-      packet.ttl == 1,
+      IOSBeaconControlProtocol.isValidTTL(packet.ttl),
       packet.recipientID == identity.peerID,
       let peer = peers[senderID],
       IOSMeshIdentity.verify(packet, key: peer.signingPublicKey),
@@ -3217,9 +3278,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         active.peerID == senderID,
         active.control.nonce == control.nonce
       {
-        beaconActuator.stop()
-        activeBeaconRequest = nil
-        emitLocalBeaconState(status: "stopped")
+        stopLocalBeacon(sendRemoteStop: false)
       }
       if
         let outgoing = outgoingBeaconRequests.removeValue(forKey: requestID),
@@ -4426,6 +4485,30 @@ enum IOSMeshNodeRole: String, CaseIterable {
   }
 }
 
+enum IOSMeshRelayPolicy {
+  static func shouldRelay(
+    role: IOSMeshNodeRole,
+    packetType: UInt8,
+    ttl: UInt8,
+    addressedToLocalNode: Bool,
+    hasDirectedRecipient: Bool
+  ) -> Bool {
+    guard role.relaysPackets, ttl > 1 else { return false }
+    switch packetType {
+    case IOSMeshProtocol.beaconControl:
+      return ttl == IOSBeaconControlProtocol.initialTTL &&
+        hasDirectedRecipient &&
+        !addressedToLocalNode
+    case IOSMeshProtocol.rangingControl:
+      return false
+    case IOSMeshProtocol.noiseHandshake, IOSMeshProtocol.noiseEncrypted:
+      return !addressedToLocalNode
+    default:
+      return true
+    }
+  }
+}
+
 struct IOSNodeCapability {
   let role: IOSMeshNodeRole
   let flags: UInt8
@@ -4699,6 +4782,7 @@ private struct IOSOutgoingBeaconRequest {
 
 enum IOSBeaconControlProtocol {
   static let version: UInt8 = 1
+  static let initialTTL: UInt8 = 2
   static let requestAction: UInt8 = 1
   static let grantAction: UInt8 = 2
   static let revokeAction: UInt8 = 3
@@ -4782,6 +4866,10 @@ enum IOSBeaconControlProtocol {
     localRadarConsentUntil > now
   }
 
+  static func isValidTTL(_ ttl: UInt8) -> Bool {
+    ttl == 1 || ttl == initialTTL
+  }
+
   private static func encode(
     action: UInt8,
     expiresAt: UInt64,
@@ -4857,8 +4945,9 @@ enum IOSRadarConsentProtocol {
   static let revokeAction: UInt8 = 2
   static let nonceSize = 16
   static let payloadSize = 26
-  static let sosDurationMilliseconds: UInt64 = 10 * 60 * 1000
-  static let maximumGrantMilliseconds: UInt64 = 20 * 60 * 1000
+  static let manualDurationMilliseconds: UInt64 = 15 * 60 * 1000
+  static let sosDurationMilliseconds: UInt64 = 30 * 60 * 1000
+  static let maximumGrantMilliseconds: UInt64 = 30 * 60 * 1000
   static let clockSkewMilliseconds: UInt64 = 2 * 60 * 1000
 
   struct Consent {
@@ -4890,8 +4979,8 @@ enum IOSRadarConsentProtocol {
   }
 
   static func hasValidTimestamp(_ timestamp: UInt64, now: UInt64) -> Bool {
-    timestamp <= now + clockSkewMilliseconds &&
-      timestamp + clockSkewMilliseconds >= now
+    timestamp <= saturatingAdd(now, clockSkewMilliseconds) &&
+      saturatingAdd(timestamp, clockSkewMilliseconds) >= now
   }
 
   static func isValidGrant(
@@ -4902,7 +4991,22 @@ enum IOSRadarConsentProtocol {
     consent.action == grantAction &&
       hasValidTimestamp(packetTimestamp, now: now) &&
       consent.expiresAt > now &&
-      consent.expiresAt <= now + maximumGrantMilliseconds + clockSkewMilliseconds
+      consent.expiresAt <= saturatingAdd(
+        saturatingAdd(now, maximumGrantMilliseconds),
+        clockSkewMilliseconds
+      )
+  }
+
+  static func sosConsentExpiresAt(packetTimestamp: UInt64, now: UInt64) -> UInt64 {
+    min(
+      saturatingAdd(packetTimestamp, sosDurationMilliseconds),
+      saturatingAdd(now, sosDurationMilliseconds)
+    )
+  }
+
+  private static func saturatingAdd(_ value: UInt64, _ increment: UInt64) -> UInt64 {
+    let (result, overflow) = value.addingReportingOverflow(increment)
+    return overflow ? UInt64.max : result
   }
 
   private static func encode(action: UInt8, expiresAt: UInt64) -> Data {
@@ -4942,6 +5046,28 @@ struct IOSMeshPacket {
   }
 }
 
+enum IOSEmergencyRetryPolicy {
+  static func rebuild(
+    packet: IOSMeshPacket,
+    localSenderID: Data,
+    now: UInt64,
+    sign: (IOSMeshPacket) -> IOSMeshPacket
+  ) -> IOSMeshPacket? {
+    guard
+      IOSMeshProtocol.isEmergency(packet),
+      packet.senderID == localSenderID,
+      packet.timestamp < UInt64.max
+    else { return nil }
+    var retry = packet
+    retry.ttl = IOSMeshProtocol.defaultTTL
+    retry.timestamp = max(now, packet.timestamp + 1)
+    retry.signature = nil
+    retry.isRSR = false
+    let signed = sign(retry)
+    return signed.signature == nil ? nil : signed
+  }
+}
+
 enum IOSMeshProtocol {
   static let announce: UInt8 = 0x01
   static let message: UInt8 = 0x02
@@ -4951,12 +5077,14 @@ enum IOSMeshProtocol {
   static let fragment: UInt8 = 0x20
   static let requestSync: UInt8 = 0x21
   static let radarControl: UInt8 = 0x23
-  static let hbtCapability: UInt8 = 0x24
+  static let legacyHbtCapability: UInt8 = 0x24
   static let nodeCapability: UInt8 = 0x25
   static let beaconControl: UInt8 = 0x26
   static let rangingControl: UInt8 = 0x27
   static let emergencyCapability: UInt8 = 0x28
-  static let emergencyAck: UInt8 = 0x29
+  static let legacyEmergencyAck: UInt8 = 0x29
+  static let hbtCapability: UInt8 = 0x2A
+  static let emergencyAck: UInt8 = 0x2B
   static let emergencyVersion: UInt8 = 0x01
   static let hbtVersion: UInt8 = 0x01
   static let noisePrivate: UInt8 = 0x01
@@ -4978,6 +5106,7 @@ enum IOSMeshProtocol {
     let signingPublicKey: Data
     let supportsTransfers: Bool
     let isInfrastructure: Bool
+    let emergencyPreannounce: Bool
   }
 
   struct PrivateMessage {
@@ -5302,13 +5431,17 @@ enum IOSMeshProtocol {
   static func announcement(
     nickname: String,
     noisePublicKey: Data,
-    signingPublicKey: Data
+    signingPublicKey: Data,
+    emergencyPreannounce: Bool = false
   ) -> Data {
     var output = Data()
     output.appendTLV(type: 0x01, value: Data(nickname.utf8).prefix(31))
     output.appendTLV(type: 0x02, value: noisePublicKey)
     output.appendTLV(type: 0x03, value: signingPublicKey)
     output.appendTLV(type: 0x05, value: Data([0x00]))
+    if emergencyPreannounce {
+      output.appendTLV(type: 0xF1, value: Data([0x01]))
+    }
     return output
   }
 
@@ -5319,6 +5452,7 @@ enum IOSMeshProtocol {
     var signing: Data?
     var supportsTransfers = false
     var isInfrastructure = false
+    var emergencyPreannounce = false
     while let type = reader.byte(), let length = reader.byte(),
           let value = reader.data(count: Int(length)) {
       switch type {
@@ -5327,6 +5461,7 @@ enum IOSMeshProtocol {
       case 0x03: signing = value
       case 0xF0: supportsTransfers = value == Data([0x01])
       case 0xB1: isInfrastructure = value.first.map { $0 & 0x01 != 0 } ?? false
+      case 0xF1: emergencyPreannounce = value == Data([0x01])
       default: break
       }
     }
@@ -5337,7 +5472,8 @@ enum IOSMeshProtocol {
       noisePublicKey: noise,
       signingPublicKey: signing,
       supportsTransfers: supportsTransfers,
-      isInfrastructure: isInfrastructure
+      isInfrastructure: isInfrastructure,
+      emergencyPreannounce: emergencyPreannounce
     )
   }
 
@@ -5781,6 +5917,7 @@ private extension IOSBLEFramePriority {
   static func forPacket(_ packet: IOSMeshPacket) -> IOSBLEFramePriority {
     if IOSMeshProtocol.isEmergency(packet) ||
        packet.type == IOSMeshProtocol.emergencyAck ||
+       packet.type == IOSMeshProtocol.legacyEmergencyAck ||
        packet.type == IOSMeshProtocol.beaconControl {
       return .emergency
     }
@@ -5910,6 +6047,7 @@ final class IOSMeshFragmentReassembler {
     let total: Int
     let senderID: Data
     let recipientID: Data?
+    var ttl: UInt8
     var updatedAt: Date
     var parts: [Int: Data] = [:]
     var bytes = 0
@@ -5945,6 +6083,7 @@ final class IOSMeshFragmentReassembler {
         total: fragment.total,
         senderID: packet.senderID,
         recipientID: packet.recipientID,
+        ttl: packet.ttl,
         updatedAt: now
       )
     }
@@ -5957,6 +6096,7 @@ final class IOSMeshFragmentReassembler {
       remove(key)
       return nil
     }
+    set.ttl = min(set.ttl, packet.ttl)
     if let existing = set.parts[fragment.index] {
       if existing != fragment.data { remove(key) }
       return nil
@@ -5990,7 +6130,19 @@ final class IOSMeshFragmentReassembler {
       original.senderID == packet.senderID,
       original.recipientID == packet.recipientID
     else { return nil }
-    original.ttl = 0
+    switch original.type {
+    case IOSMeshProtocol.beaconControl:
+      guard
+        original.ttl == IOSBeaconControlProtocol.initialTTL,
+        IOSBeaconControlProtocol.isValidTTL(set.ttl)
+      else { return nil }
+      original.ttl = set.ttl
+    case IOSMeshProtocol.rangingControl:
+      guard original.ttl == 1, set.ttl == 1 else { return nil }
+      original.ttl = 1
+    default:
+      original.ttl = 0
+    }
     return original
   }
 
@@ -6023,9 +6175,13 @@ enum IOSNoiseReplayPolicy {
   }
 
   static func isStoreForwardSafe(_ packet: IOSMeshPacket) -> Bool {
-    packet.type != IOSMeshProtocol.noiseHandshake &&
-      packet.type != IOSMeshProtocol.noiseEncrypted &&
-      packet.type != IOSMeshProtocol.beaconControl
+    let effectiveType = packet.type == IOSMeshProtocol.fragment
+      ? IOSMeshProtocol.decodeFragmentPayload(packet.payload)?.originalType ?? packet.type
+      : packet.type
+    return effectiveType != IOSMeshProtocol.noiseHandshake &&
+      effectiveType != IOSMeshProtocol.noiseEncrypted &&
+      effectiveType != IOSMeshProtocol.beaconControl &&
+      effectiveType != IOSMeshProtocol.rangingControl
   }
 }
 

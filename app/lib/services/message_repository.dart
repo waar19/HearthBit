@@ -101,7 +101,7 @@ class MessageRepository {
     );
     return _database ??= await SecureDatabase.open(
       databasePath: resolvedDatabasePath,
-      version: 5,
+      version: 6,
       testFactory: databaseFactory,
       onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
       onCreate: (database, version) async {
@@ -133,6 +133,17 @@ class MessageRepository {
             column: 'hearthbit_verified',
             definition: 'INTEGER NOT NULL DEFAULT 0',
           );
+        }
+        if (oldVersion < 6) {
+          await _createEmergencyAttemptHashTable(database);
+          await database.rawInsert('''
+            INSERT OR IGNORE INTO emergency_attempt_hash
+              (local_id, canonical_hash, created_at)
+            SELECT local_id, lower(canonical_hash),
+              COALESCE(last_attempt_at, created_at)
+            FROM emergency_outbox
+            WHERE canonical_hash IS NOT NULL
+          ''');
         }
       },
     );
@@ -226,6 +237,7 @@ class MessageRepository {
       'CREATE INDEX IF NOT EXISTS emergency_outbox_due_idx '
       'ON emergency_outbox(state, next_attempt_at, expires_at)',
     );
+    await _createEmergencyAttemptHashTable(database);
     await database.execute('''
       CREATE TABLE IF NOT EXISTS emergency_ack (
         local_id TEXT NOT NULL,
@@ -236,6 +248,45 @@ class MessageRepository {
           ON DELETE CASCADE
       )
     ''');
+  }
+
+  static Future<void> _createEmergencyAttemptHashTable(
+    Database database,
+  ) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS emergency_attempt_hash (
+        local_id TEXT NOT NULL,
+        canonical_hash TEXT NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY(local_id) REFERENCES emergency_outbox(local_id)
+          ON DELETE CASCADE
+      )
+    ''');
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS emergency_attempt_hash_local_idx '
+      'ON emergency_attempt_hash(local_id, created_at DESC)',
+    );
+  }
+
+  static Future<void> _storeEmergencyAttemptHash(
+    DatabaseExecutor transaction,
+    EmergencyDelivery delivery,
+  ) async {
+    final canonicalHash = delivery.canonicalHash?.toLowerCase();
+    if (canonicalHash == null || canonicalHash.isEmpty) return;
+    await transaction.insert('emergency_attempt_hash', {
+      'local_id': delivery.localId,
+      'canonical_hash': canonicalHash,
+      'created_at': DateTime.now().toUtc().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    await transaction.rawDelete(
+      'DELETE FROM emergency_attempt_hash '
+      'WHERE local_id = ? AND canonical_hash NOT IN ('
+      'SELECT canonical_hash FROM emergency_attempt_hash '
+      'WHERE local_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 64'
+      ')',
+      [delivery.localId, delivery.localId],
+    );
   }
 
   Future<List<MeshMessage>> load() async {
@@ -368,6 +419,7 @@ class MessageRepository {
         delivery.toDatabase(),
         conflictAlgorithm: ConflictAlgorithm.ignore,
       );
+      await _storeEmergencyAttemptHash(transaction, delivery);
       await transaction.rawDelete(
         'DELETE FROM emergency_outbox WHERE local_id NOT IN ('
         'SELECT local_id FROM emergency_outbox '
@@ -378,12 +430,16 @@ class MessageRepository {
   }
 
   Future<void> updateEmergencyDelivery(EmergencyDelivery delivery) async {
-    await (await _db).update(
-      'emergency_outbox',
-      delivery.toDatabase(),
-      where: 'local_id = ?',
-      whereArgs: [delivery.localId],
-    );
+    final database = await _db;
+    await database.transaction((transaction) async {
+      await transaction.update(
+        'emergency_outbox',
+        delivery.toDatabase(),
+        where: 'local_id = ?',
+        whereArgs: [delivery.localId],
+      );
+      await _storeEmergencyAttemptHash(transaction, delivery);
+    });
   }
 
   Future<List<EmergencyDelivery>> loadEmergencyDeliveries() async {
@@ -420,7 +476,7 @@ class MessageRepository {
     final database = await _db;
     return database.transaction((transaction) async {
       final rows = await transaction.query(
-        'emergency_outbox',
+        'emergency_attempt_hash',
         columns: ['local_id'],
         where: 'canonical_hash = ?',
         whereArgs: [canonicalHash.toLowerCase()],

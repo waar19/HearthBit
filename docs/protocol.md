@@ -22,10 +22,31 @@ scan response por `0xA5 || token`, donde `token` son los primeros 8 octetos de
 trata este valor solo como pista para conectar: no crea identidad, confianza ni
 estado de radar. iOS no añade identidad al anuncio.
 
-Los `ANNOUNCE` ordinarios usan TTL 1 en modo privado. Al emitir un SOS público,
-el emisor envía primero un `ANNOUNCE` con TTL completo; es necesario para que
-los saltos posteriores autentiquen el mensaje. La interoperabilidad BitChat
-opt-in restaura el peer ID estático y el TTL completo de los anuncios.
+Los `ANNOUNCE` ordinarios usan TTL 1 en modo privado. Al emitir un SOS o
+check-in público, el emisor envía inmediatamente antes un `ANNOUNCE` firmado
+con TTL completo y el TLV `EMERGENCY_PREANNOUNCE` (`type=0xF1`, longitud
+`0x01`, valor exacto `0x01`). Esto se hace tanto en modo público como privado.
+La interoperabilidad BitChat opt-in restaura el peer ID estático y el TTL
+completo de los anuncios ordinarios, pero no les añade el marcador.
+
+### Política de reloj para `ANNOUNCE`
+
+Android e iOS aceptan normalmente un `ANNOUNCE` solo si su timestamp está
+dentro de ±10 minutos del reloj local. Como excepción de disponibilidad para
+víctimas con el reloj atrasado, un `ANNOUNCE` cuya firma ya fue verificada y
+cuyo payload contiene el marcador exacto `EMERGENCY_PREANNOUNCE` puede tener
+hasta 24 horas de antigüedad. Esta excepción no amplía el futuro: incluso con
+el marcador, un anuncio adelantado más de 10 minutos se rechaza.
+
+El TTL se normaliza a cero para firmar y puede ser alterado por relés. Por
+tanto, nunca decide ni amplía la ventana de reloj: cambiar un TTL firmado como
+1 a 7 conserva la firma, pero el anuncio sigue sujeto a 10 minutos si no lleva
+el marcador firmado.
+
+El relay de infraestructura no aplica la excepción de emergencia: exige
+siempre ±10 minutos, tanto para anuncios atrasados como adelantados. Las
+implementaciones comparan límites de tiempo sin valor absoluto ni aritmética
+que pueda desbordar los enteros de timestamp.
 
 Antes de compartir identidad en un enlace GATT privado, HearthBit intercambia
 la secuencia de transporte ASCII `HB-LINK1`. No es un paquete mesh, no se
@@ -96,9 +117,19 @@ Tipos implementados:
 - `0x20`: fragmento
 - `0x21`: solicitud de sincronización
 - `0x23`: consentimiento temporal del radar
-- `0x24`: capacidad HBT
+- `0x24`: prekey Bitle; recepción temporal de capacidad HBT heredada
 - `0x25`: capacidad y rol de nodo HearthBit
 - `0x26`: control dirigido de baliza física
+- `0x27`: control dirigido de ranging
+- `0x28`: capacidad de acuse de emergencia
+- `0x29`: voz BitChat; recepción temporal de acuse de emergencia heredado
+- `0x2A`: capacidad HBT
+- `0x2B`: acuse de emergencia dirigido
+
+HearthBit solo emite `HBT_CAPABILITY` como `0x2A` y `EMERGENCY_ACK` como
+`0x2B`. La recepción heredada en `0x24`/`0x29` exige validar estructura,
+firma, identidad anunciada y, para el acuse, destinatario local; el byte por sí
+solo es ambiguo con `PREKEY_BUNDLE`/`VOICE_FRAME`.
 
 Los tamaños se normalizan a 256, 512, 1024 o 2048 bytes mediante padding
 PKCS#7 cuando la diferencia cabe en un byte.
@@ -162,6 +193,13 @@ decimales antes de firmar. Un check-in del círculo usa el marcador
 `[HB-CHECKIN|...]` dentro de un mensaje Noise privado dirigido por separado a
 cada familiar verificado; no usa el canal público.
 
+Un SOS válido concede una ventana derivada de consentimiento radar de 30
+minutos desde el timestamp del paquete, sin superar 30 minutos desde el reloj
+receptor. La suma de ambas cotas **MUST** saturar en el máximo representable y
+nunca desbordar. Mientras Modo Rescate siga activo, cada ping renueva también
+el grant local por 30 minutos antes de emitir el SOS. El consentimiento manual
+de la UI permanece separado y dura 15 minutos.
+
 ## Paquete dedicado de capacidad de nodo (`0x25`)
 
 Payload firmado:
@@ -179,32 +217,37 @@ identidad ni el flujo de chat.
 
 ### Decisión de compatibilidad sobre `ANNOUNCE`
 
-No se añadió un TLV HearthBit al `ANNOUNCE`. El decoder del submódulo BitChat
-actual sí conserva TLV desconocidos, pero existieron builds con la regresión
-que rechazaba o reconstruía incorrectamente extensiones desconocidas. Por
-tanto, que el código fijado hoy sea tolerante no prueba seguridad para toda la
-flota interoperable.
+Los anuncios ordinarios mantienen el perfil conocido (`0x01`, `0x02`, `0x03`
+y `0x05`) y las capacidades generales siguen en paquetes dedicados
+`0x2A`/`0x25`. Solo el anuncio inmediatamente anterior a una emergencia añade
+`0xF1`.
 
-HearthBit mantiene el `ANNOUNCE` en el perfil conocido (`0x01`, `0x02`,
-`0x03` y el `0x05` estándar sin capacidades HearthBit) y usa paquetes
-dedicados `0x24`/`0x25`. Esto reduce el fallo de un cliente antiguo a ignorar
-una capacidad opcional, en vez de perder el anuncio de identidad completo.
+El tradeoff es deliberado: clientes antiguos con un decoder intolerante a TLV
+desconocidos pueden ignorar ese anuncio y perder la autenticación del SOS a
+varios saltos. Los clientes compatibles ignoran TLV desconocidos; HearthBit
+solo concede la ventana de 24 horas después de decodificar el valor exacto y
+verificar la firma. Así se evita que el TTL mutable abra la excepción para
+tráfico ordinario, a costa de compatibilidad con builds antiguos defectuosos.
 
 ## Baliza física dirigida (`0x26`)
 
 `0x25` sigue siendo `NODE_CAPABILITY`. `BEACON_CONTROL` usa `0x26`, siempre con
-`recipientId`, firma Ed25519 y TTL 1. El payload v1 fijo contiene acción
+`recipientId`, firma Ed25519 y TTL inicial 2. Un relay puede reenviarlo
+exactamente una vez, solo cuando no es el destinatario local, decrementando el
+TTL a 1 y conservando `recipientId`, payload, firma y nonce. TTL 0 o mayor que
+2 es inválido. El payload v1 fijo contiene acción
 `REQUEST`, `GRANT`, `REVOKE` o `STOP`, expiración Unix ms, nonce aleatorio de
 16 bytes y flags de flash, sonido y vibración. Una solicitud o concesión no
 puede durar más de 5 minutos.
 
 El receptor valida longitud exacta, versión, acción, flags, timestamp,
-expiración y firma contra el peer previamente anunciado. La trama nunca entra
-en store-forward, sincronización ni relay. `REQUEST` no enciende hardware y
-siempre requiere aceptación explícita. El modo rescate y el consentimiento
-temporal de radar autorizan medición, no el control remoto de flash, sonido o
-vibración. En iOS la actuación se detiene al pasar la app a segundo plano; no
-se declara audio de fondo.
+expiración, TTL 1 o 2 y firma contra el peer previamente anunciado. La trama
+nunca entra en store-forward ni sincronización GCS. `REQUEST` no enciende
+hardware por sí solo: la actuación requiere un `GRANT` local producido por la
+aceptación manual o por la política de autoaceptación ya autorizada. Un relay
+que no sea destinatario solo reenvía y nunca aplica el control. En iOS la
+actuación se detiene al pasar la app a segundo plano; no se declara audio de
+fondo.
 
 ## Privacidad de balizas BLE genéricas en Android
 

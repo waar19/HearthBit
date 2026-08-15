@@ -24,6 +24,8 @@ class _FakePlatform extends MeshPlatformService {
   final List<({String requestId, bool accept})> beaconResponses = [];
   int panicWipeCalls = 0;
   final List<String> nodeRoles = [];
+  final List<String> retryEmergencyCalls = [];
+  String? retryEmergencyResult;
   final List<({String content, String? channel})> publicMessages = [];
   final List<({String peerId, String content, String? messageId})>
   privateMessages = [];
@@ -143,7 +145,10 @@ class _FakePlatform extends MeshPlatformService {
   }
 
   @override
-  Future<bool> retryEmergency(String canonicalHash) async => true;
+  Future<String?> retryEmergency(String canonicalHash) async {
+    retryEmergencyCalls.add(canonicalHash);
+    return retryEmergencyResult;
+  }
 
   @override
   Future<Map<Object?, Object?>> getPowerStatus() async => {
@@ -218,6 +223,8 @@ class _FakeRepository extends MessageRepository {
   final List<MeshPeer> knownPeers = [];
   final List<PendingPrivateMessage> outbox = [];
   final List<EmergencyDelivery> emergencyOutbox = [];
+  final Map<String, String> emergencyAttemptLocalIds = {};
+  int acknowledgementMisses = 0;
 
   @override
   Future<List<MeshMessage>> load() async => List.of(loaded);
@@ -269,6 +276,8 @@ class _FakeRepository extends MessageRepository {
   @override
   Future<void> insertEmergencyDelivery(EmergencyDelivery delivery) async {
     emergencyOutbox.add(delivery);
+    final hash = delivery.canonicalHash;
+    if (hash != null) emergencyAttemptLocalIds[hash] = delivery.localId;
   }
 
   @override
@@ -277,6 +286,8 @@ class _FakeRepository extends MessageRepository {
       (item) => item.localId == delivery.localId,
     );
     if (index >= 0) emergencyOutbox[index] = delivery;
+    final hash = delivery.canonicalHash;
+    if (hash != null) emergencyAttemptLocalIds[hash] = delivery.localId;
   }
 
   @override
@@ -301,9 +312,12 @@ class _FakeRepository extends MessageRepository {
     required String peerId,
     required DateTime acknowledgedAt,
   }) async {
-    final index = emergencyOutbox.indexWhere(
-      (item) => item.canonicalHash == canonicalHash,
-    );
+    if (acknowledgementMisses > 0) {
+      acknowledgementMisses -= 1;
+      return null;
+    }
+    final localId = emergencyAttemptLocalIds[canonicalHash];
+    final index = emergencyOutbox.indexWhere((item) => item.localId == localId);
     if (index < 0) return null;
     final delivery = emergencyOutbox[index];
     emergencyOutbox[index] = delivery.copyWith(
@@ -319,6 +333,7 @@ class _FakeRepository extends MessageRepository {
     knownPeers.clear();
     outbox.clear();
     emergencyOutbox.clear();
+    emergencyAttemptLocalIds.clear();
   }
 
   @override
@@ -944,7 +959,17 @@ void main() {
       expect(platform.sosCalls, 1);
       expect(
         platform.radarConsentCalls,
-        contains((enabled: true, minutes: 10)),
+        contains((enabled: true, minutes: 30)),
+      );
+      expect(
+        platform.radarConsentCalls
+            .where((call) => call.enabled)
+            .map((call) => call.minutes),
+        everyElement(30),
+      );
+      expect(
+        platform.radarConsentCalls.where((call) => call.enabled).length,
+        2,
       );
       expect(controller.lastRescuePing, isNotNull);
       expect(platform.rescueConfigurations.last, isTrue);
@@ -1254,6 +1279,73 @@ void main() {
     final acknowledged = controller.emergencyDeliveries.single;
     expect(acknowledged.state, EmergencyDeliveryState.acknowledged);
     expect(acknowledged.confirmationCount, 1);
+  });
+
+  test('reintenta una vez el ACK que se adelanta a la persistencia', () async {
+    platform.emit({
+      'type': 'status',
+      'status': 'active',
+      'role': 'PHONE_RELAY',
+    });
+    await pumpEvents();
+    await controller.sendSos('Ayuda');
+    final delivery = controller.emergencyDeliveries.single;
+    repository.acknowledgementMisses = 1;
+
+    platform.emit({
+      'type': 'emergencyAck',
+      'canonicalHash': delivery.canonicalHash,
+      'peerId': 'peer-racing',
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    await pumpEvents();
+
+    expect(
+      controller.emergencyDeliveries.single.state,
+      EmergencyDeliveryState.acknowledged,
+    );
+  });
+
+  test('reintento de SOS conserva el nuevo hash nativo', () async {
+    platform.emit({
+      'type': 'status',
+      'status': 'active',
+      'role': 'PHONE_RELAY',
+    });
+    await pumpEvents();
+    await controller.sendSos('Ayuda');
+    final original = controller.emergencyDeliveries.single;
+    final originalHash = original.canonicalHash;
+    const retryHash =
+        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    platform.retryEmergencyResult = retryHash;
+
+    await controller.retryEmergency(original.localId);
+
+    final retried = controller.emergencyDeliveries.single;
+    expect(platform.retryEmergencyCalls, [originalHash]);
+    expect(retried.canonicalHash, retryHash);
+    expect(repository.emergencyOutbox.single.canonicalHash, retryHash);
+    expect(platform.sosCalls, 1);
+
+    platform.emit({
+      'type': 'emergencyAck',
+      'canonicalHash': originalHash,
+      'peerId': 'peer-old-attempt',
+    });
+    platform.emit({
+      'type': 'emergencyAck',
+      'canonicalHash': retryHash,
+      'peerId': 'peer-new-attempt',
+    });
+    await pumpEvents();
+    await pumpEvents();
+
+    expect(
+      controller.emergencyDeliveries.single.state,
+      EmergencyDeliveryState.acknowledged,
+    );
+    expect(controller.emergencyDeliveries.single.confirmationCount, 2);
   });
 
   test('el borrado de pánico elimina el consentimiento local', () async {

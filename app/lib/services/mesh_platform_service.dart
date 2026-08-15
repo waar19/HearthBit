@@ -278,16 +278,22 @@ class MeshPlatformService {
     }
   }
 
-  Future<bool> retryEmergency(String canonicalHash) async {
+  Future<String?> retryEmergency(String canonicalHash) async {
     try {
-      return await _methods.invokeMethod<bool>('retryEmergency', {
-            'canonicalHash': canonicalHash,
-          }) ??
-          false;
+      final result = await _methods.invokeMethod<Object?>('retryEmergency', {
+        'canonicalHash': canonicalHash,
+      });
+      if (result is Map<Object?, Object?>) {
+        return (result['canonicalHash'] as String?)?.toLowerCase();
+      }
+      if (result is bool) {
+        return result ? canonicalHash.toLowerCase() : null;
+      }
+      return null;
     } on MissingPluginException {
-      return false;
+      return null;
     } on PlatformException catch (error) {
-      if (error.code == 'not_implemented') return false;
+      if (error.code == 'not_implemented') return null;
       rethrow;
     }
   }

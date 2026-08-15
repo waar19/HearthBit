@@ -3,13 +3,84 @@ package com.hearthbit.app.mesh
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.security.MessageDigest
 
 class MeshProtocolTest {
+    @Test
+    fun `dos reintentos de emergencia renuevan timestamp fingerprint y hash`() {
+        val sender = ByteArray(8) { it.toByte() }
+        val original = MeshProtocol.Packet(
+            type = MeshProtocol.TYPE_MESSAGE,
+            ttl = 1,
+            timestamp = 100,
+            senderId = sender,
+            payload = "SOS|Ayuda||".toByteArray(),
+            signature = ByteArray(64) { 1 },
+            isRsr = true,
+        )
+        val sign: (MeshProtocol.Packet) -> MeshProtocol.Packet = { packet ->
+            val digest = MessageDigest.getInstance("SHA-256")
+                .digest(packet.canonicalForSigning())
+            packet.copy(signature = digest + digest)
+        }
+
+        val first = EmergencyRetryPolicy.rebuild(original, sender, now = 100, sign = sign)
+        val second = first?.let {
+            EmergencyRetryPolicy.rebuild(it, sender, now = 100, sign = sign)
+        }
+
+        assertNotNull(first)
+        assertNotNull(second)
+        assertEquals(101L, first!!.timestamp)
+        assertEquals(102L, second!!.timestamp)
+        assertEquals(MeshProtocol.TTL, first.ttl)
+        assertEquals(MeshProtocol.TTL, second.ttl)
+        assertFalse(first.isRsr)
+        assertFalse(second.isRsr)
+        assertNotEquals(MeshProtocol.fingerprint(original), MeshProtocol.fingerprint(first))
+        assertNotEquals(MeshProtocol.fingerprint(first), MeshProtocol.fingerprint(second))
+        assertNotEquals(
+            MeshProtocol.hex(MeshProtocol.emergencyCanonicalHash(original)),
+            MeshProtocol.hex(MeshProtocol.emergencyCanonicalHash(first)),
+        )
+        assertNotEquals(
+            MeshProtocol.hex(MeshProtocol.emergencyCanonicalHash(first)),
+            MeshProtocol.hex(MeshProtocol.emergencyCanonicalHash(second)),
+        )
+    }
+
+    @Test
+    fun `reintento rechaza paquetes ajenos y timestamp sin sucesor`() {
+        val sender = ByteArray(8) { it.toByte() }
+        val packet = MeshProtocol.Packet(
+            type = MeshProtocol.TYPE_MESSAGE,
+            ttl = MeshProtocol.TTL,
+            timestamp = 1,
+            senderId = sender,
+            payload = "SOS|Ayuda||".toByteArray(),
+            signature = ByteArray(64),
+        )
+        val sign: (MeshProtocol.Packet) -> MeshProtocol.Packet = {
+            it.copy(signature = ByteArray(64) { 1 })
+        }
+
+        assertNull(EmergencyRetryPolicy.rebuild(packet, ByteArray(8), 2, sign))
+        assertNull(
+            EmergencyRetryPolicy.rebuild(
+                packet.copy(timestamp = Long.MAX_VALUE),
+                sender,
+                Long.MAX_VALUE,
+                sign,
+            ),
+        )
+    }
+
     @Test
     fun `ACK de emergencia es versionado y ligado al hash canonico`() {
         val emergency = MeshProtocol.Packet(
@@ -293,6 +364,23 @@ class MeshProtocolTest {
         assertEquals(76, base.size)
         assertArrayEquals(byteArrayOf(0x05, 0x01, 0x00), base.takeLast(3).toByteArray())
         assertEquals(false, MeshProtocol.decodeAnnouncement(base)!!.supportsTransfers)
+        assertEquals(false, MeshProtocol.decodeAnnouncement(base)!!.emergencyPreannounce)
+    }
+
+    @Test
+    fun `announcement de emergencia reconoce solo marcador exacto`() {
+        val marked = MeshProtocol.encodeAnnouncement(
+            nickname = "Ana",
+            noisePublicKey = ByteArray(32) { 2 },
+            signingPublicKey = ByteArray(32) { 3 },
+            emergencyPreannounce = true,
+        )
+        val unknownValue = marked.copyOf().also { it[it.lastIndex] = 0x02 }
+        val corrupt = marked.copyOf(marked.size - 1)
+
+        assertEquals(true, MeshProtocol.decodeAnnouncement(marked)!!.emergencyPreannounce)
+        assertEquals(false, MeshProtocol.decodeAnnouncement(unknownValue)!!.emergencyPreannounce)
+        assertNull(MeshProtocol.decodeAnnouncement(corrupt))
     }
 
     @Test
@@ -315,6 +403,11 @@ class MeshProtocolTest {
 
     @Test
     fun `paquete de capacidad HBT sobrevive ida y vuelta`() {
+        assertEquals(0x2A, MeshProtocol.TYPE_HBT_CAPABILITY.toInt() and 0xFF)
+        assertEquals(0x2B, MeshProtocol.TYPE_EMERGENCY_ACK.toInt() and 0xFF)
+        assertEquals(0x24, MeshProtocol.TYPE_LEGACY_HBT_CAPABILITY.toInt() and 0xFF)
+        assertEquals(0x29, MeshProtocol.TYPE_LEGACY_EMERGENCY_ACK.toInt() and 0xFF)
+
         val packet = MeshProtocol.Packet(
             type = MeshProtocol.TYPE_HBT_CAPABILITY,
             ttl = MeshProtocol.TTL,
@@ -328,6 +421,42 @@ class MeshProtocolTest {
         assertNotNull(decoded)
         assertEquals(MeshProtocol.TYPE_HBT_CAPABILITY, decoded!!.type)
         assertArrayEquals(byteArrayOf(MeshProtocol.HBT_VERSION), decoded.payload)
+    }
+
+    @Test
+    fun `decoder conserva tipos legacy para validacion compatible`() {
+        val legacyTypes = listOf(
+            MeshProtocol.TYPE_LEGACY_HBT_CAPABILITY,
+            MeshProtocol.TYPE_LEGACY_EMERGENCY_ACK,
+        )
+
+        legacyTypes.forEach { legacyType ->
+            val packet = MeshProtocol.Packet(
+                type = legacyType,
+                ttl = MeshProtocol.TTL,
+                timestamp = 1234,
+                senderId = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8),
+                recipientId = byteArrayOf(8, 7, 6, 5, 4, 3, 2, 1),
+                payload = byteArrayOf(1),
+            )
+
+            val decoded = MeshProtocol.decode(MeshProtocol.encode(packet, padded = false))
+
+            assertNotNull(decoded)
+            assertEquals(legacyType, decoded!!.type)
+        }
+        assertEquals(true, MeshProtocol.isHbtCapabilityType(MeshProtocol.TYPE_HBT_CAPABILITY))
+        assertEquals(true, MeshProtocol.isHbtCapabilityType(MeshProtocol.TYPE_LEGACY_HBT_CAPABILITY))
+        assertEquals(
+            true,
+            MeshProtocol.isEmergencyAcknowledgementType(MeshProtocol.TYPE_EMERGENCY_ACK),
+        )
+        assertEquals(
+            true,
+            MeshProtocol.isEmergencyAcknowledgementType(
+                MeshProtocol.TYPE_LEGACY_EMERGENCY_ACK,
+            ),
+        )
     }
 
     @Test

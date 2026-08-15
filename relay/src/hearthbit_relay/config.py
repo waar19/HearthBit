@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 from .identity import NodeRole
 from .protocol import (
     TYPE_COURIER_ENVELOPE,
+    TYPE_EMERGENCY_ACK,
     TYPE_MESSAGE,
 )
 
@@ -29,6 +30,7 @@ class StoreConfig:
             {
                 TYPE_MESSAGE,
                 TYPE_COURIER_ENVELOPE,
+                TYPE_EMERGENCY_ACK,
             }
         )
     )
@@ -150,10 +152,12 @@ class FloodConfig:
 
     sender_rate_per_second: float = 8.0
     sender_burst: int = 32
-    emergency_rate_per_second: float = 2.0
-    emergency_burst: int = 8
+    emergency_rate_per_second: float = 8.0
+    emergency_burst: int = 32
     bridge_rate_per_second: float = 20.0
     bridge_burst: int = 64
+    bridge_emergency_rate_per_second: float = 20.0
+    bridge_emergency_burst: int = 64
 
 
 @dataclass(frozen=True, slots=True)
@@ -551,6 +555,16 @@ def load_config(path: str | Path | None) -> RelayConfig:
             "bridge_burst",
             _DEFAULT_FLOOD.bridge_burst,
         ),
+        bridge_emergency_rate_per_second=_positive_number(
+            flood_raw,
+            "bridge_emergency_rate_per_second",
+            _DEFAULT_FLOOD.bridge_emergency_rate_per_second,
+        ),
+        bridge_emergency_burst=_positive_int(
+            flood_raw,
+            "bridge_emergency_burst",
+            _DEFAULT_FLOOD.bridge_emergency_burst,
+        ),
     )
     identity_path = str(raw.get("identity_path", _DEFAULT_RELAY.identity_path))
     trust_store_value = raw.get("trust_store_path")
@@ -657,7 +671,15 @@ def load_config(path: str | Path | None) -> RelayConfig:
         raise ValueError("'matrix.max_bridge_hops' cannot exceed 32")
     if config.matrix.inbound_queue_size > 4096:
         raise ValueError("'matrix.inbound_queue_size' cannot exceed 4096")
-    if config.flood.sender_burst > 10_000 or config.flood.bridge_burst > 10_000:
+    if any(
+        burst > 10_000
+        for burst in (
+            config.flood.sender_burst,
+            config.flood.emergency_burst,
+            config.flood.bridge_burst,
+            config.flood.bridge_emergency_burst,
+        )
+    ):
         raise ValueError("flood burst limits cannot exceed 10000")
     if config.matrix.private_opaque.enabled:
         raise ValueError(

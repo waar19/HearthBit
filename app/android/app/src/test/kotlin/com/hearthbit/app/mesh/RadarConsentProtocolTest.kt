@@ -16,7 +16,73 @@ import java.security.SecureRandom
 
 class RadarConsentProtocolTest {
     @Test
-    fun `concesion valida dura como maximo veinte minutos`() {
+    fun `concesion manual dura quince minutos y rescate acepta treinta`() {
+        val now = 1_000_000L
+        val manual = requireNotNull(
+            RadarConsentProtocol.decode(
+                RadarConsentProtocol.grant(now + RadarConsentProtocol.MANUAL_DURATION_MS),
+            ),
+        )
+        val rescue = requireNotNull(
+            RadarConsentProtocol.decode(
+                RadarConsentProtocol.grant(now + RadarConsentProtocol.SOS_DURATION_MS),
+            ),
+        )
+
+        assertEquals(15 * 60_000L, RadarConsentProtocol.MANUAL_DURATION_MS)
+        assertEquals(30 * 60_000L, RadarConsentProtocol.SOS_DURATION_MS)
+        assertTrue(RadarConsentProtocol.isValidGrant(manual, now, now))
+        assertTrue(RadarConsentProtocol.isValidGrant(rescue, now, now))
+    }
+
+    @Test
+    fun `cada ping de rescate renueva treinta minutos`() {
+        val firstPing = 1_000_000L
+        val secondPing = firstPing + 120_000L
+
+        assertEquals(
+            firstPing + RadarConsentProtocol.SOS_DURATION_MS,
+            RadarConsentProtocol.sosConsentExpiresAt(firstPing),
+        )
+        assertEquals(
+            secondPing + RadarConsentProtocol.SOS_DURATION_MS,
+            RadarConsentProtocol.sosConsentExpiresAt(secondPing),
+        )
+    }
+
+    @Test
+    fun `expiracion SOS satura y limita timestamps futuros al reloj local`() {
+        val now = 10_000_000L
+        assertEquals(
+            now + RadarConsentProtocol.SOS_DURATION_MS,
+            RadarConsentProtocol.sosConsentExpiresAt(
+                Long.MAX_VALUE - RadarConsentProtocol.SOS_DURATION_MS + 1,
+                now,
+            ),
+        )
+        assertEquals(
+            Long.MAX_VALUE,
+            RadarConsentProtocol.sosConsentExpiresAt(
+                Long.MAX_VALUE,
+                Long.MAX_VALUE,
+            ),
+        )
+        val consent = requireNotNull(
+            RadarConsentProtocol.decode(
+                RadarConsentProtocol.grant(Long.MAX_VALUE),
+            ),
+        )
+        assertTrue(
+            RadarConsentProtocol.isValidGrant(
+                consent,
+                packetTimestamp = Long.MAX_VALUE,
+                now = Long.MAX_VALUE - 1,
+            ),
+        )
+    }
+
+    @Test
+    fun `concesion codifica y decodifica expiracion`() {
         val now = 1_000_000L
         val payload = RadarConsentProtocol.grant(
             now + RadarConsentProtocol.MANUAL_DURATION_MS,

@@ -398,7 +398,7 @@ class MeshController extends ChangeNotifier {
     rescueStartedAt ??= now;
     rescueExpiresAt = now.add(const Duration(hours: 24));
     notifyListeners();
-    await _platform.setRadarConsent(enabled: true, minutes: 10);
+    await _platform.setRadarConsent(enabled: true, minutes: 30);
     await ensureAlwaysLocation();
     await _rescuePing();
     final state = await _platform.configureRescueMode(
@@ -415,7 +415,7 @@ class MeshController extends ChangeNotifier {
 
   Future<void> _rescuePing() async {
     if (!rescueMode) return;
-    await _platform.setRadarConsent(enabled: true, minutes: 10);
+    await _platform.setRadarConsent(enabled: true, minutes: 30);
     await sendSos(
       _rescueDescription,
       locationPrecision: _rescueLocationPrecision,
@@ -1078,7 +1078,11 @@ class MeshController extends ChangeNotifier {
       String? canonicalHash = delivery.canonicalHash;
       var transmitted = false;
       if (canonicalHash != null) {
-        transmitted = await _platform.retryEmergency(canonicalHash);
+        final retryHash = await _platform.retryEmergency(canonicalHash);
+        if (retryHash != null) {
+          canonicalHash = retryHash;
+          transmitted = true;
+        }
       }
       if (!transmitted) {
         final result = await _platform.sendEmergency(
@@ -1098,6 +1102,9 @@ class MeshController extends ChangeNotifier {
         canonicalHash: canonicalHash,
         clearLastError: true,
       );
+      // El nativo transmite antes de devolver el hash. Persistirlo sin otro
+      // await reduce al mínimo la carrera con un ACK que ya viene en camino.
+      await _replaceEmergencyDelivery(delivery);
       DiagnosticsLog.instance.info(
         'emergency.outbox.relayed',
         data: {'kind': delivery.kind, 'attempt': attempt},
@@ -1110,6 +1117,7 @@ class MeshController extends ChangeNotifier {
         nextAttemptAt: now.add(_emergencyBackoff(attempt)),
         lastError: error.runtimeType.toString(),
       );
+      await _replaceEmergencyDelivery(delivery);
       DiagnosticsLog.instance.warning(
         'emergency.outbox.transmit_failed',
         error: error,
@@ -1117,7 +1125,6 @@ class MeshController extends ChangeNotifier {
         data: {'kind': delivery.kind, 'attempt': attempt},
       );
     }
-    await _replaceEmergencyDelivery(delivery);
     _scheduleEmergencyRetry();
   }
 
@@ -1607,11 +1614,19 @@ class MeshController extends ChangeNotifier {
     String canonicalHash,
     String acknowledgingPeerId,
   ) async {
-    final localId = await _repository.recordEmergencyAcknowledgement(
+    var localId = await _repository.recordEmergencyAcknowledgement(
       canonicalHash: canonicalHash,
       peerId: acknowledgingPeerId,
       acknowledgedAt: DateTime.now(),
     );
+    if (localId == null) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      localId = await _repository.recordEmergencyAcknowledgement(
+        canonicalHash: canonicalHash,
+        peerId: acknowledgingPeerId,
+        acknowledgedAt: DateTime.now(),
+      );
+    }
     if (localId == null) return;
     _emergencyDeliveries
       ..clear()

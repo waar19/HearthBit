@@ -19,7 +19,6 @@ import android.os.Looper
 import android.os.ParcelUuid
 import android.util.Log
 import java.util.UUID
-import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -39,8 +38,9 @@ internal class MeshtasticBleLinkAdapter(
     private val adapter: BluetoothAdapter? =
         context.getSystemService(BluetoothManager::class.java)?.adapter
     private val handler = Handler(Looper.getMainLooper())
-    private val writeQueue = ArrayBlockingQueue<ByteArray>(MAX_QUEUED_WRITES)
+    private val writeQueue = MeshtasticDeliveryQueue(MAX_QUEUED_WRITES)
     private val packetIds = AtomicInteger((System.currentTimeMillis() and 0x7fffffff).toInt())
+    private val droppedWrites = AtomicInteger(0)
 
     @Volatile
     private var gatt: BluetoothGatt? = null
@@ -141,7 +141,7 @@ internal class MeshtasticBleLinkAdapter(
                 requestAck = priority == LinkPriority.CRITICAL,
             )
         }.getOrNull() ?: return false
-        if (!writeQueue.offer(encoded)) return false
+        if (!enqueueWrite(encoded, priority)) return false
         drainWrites()
         return true
     }
@@ -268,7 +268,10 @@ internal class MeshtasticBleLinkAdapter(
 
     private fun finishSetup(gatt: BluetoothGatt) {
         setReady(true, gatt.device.name)
-        writeQueue.offer(MeshtasticFrameCodec.configRequest(nextConfigNonce()))
+        enqueueWrite(
+            MeshtasticFrameCodec.configRequest(nextConfigNonce()),
+            LinkPriority.CRITICAL,
+        )
         drainWrites()
         readNext(gatt)
     }
@@ -288,6 +291,30 @@ internal class MeshtasticBleLinkAdapter(
         writing = connection.writeCharacteristic(characteristic)
         if (!writing) {
             Log.w(LOG_TAG, "Meshtastic ToRadio write was rejected")
+        }
+    }
+
+    private fun enqueueWrite(bytes: ByteArray, priority: LinkPriority): Boolean {
+        return when (writeQueue.offer(bytes, priority)) {
+            MeshtasticQueueOfferResult.ENQUEUED -> true
+            MeshtasticQueueOfferResult.EVICTED_STANDARD -> {
+                logQueueDrop("Meshtastic BLE queue evicted oldest STANDARD frame")
+                true
+            }
+
+            MeshtasticQueueOfferResult.REJECTED_FULL -> {
+                logQueueDrop("Meshtastic BLE queue rejected $priority frame")
+                false
+            }
+        }
+    }
+
+    private fun logQueueDrop(message: String) {
+        val count = droppedWrites.updateAndGet { current ->
+            if (current == Int.MAX_VALUE) 1 else current + 1
+        }
+        if (count <= INITIAL_DROP_LOG_LIMIT || count % DROP_LOG_INTERVAL == 0) {
+            Log.w(LOG_TAG, "$message (drop count=$count)")
         }
     }
 
@@ -312,6 +339,8 @@ internal class MeshtasticBleLinkAdapter(
         const val LINK_COST = 30
         const val MAX_QUEUED_WRITES = 64
         const val RECONNECT_DELAY_MS = 5_000L
+        const val INITIAL_DROP_LOG_LIMIT = 3
+        const val DROP_LOG_INTERVAL = 64
         val MESHTASTIC_SERVICE_UUID: UUID =
             UUID.fromString("6ba1b218-15a8-461f-9fa8-5dcae273eafd")
         val FROM_RADIO_UUID: UUID =

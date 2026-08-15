@@ -12,6 +12,7 @@ internal class MeshFragmentReassembler {
         val total: Int,
         val senderId: ByteArray,
         val recipientId: ByteArray?,
+        var ttl: Byte,
         var updatedAt: Long,
         val parts: MutableMap<Int, ByteArray> = mutableMapOf(),
         var bytes: Int = 0,
@@ -39,6 +40,7 @@ internal class MeshFragmentReassembler {
                     total = fragment.total,
                     senderId = packet.senderId.copyOf(),
                     recipientId = packet.recipientId?.copyOf(),
+                    ttl = packet.ttl,
                     updatedAt = now,
                 ).also { sets[key] = it }
             }
@@ -51,6 +53,10 @@ internal class MeshFragmentReassembler {
                 remove(key)
                 return null
             }
+            set.ttl = minOf(
+                set.ttl.toInt() and 0xFF,
+                packet.ttl.toInt() and 0xFF,
+            ).toByte()
 
             val existing = set.parts[fragment.index]
             if (existing != null) {
@@ -86,7 +92,25 @@ internal class MeshFragmentReassembler {
             }
             // El paquete original ya viajó dentro de fragments que fueron
             // retransmitidos individualmente; no volver a retransmitirlo.
-            return decoded.copy(ttl = 0)
+            return when (decoded.type) {
+                MeshProtocol.TYPE_BEACON_CONTROL -> {
+                    if ((decoded.ttl.toInt() and 0xFF) != BeaconControlProtocol.INITIAL_TTL ||
+                        !BeaconControlProtocol.isValidTtl(set.ttl.toInt() and 0xFF)
+                    ) {
+                        null
+                    } else {
+                        decoded.copy(ttl = set.ttl)
+                    }
+                }
+                MeshProtocol.TYPE_RANGING_CONTROL -> {
+                    if (decoded.ttl != 1.toByte() || set.ttl != 1.toByte()) {
+                        null
+                    } else {
+                        decoded.copy(ttl = 1)
+                    }
+                }
+                else -> decoded.copy(ttl = 0)
+            }
         }
     }
 

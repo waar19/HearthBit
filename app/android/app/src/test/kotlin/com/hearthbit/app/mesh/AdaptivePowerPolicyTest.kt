@@ -67,7 +67,7 @@ class AdaptivePowerPolicyTest {
     }
 
     @Test
-    fun `rescue work stays at least balanced with screen off or system saver`() {
+    fun `rescue work stays at least balanced even with critical battery`() {
         assertEquals(
             PowerProfile.BALANCED,
             profile(
@@ -82,12 +82,25 @@ class AdaptivePowerPolicyTest {
             profile(battery = 20, screenOn = false, highPerformance = true),
         )
         assertEquals(
-            PowerProfile.CRITICAL,
+            PowerProfile.BALANCED,
             profile(battery = 10, screenOn = false, highPerformance = true),
         )
         assertEquals(
+            PowerProfile.BALANCED,
+            profile(battery = 0, systemPowerSave = true, highPerformance = true),
+        )
+        assertEquals(
+            PowerProfile.PERFORMANCE,
+            profile(battery = 5, charging = true, highPerformance = true),
+        )
+        assertEquals(
             PowerProfile.SURVIVAL,
-            profile(battery = 80, survival = true, highPerformance = true),
+            profile(
+                battery = 5,
+                charging = true,
+                survival = true,
+                highPerformance = true,
+            ),
         )
     }
 

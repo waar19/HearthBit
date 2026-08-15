@@ -4,6 +4,7 @@ import java.security.SecureRandom
 
 internal object BeaconControlProtocol {
     const val VERSION: Byte = 1
+    const val INITIAL_TTL = 2
     const val ACTION_REQUEST: Byte = 1
     const val ACTION_GRANT: Byte = 2
     const val ACTION_REVOKE: Byte = 3
@@ -83,6 +84,8 @@ internal object BeaconControlProtocol {
 
     fun shouldAutoAccept(localRadarConsentUntil: Long, now: Long = System.currentTimeMillis()): Boolean =
         localRadarConsentUntil > now
+
+    fun isValidTtl(ttl: Int): Boolean = ttl == 1 || ttl == INITIAL_TTL
 
     fun nonceHex(nonce: ByteArray): String = MeshProtocol.hex(nonce)
 

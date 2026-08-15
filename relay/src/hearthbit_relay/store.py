@@ -8,7 +8,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .config import StoreConfig
-from .protocol import EPHEMERAL_MESSAGE_TYPES
+from .protocol import (
+    EMERGENCY_ACK_RETENTION_SECONDS,
+    EPHEMERAL_MESSAGE_TYPES,
+    TYPE_EMERGENCY_ACK,
+    PacketError,
+    decode_packet,
+    is_storable_emergency_ack,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,7 +76,7 @@ class PacketStore:
             self._db.execute(
                 "ALTER TABLE packets ADD COLUMN priority INTEGER NOT NULL DEFAULT 0"
             )
-        self._remove_ephemeral_packets()
+        self._remove_ineligible_packets()
         self._operations = 0
 
     def seen_or_add(
@@ -129,6 +136,14 @@ class PacketStore:
         now = _now_ms() if now_ms is None else now_ms
         if message_type in EPHEMERAL_MESSAGE_TYPES or expires_at_ms <= now:
             return False
+        if message_type == TYPE_EMERGENCY_ACK:
+            expires_at_ms = _emergency_ack_expiry(
+                packet,
+                expires_at_ms=expires_at_ms,
+                stored_at_ms=now,
+            )
+            if expires_at_ms is None or expires_at_ms <= now:
+                return False
         with self._lock:
             cursor = self._db.execute(
                 """
@@ -260,12 +275,36 @@ class PacketStore:
         if self._operations % 256 == 0:
             self.purge(now_ms=now_ms)
 
-    def _remove_ephemeral_packets(self) -> None:
+    def _remove_ineligible_packets(self) -> None:
         placeholders = ",".join("?" for _ in EPHEMERAL_MESSAGE_TYPES)
         self._db.execute(
             f"DELETE FROM packets WHERE message_type IN ({placeholders})",
             tuple(EPHEMERAL_MESSAGE_TYPES),
         )
+        rows = self._db.execute(
+            """
+            SELECT fingerprint, packet, created_at_ms, expires_at_ms
+            FROM packets
+            WHERE message_type = ?
+            """,
+            (TYPE_EMERGENCY_ACK,),
+        ).fetchall()
+        for fingerprint, packet, created_at_ms, expires_at_ms in rows:
+            bounded_expiry = _emergency_ack_expiry(
+                bytes(packet),
+                expires_at_ms=int(expires_at_ms),
+                stored_at_ms=int(created_at_ms),
+            )
+            if bounded_expiry is None or bounded_expiry <= int(created_at_ms):
+                self._db.execute(
+                    "DELETE FROM packets WHERE fingerprint = ?",
+                    (fingerprint,),
+                )
+            elif bounded_expiry != int(expires_at_ms):
+                self._db.execute(
+                    "UPDATE packets SET expires_at_ms = ? WHERE fingerprint = ?",
+                    (bounded_expiry, fingerprint),
+                )
 
     def _enforce_limits(self) -> None:
         while (
@@ -285,3 +324,23 @@ class PacketStore:
 
 def _now_ms() -> int:
     return time.time_ns() // 1_000_000
+
+
+def _emergency_ack_expiry(
+    packet: bytes,
+    *,
+    expires_at_ms: int,
+    stored_at_ms: int,
+) -> int | None:
+    try:
+        decoded = decode_packet(packet)
+    except PacketError:
+        return None
+    if not is_storable_emergency_ack(decoded):
+        return None
+    window_ms = EMERGENCY_ACK_RETENTION_SECONDS * 1000
+    return min(
+        expires_at_ms,
+        stored_at_ms + window_ms,
+        decoded.timestamp_ms + window_ms,
+    )

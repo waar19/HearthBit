@@ -142,9 +142,10 @@ El commit fijado registra:
 | `0x22` | `FILE_TRANSFER` | archivo BLE del perfil BitChat |
 | `0x29` | `VOICE_FRAME` | voz efímera, excluida de gossip |
 
-El tipo exterior `0x04` (Courier), los tipos `0x23`–`0x25` y el tipo Noise
-interior `0x30` no aparecen en ese registro. Son extensiones HearthBit
-documentadas en `docs/extension-registry.md`.
+El tipo exterior `0x04` (Courier), los tipos `0x23`–`0x28`, `0x2A`–`0x2B` y el
+tipo Noise interior `0x30` no aparecen en ese registro. Son extensiones
+HearthBit/Bitle documentadas en `docs/extension-registry.md`. `0x29` permanece
+asignado por BitChat a `VOICE_FRAME`.
 
 Un tipo desconocido dirigido al nodo local **MUST** ignorarse sin alterar
 identidad, capacidades o sesión. No se presupone que un cliente upstream

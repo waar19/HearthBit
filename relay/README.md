@@ -115,7 +115,10 @@ as central and peripheral simultaneously.
   never persisted.
 
 A `CourierEnvelope` expiry TLV can only reduce, never extend, configured
-retention.
+retention. `EMERGENCY_ACK 0x2B` is persisted only with a recipient, signature,
+and the registered payload shape; retention never exceeds 48 hours even when
+`store.packet_ttl_seconds` is higher. Ambiguous legacy ACK `0x29` is always
+purged.
 
 Stop the service before trust administration. `hearthbit-relay-trust --store
 PATH list` lists sender IDs; `remove --sender ID --confirm` explicitly clears

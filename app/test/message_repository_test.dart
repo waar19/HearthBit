@@ -218,6 +218,12 @@ void main() {
       canonicalHash: 'a' * 64,
     );
     await repository.updateEmergencyDelivery(delivery);
+    delivery = delivery.copyWith(
+      attempts: 2,
+      canonicalHash: 'b' * 64,
+      nextAttemptAt: createdAt.add(const Duration(seconds: 45)),
+    );
+    await repository.updateEmergencyDelivery(delivery);
 
     await repository.recordEmergencyAcknowledgement(
       canonicalHash: 'a' * 64,
@@ -225,12 +231,7 @@ void main() {
       acknowledgedAt: createdAt.add(const Duration(seconds: 2)),
     );
     await repository.recordEmergencyAcknowledgement(
-      canonicalHash: 'a' * 64,
-      peerId: 'peer-a',
-      acknowledgedAt: createdAt.add(const Duration(seconds: 3)),
-    );
-    await repository.recordEmergencyAcknowledgement(
-      canonicalHash: 'a' * 64,
+      canonicalHash: 'b' * 64,
       peerId: 'peer-b',
       acknowledgedAt: createdAt.add(const Duration(seconds: 4)),
     );

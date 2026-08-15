@@ -1,11 +1,15 @@
 import pytest
 
 from hearthbit_relay.protocol import (
+    EPHEMERAL_MESSAGE_TYPES,
     FLAG_ROUTE,
     FLAG_RSR,
+    TYPE_EMERGENCY_ACK,
     TYPE_FRAGMENT,
     TYPE_GROUP_MESSAGE,
     TYPE_HBT_CAPABILITY,
+    TYPE_LEGACY_EMERGENCY_ACK,
+    TYPE_LEGACY_HBT_CAPABILITY,
     TYPE_NODE_CAPABILITY,
     TYPE_PREKEY_BUNDLE,
     FragmentReassembler,
@@ -208,9 +212,41 @@ def test_v2_forwarding_preserves_version_route_flags_and_every_other_byte() -> N
     assert relay_fingerprint(original) == relay_fingerprint(forwarded)
 
 
-def test_capability_type_names_keep_legacy_import_aliases() -> None:
-    assert TYPE_HBT_CAPABILITY == TYPE_PREKEY_BUNDLE == 0x24
+def test_extension_type_codes_do_not_collide_with_upstream_or_firmware() -> None:
+    assert TYPE_PREKEY_BUNDLE == TYPE_LEGACY_HBT_CAPABILITY == 0x24
     assert TYPE_NODE_CAPABILITY == TYPE_GROUP_MESSAGE == 0x25
+    assert TYPE_LEGACY_EMERGENCY_ACK == 0x29
+    assert TYPE_HBT_CAPABILITY == 0x2A
+    assert TYPE_EMERGENCY_ACK == 0x2B
+
+
+def test_only_legacy_emergency_ack_remains_ephemeral() -> None:
+    assert TYPE_LEGACY_EMERGENCY_ACK in EPHEMERAL_MESSAGE_TYPES
+    assert TYPE_EMERGENCY_ACK not in EPHEMERAL_MESSAGE_TYPES
+
+
+@pytest.mark.parametrize(
+    "message_type",
+    (
+        TYPE_LEGACY_HBT_CAPABILITY,
+        TYPE_HBT_CAPABILITY,
+        TYPE_LEGACY_EMERGENCY_ACK,
+        TYPE_EMERGENCY_ACK,
+    ),
+)
+def test_decoder_accepts_current_and_legacy_extension_types(message_type: int) -> None:
+    decoded = decode_packet(
+        encode_packet(
+            message_type=message_type,
+            ttl=7,
+            timestamp_ms=123,
+            sender_id=b"sender01",
+            recipient_id=b"target01",
+            payload=b"\x01",
+        )
+    )
+
+    assert decoded.message_type == message_type
 
 
 @pytest.mark.parametrize("ttl", [0, 1])

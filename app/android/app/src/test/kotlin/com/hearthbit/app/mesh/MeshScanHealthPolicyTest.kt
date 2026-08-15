@@ -1,7 +1,9 @@
 package com.hearthbit.app.mesh
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MeshScanHealthPolicyTest {
@@ -61,6 +63,48 @@ class MeshScanHealthPolicyTest {
                 scanStartedAt = 0L,
                 lastResultAt = 0L,
                 expectsKnownPeer = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `radar y rescate fuerzan escaneo continuo sin duty cycle`() {
+        val radarRequested = MeshScanSchedulingPolicy.highPerformanceRequested(
+            radarActive = true,
+            rescueActive = false,
+        )
+        val rescueRequested = MeshScanSchedulingPolicy.highPerformanceRequested(
+            radarActive = false,
+            rescueActive = true,
+        )
+
+        assertTrue(radarRequested)
+        assertTrue(rescueRequested)
+        assertFalse(
+            MeshScanSchedulingPolicy.shouldUseDutyCycle(
+                profile = PowerProfile.CRITICAL,
+                highPerformanceRequested = rescueRequested,
+            ),
+        )
+        assertTrue(
+            MeshScanSchedulingPolicy.shouldScanContinuously(
+                profile = PowerProfile.CRITICAL,
+                highPerformanceRequested = rescueRequested,
+                recoveryScanActive = false,
+            ),
+        )
+        assertFalse(
+            MeshScanSchedulingPolicy.shouldScanContinuously(
+                profile = PowerProfile.CRITICAL,
+                highPerformanceRequested = false,
+                recoveryScanActive = false,
+            ),
+        )
+        assertFalse(
+            MeshScanSchedulingPolicy.shouldScanContinuously(
+                profile = PowerProfile.SURVIVAL,
+                highPerformanceRequested = rescueRequested,
+                recoveryScanActive = false,
             ),
         )
     }

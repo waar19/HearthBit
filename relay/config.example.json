@@ -17,10 +17,12 @@
   "flood": {
     "sender_rate_per_second": 8,
     "sender_burst": 32,
-    "emergency_rate_per_second": 2,
-    "emergency_burst": 8,
+    "emergency_rate_per_second": 8,
+    "emergency_burst": 32,
     "bridge_rate_per_second": 20,
-    "bridge_burst": 64
+    "bridge_burst": 64,
+    "bridge_emergency_rate_per_second": 20,
+    "bridge_emergency_burst": 64
   },
   "lan": {
     "enabled": false,
@@ -107,6 +109,6 @@
     "seen_ttl_seconds": 86400,
     "replay_batch": 256,
     "require_signature": true,
-    "message_types": ["0x02", "0x04"]
+    "message_types": ["0x02", "0x04", "0x2B"]
   }
 }

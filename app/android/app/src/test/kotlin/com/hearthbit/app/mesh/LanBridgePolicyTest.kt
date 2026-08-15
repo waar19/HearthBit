@@ -2,7 +2,9 @@ package com.hearthbit.app.mesh
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LanBridgePolicyTest {
@@ -33,5 +35,11 @@ class LanBridgePolicyTest {
     @Test(expected = IllegalArgumentException::class)
     fun `rechaza frames sobre el limite negociado`() {
         LanBridgePolicy.validateFrame(byteArrayOf(1, 2, 3), 2)
+    }
+
+    @Test
+    fun `solo un stop explicito limpia el puente LAN`() {
+        assertFalse(LanBridgePolicy.shouldClearOnStop(notify = false))
+        assertTrue(LanBridgePolicy.shouldClearOnStop(notify = true))
     }
 }

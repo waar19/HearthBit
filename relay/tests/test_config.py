@@ -10,10 +10,28 @@ from hearthbit_relay.bluez import (
 )
 from hearthbit_relay.config import RelayConfig, load_config
 from hearthbit_relay.identity import NodeRole
+from hearthbit_relay.protocol import TYPE_EMERGENCY_ACK
 
 
 def test_default_central_limit_is_greater_than_two() -> None:
     assert RelayConfig().max_central_links > 2
+
+
+def test_emergency_flood_defaults_match_or_exceed_normal_capacity() -> None:
+    flood = RelayConfig().flood
+
+    assert flood.emergency_rate_per_second == 8
+    assert flood.emergency_burst == 32
+    assert flood.emergency_rate_per_second >= flood.sender_rate_per_second
+    assert flood.emergency_burst >= flood.sender_burst
+    assert flood.bridge_emergency_rate_per_second == 20
+    assert flood.bridge_emergency_burst == 64
+    assert flood.bridge_emergency_rate_per_second >= flood.bridge_rate_per_second
+    assert flood.bridge_emergency_burst >= flood.bridge_burst
+
+
+def test_store_defaults_include_current_emergency_ack() -> None:
+    assert TYPE_EMERGENCY_ACK in RelayConfig().store.message_types
 
 
 def test_privacy_defaults_bind_lan_to_loopback() -> None:
@@ -302,6 +320,8 @@ def test_identity_and_flood_policies_are_bounded(tmp_path) -> None:
                     "emergency_burst": 3,
                     "bridge_rate_per_second": 10,
                     "bridge_burst": 20,
+                    "bridge_emergency_rate_per_second": 12,
+                    "bridge_emergency_burst": 24,
                 },
             }
         ),
@@ -311,6 +331,8 @@ def test_identity_and_flood_policies_are_bounded(tmp_path) -> None:
     config = load_config(path)
     assert config.identity_verification.unknown_signed_policy == "reject"
     assert config.flood.sender_burst == 8
+    assert config.flood.bridge_emergency_rate_per_second == 12
+    assert config.flood.bridge_emergency_burst == 24
 
     path.write_text(
         json.dumps(
