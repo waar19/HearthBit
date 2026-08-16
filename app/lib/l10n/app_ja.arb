@@ -238,6 +238,7 @@
   "diagnosticsMeshSection": "メッシュ",
   "diagnosticsPlatform": "プラットフォーム",
   "diagnosticsStatus": "状態",
+  "diagnosticsIdentityRotation": "最新のIDローテーション",
   "diagnosticsNearbyDevices": "近くのデバイス",
   "diagnosticsAdvertising": "BLE アドバタイズ",
   "diagnosticsMeshScan": "メッシュスキャン",

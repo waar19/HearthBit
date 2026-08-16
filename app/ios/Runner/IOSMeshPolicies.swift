@@ -295,6 +295,7 @@ enum IOSMeshIngressPolicy {
     IOSMeshProtocol.emergencyCapability,
     IOSMeshProtocol.legacyEmergencyAck,
     IOSMeshProtocol.emergencyAck,
+    IOSMeshProtocol.keyRotation,
   ]
 
   static func requiresPublicSignature(_ packetType: UInt8) -> Bool {
@@ -545,6 +546,7 @@ enum IOSMeshInteropPolicy {
     IOSMeshProtocol.hbtCapability,
     IOSMeshProtocol.emergencyCapability,
     IOSMeshProtocol.nodeCapability,
+    IOSMeshProtocol.keyRotation,
   ]
 
   static func shouldProcessPublicMessage(
@@ -608,6 +610,7 @@ enum IOSNoiseReplayPolicy {
     return effectiveType != IOSMeshProtocol.noiseHandshake &&
       effectiveType != IOSMeshProtocol.noiseEncrypted &&
       effectiveType != IOSMeshProtocol.beaconControl &&
-      effectiveType != IOSMeshProtocol.rangingControl
+      effectiveType != IOSMeshProtocol.rangingControl &&
+      effectiveType != IOSMeshProtocol.keyRotation
   }
 }

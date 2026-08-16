@@ -716,6 +716,33 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         guard let data = arguments["data"] as? FlutterStandardTypedData
         else { throw IOSMeshError.peerUnavailable }
         result(FlutterStandardTypedData(bytes: try identity.signBytes(data.data)))
+      case "rotateLocalIdentity":
+        guard running, identity != nil else { throw IOSMeshError.identityUnavailable }
+        let oldPeerID = identity.peerIDHex
+        let prepared = try identity.prepareRotation(timestamp: currentMilliseconds())
+        let newPeerID = IOSMeshProtocol.peerID(
+          prepared.noisePrivateKey.publicKey.rawRepresentation
+        ).hex
+        try identity.activateRotation(prepared)
+        broadcast(prepared.packet)
+        identity = try IOSMeshIdentity()
+        sessions.removeAll()
+        responderCandidates.removeAll()
+        securePeerIDs.removeAll()
+        privateChatPeerIDs.removeAll()
+        decryptFailures.removeAll()
+        latestAnnouncementTimestampByPeer.removeAll()
+        sendAnnouncement()
+        let event: [String: Any] = [
+          "type": "keyRotation",
+          "status": "local",
+          "oldPeerId": oldPeerID,
+          "newPeerId": newPeerID,
+          "sequence": prepared.sequence,
+          "timestamp": prepared.packet.timestamp,
+        ]
+        emit(event)
+        result(event)
       case "verifyPeerSignature":
         guard
           let peerID = arguments["peerId"] as? String,
@@ -2875,12 +2902,16 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       guard unknownIngressRateLimiter.allow(source: rateLimitKey) else { return }
     }
     var validatedAnnouncement: IOSMeshProtocol.Announcement?
+    var validatedKeyRotation: IOSMeshProtocol.KeyRotation?
     if packet.type == IOSMeshProtocol.announce {
       guard let announcement = validateAnnouncementIdentity(
         packet,
         senderID: senderID
       ) else { return }
       validatedAnnouncement = announcement
+    } else if packet.type == IOSMeshProtocol.keyRotation {
+      guard let rotation = validateKeyRotation(packet, senderID: senderID) else { return }
+      validatedKeyRotation = rotation
     } else {
       let originalType = packet.type == IOSMeshProtocol.fragment
         ? IOSMeshProtocol.decodeFragmentPayload(packet.payload)?.originalType
@@ -2909,7 +2940,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         packet,
         senderID: senderID,
         source: source,
-        validatedAnnouncement: validatedAnnouncement
+        validatedAnnouncement: validatedAnnouncement,
+        validatedKeyRotation: validatedKeyRotation
       )
     }
     let fragmentOriginalType = packet.type == IOSMeshProtocol.fragment
@@ -2976,9 +3008,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       case .matched:
         break
       case let .conflict(noiseChanged, signingChanged):
-        // No existe un protocolo autenticado de rotación de identidad. Se
-        // rechaza cerrado; panic wipe (o un futuro olvido explícito con UX)
-        // es el único mecanismo local para retirar este pin.
+        // Los cambios de identidad solo se aceptan mediante KEY_ROTATION
+        // firmado por la clave anterior. Un ANNOUNCE conflictivo se rechaza.
         emitIdentityConflict(
           peerID: senderID,
           noiseChanged: noiseChanged,
@@ -2996,6 +3027,45 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       return nil
     }
     return announcement
+  }
+
+  private func validateKeyRotation(
+    _ packet: IOSMeshPacket,
+    senderID: String
+  ) -> IOSMeshProtocol.KeyRotation? {
+    let now = currentMilliseconds()
+    guard
+      let oldPin = peerIdentityPins.pin(for: senderID),
+      let rotation = IOSMeshProtocol.decodeKeyRotation(packet.payload),
+      packet.recipientID == nil,
+      !packet.isDrill,
+      rotation.oldPeerID == packet.senderID,
+      rotation.timestamp == packet.timestamp,
+      rotation.timestampIsCurrent(now: now),
+      IOSMeshIdentity.verify(packet, key: oldPin.signingPublicKey),
+      IOSMeshIdentity.verifyBytes(
+        rotation.authorizationBytes,
+        signature: rotation.authorizationSignature,
+        key: oldPin.signingPublicKey
+      )
+    else { return nil }
+    do {
+      guard try peerIdentityPins.rotate(
+        oldPeerID: senderID,
+        noisePublicKey: rotation.newNoisePublicKey,
+        signingPublicKey: rotation.newSigningPublicKey,
+        sequence: rotation.sequence
+      ) != nil else { return nil }
+      return rotation
+    } catch {
+      emit([
+        "type": "error",
+        "code": "peer_identity_rotation_store_failed",
+        "peerId": senderID,
+        "message": error.localizedDescription,
+      ])
+      return nil
+    }
   }
 
   private func emitIdentityConflict(
@@ -3016,7 +3086,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     _ packet: IOSMeshPacket,
     senderID: String,
     source: UUID? = nil,
-    validatedAnnouncement: IOSMeshProtocol.Announcement? = nil
+    validatedAnnouncement: IOSMeshProtocol.Announcement? = nil,
+    validatedKeyRotation: IOSMeshProtocol.KeyRotation? = nil
   ) {
     switch packet.type {
     case IOSMeshProtocol.announce:
@@ -3198,9 +3269,46 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       processEmergencyCapability(packet, senderID: senderID)
     case IOSMeshProtocol.emergencyAck, IOSMeshProtocol.legacyEmergencyAck:
       processEmergencyAcknowledgement(packet, senderID: senderID)
+    case IOSMeshProtocol.keyRotation:
+      guard let rotation = validatedKeyRotation else { return }
+      let newPeerID = rotation.newPeerID.hex
+      let previous = peers.removeValue(forKey: senderID)
+      invalidateNoiseState(peerID: senderID)
+      latestAnnouncementTimestampByPeer.removeValue(forKey: senderID)
+      let rotatedSources = peripheralPeers.compactMap {
+        $0.value == senderID ? $0.key : nil
+      }
+      for sourceID in rotatedSources {
+        peripheralPeers[sourceID] = newPeerID
+      }
+      if let previous {
+        peers[newPeerID] = IOSMeshPeer(
+          id: newPeerID,
+          nickname: previous.nickname,
+          noisePublicKey: rotation.newNoisePublicKey,
+          signingPublicKey: rotation.newSigningPublicKey,
+          supportsTransfers: previous.supportsTransfers,
+          hearthbitVerified: previous.hearthbitVerified,
+          supportsEmergencyAck: previous.supportsEmergencyAck,
+          isInfrastructure: previous.isInfrastructure,
+          role: previous.role,
+          hasLongRangeTrunk: previous.hasLongRangeTrunk,
+          lastSeen: Date()
+        )
+      }
+      emit([
+        "type": "keyRotation",
+        "status": "accepted",
+        "oldPeerId": senderID,
+        "newPeerId": newPeerID,
+        "sequence": rotation.sequence,
+        "timestamp": rotation.timestamp,
+      ])
+      emit(["type": "peers", "peers": peerMaps()])
     case IOSMeshProtocol.fragment:
       if let reassembled = fragmentReassembler.accept(packet) {
         var validatedAnnouncement: IOSMeshProtocol.Announcement?
+        var fragmentKeyRotation: IOSMeshProtocol.KeyRotation?
         if reassembled.type == IOSMeshProtocol.announce {
           guard let announcement = validateAnnouncementIdentity(
             reassembled,
@@ -3211,6 +3319,12 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
               packet.ttl == IOSMeshProtocol.defaultTTL), let source {
             peripheralPeers[source] = senderID
           }
+        } else if reassembled.type == IOSMeshProtocol.keyRotation {
+          guard let rotation = validateKeyRotation(
+            reassembled,
+            senderID: senderID
+          ) else { return }
+          fragmentKeyRotation = rotation
         } else if IOSMeshIngressPolicy.requiresPublicSignature(reassembled.type) {
           guard
             let pinnedIdentity = peerIdentityPins.pin(for: senderID),
@@ -3224,7 +3338,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           reassembled,
           senderID: senderID,
           source: source,
-          validatedAnnouncement: validatedAnnouncement
+          validatedAnnouncement: validatedAnnouncement,
+          validatedKeyRotation: fragmentKeyRotation
         )
       }
     default:

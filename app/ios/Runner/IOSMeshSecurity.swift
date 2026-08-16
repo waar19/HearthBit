@@ -135,10 +135,26 @@ enum IOSKeychain {
 }
 final class IOSMeshIdentity {
   private static let service = "HearthBit"
+  private static let bundleAccount = "identity.v2"
+  private struct IdentityBundle: Codable {
+    let version: Int
+    let noisePrivateKey: Data
+    let signingPrivateKey: Data
+    let rotationSequence: UInt64
+  }
+
+  struct PreparedRotation {
+    let packet: IOSMeshPacket
+    let noisePrivateKey: Curve25519.KeyAgreement.PrivateKey
+    let signingPrivateKey: Curve25519.Signing.PrivateKey
+    let sequence: UInt64
+  }
+
   let noisePrivateKey: Curve25519.KeyAgreement.PrivateKey
   let signingPrivateKey: Curve25519.Signing.PrivateKey
   let peerID: Data
   let peerIDHex: String
+  let rotationSequence: UInt64
 
   // «SOS-XXXX» como nombre por defecto: neutro y comprensible en cualquier
   // idioma, clave ahora que la app está localizada en varios idiomas.
@@ -151,6 +167,33 @@ final class IOSMeshIdentity {
   }
 
   init() throws {
+    if case let .value(data) = try IOSKeychain.read(
+      service: Self.service,
+      account: Self.bundleAccount
+    ) {
+      let bundle = try JSONDecoder().decode(IdentityBundle.self, from: data)
+      guard
+        bundle.version == 1,
+        bundle.rotationSequence > 0,
+        let noise = try? Curve25519.KeyAgreement.PrivateKey(
+          rawRepresentation: bundle.noisePrivateKey
+        ),
+        let signing = try? Curve25519.Signing.PrivateKey(
+          rawRepresentation: bundle.signingPrivateKey
+        )
+      else {
+        throw IOSSecureStorageError.corruptValue(
+          service: Self.service,
+          account: Self.bundleAccount
+        )
+      }
+      noisePrivateKey = noise
+      signingPrivateKey = signing
+      rotationSequence = bundle.rotationSequence
+      peerID = IOSMeshProtocol.peerID(noise.publicKey.rawRepresentation)
+      peerIDHex = peerID.hex
+      return
+    }
     let noiseStored = try IOSKeychain.read(service: Self.service, account: "noise")
     let signingStored = try IOSKeychain.read(service: Self.service, account: "signing")
     switch (noiseStored, signingStored) {
@@ -201,6 +244,7 @@ final class IOSMeshIdentity {
         account: "identity-partial"
       )
     }
+    rotationSequence = 0
     peerID = IOSMeshProtocol.peerID(noisePrivateKey.publicKey.rawRepresentation)
     peerIDHex = peerID.hex
   }
@@ -224,6 +268,68 @@ final class IOSMeshIdentity {
     try signingPrivateKey.signature(for: data)
   }
 
+  func prepareRotation(
+    timestamp: UInt64,
+    sequence: UInt64? = nil
+  ) throws -> PreparedRotation {
+    let nextSequence: UInt64
+    if let sequence {
+      nextSequence = sequence
+    } else {
+      let (candidate, overflow) = rotationSequence.addingReportingOverflow(1)
+      guard !overflow else { throw IOSMeshError.invalidPayload }
+      nextSequence = candidate
+    }
+    guard nextSequence > rotationSequence else { throw IOSMeshError.invalidPayload }
+    let noise = Curve25519.KeyAgreement.PrivateKey()
+    let signing = Curve25519.Signing.PrivateKey()
+    let unsigned = IOSMeshProtocol.KeyRotation(
+      oldPeerID: peerID,
+      newNoisePublicKey: noise.publicKey.rawRepresentation,
+      newSigningPublicKey: signing.publicKey.rawRepresentation,
+      timestamp: timestamp,
+      sequence: nextSequence,
+      authorizationSignature: Data(repeating: 0, count: 64)
+    )
+    let authorization = try signBytes(unsigned.authorizationBytes)
+    let payload = IOSMeshProtocol.keyRotationPayload(
+      oldPeerID: peerID,
+      newNoisePublicKey: noise.publicKey.rawRepresentation,
+      newSigningPublicKey: signing.publicKey.rawRepresentation,
+      timestamp: timestamp,
+      sequence: nextSequence,
+      authorizationSignature: authorization
+    )
+    let packet = sign(IOSMeshPacket(
+      type: IOSMeshProtocol.keyRotation,
+      ttl: IOSMeshProtocol.defaultTTL,
+      timestamp: timestamp,
+      senderID: peerID,
+      payload: payload
+    ))
+    guard packet.signature != nil else { throw IOSMeshError.identityUnavailable }
+    return PreparedRotation(
+      packet: packet,
+      noisePrivateKey: noise,
+      signingPrivateKey: signing,
+      sequence: nextSequence
+    )
+  }
+
+  func activateRotation(_ prepared: PreparedRotation) throws {
+    let bundle = IdentityBundle(
+      version: 1,
+      noisePrivateKey: prepared.noisePrivateKey.rawRepresentation,
+      signingPrivateKey: prepared.signingPrivateKey.rawRepresentation,
+      rotationSequence: prepared.sequence
+    )
+    try IOSKeychain.upsert(
+      JSONEncoder().encode(bundle),
+      service: Self.service,
+      account: Self.bundleAccount
+    )
+  }
+
   static func verifyBytes(_ data: Data, signature: Data, key: Data) -> Bool {
     guard let publicKey = try? Curve25519.Signing.PublicKey(rawRepresentation: key)
     else { return false }
@@ -231,7 +337,7 @@ final class IOSMeshIdentity {
   }
 
   static func clear() throws {
-    for account in ["noise", "signing"] {
+    for account in ["noise", "signing", bundleAccount] {
       try IOSKeychain.delete(service: service, account: account)
     }
     UserDefaults.standard.removeObject(forKey: "hearthbit.nickname")

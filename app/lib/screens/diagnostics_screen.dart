@@ -133,6 +133,10 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                     _statusLabel(context, controller.status),
                   ),
                   (
+                    context.l10n.diagnosticsIdentityRotation,
+                    controller.lastKeyRotationDiagnostic ?? '—',
+                  ),
+                  (
                     context.l10n.diagnosticsNearbyDevices,
                     '${controller.peers.length}',
                   ),

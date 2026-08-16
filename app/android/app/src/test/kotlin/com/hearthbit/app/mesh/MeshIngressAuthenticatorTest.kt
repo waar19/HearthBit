@@ -1,10 +1,15 @@
 package com.hearthbit.app.mesh
 
+import com.bitchat.android.noise.southernstorm.protocol.Noise
+import org.bouncycastle.crypto.generators.Ed25519KeyPairGenerator
+import org.bouncycastle.crypto.params.Ed25519KeyGenerationParameters
+import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.security.SecureRandom
 
 class MeshIngressAuthenticatorTest {
     @Test
@@ -307,6 +312,73 @@ class MeshIngressAuthenticatorTest {
                 emergencyPreannounce = true,
                 nowMs = Long.MIN_VALUE,
             ),
+        )
+    }
+
+    @Test
+    fun `key rotation requires old pin both signatures clock and matching old peer`() {
+        val oldNoise = ByteArray(32) { (it + 1).toByte() }
+        val oldSigning = ByteArray(32) { (it + 33).toByte() }
+        val oldPeer = MeshProtocol.peerIdFromNoiseKey(oldNoise)
+        val oldPeerHex = MeshProtocol.hex(oldPeer)
+        val now = 1_700_000_000_000L
+        val dh = Noise.createDH("25519")
+        dh.generateKeyPair()
+        val newNoise = ByteArray(32).also { dh.getPublicKey(it, 0) }
+        dh.destroy()
+        val signingGenerator = Ed25519KeyPairGenerator()
+        signingGenerator.init(Ed25519KeyGenerationParameters(SecureRandom()))
+        val newSigning =
+            (signingGenerator.generateKeyPair().public as Ed25519PublicKeyParameters).encoded
+        val packet = MeshProtocol.Packet(
+            type = MeshProtocol.TYPE_KEY_ROTATION,
+            ttl = MeshProtocol.TTL,
+            timestamp = now,
+            senderId = oldPeer,
+            payload = KeyRotationProtocol.encode(
+                oldPeer,
+                newNoise,
+                newSigning,
+                now,
+                3,
+                ByteArray(64) { 7 },
+            ),
+            signature = ByteArray(64) { 9 },
+        )
+        var rotated = false
+        val authenticator = MeshIngressAuthenticator(
+            trustLookup = {
+                if (it == oldPeerHex) {
+                    PeerTrustLookup.Pinned(PeerIdentityKeys(oldSigning, oldNoise))
+                } else {
+                    PeerTrustLookup.Unknown
+                }
+            },
+            validateAndPin = { _, _ -> PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION },
+            rotatePin = { peerId, _, sequence ->
+                rotated = peerId == oldPeerHex && sequence == 3L
+                PeerIdentityDecision.ACCEPT_AUTHENTICATED_ROTATION
+            },
+            verifySignature = { _, key -> key.contentEquals(oldSigning) },
+            verifyBytes = { _, signature, key ->
+                signature.contentEquals(ByteArray(64) { 7 }) && key.contentEquals(oldSigning)
+            },
+            nowMs = { now },
+        )
+
+        val accepted = authenticator.authenticate(packet)
+        assertEquals(MeshIngressDisposition.ACCEPT, accepted.disposition)
+        assertTrue(rotated)
+        assertEquals(3L, accepted.keyRotation?.sequence)
+        assertEquals(
+            MeshIngressDisposition.REJECT,
+            authenticator.authenticate(packet.copy(senderId = ByteArray(8) { 1 })).disposition,
+        )
+        assertEquals(
+            MeshIngressDisposition.REJECT,
+            authenticator.authenticate(
+                packet.copy(timestamp = now - KeyRotationProtocol.CLOCK_WINDOW_MS - 1),
+            ).disposition,
         )
     }
 

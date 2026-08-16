@@ -341,6 +341,9 @@ class MainActivity : FlutterActivity() {
                         requireNotNull(call.argument<ByteArray>("data")),
                     )
                 }
+                "rotateLocalIdentity" -> runMethod(result) {
+                    MeshRuntime.engine(this).rotateLocalIdentity()
+                }
                 "verifyPeerSignature" -> runMethod(result) {
                     MeshRuntime.engine(this).verifyPeerSignature(
                         requireNotNull(call.argument<String>("peerId")),

@@ -76,6 +76,8 @@ struct IOSPeerIdentityPin: Codable, Equatable {
   let peerID: String
   let noisePublicKey: Data
   let signingPublicKey: Data
+  var lastRotationSequence: UInt64? = nil
+  var retired: Bool? = nil
 }
 
 enum IOSPeerIdentityPinDecision: Equatable {
@@ -151,7 +153,7 @@ final class IOSPeerIdentityPinStore {
   }
 
   func pin(for peerID: String) -> IOSPeerIdentityPin? {
-    pins[peerID.lowercased()]
+    pins[peerID.lowercased()].flatMap { $0.retired == true ? nil : $0 }
   }
 
   func validateAndPin(
@@ -172,6 +174,9 @@ final class IOSPeerIdentityPinStore {
       )
     }
     if let existing = pins[normalized] {
+      if existing.retired == true {
+        return .conflict(noiseChanged: true, signingChanged: true)
+      }
       let noiseChanged = existing.noisePublicKey != noisePublicKey
       let signingChanged = existing.signingPublicKey != signingPublicKey
       if noiseChanged || signingChanged {
@@ -197,7 +202,9 @@ final class IOSPeerIdentityPinStore {
     let pin = IOSPeerIdentityPin(
       peerID: normalized,
       noisePublicKey: noisePublicKey,
-      signingPublicKey: signingPublicKey
+      signingPublicKey: signingPublicKey,
+      lastRotationSequence: 0,
+      retired: false
     )
     pins[normalized] = pin
     do {
@@ -208,6 +215,55 @@ final class IOSPeerIdentityPinStore {
       throw error
     }
     return .firstBinding
+  }
+
+  func rotate(
+    oldPeerID: String,
+    noisePublicKey: Data,
+    signingPublicKey: Data,
+    sequence: UInt64
+  ) throws -> IOSPeerIdentityPin? {
+    try ensureAvailable()
+    let oldID = oldPeerID.lowercased()
+    guard
+      sequence > 0,
+      let oldPin = pins[oldID],
+      oldPin.retired != true,
+      sequence > (oldPin.lastRotationSequence ?? 0),
+      noisePublicKey.count == 32,
+      signingPublicKey.count == 32,
+      noisePublicKey.contains(where: { $0 != 0 }),
+      signingPublicKey.contains(where: { $0 != 0 }),
+      (try? Curve25519.KeyAgreement.PublicKey(rawRepresentation: noisePublicKey)) != nil,
+      (try? Curve25519.Signing.PublicKey(rawRepresentation: signingPublicKey)) != nil
+    else { return nil }
+    let newID = IOSMeshProtocol.peerID(noisePublicKey).hex
+    let collides = pins.values.contains {
+      $0.peerID != oldID &&
+        $0.retired != true &&
+        ($0.noisePublicKey == noisePublicKey ||
+         $0.signingPublicKey == signingPublicKey)
+    }
+    guard newID != oldID, pins[newID] == nil, !collides else { return nil }
+    let replacement = IOSPeerIdentityPin(
+      peerID: newID,
+      noisePublicKey: noisePublicKey,
+      signingPublicKey: signingPublicKey,
+      lastRotationSequence: sequence
+    )
+    var retiredPin = oldPin
+    retiredPin.retired = true
+    pins[oldID] = retiredPin
+    pins[newID] = replacement
+    do {
+      try persist()
+      return replacement
+    } catch {
+      pins.removeValue(forKey: newID)
+      pins[oldID] = oldPin
+      failure = error
+      throw error
+    }
   }
 
   func clear() throws {
@@ -280,7 +336,9 @@ final class IOSPeerIdentityPinStore {
       output[normalized] = IOSPeerIdentityPin(
         peerID: normalized,
         noisePublicKey: pin.noisePublicKey,
-        signingPublicKey: pin.signingPublicKey
+        signingPublicKey: pin.signingPublicKey,
+        lastRotationSequence: pin.lastRotationSequence ?? 0,
+        retired: pin.retired ?? false
       )
     }
     return output

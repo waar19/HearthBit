@@ -165,6 +165,7 @@ Tipos implementados:
 - `0x29`: voz BitChat; recepción temporal de acuse de emergencia heredado
 - `0x2A`: capacidad HBT
 - `0x2B`: acuse de emergencia dirigido
+- `0x2C`: rotación autenticada de claves de identidad
 
 HearthBit solo emite `HBT_CAPABILITY` como `0x2A` y `EMERGENCY_ACK` como
 `0x2B`. La recepción heredada en `0x24`/`0x29` exige validar estructura,
@@ -180,6 +181,14 @@ Las firmas se calculan sobre el paquete sin firma y con TTL igual a cero. Así
 los relés pueden reducir TTL sin invalidar la firma. Un anuncio se acepta solo
 si su clave Noise produce el sender ID y su propia clave Ed25519 valida la
 firma.
+
+La rotación `0x2C` es la única excepción controlada al pin TOFU inmutable:
+requiere dos firmas con la clave Ed25519 antigua, secuencia monotónica
+persistida y reemplazo atómico del pin. Después se descartan las sesiones
+Noise antiguas. Un anuncio ordinario con claves distintas se sigue rechazando
+y nunca inicia rotación. El wire format, el flujo de recuperación y la
+política neutral del relay se definen normativamente en
+`docs/extension-registry.md`.
 
 Los chats privados usan `Noise_XX_25519_ChaChaPoly_SHA256`. El payload de
 transporte antepone un nonce UInt32 big-endian al ciphertext. El contenido

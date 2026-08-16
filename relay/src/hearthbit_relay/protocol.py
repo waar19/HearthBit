@@ -33,6 +33,7 @@ TYPE_EMERGENCY_CAPABILITY = 0x28
 TYPE_LEGACY_EMERGENCY_ACK = 0x29
 TYPE_HBT_CAPABILITY = 0x2A
 TYPE_EMERGENCY_ACK = 0x2B
+TYPE_KEY_ROTATION = 0x2C
 EMERGENCY_ACK_RETENTION_SECONDS = 48 * 60 * 60
 
 # Backward-compatible alias for callers that imported the old semantic name.
@@ -49,6 +50,7 @@ EPHEMERAL_MESSAGE_TYPES = frozenset(
         TYPE_RANGING_CONTROL,
         TYPE_EMERGENCY_CAPABILITY,
         TYPE_LEGACY_EMERGENCY_ACK,
+        TYPE_KEY_ROTATION,
     }
 )
 
@@ -605,6 +607,47 @@ class ExtensionEnvelope:
     version: int
     flags: int
     payload: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class KeyRotation:
+    old_peer_id: bytes
+    new_noise_public_key: bytes
+    new_signing_public_key: bytes
+    timestamp_ms: int
+    sequence: int
+    authorization_signature: bytes
+
+    @property
+    def authorization_bytes(self) -> bytes:
+        return b"HearthBitKeyRotationV1" + bytes((1,)) + self.old_peer_id + (
+            self.new_noise_public_key
+            + self.new_signing_public_key
+            + self.timestamp_ms.to_bytes(8, "big")
+            + self.sequence.to_bytes(8, "big")
+        )
+
+
+def decode_key_rotation(data: bytes) -> KeyRotation:
+    """Parse KEY_ROTATION without mutating relay-local trust."""
+    if len(data) != 153 or data[0] != 1:
+        raise PacketError("invalid key rotation payload")
+    old_peer_id = data[1:9]
+    noise = data[9:41]
+    signing = data[41:73]
+    timestamp_ms = int.from_bytes(data[73:81], "big")
+    sequence = int.from_bytes(data[81:89], "big")
+    signature = data[89:153]
+    if not sequence or not any(noise) or not any(signing):
+        raise PacketError("invalid key rotation fields")
+    return KeyRotation(
+        old_peer_id,
+        noise,
+        signing,
+        timestamp_ms,
+        sequence,
+        signature,
+    )
 
 
 def decode_extension_envelope(data: bytes) -> ExtensionEnvelope:

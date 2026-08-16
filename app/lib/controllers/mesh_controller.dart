@@ -94,6 +94,7 @@ class MeshController extends ChangeNotifier {
   Uint8List? signingPublicKey;
   MeshNodeRole localRole = MeshNodeRole.phoneRelay;
   String? lastError;
+  String? lastKeyRotationDiagnostic;
   bool supportsBackgroundRelay = false;
   bool supportsMeshtastic = false;
   String platformName = 'unknown';
@@ -1727,6 +1728,23 @@ class MeshController extends ChangeNotifier {
         if (canonicalHash != null && acknowledgingPeerId != null) {
           unawaited(
             _recordEmergencyAcknowledgement(canonicalHash, acknowledgingPeerId),
+          );
+        }
+      case MeshKeyRotationEvent():
+        final oldPeerId = event.oldPeerId;
+        final newPeerId = event.newPeerId;
+        if (event.status == 'accepted' &&
+            oldPeerId != null &&
+            newPeerId != null &&
+            oldPeerId.length >= 8 &&
+            newPeerId.length >= 8 &&
+            event.sequence != null) {
+          lastKeyRotationDiagnostic =
+              '${oldPeerId.substring(0, 8)}→'
+              '${newPeerId.substring(0, 8)} #${event.sequence}';
+          DiagnosticsLog.instance.info(
+            'mesh.identity.rotation.accepted',
+            data: {'sequence': event.sequence},
           );
         }
       case MeshRescuePingEvent():

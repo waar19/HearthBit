@@ -114,7 +114,9 @@ internal class MeshEngine(
     private val ingressAuthenticator = MeshIngressAuthenticator(
         trustLookup = peerTrustStore::lookup,
         validateAndPin = { peerId, keys -> peerTrustStore.validateAndPin(peerId, keys) },
+        rotatePin = peerTrustStore::rotate,
         verifySignature = { packet, key -> identity.verify(packet, key) },
+        verifyBytes = { data, signature, key -> identity.verifyBytes(data, signature, key) },
     )
     private val fragmentReassembler = MeshFragmentReassembler()
     private val packetFragmenter = MeshPacketFragmenter()
@@ -1133,6 +1135,37 @@ internal class MeshEngine(
     }
 
     fun signPayload(data: ByteArray): ByteArray = identity.signBytes(data)
+
+    fun rotateLocalIdentity(): Map<String, Any> = synchronized(this) {
+        check(running) { "mesh_not_running" }
+        val oldPeerId = identity.peerIdHex
+        val prepared = identity.prepareRotation()
+        val newPeerId = MeshProtocol.hex(
+            MeshProtocol.peerIdFromNoiseKey(prepared.material.noisePublicKey),
+        )
+        identity.activateRotation(prepared)
+        // El frame ya quedó firmado por la identidad antigua, pero solo se
+        // emite después de confirmar la persistencia segura de las claves.
+        broadcast(prepared.packet)
+        noiseSessions.close()
+        identity = MeshIdentity(context)
+        noiseSessions = NoiseSessionManagerLite(identity.peerIdHex, identity.noisePrivateKey)
+        noiseFailureTracker.clear()
+        lastHandshakeAttemptByPeer.clear()
+        latestAnnouncementTimestampByPeer.clear()
+        restartAdvertising()
+        sendAnnouncement()
+        val event = mapOf(
+            "type" to "keyRotation",
+            "status" to "local",
+            "oldPeerId" to oldPeerId,
+            "newPeerId" to newPeerId,
+            "sequence" to prepared.sequence,
+            "timestamp" to prepared.packet.timestamp,
+        )
+        emit(event)
+        event
+    }
 
     fun verifyPeerSignature(peerIdHex: String, data: ByteArray, signature: ByteArray): Boolean {
         val key = peers[peerIdHex]?.signingPublicKey ?: when (
@@ -2202,6 +2235,11 @@ internal class MeshEngine(
                 processEmergencyCapability(packet, senderHex, sourceAddress)
             MeshProtocol.TYPE_LEGACY_EMERGENCY_ACK,
             MeshProtocol.TYPE_EMERGENCY_ACK -> processEmergencyAck(packet, senderHex)
+            MeshProtocol.TYPE_KEY_ROTATION -> processKeyRotation(
+                senderHex,
+                requireNotNull(authentication?.keyRotation),
+                sourceAddress,
+            )
             MeshProtocol.TYPE_FRAGMENT -> {
                 val reassembled = fragmentReassembler.accept(packet)
                 if (reassembled != null) {
@@ -2299,6 +2337,40 @@ internal class MeshEngine(
         ) {
             initiateHandshake(senderHex)
         }
+    }
+
+    private fun processKeyRotation(
+        oldPeerId: String,
+        rotation: KeyRotationProtocol.Rotation,
+        sourceAddress: String,
+    ) {
+        val newPeerId = MeshProtocol.hex(rotation.newPeerId)
+        val previous = peers.remove(oldPeerId)
+        noiseSessions.invalidate(oldPeerId)
+        noiseFailureTracker.clear(oldPeerId)
+        lastHandshakeAttemptByPeer.remove(oldPeerId)
+        latestAnnouncementTimestampByPeer.remove(oldPeerId)
+        addressToPeer.entries.removeIf { it.value == oldPeerId }
+        addressToPeer[sourceAddress] = newPeerId
+        if (previous != null) {
+            peers[newPeerId] = previous.copy(
+                id = newPeerId,
+                signingPublicKey = rotation.newSigningPublicKey,
+                noisePublicKey = rotation.newNoisePublicKey,
+                lastSeen = System.currentTimeMillis(),
+            )
+        }
+        emit(
+            mapOf(
+                "type" to "keyRotation",
+                "status" to "accepted",
+                "oldPeerId" to oldPeerId,
+                "newPeerId" to newPeerId,
+                "sequence" to rotation.sequence,
+                "timestamp" to rotation.timestamp,
+            ),
+        )
+        emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
     }
 
     private fun processHbtCapability(

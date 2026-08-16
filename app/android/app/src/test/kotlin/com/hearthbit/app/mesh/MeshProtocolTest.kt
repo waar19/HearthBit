@@ -436,6 +436,7 @@ class MeshProtocolTest {
     fun `paquete de capacidad HBT sobrevive ida y vuelta`() {
         assertEquals(0x2A, MeshProtocol.TYPE_HBT_CAPABILITY.toInt() and 0xFF)
         assertEquals(0x2B, MeshProtocol.TYPE_EMERGENCY_ACK.toInt() and 0xFF)
+        assertEquals(0x2C, MeshProtocol.TYPE_KEY_ROTATION.toInt() and 0xFF)
         assertEquals(0x24, MeshProtocol.TYPE_LEGACY_HBT_CAPABILITY.toInt() and 0xFF)
         assertEquals(0x29, MeshProtocol.TYPE_LEGACY_EMERGENCY_ACK.toInt() and 0xFF)
 

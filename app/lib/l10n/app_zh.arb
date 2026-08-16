@@ -238,6 +238,7 @@
   "diagnosticsMeshSection": "网状网络",
   "diagnosticsPlatform": "平台",
   "diagnosticsStatus": "状态",
+  "diagnosticsIdentityRotation": "最近一次身份轮换",
   "diagnosticsNearbyDevices": "附近设备",
   "diagnosticsAdvertising": "BLE 广播",
   "diagnosticsMeshScan": "网状网络扫描",

@@ -238,6 +238,7 @@
   "diagnosticsMeshSection": "Malla",
   "diagnosticsPlatform": "Plataforma",
   "diagnosticsStatus": "Estado",
+  "diagnosticsIdentityRotation": "Última rotación de identidad",
   "diagnosticsNearbyDevices": "Dispositivos cercanos",
   "diagnosticsAdvertising": "Anuncio BLE",
   "diagnosticsMeshScan": "Escaneo de malla",

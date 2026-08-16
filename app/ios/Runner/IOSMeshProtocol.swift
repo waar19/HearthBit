@@ -443,6 +443,7 @@ enum IOSMeshProtocol {
   static let legacyEmergencyAck: UInt8 = 0x29
   static let hbtCapability: UInt8 = 0x2A
   static let emergencyAck: UInt8 = 0x2B
+  static let keyRotation: UInt8 = 0x2C
   static let emergencyVersion: UInt8 = 0x01
   static let hbtVersion: UInt8 = 0x01
   static let noisePrivate: UInt8 = 0x01
@@ -568,6 +569,103 @@ enum IOSMeshProtocol {
     let version: UInt8
     let flags: UInt8
     let payload: Data
+  }
+
+  struct KeyRotation {
+    static let version: UInt8 = 1
+    static let payloadSize = 153
+    static let clockWindowMilliseconds: UInt64 = 10 * 60 * 1_000
+    static let domain = Data("HearthBitKeyRotationV1".utf8)
+
+    let oldPeerID: Data
+    let newNoisePublicKey: Data
+    let newSigningPublicKey: Data
+    let timestamp: UInt64
+    let sequence: UInt64
+    let authorizationSignature: Data
+
+    var newPeerID: Data { IOSMeshProtocol.peerID(newNoisePublicKey) }
+
+    var authorizationBytes: Data {
+      Self.domain + IOSMeshProtocol.keyRotationUnsigned(
+        oldPeerID: oldPeerID,
+        newNoisePublicKey: newNoisePublicKey,
+        newSigningPublicKey: newSigningPublicKey,
+        timestamp: timestamp,
+        sequence: sequence
+      )
+    }
+
+    func timestampIsCurrent(now: UInt64) -> Bool {
+      let delta = timestamp >= now ? timestamp - now : now - timestamp
+      return delta <= Self.clockWindowMilliseconds
+    }
+  }
+
+  static func decodeKeyRotation(_ payload: Data) -> KeyRotation? {
+    guard payload.count == KeyRotation.payloadSize else { return nil }
+    var reader = DataReader(payload)
+    guard
+      reader.byte() == KeyRotation.version,
+      let oldPeerID = reader.data(count: 8),
+      let noise = reader.data(count: 32),
+      noise.contains(where: { $0 != 0 }),
+      let signing = reader.data(count: 32),
+      signing.contains(where: { $0 != 0 }),
+      let timestamp: UInt64 = reader.integer(),
+      let sequence: UInt64 = reader.integer(),
+      sequence > 0,
+      let signature = reader.data(count: 64),
+      reader.remaining.isEmpty,
+      (try? Curve25519.KeyAgreement.PublicKey(rawRepresentation: noise)) != nil,
+      (try? Curve25519.Signing.PublicKey(rawRepresentation: signing)) != nil
+    else { return nil }
+    return KeyRotation(
+      oldPeerID: oldPeerID,
+      newNoisePublicKey: noise,
+      newSigningPublicKey: signing,
+      timestamp: timestamp,
+      sequence: sequence,
+      authorizationSignature: signature
+    )
+  }
+
+  static func keyRotationPayload(
+    oldPeerID: Data,
+    newNoisePublicKey: Data,
+    newSigningPublicKey: Data,
+    timestamp: UInt64,
+    sequence: UInt64,
+    authorizationSignature: Data
+  ) -> Data {
+    precondition(authorizationSignature.count == 64)
+    return keyRotationUnsigned(
+      oldPeerID: oldPeerID,
+      newNoisePublicKey: newNoisePublicKey,
+      newSigningPublicKey: newSigningPublicKey,
+      timestamp: timestamp,
+      sequence: sequence
+    ) + authorizationSignature
+  }
+
+  private static func keyRotationUnsigned(
+    oldPeerID: Data,
+    newNoisePublicKey: Data,
+    newSigningPublicKey: Data,
+    timestamp: UInt64,
+    sequence: UInt64
+  ) -> Data {
+    precondition(oldPeerID.count == 8)
+    precondition(newNoisePublicKey.count == 32)
+    precondition(newSigningPublicKey.count == 32)
+    precondition(sequence > 0)
+    var output = Data([KeyRotation.version])
+    output.append(oldPeerID)
+    output.append(newNoisePublicKey)
+    output.append(newSigningPublicKey)
+    output.appendInteger(timestamp)
+    output.appendInteger(sequence)
+    return output
   }
 
   static func decodeExtensionEnvelope(_ input: Data) -> ExtensionEnvelope? {

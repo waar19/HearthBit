@@ -238,6 +238,7 @@
   "diagnosticsMeshSection": "Mesh",
   "diagnosticsPlatform": "Plattform",
   "diagnosticsStatus": "Status",
+  "diagnosticsIdentityRotation": "Letzte Identitätsrotation",
   "diagnosticsNearbyDevices": "Geräte in der Nähe",
   "diagnosticsAdvertising": "BLE-Werbung",
   "diagnosticsMeshScan": "Mesh-Scan",

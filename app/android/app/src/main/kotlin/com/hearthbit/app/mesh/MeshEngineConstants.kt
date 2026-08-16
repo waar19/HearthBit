@@ -52,6 +52,7 @@ internal object MeshEngineConstants {
         MeshProtocol.TYPE_HBT_CAPABILITY,
         MeshProtocol.TYPE_EMERGENCY_CAPABILITY,
         MeshProtocol.TYPE_NODE_CAPABILITY,
+        MeshProtocol.TYPE_KEY_ROTATION,
     )
 
     val SERVICE_UUID: UUID =

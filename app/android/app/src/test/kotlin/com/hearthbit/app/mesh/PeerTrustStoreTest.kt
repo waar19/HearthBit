@@ -63,6 +63,36 @@ class PeerTrustStoreTest {
         assertEquals(PeerTrustLookup.Invalid, store.lookup(peerId))
     }
 
+    @Test
+    fun `authenticated rotation migrates pin atomically and rejects replay and collision`() {
+        val storage = FakePeerTrustStorage()
+        val store = PeerTrustStore(storage)
+        val old = keys(4)
+        val replacement = keys(5)
+        val occupied = keys(6)
+        val oldId = peerId(old)
+        val replacementId = peerId(replacement)
+        assertEquals(PeerIdentityDecision.FIRST_BINDING, store.validateAndPin(oldId, old))
+        assertEquals(
+            PeerIdentityDecision.ACCEPT_AUTHENTICATED_ROTATION,
+            store.rotate(oldId, replacement, 7),
+        )
+        assertEquals(PeerTrustLookup.Invalid, store.lookup(oldId))
+        assertTrue(store.lookup(replacementId) is PeerTrustLookup.Pinned)
+        assertEquals(
+            PeerIdentityDecision.REJECT_REPLAY,
+            store.rotate(replacementId, keys(7), 7),
+        )
+        assertEquals(
+            PeerIdentityDecision.FIRST_BINDING,
+            store.validateAndPin(peerId(occupied), occupied),
+        )
+        assertEquals(
+            PeerIdentityDecision.REJECT_COLLISION,
+            store.rotate(replacementId, occupied, 8),
+        )
+    }
+
     private fun keys(seed: Int): PeerIdentityKeys = PeerIdentityKeys(
         signingPublicKey = ByteArray(32) { (seed + it).toByte() },
         noisePublicKey = ByteArray(32) { (seed * 3 + it).toByte() },
@@ -78,6 +108,11 @@ class PeerTrustStoreTest {
         override fun contains(key: String): Boolean = values.containsKey(key)
         override fun putString(key: String, value: String): Boolean {
             values[key] = value
+            return true
+        }
+        override fun replaceString(oldKey: String, newKey: String, value: String): Boolean {
+            values[oldKey] = "retired-by-key-rotation"
+            values[newKey] = value
             return true
         }
         override fun keys(): Set<String> = values.keys

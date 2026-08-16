@@ -238,6 +238,7 @@
   "diagnosticsMeshSection": "Maillage",
   "diagnosticsPlatform": "Plateforme",
   "diagnosticsStatus": "État",
+  "diagnosticsIdentityRotation": "Dernière rotation d’identité",
   "diagnosticsNearbyDevices": "Appareils à proximité",
   "diagnosticsAdvertising": "Annonce BLE",
   "diagnosticsMeshScan": "Balayage du maillage",

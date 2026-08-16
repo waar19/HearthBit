@@ -9,6 +9,7 @@ from hearthbit_relay.protocol import (
     TYPE_FRAGMENT,
     TYPE_GROUP_MESSAGE,
     TYPE_HBT_CAPABILITY,
+    TYPE_KEY_ROTATION,
     TYPE_LEGACY_EMERGENCY_ACK,
     TYPE_LEGACY_HBT_CAPABILITY,
     TYPE_NODE_CAPABILITY,
@@ -243,11 +244,13 @@ def test_extension_type_codes_do_not_collide_with_upstream_or_firmware() -> None
     assert TYPE_LEGACY_EMERGENCY_ACK == 0x29
     assert TYPE_HBT_CAPABILITY == 0x2A
     assert TYPE_EMERGENCY_ACK == 0x2B
+    assert TYPE_KEY_ROTATION == 0x2C
 
 
 def test_only_legacy_emergency_ack_remains_ephemeral() -> None:
     assert TYPE_LEGACY_EMERGENCY_ACK in EPHEMERAL_MESSAGE_TYPES
     assert TYPE_EMERGENCY_ACK not in EPHEMERAL_MESSAGE_TYPES
+    assert TYPE_KEY_ROTATION in EPHEMERAL_MESSAGE_TYPES
 
 
 @pytest.mark.parametrize(

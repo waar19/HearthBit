@@ -569,6 +569,24 @@ class MeshPlatformService {
     }))!;
   }
 
+  /// Rota la identidad local únicamente tras una acción explícita de usuario.
+  ///
+  /// El nativo firma y emite KEY_ROTATION con la clave anterior, activa las
+  /// claves nuevas en almacenamiento seguro y reinicia las sesiones Noise.
+  /// Esta API no se invoca automáticamente ante conflictos.
+  Future<Map<Object?, Object?>> rotateLocalIdentity() async {
+    final result = await _methods.invokeMapMethod<Object?, Object?>(
+      'rotateLocalIdentity',
+    );
+    if (result?['status'] != 'local' ||
+        result?['oldPeerId'] is! String ||
+        result?['newPeerId'] is! String ||
+        result?['sequence'] is! num) {
+      throw StateError('Native identity rotation did not complete');
+    }
+    return result!;
+  }
+
   Future<bool> verifyPeerSignature(
     String peerId,
     Uint8List data,

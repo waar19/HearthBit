@@ -745,6 +745,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnosticsStatus => '状态';
 
   @override
+  String get diagnosticsIdentityRotation => '最近一次身份轮换';
+
+  @override
   String get diagnosticsNearbyDevices => '附近设备';
 
   @override

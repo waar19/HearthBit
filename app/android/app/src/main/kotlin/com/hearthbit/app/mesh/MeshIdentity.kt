@@ -42,10 +42,25 @@ internal class MeshIdentity(context: Context) {
     val signingPublicKey: ByteArray
     val peerId: ByteArray
     val peerIdHex: String
+    val rotationSequence: Long
+
+    data class RotationMaterial(
+        val noisePrivateKey: ByteArray,
+        val noisePublicKey: ByteArray,
+        val signingPrivateKey: ByteArray,
+        val signingPublicKey: ByteArray,
+    )
+
+    data class PreparedRotation(
+        val packet: MeshProtocol.Packet,
+        val material: RotationMaterial,
+        val sequence: Long,
+    )
 
     init {
-        val existingNoisePrivate = read(KEY_NOISE_PRIVATE)
-        val existingNoisePublic = read(KEY_NOISE_PUBLIC)
+        val bundle = readBundle()
+        val existingNoisePrivate = bundle?.noisePrivateKey ?: read(KEY_NOISE_PRIVATE)
+        val existingNoisePublic = bundle?.noisePublicKey ?: read(KEY_NOISE_PUBLIC)
         if (existingNoisePrivate?.size == 32 && existingNoisePublic?.size == 32) {
             noisePrivateKey = existingNoisePrivate
             noisePublicKey = existingNoisePublic
@@ -59,8 +74,8 @@ internal class MeshIdentity(context: Context) {
             write(KEY_NOISE_PUBLIC, noisePublicKey)
         }
 
-        val existingSigningPrivate = read(KEY_SIGNING_PRIVATE)
-        val existingSigningPublic = read(KEY_SIGNING_PUBLIC)
+        val existingSigningPrivate = bundle?.signingPrivateKey ?: read(KEY_SIGNING_PRIVATE)
+        val existingSigningPublic = bundle?.signingPublicKey ?: read(KEY_SIGNING_PUBLIC)
         if (existingSigningPrivate?.size == 32 && existingSigningPublic?.size == 32) {
             signingPrivateKey = existingSigningPrivate
             signingPublicKey = existingSigningPublic
@@ -76,6 +91,7 @@ internal class MeshIdentity(context: Context) {
 
         peerId = MeshProtocol.peerIdFromNoiseKey(noisePublicKey)
         peerIdHex = MeshProtocol.hex(peerId)
+        rotationSequence = bundle?.sequence ?: 0L
     }
 
     fun sign(packet: MeshProtocol.Packet): MeshProtocol.Packet {
@@ -112,6 +128,67 @@ internal class MeshIdentity(context: Context) {
         return verifier.verifySignature(signature)
     }
 
+    fun prepareRotation(
+        timestamp: Long = System.currentTimeMillis(),
+        sequence: Long = rotationSequence + 1,
+    ): PreparedRotation {
+        require(sequence > rotationSequence)
+        val noise = Noise.createDH("25519")
+        noise.generateKeyPair()
+        val noisePrivate = ByteArray(32).also { noise.getPrivateKey(it, 0) }
+        val noisePublic = ByteArray(32).also { noise.getPublicKey(it, 0) }
+        noise.destroy()
+        val generator = Ed25519KeyPairGenerator()
+        generator.init(Ed25519KeyGenerationParameters(SecureRandom()))
+        val signingPair = generator.generateKeyPair()
+        val signingPrivate = (signingPair.private as Ed25519PrivateKeyParameters).encoded
+        val signingPublic = (signingPair.public as Ed25519PublicKeyParameters).encoded
+        val unsigned = KeyRotationProtocol.Rotation(
+            oldPeerId = peerId,
+            newNoisePublicKey = noisePublic,
+            newSigningPublicKey = signingPublic,
+            timestamp = timestamp,
+            sequence = sequence,
+            authorizationSignature = ByteArray(64),
+        )
+        val payload = KeyRotationProtocol.encode(
+            peerId,
+            noisePublic,
+            signingPublic,
+            timestamp,
+            sequence,
+            signBytes(unsigned.authorizationBytes()),
+        )
+        val packet = sign(
+            MeshProtocol.Packet(
+                type = MeshProtocol.TYPE_KEY_ROTATION,
+                ttl = MeshProtocol.TTL,
+                timestamp = timestamp,
+                senderId = peerId,
+                payload = payload,
+            ),
+        )
+        return PreparedRotation(
+            packet,
+            RotationMaterial(noisePrivate, noisePublic, signingPrivate, signingPublic),
+            sequence,
+        )
+    }
+
+    fun activateRotation(prepared: PreparedRotation) {
+        val fields = listOf(
+            BUNDLE_VERSION,
+            Base64.encodeToString(prepared.material.noisePrivateKey, Base64.NO_WRAP),
+            Base64.encodeToString(prepared.material.noisePublicKey, Base64.NO_WRAP),
+            Base64.encodeToString(prepared.material.signingPrivateKey, Base64.NO_WRAP),
+            Base64.encodeToString(prepared.material.signingPublicKey, Base64.NO_WRAP),
+            prepared.sequence.toString(),
+        )
+        check(preferences.putString(KEY_ACTIVE_BUNDLE, fields.joinToString(":"))) {
+            "No se pudo activar la rotación de identidad"
+        }
+    }
+
     fun clear() {
         check(preferences.clear()) {
             "No se pudo borrar la identidad cifrada"
@@ -131,6 +208,23 @@ internal class MeshIdentity(context: Context) {
         check(preferences.putString(key, Base64.encodeToString(value, Base64.NO_WRAP)))
     }
 
+    private fun readBundle(): StoredBundle? = runCatching {
+        val fields = preferences.getString(KEY_ACTIVE_BUNDLE, null)?.split(":") ?: return null
+        if (fields.size != 6 || fields[0] != BUNDLE_VERSION) return null
+        val values = fields.slice(1..4).map { Base64.decode(it, Base64.NO_WRAP) }
+        val sequence = fields[5].toLong()
+        if (values.any { it.size != 32 } || sequence <= 0L) return null
+        StoredBundle(values[0], values[1], values[2], values[3], sequence)
+    }.getOrNull()
+
+    private data class StoredBundle(
+        val noisePrivateKey: ByteArray,
+        val noisePublicKey: ByteArray,
+        val signingPrivateKey: ByteArray,
+        val signingPublicKey: ByteArray,
+        val sequence: Long,
+    )
+
     private companion object {
         const val KEY_NICKNAME = "nickname"
         const val KEY_NOISE_PRIVATE = "noise_private"
@@ -139,5 +233,7 @@ internal class MeshIdentity(context: Context) {
         const val KEY_SIGNING_PUBLIC = "signing_public"
         const val KEY_RADAR_CONSENT_UNTIL = "radar_consent_until"
         const val KEY_NODE_ROLE = "node_role"
+        const val KEY_ACTIVE_BUNDLE = "identity_bundle"
+        const val BUNDLE_VERSION = "1"
     }
 }

@@ -40,7 +40,8 @@ internal object StoreForwardRetentionPolicy {
         return effectiveType != MeshProtocol.TYPE_NOISE_HANDSHAKE &&
             effectiveType != MeshProtocol.TYPE_NOISE_ENCRYPTED &&
             effectiveType != MeshProtocol.TYPE_BEACON_CONTROL &&
-            effectiveType != MeshProtocol.TYPE_RANGING_CONTROL
+            effectiveType != MeshProtocol.TYPE_RANGING_CONTROL &&
+            effectiveType != MeshProtocol.TYPE_KEY_ROTATION
     }
 
     private fun saturatedAdd(value: Long, increment: Long): Long =

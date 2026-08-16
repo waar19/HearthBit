@@ -1441,6 +1441,12 @@ abstract class AppLocalizations {
   /// **'Status'**
   String get diagnosticsStatus;
 
+  /// No description provided for @diagnosticsIdentityRotation.
+  ///
+  /// In en, this message translates to:
+  /// **'Last identity rotation'**
+  String get diagnosticsIdentityRotation;
+
   /// No description provided for @diagnosticsNearbyDevices.
   ///
   /// In en, this message translates to:

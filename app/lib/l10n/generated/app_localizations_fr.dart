@@ -788,6 +788,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get diagnosticsStatus => 'État';
 
   @override
+  String get diagnosticsIdentityRotation => 'Dernière rotation d’identité';
+
+  @override
   String get diagnosticsNearbyDevices => 'Appareils à proximité';
 
   @override

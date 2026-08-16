@@ -760,6 +760,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get diagnosticsStatus => '状態';
 
   @override
+  String get diagnosticsIdentityRotation => '最新のIDローテーション';
+
+  @override
   String get diagnosticsNearbyDevices => '近くのデバイス';
 
   @override
