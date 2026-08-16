@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.hearthbit.app"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.hearthbit.relay"
@@ -65,5 +65,6 @@ dependencies {
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("com.google.crypto.tink:tink-android:1.23.0")
     implementation("org.bouncycastle:bcprov-jdk18on:1.85.2")
+    implementation("org.meshtastic:protobufs:2.7.26")
     testImplementation("junit:junit:4.13.2")
 }

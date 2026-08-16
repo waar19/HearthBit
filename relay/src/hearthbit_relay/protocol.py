@@ -22,22 +22,32 @@ TYPE_NOISE_HANDSHAKE = 0x10
 TYPE_NOISE_ENCRYPTED = 0x11
 TYPE_FRAGMENT = 0x20
 TYPE_REQUEST_SYNC = 0x21
-TYPE_HBT_CAPABILITY = 0x24
+TYPE_RADAR_CONTROL = 0x23
+TYPE_PREKEY_BUNDLE = 0x24
+TYPE_LEGACY_HBT_CAPABILITY = 0x24
 TYPE_NODE_CAPABILITY = 0x25
+TYPE_BEACON_CONTROL = 0x26
+TYPE_RANGING_CONTROL = 0x27
 TYPE_EMERGENCY_CAPABILITY = 0x28
-TYPE_EMERGENCY_ACK = 0x29
+TYPE_LEGACY_EMERGENCY_ACK = 0x29
+TYPE_HBT_CAPABILITY = 0x2A
+TYPE_EMERGENCY_ACK = 0x2B
+EMERGENCY_ACK_RETENTION_SECONDS = 48 * 60 * 60
 
-# Backward-compatible aliases for callers that imported the old, incorrect
-# semantic names. These wire values are ephemeral capability announcements.
-TYPE_PREKEY_BUNDLE = TYPE_HBT_CAPABILITY
+# Backward-compatible alias for callers that imported the old semantic name.
 TYPE_GROUP_MESSAGE = TYPE_NODE_CAPABILITY
 
 EPHEMERAL_MESSAGE_TYPES = frozenset(
     {
         TYPE_ANNOUNCE,
+        TYPE_RADAR_CONTROL,
+        TYPE_LEGACY_HBT_CAPABILITY,
         TYPE_HBT_CAPABILITY,
         TYPE_NODE_CAPABILITY,
+        TYPE_BEACON_CONTROL,
+        TYPE_RANGING_CONTROL,
         TYPE_EMERGENCY_CAPABILITY,
+        TYPE_LEGACY_EMERGENCY_ACK,
     }
 )
 
@@ -87,6 +97,17 @@ class Packet:
         data = bytearray(self.raw)
         data[2] = self.ttl - 1
         return bytes(data)
+
+
+def is_storable_emergency_ack(packet: Packet) -> bool:
+    """Return whether a current ACK has the directed, signed registry shape."""
+    return (
+        packet.message_type == TYPE_EMERGENCY_ACK
+        and packet.is_directed
+        and packet.has_signature
+        and len(packet.payload) == 33
+        and packet.payload[0] == 0x01
+    )
 
 
 def decode_packet(data: bytes, *, max_size: int = MAX_PACKET_SIZE) -> Packet:

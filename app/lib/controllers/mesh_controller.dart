@@ -6,11 +6,14 @@ import 'package:geolocator/geolocator.dart';
 
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
+import '../services/acoustic_sos.dart';
 import '../services/app_preferences.dart';
 import '../services/beacon_control_protocol.dart';
 import '../services/diagnostics_log.dart';
+import '../services/mesh_native_event.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/message_repository.dart';
+import '../services/optical_protocol.dart';
 import '../services/peer_location_tracker.dart';
 
 enum PrivateMessageSendDisposition { sent, queued, failed }
@@ -59,12 +62,15 @@ class MeshController extends ChangeNotifier {
     MessageRepository? repository,
     PeerLocationTracker? locationTracker,
     AppPreferences? preferences,
+    AcousticSosTransportPort? acousticSos,
   }) : _platform = platform ?? MeshPlatformService(),
        _repository = repository ?? MessageRepository(),
+       _providedAcousticSos = acousticSos,
        _preferences = preferences,
        _drillModeEnabled = preferences?.drillModeEnabled ?? false,
        _privateMode = preferences?.privacyPrivateMode ?? true,
        _bitchatInteropEnabled = preferences?.bitchatInteropEnabled ?? false,
+       _meshtasticEnabled = preferences?.meshtasticEnabled ?? false,
        peerLocations = locationTracker ?? PeerLocationTracker() {
     peerLocations.addListener(_notifyLocationChanged);
     preferences?.addListener(_handlePreferencesChanged);
@@ -73,7 +79,7 @@ class MeshController extends ChangeNotifier {
   /// Intervalo entre reenvíos de SOS con GPS fresco en modo rescate: lo
   /// bastante frecuente para seguir a una persona que se mueve, lo bastante
   /// espaciado para no agotar batería ni saturar la malla.
-  static const Duration rescueInterval = Duration(minutes: 5);
+  static const Duration rescueInterval = RescueModeContract.defaultInterval;
   static const Duration radarLocationInterval = Duration(seconds: 20);
   static const int radarLocationDistanceMeters = 15;
   static const Duration peerReachabilityWindow = Duration(minutes: 4);
@@ -85,6 +91,10 @@ class MeshController extends ChangeNotifier {
 
   final MeshPlatformService _platform;
   final MessageRepository _repository;
+  final AcousticSosTransportPort? _providedAcousticSos;
+  AcousticSosTransportPort? _createdAcousticSos;
+  AcousticSosTransportPort get _acousticSos =>
+      _providedAcousticSos ?? (_createdAcousticSos ??= AcousticSosTransport());
   final AppPreferences? _preferences;
   final PeerLocationTracker peerLocations;
   final List<MeshMessage> _messages = [];
@@ -93,9 +103,10 @@ class MeshController extends ChangeNotifier {
   final Map<String, MeshPeer> _knownPeers = {};
   final List<PendingPrivateMessage> _privateMessageOutbox = [];
   final List<EmergencyDelivery> _emergencyDeliveries = [];
+  final Set<String> _emergencyChannelsUsed = {};
   final Random _random = Random.secure();
 
-  StreamSubscription<Map<Object?, Object?>>? _subscription;
+  StreamSubscription<MeshNativeEvent>? _subscription;
   bool _drainingPrivateMessageOutbox = false;
   bool _privateMessageOutboxDrainRequested = false;
   bool _drainingEmergencyOutbox = false;
@@ -110,10 +121,26 @@ class MeshController extends ChangeNotifier {
   MeshNodeRole localRole = MeshNodeRole.phoneRelay;
   String? lastError;
   bool supportsBackgroundRelay = false;
+  bool supportsMeshtastic = false;
+  String platformName = 'unknown';
+  bool supportsAcousticSonar = false;
+  bool supportsRadioRanging = false;
+  bool meshAdvertising = false;
+  bool meshScanActive = false;
+  bool genericScanActive = false;
+  bool genericScanEnabled = false;
+  int bleDutyCyclePercent = 0;
+  int activeBleScans = 0;
+  int scanStarts = 0;
+  int storeForwardEntries = 0;
+  Set<String> activeTransports = const {};
   DateTime? radarConsentUntil;
   PendingBeaconRequest? pendingBeaconRequest;
   bool localBeaconActive = false;
   DateTime? localBeaconExpiresAt;
+  OpticalEmergencyBundle? latestSosQr;
+  bool acousticSosListening = false;
+  bool acousticSosBroadcasting = false;
 
   // Modo rescate: reenvía el SOS con ubicación actualizada periódicamente.
   bool rescueMode = false;
@@ -146,11 +173,15 @@ class MeshController extends ChangeNotifier {
   bool _drillModeEnabled;
   bool _privateMode;
   bool _bitchatInteropEnabled;
+  bool _meshtasticEnabled;
 
   List<MeshMessage> get messages => List.unmodifiable(_messages);
   bool get bitchatInteropEnabled => _bitchatInteropEnabled;
+  bool get meshtasticEnabled => _meshtasticEnabled;
   List<EmergencyDelivery> get emergencyDeliveries =>
       List.unmodifiable(_emergencyDeliveries);
+  Set<String> get emergencyChannelsUsed =>
+      Set.unmodifiable(_emergencyChannelsUsed);
   bool get drillModeEnabled => _drillModeEnabled;
   List<MeshMessage> get drillMessages => List.unmodifiable(
     _messages.where((message) => message.isDrill).toList().reversed,
@@ -272,13 +303,20 @@ class MeshController extends ChangeNotifier {
       (first, second) => first.timestamp.compareTo(second.timestamp),
     );
     _trimMessagesInMemory();
-    _subscription = _platform.events.listen(_handleEventSafely);
+    _subscription = _platform.nativeEvents.listen(_handleEventSafely);
     final capabilities = await _platform.getCapabilities();
+    platformName = capabilities['platform'] as String? ?? platformName;
     supportsBackgroundRelay = capabilities['backgroundRelay'] as bool? ?? false;
+    supportsMeshtastic = capabilities['meshtastic'] as bool? ?? false;
+    supportsAcousticSonar = capabilities['acousticSonar'] as bool? ?? false;
+    supportsRadioRanging = capabilities['radioRanging'] as bool? ?? false;
     await _platform.configurePrivacyMode(
       privateMode: _privateMode,
       bitchatInteropEnabled: _bitchatInteropEnabled,
     );
+    if (_meshtasticEnabled && supportsMeshtastic) {
+      await _platform.configureMeshtasticBridge(enabled: true);
+    }
     await _restoreNativeRescueMode();
     await refreshPowerStatus();
     if (_preferences?.meshDesiredActive == true) {
@@ -320,6 +358,43 @@ class MeshController extends ChangeNotifier {
     adaptivePowerSaving =
         power['adaptivePowerSaving'] as bool? ?? powerProfile.savesPower;
     notifyListeners();
+  }
+
+  Future<void> refreshDiagnostics({bool notify = true}) async {
+    final diagnostics = await _platform.getMeshDiagnostics();
+    if (diagnostics.isEmpty) return;
+    platformName = diagnostics['platform'] as String? ?? platformName;
+    meshAdvertising = diagnostics['advertising'] as bool? ?? meshAdvertising;
+    meshScanActive = diagnostics['meshScanActive'] as bool? ?? meshScanActive;
+    genericScanActive =
+        diagnostics['genericScanActive'] as bool? ?? genericScanActive;
+    genericScanEnabled =
+        diagnostics['genericScanEnabled'] as bool? ?? genericScanEnabled;
+    batteryLevel =
+        (diagnostics['batteryLevel'] as num?)?.toInt() ?? batteryLevel;
+    powerProfile = MeshPowerProfile.fromWire(
+      diagnostics['powerProfile'] ?? powerProfile.wireName,
+    );
+    adaptivePowerSaving =
+        diagnostics['adaptivePowerSaving'] as bool? ?? adaptivePowerSaving;
+    bleDutyCyclePercent =
+        (diagnostics['bleDutyCyclePercent'] as num?)?.toInt() ??
+        bleDutyCyclePercent;
+    activeBleScans =
+        (diagnostics['activeScans'] as num?)?.toInt() ?? activeBleScans;
+    scanStarts = (diagnostics['scanStarts'] as num?)?.toInt() ?? scanStarts;
+    storeForwardEntries =
+        (diagnostics['storeForwardEntries'] as num?)?.toInt() ??
+        storeForwardEntries;
+    final transports = diagnostics['transports'];
+    if (transports is List<Object?>) {
+      activeTransports = transports
+          .whereType<String>()
+          .map((value) => value.trim().toLowerCase())
+          .where((value) => value.isNotEmpty)
+          .toSet();
+    }
+    if (notify) notifyListeners();
   }
 
   /// Abre el diálogo de optimización de batería (Android). El resultado real
@@ -371,6 +446,10 @@ class MeshController extends ChangeNotifier {
       rescueMode = false;
       rescueStartedAt = null;
       rescueExpiresAt = null;
+      latestSosQr = null;
+      _emergencyChannelsUsed.clear();
+      await (_providedAcousticSos ?? _createdAcousticSos)?.stopBroadcast();
+      acousticSosBroadcasting = false;
       _stopRadarLocationSharing();
       if (wasRescueActive || radarConsentActive) {
         await revokeRadarConsent();
@@ -387,13 +466,24 @@ class MeshController extends ChangeNotifier {
     }
     final now = DateTime.now();
     rescueMode = true;
+    _emergencyChannelsUsed.clear();
     rescueStartedAt ??= now;
     rescueExpiresAt = now.add(const Duration(hours: 24));
     notifyListeners();
-    await _platform.setRadarConsent(enabled: true, minutes: 10);
+    await _platform.setRadarConsent(enabled: true, minutes: 30);
     await ensureAlwaysLocation();
+    var state = await _platform.configureRescueMode(
+      active: true,
+      description: _rescueDescription,
+      startedAt: rescueStartedAt,
+      lastPingAt: now,
+      expiresAt: rescueExpiresAt,
+      interval: interval ?? rescueInterval,
+      locationPrecision: _rescueLocationPrecision,
+    );
+    _applyNativeRescueState(state);
     await _rescuePing();
-    final state = await _platform.configureRescueMode(
+    state = await _platform.configureRescueMode(
       active: true,
       description: _rescueDescription,
       startedAt: rescueStartedAt,
@@ -407,7 +497,7 @@ class MeshController extends ChangeNotifier {
 
   Future<void> _rescuePing() async {
     if (!rescueMode) return;
-    await _platform.setRadarConsent(enabled: true, minutes: 10);
+    await _platform.setRadarConsent(enabled: true, minutes: 30);
     await sendSos(
       _rescueDescription,
       locationPrecision: _rescueLocationPrecision,
@@ -603,6 +693,48 @@ class MeshController extends ChangeNotifier {
     } else {
       DiagnosticsLog.instance.warning('sos.send.failed');
     }
+  }
+
+  Future<bool> composeEmergencySms({
+    required String recipient,
+    required String message,
+    SosLocationPrecision locationPrecision = SosLocationPrecision.approximate,
+  }) async {
+    final readable = message.trim().isEmpty
+        ? currentL10n.sosDefaultMessage
+        : message.trim();
+    final position = locationPrecision == SosLocationPrecision.none
+        ? null
+        : await _currentPosition();
+    final coordinates = position == null
+        ? null
+        : switch (locationPrecision) {
+            SosLocationPrecision.exact => (
+              position.latitude.toStringAsFixed(6),
+              position.longitude.toStringAsFixed(6),
+            ),
+            SosLocationPrecision.approximate => (
+              coarsenEmergencyCoordinate(position.latitude).toStringAsFixed(3),
+              coarsenEmergencyCoordinate(position.longitude).toStringAsFixed(3),
+            ),
+            SosLocationPrecision.none => null,
+          };
+    final body = coordinates == null
+        ? currentL10n.emergencySmsBodyWithoutLocation(readable)
+        : currentL10n.emergencySmsBodyWithLocation(
+            readable,
+            coordinates.$1,
+            coordinates.$2,
+          );
+    final opened = await _platform.composeEmergencySms(
+      recipient: recipient,
+      body: body,
+    );
+    DiagnosticsLog.instance.info(
+      'emergency.sms.composer',
+      data: {'opened': opened, 'locationPrecision': locationPrecision},
+    );
+    return opened;
   }
 
   Future<void> sendCheckIn(CheckInStatus status, String readableMessage) async {
@@ -867,10 +999,37 @@ class MeshController extends ChangeNotifier {
     await _run<void>(
       () => _platform.startLocalBeacon(flags: flags, duration: duration),
     );
+    if (lastError != null) return;
+    final sos = latestSosQr;
+    if (flags & BeaconControlFlags.sound != 0 && sos != null) {
+      await _startAcousticSosBroadcast(sos);
+    }
   }
 
   Future<void> stopLocalBeacon() async {
     await _run<void>(_platform.stopLocalBeacon);
+    await (_providedAcousticSos ?? _createdAcousticSos)?.stopBroadcast();
+    acousticSosBroadcasting = false;
+    notifyListeners();
+  }
+
+  Future<bool> startAcousticSosListening() async {
+    final started =
+        await _run<bool>(
+          () => _acousticSos.startListening((frame) async {
+            await _run<void>(() => _platform.injectEmergencyLanFrame(frame));
+          }),
+        ) ??
+        false;
+    acousticSosListening = started;
+    notifyListeners();
+    return started;
+  }
+
+  Future<void> stopAcousticSosListening() async {
+    await _acousticSos.stopListening();
+    acousticSosListening = false;
+    notifyListeners();
   }
 
   Future<void> respondToBeaconRequest(bool accept) async {
@@ -1069,18 +1228,33 @@ class MeshController extends ChangeNotifier {
     try {
       String? canonicalHash = delivery.canonicalHash;
       var transmitted = false;
+      EmergencyTransmission? transmission;
       if (canonicalHash != null) {
-        transmitted = await _platform.retryEmergency(canonicalHash);
+        final retryHash = await _platform.retryEmergency(canonicalHash);
+        if (retryHash != null) {
+          canonicalHash = retryHash;
+          transmitted = true;
+        }
       }
       if (!transmitted) {
-        final result = await _platform.sendEmergency(
+        transmission = await _platform.sendEmergency(
           messageId: delivery.localId,
           content: delivery.content,
           channel: delivery.kind == EmergencyDeliveryKind.sos
               ? 'sos'
               : 'checkin',
         );
-        canonicalHash = result.canonicalHash;
+        canonicalHash = transmission.canonicalHash;
+      }
+      if (delivery.kind == EmergencyDeliveryKind.sos &&
+          transmission?.hasQrFrames == true) {
+        latestSosQr = OpticalEmergencyBundle(
+          announcementFrame: transmission!.announcementFrame!,
+          messageFrame: transmission.messageFrame!,
+          fallbackText: _emergencyQrFallback(delivery.content),
+        );
+        _emergencyChannelsUsed.add('qr');
+        if (rescueMode) await _startAcousticSosBroadcast(latestSosQr!);
       }
       delivery = delivery.copyWith(
         state: EmergencyDeliveryState.relayed,
@@ -1090,6 +1264,9 @@ class MeshController extends ChangeNotifier {
         canonicalHash: canonicalHash,
         clearLastError: true,
       );
+      // El nativo transmite antes de devolver el hash. Persistirlo sin otro
+      // await reduce al mínimo la carrera con un ACK que ya viene en camino.
+      await _replaceEmergencyDelivery(delivery);
       DiagnosticsLog.instance.info(
         'emergency.outbox.relayed',
         data: {'kind': delivery.kind, 'attempt': attempt},
@@ -1102,6 +1279,7 @@ class MeshController extends ChangeNotifier {
         nextAttemptAt: now.add(_emergencyBackoff(attempt)),
         lastError: error.runtimeType.toString(),
       );
+      await _replaceEmergencyDelivery(delivery);
       DiagnosticsLog.instance.warning(
         'emergency.outbox.transmit_failed',
         error: error,
@@ -1109,8 +1287,25 @@ class MeshController extends ChangeNotifier {
         data: {'kind': delivery.kind, 'attempt': attempt},
       );
     }
-    await _replaceEmergencyDelivery(delivery);
     _scheduleEmergencyRetry();
+  }
+
+  Future<void> _startAcousticSosBroadcast(OpticalEmergencyBundle sos) async {
+    try {
+      acousticSosBroadcasting = await _acousticSos.startBroadcast([
+        sos.announcementFrame,
+        sos.messageFrame,
+      ]);
+      if (acousticSosBroadcasting) _emergencyChannelsUsed.add('audio');
+      notifyListeners();
+    } catch (error, stackTrace) {
+      acousticSosBroadcasting = false;
+      DiagnosticsLog.instance.warning(
+        'acoustic_sos.broadcast.failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   Duration _emergencyBackoff(int attempts) {
@@ -1120,6 +1315,20 @@ class MeshController extends ChangeNotifier {
       emergencyMaximumBackoff.inSeconds,
     );
     return Duration(seconds: seconds);
+  }
+
+  String _emergencyQrFallback(String content) {
+    final fields = content.split('|');
+    final description = fields.length > 1 && fields[1].trim().isNotEmpty
+        ? fields[1].trim()
+        : currentL10n.sosDefaultMessage;
+    final coordinates =
+        fields.length > 3 &&
+            fields[2].trim().isNotEmpty &&
+            fields[3].trim().isNotEmpty
+        ? '\nGPS: ${fields[2].trim()}, ${fields[3].trim()}'
+        : '';
+    return 'HEARTHBIT SOS\n$description$coordinates\nID: $peerId';
   }
 
   Future<void> _replaceEmergencyDelivery(EmergencyDelivery delivery) async {
@@ -1195,6 +1404,8 @@ class MeshController extends ChangeNotifier {
 
   Future<void> panicWipe() async {
     await setRescueMode(false);
+    await (_providedAcousticSos ?? _createdAcousticSos)?.stopListening();
+    acousticSosListening = false;
     await _preferences?.setMeshDesiredActive(false);
     final freshIdentity = await _platform.panicWipe();
     await _repository.destroy();
@@ -1457,67 +1668,56 @@ class MeshController extends ChangeNotifier {
     );
   }
 
-  void _handleEvent(Map<Object?, Object?> event) {
-    switch (event['type']) {
-      case 'snapshot':
-        _applyStatus(event);
-        _replacePeers(event['peers']);
-        _replacePresences(event['presences']);
-        break;
-      case 'status':
-        _applyStatus(event);
-        break;
-      case 'power':
-        batteryLevel = (event['batteryLevel'] as num?)?.toInt() ?? batteryLevel;
-        powerProfile = MeshPowerProfile.fromWire(event['powerProfile']);
+  void _handleEvent(MeshNativeEvent event) {
+    switch (event) {
+      case MeshSnapshotEvent():
+        _applyStatus(event.raw);
+        _replacePeers(event.raw['peers']);
+        _replacePresences(event.raw['presences']);
+      case MeshStatusEvent():
+        _applyStatus(event.raw);
+      case MeshPowerEvent():
+        batteryLevel = event.batteryLevel ?? batteryLevel;
+        powerProfile = MeshPowerProfile.fromWire(event.powerProfile);
         adaptivePowerSaving =
-            event['adaptivePowerSaving'] as bool? ?? powerProfile.savesPower;
-        break;
-      case 'peers':
-        _replacePeers(event['peers']);
+            event.adaptivePowerSaving ?? powerProfile.savesPower;
+      case MeshPeersEvent():
+        _replacePeers(event.peers);
         _scheduleTopologyNotification();
         return;
-      case 'presences':
-        _replacePresences(event['presences']);
+      case MeshPresencesEvent():
+        _replacePresences(event.presences);
         _scheduleTopologyNotification();
         return;
-      case 'radarConsent':
-        _applyRadarConsent(event);
-        _replacePeers(event['peers']);
-        break;
-      case 'beaconRequest':
-        _applyBeaconRequest(event);
-        break;
-      case 'beaconRequestResolved':
-        if (pendingBeaconRequest?.requestId == event['requestId']) {
+      case MeshRadarConsentEvent():
+        _applyRadarConsent(event.raw);
+        _replacePeers(event.raw['peers']);
+      case MeshBeaconRequestEvent():
+        _applyBeaconRequest(event.raw);
+      case MeshBeaconRequestResolvedEvent():
+        if (pendingBeaconRequest?.requestId == event.requestId) {
           pendingBeaconRequest = null;
         }
-        break;
-      case 'beaconState':
-        if (event['scope'] == 'local') {
-          _applyLocalBeaconState(event);
+      case MeshBeaconStateEvent():
+        if (event.scope == 'local') {
+          _applyLocalBeaconState(event.raw);
         }
-        break;
-      case 'message':
-        final rawMessage = event['message'];
-        if (rawMessage is Map<Object?, Object?>) {
-          final message = MeshMessage.tryParse(rawMessage);
-          if (message == null) break;
-          if (message.isRadarLocation) {
-            peerLocations.ingestLive(message);
-            break;
-          }
-          if (_messages.every((existing) => existing.id != message.id)) {
-            _messages.add(message);
-            _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-            _trimMessagesInMemory();
-            peerLocations.ingestPersisted(message);
-            unawaited(_repository.save(message));
-          }
+      case MeshMessageEvent():
+        final message = event.message;
+        if (message == null) break;
+        if (message.isRadarLocation) {
+          peerLocations.ingestLive(message);
+          break;
         }
-        break;
-      case 'error':
-        lastError = event['message'] as String? ?? currentL10n.errorUnknown;
+        if (_messages.every((existing) => existing.id != message.id)) {
+          _messages.add(message);
+          _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+          _trimMessagesInMemory();
+          peerLocations.ingestPersisted(message);
+          unawaited(_repository.save(message));
+        }
+      case MeshErrorEvent():
+        lastError = event.message ?? currentL10n.errorUnknown;
         DiagnosticsLog.instance.warning(
           'mesh.native.error',
           data: {'whileStarting': status == MeshConnectionStatus.starting},
@@ -1525,47 +1725,48 @@ class MeshController extends ChangeNotifier {
         if (status == MeshConnectionStatus.starting) {
           status = MeshConnectionStatus.error;
         }
-        break;
-      case 'wiped':
+      case MeshWipedEvent():
         _messages.clear();
         peerLocations.clear();
         _peers.clear();
         _presences.clear();
         _knownPeers.clear();
-        _applyStatus(event);
+        _applyStatus(event.raw);
         radarConsentUntil = null;
         pendingBeaconRequest = null;
         localBeaconActive = false;
         localBeaconExpiresAt = null;
         _stopRadarLocationSharing();
-        break;
-      case 'emergencyAck':
-        final canonicalHash = event['canonicalHash'] as String?;
-        final acknowledgingPeerId = event['peerId'] as String?;
+      case MeshEmergencyAckEvent():
+        final canonicalHash = event.canonicalHash;
+        final acknowledgingPeerId = event.peerId;
         if (canonicalHash != null && acknowledgingPeerId != null) {
           unawaited(
             _recordEmergencyAcknowledgement(canonicalHash, acknowledgingPeerId),
           );
         }
-        break;
-      case 'rescuePing':
-        final timestamp = (event['timestamp'] as num?)?.toInt();
+      case MeshRescuePingEvent():
+        final timestamp = event.timestamp;
         if (timestamp != null && timestamp > 0) {
           lastRescuePing = DateTime.fromMillisecondsSinceEpoch(timestamp);
         }
-        break;
-      case 'rssi':
-      case 'radarDiagnostic':
+      case MeshEmergencyTransportEvent():
+        _emergencyChannelsUsed.addAll(event.channels);
+      case MeshRssiEvent() || MeshRadarDiagnosticEvent():
         // Lecturas y avisos del radar de rescate: los consume RadarScreen
         // directamente del stream; evitar redibujar toda la app.
         return;
-      default:
+      case MeshRangingMeasurementEvent() ||
+          MeshRadioRangingStateEvent() ||
+          MeshRangingControlEvent() ||
+          MeshRadarExpiredEvent() ||
+          MeshUnknownEvent():
         break;
     }
     notifyListeners();
   }
 
-  void _handleEventSafely(Map<Object?, Object?> event) {
+  void _handleEventSafely(MeshNativeEvent event) {
     try {
       _handleEvent(event);
     } on FormatException catch (error, stackTrace) {
@@ -1599,11 +1800,19 @@ class MeshController extends ChangeNotifier {
     String canonicalHash,
     String acknowledgingPeerId,
   ) async {
-    final localId = await _repository.recordEmergencyAcknowledgement(
+    var localId = await _repository.recordEmergencyAcknowledgement(
       canonicalHash: canonicalHash,
       peerId: acknowledgingPeerId,
       acknowledgedAt: DateTime.now(),
     );
+    if (localId == null) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      localId = await _repository.recordEmergencyAcknowledgement(
+        canonicalHash: canonicalHash,
+        peerId: acknowledgingPeerId,
+        acknowledgedAt: DateTime.now(),
+      );
+    }
     if (localId == null) return;
     _emergencyDeliveries
       ..clear()
@@ -1656,6 +1865,16 @@ class MeshController extends ChangeNotifier {
         event['adaptivePowerSaving'] as bool? ?? powerProfile.savesPower;
     final metrics = event['resourceMetrics'];
     if (metrics is Map<Object?, Object?>) {
+      bleDutyCyclePercent =
+          (metrics['bleDutyCyclePercent'] as num?)?.toInt() ??
+          bleDutyCyclePercent;
+      activeBleScans =
+          (metrics['activeScans'] as num?)?.toInt() ?? activeBleScans;
+      meshScanActive = activeBleScans > 0;
+      scanStarts = (metrics['scanStarts'] as num?)?.toInt() ?? scanStarts;
+      storeForwardEntries =
+          (metrics['storeForwardEntries'] as num?)?.toInt() ??
+          storeForwardEntries;
       DiagnosticsLog.instance.info(
         'mesh.resource.stats',
         data: {
@@ -1667,6 +1886,16 @@ class MeshController extends ChangeNotifier {
               (metrics['storeForwardEntries'] as num?)?.toInt() ?? -1,
         },
       );
+    }
+    final links = event['links'];
+    if (links is List<Object?>) {
+      activeTransports = links
+          .whereType<Map<Object?, Object?>>()
+          .map((link) => link['kind'])
+          .whereType<String>()
+          .map((value) => value.trim().toLowerCase())
+          .where((value) => value.isNotEmpty)
+          .toSet();
     }
     _applyRadarConsent(event);
     if (!couldSend && canSend) {
@@ -1837,6 +2066,14 @@ class MeshController extends ChangeNotifier {
       );
       changed = true;
     }
+    final meshtastic = _preferences?.meshtasticEnabled ?? false;
+    if (meshtastic != _meshtasticEnabled) {
+      _meshtasticEnabled = meshtastic;
+      if (supportsMeshtastic) {
+        unawaited(_platform.configureMeshtasticBridge(enabled: meshtastic));
+      }
+      changed = true;
+    }
     if (changed) notifyListeners();
   }
 
@@ -1851,6 +2088,8 @@ class MeshController extends ChangeNotifier {
     peerLocations.removeListener(_notifyLocationChanged);
     peerLocations.dispose();
     unawaited(_repository.close());
+    final acousticSos = _providedAcousticSos ?? _createdAcousticSos;
+    if (acousticSos != null) unawaited(acousticSos.dispose());
     super.dispose();
   }
 }

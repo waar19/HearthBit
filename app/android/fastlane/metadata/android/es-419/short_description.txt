@@ -1,0 +1,1 @@
+Chat, SOS y radar de rescate sin internet mediante una malla Bluetooth.

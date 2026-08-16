@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import os
+import time
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -29,6 +30,7 @@ from .protocol import (
 DEFAULT_TTL = 7
 IDENTITY_VERSION = 1
 NODE_CAPABILITY_VERSION = 1
+ANNOUNCEMENT_CLOCK_WINDOW_MS = 10 * 60 * 1_000
 
 
 class IdentityError(ValueError):
@@ -311,12 +313,22 @@ def verify_packet_signature(packet: Packet, public_key: bytes) -> bool:
     return True
 
 
-def validate_announcement(packet: Packet | bytes) -> Announcement | None:
+def validate_announcement(
+    packet: Packet | bytes,
+    now_ms: int | None = None,
+) -> Announcement | None:
     try:
         decoded = decode_packet(packet) if isinstance(packet, bytes) else packet
     except PacketError:
         return None
     if decoded.message_type != TYPE_ANNOUNCE:
+        return None
+    current_ms = time.time_ns() // 1_000_000 if now_ms is None else now_ms
+    if not (
+        current_ms - ANNOUNCEMENT_CLOCK_WINDOW_MS
+        <= decoded.timestamp_ms
+        <= current_ms + ANNOUNCEMENT_CLOCK_WINDOW_MS
+    ):
         return None
     announcement = decode_announcement(decoded.payload)
     if announcement is None:

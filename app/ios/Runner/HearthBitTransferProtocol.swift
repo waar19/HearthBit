@@ -38,6 +38,24 @@ enum HBTransferProtocol {
   static let tagChunkBitmap: UInt8 = 0x11
   static let tagReason: UInt8 = 0x12
   static let tagReceivedCount: UInt8 = 0x14
+
+  static let transportBle: UInt32 = 1
+  static let transportLan: UInt32 = 2
+  static let transportNearby: UInt32 = 4
+  static let transportWifiAware: UInt32 = 8
+  static let transportOptical: UInt32 = 16
+  static let transportWifiDirect: UInt32 = 32
+  static let transportMultipeer: UInt32 = 64
+  static let transportExternal: UInt32 = 128
+
+  static let transportIdBle: UInt8 = 0
+  static let transportIdLan: UInt8 = 1
+  static let transportIdNearby: UInt8 = 2
+  static let transportIdWifiAware: UInt8 = 3
+  static let transportIdOptical: UInt8 = 4
+  static let transportIdWifiDirect: UInt8 = 5
+  static let transportIdMultipeer: UInt8 = 6
+  static let transportIdExternal: UInt8 = 7
 }
 
 struct HBTransferFrame {

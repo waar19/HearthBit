@@ -19,7 +19,7 @@ erweitern.
   optische QR-Codes.
 - Professionelles Suchradar mit BLE-Nähe, Trend, Kompass, GPS-Fusion,
   Android-16-Ranging und optionaler akustischer Kurzstreckenmessung.
-- Offline-Erste-Hilfe-Inhalte, Familiengruppen und physische Signalgeber.
+- Offline-Notrufnummern, Familiengruppen und physische Signalgeber.
 - Benutzeroberfläche auf Englisch, Spanisch, Deutsch, Französisch,
   vereinfachtem Chinesisch und Japanisch.
 

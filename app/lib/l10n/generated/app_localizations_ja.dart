@@ -75,6 +75,13 @@ class AppLocalizationsJa extends AppLocalizations {
       '有効です。近くの第三者が固定無線識別子でこの端末を追跡でき、公開メッセージはメッシュから読み取れます。';
 
   @override
+  String get meshtasticInteropTitle => 'Meshtastic 長距離無線';
+
+  @override
+  String get meshtasticInteropBody =>
+      '既定では無効です。有効にすると、近くの Meshtastic 無線機に接続します。プライベートな内容は LoRa メッシュ上でもエンドツーエンド暗号化されたままです。';
+
+  @override
   String get externalPresenceNoChat => '外部ネットワーク端末 · チャット不可';
 
   @override
@@ -187,6 +194,85 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get sosDefaultMessage => '助けが必要です';
+
+  @override
+  String get sosQrTitle => 'QRによるSOS';
+
+  @override
+  String get sosQrShowInstructions =>
+      'このコードを別の人に見せてください。HearthBitはSOSを中継でき、一般のカメラでも予備テキストを読めます。';
+
+  @override
+  String get sosQrFallbackTitle => 'アプリなしで読める情報';
+
+  @override
+  String get sosQrOpen => 'SOS QRを表示';
+
+  @override
+  String get sosQrScan => 'SOSをスキャンして中継';
+
+  @override
+  String get acousticSosListen => '音響SOSを待ち受ける';
+
+  @override
+  String get acousticSosStopListening => '音響待ち受けを停止';
+
+  @override
+  String get sosChannelsTitle => 'SOSの送信・準備経路';
+
+  @override
+  String get sosQrRelayTitle => 'SOSを検出しました';
+
+  @override
+  String get sosQrRelayAction => 'SOSを中継';
+
+  @override
+  String get sosQrInvalid => 'QRに有効な署名済みHearthBit SOSが含まれていません。';
+
+  @override
+  String get sosQrRelayed => 'SOSを検証してメッシュに追加しました';
+
+  @override
+  String get emergencySmsOpen => '信頼できる連絡先へSMSで知らせる';
+
+  @override
+  String get emergencySmsTitle => '緊急SMS';
+
+  @override
+  String get emergencySmsBody =>
+      '信頼できる連絡先向けのメッセージを準備します。内容を確認して送信できるようメッセージアプリを開きます。';
+
+  @override
+  String get emergencySmsRecipient => '信頼できる連絡先の電話番号';
+
+  @override
+  String get emergencySmsMessage => '緊急メッセージ';
+
+  @override
+  String get emergencySmsDisclaimer => '自動送信はされず、公的な緊急サービスへの通報の代わりにはなりません。';
+
+  @override
+  String get emergencySmsCompose => 'メッセージアプリを開く';
+
+  @override
+  String get emergencySmsUnavailable => '対応するメッセージアプリがありません';
+
+  @override
+  String get emergencySmsInvalidRecipient => '有効な電話番号を入力してください';
+
+  @override
+  String emergencySmsBodyWithoutLocation(String message) {
+    return 'HearthBit緊急アラート：$message。このSMSは公的な緊急サービスの代わりにはなりません。';
+  }
+
+  @override
+  String emergencySmsBodyWithLocation(
+    String message,
+    String latitude,
+    String longitude,
+  ) {
+    return 'HearthBit緊急アラート：$message。座標：$latitude, $longitude。このSMSは公的な緊急サービスの代わりにはなりません。';
+  }
 
   @override
   String get sosReceivedTitle => '受信したアラート';
@@ -421,7 +507,33 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transportWifiAware => 'Wi-Fi Aware';
 
   @override
+  String get transportWifiDirect => 'Wi-Fi Direct';
+
+  @override
+  String get transportMultipeer => 'Multipeer';
+
+  @override
+  String get transportShare => '別のアプリで共有';
+
+  @override
   String get transportOptical => '光学 QR';
+
+  @override
+  String get transferExport => '共有';
+
+  @override
+  String get transferImport => 'HearthBit パッケージを開く';
+
+  @override
+  String get sealedTransferSend => '別のアプリで暗号化送信';
+
+  @override
+  String get sealedImportTitle => '検証済みの暗号化ファイル';
+
+  @override
+  String sealedImportBody(String fileName, String sender) {
+    return '$fileName は検証済み連絡先 $sender によって署名されています。保存しますか？';
+  }
 
   @override
   String get actionReject => '拒否';
@@ -631,6 +743,69 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get diagnosticsExportError => '診断レポートをエクスポートできませんでした';
+
+  @override
+  String get diagnosticsTitle => '診断';
+
+  @override
+  String get diagnosticsRefreshTooltip => '診断情報を更新';
+
+  @override
+  String get diagnosticsMeshSection => 'メッシュ';
+
+  @override
+  String get diagnosticsPlatform => 'プラットフォーム';
+
+  @override
+  String get diagnosticsStatus => '状態';
+
+  @override
+  String get diagnosticsNearbyDevices => '近くのデバイス';
+
+  @override
+  String get diagnosticsAdvertising => 'BLE アドバタイズ';
+
+  @override
+  String get diagnosticsMeshScan => 'メッシュスキャン';
+
+  @override
+  String get diagnosticsGenericScan => '一般信号スキャン';
+
+  @override
+  String get diagnosticsEnergySection => '電力';
+
+  @override
+  String get diagnosticsBattery => 'バッテリー';
+
+  @override
+  String get diagnosticsPowerProfile => '電力プロファイル';
+
+  @override
+  String get diagnosticsBleDutyCycle => 'BLE 稼働率';
+
+  @override
+  String get diagnosticsScanStarts => 'スキャン開始回数';
+
+  @override
+  String get diagnosticsStoreForward => '蓄積転送キュー';
+
+  @override
+  String get diagnosticsTransportsSection => '有効な通信経路';
+
+  @override
+  String get diagnosticsNoActiveTransports => '有効な通信経路は報告されていません';
+
+  @override
+  String get diagnosticsEventsSection => '最近のイベント';
+
+  @override
+  String get diagnosticsNoEvents => '診断イベントはまだありません';
+
+  @override
+  String get diagnosticsEnabled => '有効';
+
+  @override
+  String get diagnosticsDisabled => '無効';
 
   @override
   String get openLinkError => 'リンクを開けませんでした';
@@ -872,6 +1047,13 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get radarSonarTooNoisy =>
       'チャープ音を測定できませんでした。周囲の騒音を減らし、両方の端末を覆わずに再試行してください。';
+
+  @override
+  String get radarSonarRemoteMicrophoneRequired => '相手の端末でソナーのマイク使用が許可されていません。';
+
+  @override
+  String get radarSonarSelfChirpMissing =>
+      'この端末は自身の信号を検出できませんでした。Bluetoothイヤホンを外し、スピーカーを覆わずに再試行してください。';
 
   @override
   String get radarSweepEstimateWarning =>
@@ -1428,40 +1610,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String apkOfferSent(String peer) {
     return '$peer にAPKを提案しました。適切な高速転送経路がない場合はエラーが表示されます。';
   }
-
-  @override
-  String get firstAidOpen => 'オフライン応急手当を開く';
-
-  @override
-  String get firstAidTitle => 'オフライン応急手当';
-
-  @override
-  String get firstAidDisclaimer =>
-      '地域の救急へ通報してください。この案内は専門家の救助や講習に代わりません。地域で手順が異なるため、通信指令員と当局に従ってください。';
-
-  @override
-  String get firstAidChooseTopic => '起きていることを選ぶ';
-
-  @override
-  String get firstAidEnglishFallback => 'この翻訳を検証できないため、検証済みの英語版を表示しています。';
-
-  @override
-  String get firstAidSteps => '今すぐ行う';
-
-  @override
-  String get firstAidWarnings => '避けること';
-
-  @override
-  String get firstAidSources => '出典と確認情報';
-
-  @override
-  String firstAidReviewed(String date) {
-    return '内容確認日：$date';
-  }
-
-  @override
-  String get firstAidLoadError =>
-      '検証済みのオフライン案内を読み込めませんでした。不完全な情報に頼らず、地域の救急へ通報してください。';
 
   @override
   String get familyTitle => '家族グループ';

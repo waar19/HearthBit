@@ -180,7 +180,12 @@ class _HearthBitAppState extends State<HearthBitApp> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge([_preferences, _controller, _lanGateway]),
+      animation: Listenable.merge([
+        _preferences,
+        _controller,
+        _transfers,
+        _lanGateway,
+      ]),
       builder: (context, _) => MaterialApp(
         onGenerateTitle: (context) => context.l10n.appTitle,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -193,6 +198,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
             children: [
               child ?? const SizedBox.shrink(),
               _BeaconConsentOverlay(controller: _controller),
+              _SealedImportOverlay(transfers: _transfers),
             ],
           ),
         ),
@@ -291,6 +297,64 @@ class _BeaconConsentOverlay extends StatelessWidget {
                   const SizedBox(width: 8),
                   FilledButton(
                     onPressed: () => controller.respondToBeaconRequest(true),
+                    child: Text(context.l10n.actionAccept),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SealedImportOverlay extends StatelessWidget {
+  const _SealedImportOverlay({required this.transfers});
+
+  final TransferController transfers;
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = transfers.pendingSealedImport;
+    if (pending == null) return const SizedBox.shrink();
+    final metadata = pending.metadata;
+    return Positioned(
+      left: 12,
+      right: 12,
+      bottom: MediaQuery.paddingOf(context).bottom + 12,
+      child: Material(
+        elevation: 12,
+        borderRadius: BorderRadius.circular(16),
+        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                context.l10n.sealedImportTitle,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                context.l10n.sealedImportBody(
+                  metadata.fileName,
+                  metadata.senderPeerId.substring(0, 8),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: transfers.rejectPendingSealedImport,
+                    child: Text(context.l10n.actionReject),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: transfers.acceptPendingSealedImport,
                     child: Text(context.l10n.actionAccept),
                   ),
                 ],

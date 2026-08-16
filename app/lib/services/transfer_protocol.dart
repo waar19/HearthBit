@@ -51,6 +51,9 @@ class TransferProtocol {
   static const int transportNearby = 4;
   static const int transportWifiAware = 8;
   static const int transportOptical = 16;
+  static const int transportWifiDirect = 32;
+  static const int transportMultipeer = 64;
+  static const int transportExternal = 128;
 
   // Valores del tag TRANSPORT.
   static const int transportIdBle = 0;
@@ -58,6 +61,9 @@ class TransferProtocol {
   static const int transportIdNearby = 2;
   static const int transportIdWifiAware = 3;
   static const int transportIdOptical = 4;
+  static const int transportIdWifiDirect = 5;
+  static const int transportIdMultipeer = 6;
+  static const int transportIdExternal = 7;
 }
 
 /// Trama HBT genérica: tipo + campos TLV indexados por tag.

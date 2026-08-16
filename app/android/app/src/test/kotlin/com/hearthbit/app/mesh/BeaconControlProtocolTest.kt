@@ -63,10 +63,10 @@ class BeaconControlProtocolTest {
     }
 
     @Test
-    fun `beacon packet is directed signed ttl one and never relayed`() {
+    fun `beacon packet is directed signed and accepts only ttl one or two`() {
         val packet = MeshProtocol.Packet(
             type = MeshProtocol.TYPE_BEACON_CONTROL,
-            ttl = 1,
+            ttl = BeaconControlProtocol.INITIAL_TTL.toByte(),
             timestamp = 1_000,
             senderId = ByteArray(8) { 1 },
             recipientId = ByteArray(8) { 2 },
@@ -80,26 +80,101 @@ class BeaconControlProtocolTest {
         val decoded = requireNotNull(MeshProtocol.decode(MeshProtocol.encode(packet, padded = false)))
 
         assertEquals(0x26.toByte(), decoded.type)
-        assertEquals(1.toByte(), decoded.ttl)
+        assertEquals(2.toByte(), decoded.ttl)
         assertNotNull(decoded.recipientId)
         assertNotNull(decoded.signature)
-        assertFalse(
+        assertFalse(BeaconControlProtocol.isValidTtl(0))
+        assertTrue(BeaconControlProtocol.isValidTtl(1))
+        assertTrue(BeaconControlProtocol.isValidTtl(2))
+        assertFalse(BeaconControlProtocol.isValidTtl(3))
+    }
+
+    @Test
+    fun `beacon control relays exactly once only toward another directed recipient`() {
+        assertTrue(
             MeshRelayPolicy.shouldRelay(
                 MeshNodeRole.PHONE_RELAY,
                 MeshProtocol.TYPE_BEACON_CONTROL,
-                ttl = 7,
+                ttl = 2,
+                addressedToLocalNode = false,
+                hasDirectedRecipient = true,
+            ),
+        )
+        listOf(
+            Triple(1, false, true),
+            Triple(2, true, true),
+            Triple(2, false, false),
+            Triple(3, false, true),
+        ).forEach { (ttl, local, directed) ->
+            assertFalse(
+                MeshRelayPolicy.shouldRelay(
+                    MeshNodeRole.PHONE_RELAY,
+                    MeshProtocol.TYPE_BEACON_CONTROL,
+                    ttl = ttl,
+                    addressedToLocalNode = local,
+                    hasDirectedRecipient = directed,
+                ),
+            )
+        }
+        assertFalse(
+            MeshRelayPolicy.shouldRelay(
+                MeshNodeRole.PHONE_RELAY,
+                MeshProtocol.TYPE_RANGING_CONTROL,
+                ttl = 2,
                 addressedToLocalNode = false,
             ),
         )
     }
 
     @Test
-    fun `solo autoacepta si el consentimiento local ya estaba activo`() {
+    fun `solo autoacepta en emergencia o radar para una relacion verificada`() {
         val now = 5_000L
 
-        assertFalse(BeaconControlProtocol.shouldAutoAccept(0, now))
-        assertFalse(BeaconControlProtocol.shouldAutoAccept(now, now))
-        assertTrue(BeaconControlProtocol.shouldAutoAccept(now + 1, now))
+        assertFalse(
+            BeaconControlProtocol.shouldAutoAccept(
+                rescueModeActive = true,
+                localRadarConsentUntil = 0,
+                hearthbitVerified = false,
+                knownRelationship = true,
+                now = now,
+            ),
+        )
+        assertFalse(
+            BeaconControlProtocol.shouldAutoAccept(
+                rescueModeActive = true,
+                localRadarConsentUntil = 0,
+                hearthbitVerified = true,
+                knownRelationship = false,
+                now = now,
+            ),
+        )
+        assertTrue(
+            BeaconControlProtocol.shouldAutoAccept(
+                rescueModeActive = true,
+                localRadarConsentUntil = 0,
+                hearthbitVerified = true,
+                knownRelationship = true,
+                now = now,
+            ),
+        )
+        assertTrue(
+            BeaconControlProtocol.shouldAutoAccept(
+                rescueModeActive = false,
+                localRadarConsentUntil = now + 1,
+                hearthbitVerified = true,
+                knownRelationship = true,
+                now = now,
+            ),
+        )
+        assertFalse(
+            BeaconControlProtocol.shouldAutoAccept(
+                rescueModeActive = false,
+                localRadarConsentUntil = now,
+                hearthbitVerified = true,
+                knownRelationship = true,
+                now = now,
+            ),
+        )
     }
 
     private fun assertNotNullAndReturn(

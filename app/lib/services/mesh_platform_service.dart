@@ -4,12 +4,35 @@ import 'package:flutter/services.dart';
 
 import 'beacon_control_protocol.dart';
 import '../models/mesh_models.dart';
+import 'mesh_native_event.dart';
+
+String normalizeSmsRecipient(String value) {
+  final normalized = value.trim().replaceAll(RegExp(r'[\s()\-]'), '');
+  if (!RegExp(r'^\+?[0-9]{5,15}$').hasMatch(normalized)) {
+    throw const FormatException('invalid_sms_recipient');
+  }
+  return normalized;
+}
+
+abstract final class RescueModeContract {
+  static const Duration defaultInterval = Duration(minutes: 5);
+}
 
 class EmergencyTransmission {
-  const EmergencyTransmission({required this.messageId, this.canonicalHash});
+  const EmergencyTransmission({
+    required this.messageId,
+    this.canonicalHash,
+    this.announcementFrame,
+    this.messageFrame,
+  });
 
   final String messageId;
   final String? canonicalHash;
+  final Uint8List? announcementFrame;
+  final Uint8List? messageFrame;
+
+  bool get hasQrFrames =>
+      announcementFrame?.isNotEmpty == true && messageFrame?.isNotEmpty == true;
 }
 
 class NativeRescueState {
@@ -57,6 +80,20 @@ class NativeRescueState {
   final SosLocationPrecision locationPrecision;
 }
 
+class SealedTransferRecipient {
+  const SealedTransferRecipient({
+    required this.senderPeerId,
+    required this.recipientPeerId,
+    required this.noisePublicKey,
+    required this.signingPublicKey,
+  });
+
+  final String senderPeerId;
+  final String recipientPeerId;
+  final Uint8List noisePublicKey;
+  final Uint8List signingPublicKey;
+}
+
 class MeshPlatformService {
   static const _methods = MethodChannel('com.hearthbit.mesh/methods');
   static const _events = EventChannel('com.hearthbit.mesh/events');
@@ -72,6 +109,8 @@ class MeshPlatformService {
       .receiveBroadcastStream()
       .where((event) => event is Map)
       .cast<Map<Object?, Object?>>();
+
+  Stream<MeshNativeEvent> get nativeEvents => events.map(MeshNativeEvent.parse);
 
   Future<Map<Object?, Object?>> getCapabilities() async {
     final result = await _methods.invokeMapMethod<Object?, Object?>(
@@ -109,7 +148,7 @@ class MeshPlatformService {
     DateTime? startedAt,
     DateTime? lastPingAt,
     DateTime? expiresAt,
-    Duration interval = const Duration(minutes: 2),
+    Duration interval = RescueModeContract.defaultInterval,
     SosLocationPrecision locationPrecision = SosLocationPrecision.approximate,
   }) async {
     try {
@@ -155,6 +194,20 @@ class MeshPlatformService {
     });
   }
 
+  /// Conecta, con consentimiento explícito, un nodo Meshtastic cercano como
+  /// troncal LoRa. En plataformas sin soporte el método es un no-op seguro.
+  Future<void> configureMeshtasticBridge({required bool enabled}) async {
+    try {
+      await _methods.invokeMethod<void>('configureMeshtasticBridge', {
+        'enabled': enabled,
+      });
+    } on MissingPluginException {
+      // Plataforma sin cliente Meshtastic nativo.
+    } on PlatformException {
+      // El controlador mostrará la ausencia del enlace mediante el snapshot.
+    }
+  }
+
   Future<void> setLanDiscoveryEnabled(bool enabled) {
     return _methods.invokeMethod<void>('setLanDiscoveryEnabled', {
       'enabled': enabled,
@@ -191,6 +244,22 @@ class MeshPlatformService {
   }) {
     return _methods.invokeMethod<void>('injectRawMeshFrame', {
       'gatewayId': gatewayId,
+      'frame': frame,
+    });
+  }
+
+  Future<void> injectEmergencyQrFrames({
+    required Uint8List announcementFrame,
+    required Uint8List messageFrame,
+  }) {
+    return _methods.invokeMethod<void>('injectEmergencyQrFrames', {
+      'announcementFrame': announcementFrame,
+      'messageFrame': messageFrame,
+    });
+  }
+
+  Future<void> injectEmergencyLanFrame(Uint8List frame) {
+    return _methods.invokeMethod<void>('injectEmergencyLanFrame', {
       'frame': frame,
     });
   }
@@ -251,6 +320,8 @@ class MeshPlatformService {
       return EmergencyTransmission(
         messageId: returnedId,
         canonicalHash: (result?['canonicalHash'] as String?)?.toLowerCase(),
+        announcementFrame: result?['announcementFrame'] as Uint8List?,
+        messageFrame: result?['messageFrame'] as Uint8List?,
       );
     } on MissingPluginException {
       return EmergencyTransmission(
@@ -264,16 +335,22 @@ class MeshPlatformService {
     }
   }
 
-  Future<bool> retryEmergency(String canonicalHash) async {
+  Future<String?> retryEmergency(String canonicalHash) async {
     try {
-      return await _methods.invokeMethod<bool>('retryEmergency', {
-            'canonicalHash': canonicalHash,
-          }) ??
-          false;
+      final result = await _methods.invokeMethod<Object?>('retryEmergency', {
+        'canonicalHash': canonicalHash,
+      });
+      if (result is Map<Object?, Object?>) {
+        return (result['canonicalHash'] as String?)?.toLowerCase();
+      }
+      if (result is bool) {
+        return result ? canonicalHash.toLowerCase() : null;
+      }
+      return null;
     } on MissingPluginException {
-      return false;
+      return null;
     } on PlatformException catch (error) {
-      if (error.code == 'not_implemented') return false;
+      if (error.code == 'not_implemented') return null;
       rethrow;
     }
   }
@@ -309,6 +386,39 @@ class MeshPlatformService {
       return const {};
     } on PlatformException {
       return const {};
+    }
+  }
+
+  /// Snapshot agregado para soporte en campo. No contiene identidades,
+  /// direcciones, mensajes, claves ni coordenadas.
+  Future<Map<Object?, Object?>> getMeshDiagnostics() async {
+    try {
+      final result = await _methods.invokeMapMethod<Object?, Object?>(
+        'getMeshDiagnostics',
+      );
+      return result ?? const {};
+    } on MissingPluginException {
+      return const {};
+    } on PlatformException {
+      return const {};
+    }
+  }
+
+  Future<bool> composeEmergencySms({
+    required String recipient,
+    required String body,
+  }) async {
+    final normalizedRecipient = normalizeSmsRecipient(recipient);
+    try {
+      return await _methods.invokeMethod<bool>('composeEmergencySms', {
+            'recipient': normalizedRecipient,
+            'body': body,
+          }) ??
+          false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
     }
   }
 
@@ -449,5 +559,51 @@ class MeshPlatformService {
           'signature': signature,
         }) ??
         false;
+  }
+
+  Future<SealedTransferRecipient> getSealedTransferRecipient(
+    String peerId,
+  ) async {
+    final result = await _methods.invokeMapMethod<Object?, Object?>(
+      'getSealedTransferRecipient',
+      {'peerId': peerId},
+    );
+    final senderPeerId = result?['senderPeerId'] as String?;
+    final recipientPeerId = result?['recipientPeerId'] as String?;
+    final noisePublicKey = result?['noisePublicKey'] as Uint8List?;
+    final signingPublicKey = result?['signingPublicKey'] as Uint8List?;
+    if (senderPeerId == null ||
+        recipientPeerId == null ||
+        noisePublicKey?.length != 32 ||
+        signingPublicKey?.length != 32 ||
+        result?['verified'] != true) {
+      throw StateError('Unknown or unverified sealed-transfer recipient');
+    }
+    return SealedTransferRecipient(
+      senderPeerId: senderPeerId,
+      recipientPeerId: recipientPeerId,
+      noisePublicKey: noisePublicKey!,
+      signingPublicKey: signingPublicKey!,
+    );
+  }
+
+  Future<Uint8List> deriveSealedOpenSecret(
+    Uint8List ephemeralPublicKey,
+    String recipientPeerId,
+  ) async {
+    if (ephemeralPublicKey.length != 32) {
+      throw const FormatException('Invalid sealed-transfer ephemeral key');
+    }
+    final result = await _methods.invokeMethod<Uint8List>(
+      'deriveSealedOpenSecret',
+      {
+        'ephemeralPublicKey': ephemeralPublicKey,
+        'recipientPeerId': recipientPeerId,
+      },
+    );
+    if (result?.length != 32) {
+      throw StateError('Native sealed-transfer key agreement failed');
+    }
+    return result!;
   }
 }

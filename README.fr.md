@@ -18,7 +18,7 @@ relais Android TV/Automotive, Linux et Raspberry Pi peuvent étendre sa portée.
   ou QR optique.
 - Radar de recherche avec proximité BLE, tendance, boussole, fusion GPS,
   Ranging d’Android 16 et mesure acoustique facultative à courte portée.
-- Premiers secours hors ligne, groupes familiaux et balises physiques.
+- Numéros d’urgence hors ligne, groupes familiaux et balises physiques.
 - Interface en anglais, espagnol, allemand, français, chinois simplifié et
   japonais.
 

@@ -72,6 +72,20 @@ class GattDeliveryPolicyTest {
     }
 
     @Test
+    fun `legacy emergency ACK keeps critical priority on reception`() {
+        val packet = MeshProtocol.Packet(
+            type = MeshProtocol.TYPE_LEGACY_EMERGENCY_ACK,
+            ttl = MeshProtocol.TTL,
+            timestamp = 1,
+            senderId = ByteArray(8),
+            recipientId = ByteArray(8) { 1 },
+            payload = byteArrayOf(MeshProtocol.EMERGENCY_PROTOCOL_VERSION) + ByteArray(32),
+        )
+
+        assertTrue(GattFramePriority.isCritical(MeshProtocol.encode(packet, padded = false)))
+    }
+
+    @Test
     fun `regular message keeps standard priority across local fragmentation`() {
         val packet = MeshProtocol.Packet(
             type = MeshProtocol.TYPE_MESSAGE,

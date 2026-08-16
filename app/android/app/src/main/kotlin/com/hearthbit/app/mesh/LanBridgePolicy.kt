@@ -24,4 +24,6 @@ internal object LanBridgePolicy {
         }
         return frame.copyOf()
     }
+
+    fun shouldClearOnStop(notify: Boolean): Boolean = notify
 }

@@ -1,0 +1,20 @@
+---
+description: After finishing work, always commit and push without waiting to be asked
+alwaysApply: true
+---
+
+# Git: always commit and push
+
+When the requested work is done and there are pending changes (including dirty submodules):
+
+1. Create a commit. Do not wait for the user to say "commit".
+2. Push to the current branch remote. Do not wait for the user to say "push".
+3. Linked repos (git submodules) are not optional extras. Treat them like this repo:
+   - `firmware/anchor-node` is https://github.com/waar19/bitle.git (usually branch `main`)
+   - `vendor/bitchat-android` is https://github.com/waar19/bitchat-android.git
+   Commit and push the submodule first, then update this repo's pointer, commit, and push this repo. Skipping the submodule push leaves the app pointing at firmware that only exists on this machine.
+4. Use a short, non-technical commit message focused on user-facing impact.
+5. Do not force-push. Do not skip hooks. Do not commit secrets (`.env`, credentials, keys).
+6. The Source Control panel being open is not a substitute for this: still commit and push from the agent.
+
+This project rule overrides any generic "only commit/push when asked" guidance for this repository.

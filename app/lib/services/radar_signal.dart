@@ -38,10 +38,12 @@ class RadarSignalProcessor {
     this.medianWindowSize = 5,
     this.trendWindow = const Duration(seconds: 4),
     this.trendThresholdDb = 2.0,
+    this.trendConfirmationWindows = 2,
     this.staleAfter = const Duration(seconds: 5),
     this.txPowerAtOneMeter = -59.0,
     this.pathLossExponent = 2.4,
-  }) : assert(medianWindowSize > 0);
+  }) : assert(medianWindowSize > 0),
+       assert(trendConfirmationWindows > 0);
 
   final double smoothingFactor;
   final int medianWindowSize;
@@ -51,6 +53,9 @@ class RadarSignalProcessor {
 
   /// Cambio mínimo en dB para declarar acercamiento/alejamiento.
   final double trendThresholdDb;
+
+  /// Evaluaciones consecutivas requeridas antes de abandonar «estable».
+  final int trendConfirmationWindows;
 
   /// Sin muestras durante este tiempo, la señal se considera perdida.
   final Duration staleAfter;
@@ -65,6 +70,9 @@ class RadarSignalProcessor {
   final List<double> _rawWindow = [];
   double? _smoothed;
   DateTime? _lastSampleAt;
+  RadarTrend _confirmedTrend = RadarTrend.unknown;
+  RadarTrend? _pendingTrend;
+  int _pendingTrendWindows = 0;
 
   RadarReading? get last => _lastReading;
   RadarReading? _lastReading;
@@ -111,6 +119,9 @@ class RadarSignalProcessor {
     _smoothed = null;
     _lastSampleAt = null;
     _lastReading = null;
+    _confirmedTrend = RadarTrend.unknown;
+    _pendingTrend = null;
+    _pendingTrendWindows = 0;
   }
 
   double _strength(double rssi) =>
@@ -134,11 +145,43 @@ class RadarSignalProcessor {
         reference = entry;
       }
     }
-    if (reference == null) return RadarTrend.unknown;
+    if (reference == null) {
+      _pendingTrend = null;
+      _pendingTrendWindows = 0;
+      return RadarTrend.unknown;
+    }
     final delta = current - reference.rssi;
-    if (delta >= trendThresholdDb) return RadarTrend.approaching;
-    if (delta <= -trendThresholdDb) return RadarTrend.receding;
-    return RadarTrend.steady;
+    final candidate = delta >= trendThresholdDb
+        ? RadarTrend.approaching
+        : delta <= -trendThresholdDb
+        ? RadarTrend.receding
+        : RadarTrend.steady;
+    if (candidate == RadarTrend.steady) {
+      _confirmedTrend = RadarTrend.steady;
+      _pendingTrend = null;
+      _pendingTrendWindows = 0;
+      return _confirmedTrend;
+    }
+    if (_confirmedTrend == candidate) {
+      _pendingTrend = null;
+      _pendingTrendWindows = 0;
+      return _confirmedTrend;
+    }
+    if (_confirmedTrend == RadarTrend.unknown) {
+      _confirmedTrend = RadarTrend.steady;
+    }
+    if (_pendingTrend == candidate) {
+      _pendingTrendWindows++;
+    } else {
+      _pendingTrend = candidate;
+      _pendingTrendWindows = 1;
+    }
+    if (_pendingTrendWindows >= trendConfirmationWindows) {
+      _confirmedTrend = candidate;
+      _pendingTrend = null;
+      _pendingTrendWindows = 0;
+    }
+    return _confirmedTrend;
   }
 
   double _distance(double rssi) => math

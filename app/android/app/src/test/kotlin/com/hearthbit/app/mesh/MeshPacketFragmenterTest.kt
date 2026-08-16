@@ -112,6 +112,42 @@ class MeshPacketFragmenterTest {
     }
 
     @Test
+    fun `fragmentos de beacon conservan ttl directo o tras un relay`() {
+        val original = MeshProtocol.Packet(
+            type = MeshProtocol.TYPE_BEACON_CONTROL,
+            ttl = BeaconControlProtocol.INITIAL_TTL.toByte(),
+            timestamp = 1_000,
+            senderId = sender,
+            recipientId = ByteArray(8) { 2 },
+            payload = BeaconControlProtocol.request(
+                expiresAt = 2_000,
+                flags = BeaconControlProtocol.FLAG_FLASH,
+                nonce = ByteArray(BeaconControlProtocol.NONCE_SIZE) { it.toByte() },
+            ),
+            signature = ByteArray(64) { 3 },
+        )
+        val frames = requireNotNull(
+            fragmenter().prepare(MeshProtocol.encodeForBle(original), 100),
+        )
+        assertTrue(frames.size > 1)
+
+        fun reassembleWithTtl(ttl: Byte): MeshProtocol.Packet? {
+            val reassembler = MeshFragmentReassembler()
+            var result: MeshProtocol.Packet? = null
+            frames.forEach { frame ->
+                val fragment = requireNotNull(MeshProtocol.decode(frame)).copy(ttl = ttl)
+                result = reassembler.accept(fragment) ?: result
+            }
+            return result
+        }
+
+        assertEquals(2.toByte(), requireNotNull(reassembleWithTtl(2)).ttl)
+        assertEquals(1.toByte(), requireNotNull(reassembleWithTtl(1)).ttl)
+        assertNull(reassembleWithTtl(0))
+        assertNull(reassembleWithTtl(3))
+    }
+
+    @Test
     fun `admite 256 fragments y rechaza 257`() {
         val random = Random(0xB17C4A7)
         val largestAcceptedPayload =

@@ -25,7 +25,6 @@ import 'package:hearth_bit/models/mesh_models.dart';
 import 'package:hearth_bit/screens/emergency_contacts_screen.dart';
 import 'package:hearth_bit/screens/emergency_screen.dart';
 import 'package:hearth_bit/screens/family_screen.dart';
-import 'package:hearth_bit/screens/first_aid_guide_screen.dart';
 import 'package:hearth_bit/screens/home_screen.dart';
 import 'package:hearth_bit/screens/onboarding_screen.dart';
 import 'package:hearth_bit/screens/radar_screen.dart';
@@ -164,6 +163,23 @@ Future<ByteData> _readFont(String directory, String file) async {
   return ByteData.sublistView(bytes);
 }
 
+Future<void> _loadFontIfAvailable(
+  String family,
+  String directory,
+  List<String> files,
+) async {
+  final paths = files.map((file) => '$directory${Platform.pathSeparator}$file');
+  if (!paths.every((path) => File(path).existsSync())) {
+    debugPrint('[ui-review] skip-font:$family');
+    return;
+  }
+  final loader = FontLoader(family);
+  for (final file in files) {
+    loader.addFont(_readFont(directory, file));
+  }
+  await loader.load();
+}
+
 Future<void> _loadRealFonts() async {
   final flutterRoot =
       Platform.environment['FLUTTER_ROOT'] ?? r'C:\src\flutter-sdk';
@@ -171,15 +187,15 @@ Future<void> _loadRealFonts() async {
       '$flutterRoot${Platform.pathSeparator}bin'
       '${Platform.pathSeparator}cache${Platform.pathSeparator}artifacts'
       '${Platform.pathSeparator}material_fonts';
-  final roboto = FontLoader('Roboto')
-    ..addFont(_readFont(fontsDir, 'roboto-regular.ttf'))
-    ..addFont(_readFont(fontsDir, 'roboto-medium.ttf'))
-    ..addFont(_readFont(fontsDir, 'roboto-bold.ttf'))
-    ..addFont(_readFont(fontsDir, 'roboto-italic.ttf'));
-  await roboto.load();
-  final icons = FontLoader('MaterialIcons')
-    ..addFont(_readFont(fontsDir, 'materialicons-regular.otf'));
-  await icons.load();
+  await _loadFontIfAvailable('Roboto', fontsDir, const [
+    'roboto-regular.ttf',
+    'roboto-medium.ttf',
+    'roboto-bold.ttf',
+    'roboto-italic.ttf',
+  ]);
+  await _loadFontIfAvailable('MaterialIcons', fontsDir, const [
+    'materialicons-regular.otf',
+  ]);
 }
 
 Future<void> _pumpApp(
@@ -585,23 +601,6 @@ void main() {
     await _pumpApp(tester, FamilyScreen(controller: family));
     await _shoot(tester, 'family_dark');
     await _audit(tester, 'family');
-    handle.dispose();
-  });
-
-  testWidgets('guía de primeros auxilios', (tester) async {
-    final handle = tester.ensureSemantics();
-    await _pumpApp(tester, const FirstAidGuideScreen());
-    await tester.pumpAndSettle();
-    await _shoot(tester, 'first_aid_list_dark');
-    await _audit(tester, 'first_aid_list');
-
-    final tiles = find.byType(ListTile);
-    if (tiles.evaluate().isNotEmpty) {
-      await tester.tap(tiles.first, warnIfMissed: false);
-      await tester.pumpAndSettle();
-      await _shoot(tester, 'first_aid_detail_dark');
-      await _audit(tester, 'first_aid_detail');
-    }
     handle.dispose();
   });
 

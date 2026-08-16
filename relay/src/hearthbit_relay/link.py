@@ -10,6 +10,7 @@ class LinkKind(StrEnum):
     LAN = "lan"
     MQTT = "mqtt"
     MATRIX = "matrix"
+    RETICULUM = "reticulum"
     LORA = "lora"
     IN_MEMORY = "in-memory"
 

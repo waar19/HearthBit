@@ -5,6 +5,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from hearthbit_relay.identity import (
+    ANNOUNCEMENT_CLOCK_WINDOW_MS,
     NodeRole,
     RelayIdentity,
     canonical_packet_bytes,
@@ -43,7 +44,7 @@ def test_announcement_is_bound_to_noise_key_and_signed_canonically(tmp_path) -> 
     )
     packet = decode_packet(raw)
 
-    announcement = validate_announcement(packet)
+    announcement = validate_announcement(packet, now_ms=1_234)
 
     assert packet.message_type == TYPE_ANNOUNCE
     assert packet.sender_id == identity.peer_id
@@ -65,7 +66,41 @@ def test_tampered_announcement_signature_is_rejected(tmp_path) -> None:
     )
     raw[-1] ^= 0x01
 
-    assert validate_announcement(bytes(raw)) is None
+    assert validate_announcement(bytes(raw), now_ms=1_234) is None
+
+
+def test_announcement_clock_rejects_past_and_future_outside_window(
+    tmp_path,
+) -> None:
+    identity = RelayIdentity.load_or_create(tmp_path / "identity.json")
+    now_ms = 10_000_000
+    past = identity.build_announcement(
+        nickname="Past",
+        timestamp_ms=now_ms - ANNOUNCEMENT_CLOCK_WINDOW_MS - 1,
+    )
+    future = identity.build_announcement(
+        nickname="Future",
+        timestamp_ms=now_ms + ANNOUNCEMENT_CLOCK_WINDOW_MS + 1,
+    )
+
+    assert validate_announcement(past, now_ms=now_ms) is None
+    assert validate_announcement(future, now_ms=now_ms) is None
+
+
+def test_announcement_clock_accepts_boundaries_and_current_time(tmp_path) -> None:
+    identity = RelayIdentity.load_or_create(tmp_path / "identity.json")
+    now_ms = 10_000_000
+
+    for timestamp_ms in (
+        now_ms - ANNOUNCEMENT_CLOCK_WINDOW_MS,
+        now_ms,
+        now_ms + ANNOUNCEMENT_CLOCK_WINDOW_MS,
+    ):
+        raw = identity.build_announcement(
+            nickname="Boundary",
+            timestamp_ms=timestamp_ms,
+        )
+        assert validate_announcement(raw, now_ms=now_ms) is not None
 
 
 def test_node_capability_roles_are_authenticated_and_wire_compatible(tmp_path) -> None:

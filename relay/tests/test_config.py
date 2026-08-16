@@ -10,10 +10,28 @@ from hearthbit_relay.bluez import (
 )
 from hearthbit_relay.config import RelayConfig, load_config
 from hearthbit_relay.identity import NodeRole
+from hearthbit_relay.protocol import TYPE_EMERGENCY_ACK
 
 
 def test_default_central_limit_is_greater_than_two() -> None:
     assert RelayConfig().max_central_links > 2
+
+
+def test_emergency_flood_defaults_match_or_exceed_normal_capacity() -> None:
+    flood = RelayConfig().flood
+
+    assert flood.emergency_rate_per_second == 8
+    assert flood.emergency_burst == 32
+    assert flood.emergency_rate_per_second >= flood.sender_rate_per_second
+    assert flood.emergency_burst >= flood.sender_burst
+    assert flood.bridge_emergency_rate_per_second == 20
+    assert flood.bridge_emergency_burst == 64
+    assert flood.bridge_emergency_rate_per_second >= flood.bridge_rate_per_second
+    assert flood.bridge_emergency_burst >= flood.bridge_burst
+
+
+def test_store_defaults_include_current_emergency_ack() -> None:
+    assert TYPE_EMERGENCY_ACK in RelayConfig().store.message_types
 
 
 def test_privacy_defaults_bind_lan_to_loopback() -> None:
@@ -21,6 +39,36 @@ def test_privacy_defaults_bind_lan_to_loopback() -> None:
     assert config.lan.listen_host == "127.0.0.1"
     assert not config.mqtt.allow_sensitive_emergency_coordinates
     assert not config.matrix.allow_sensitive_emergency_coordinates
+    assert not config.reticulum.allow_sensitive_emergency_coordinates
+    assert not config.reticulum.enabled
+
+
+def test_reticulum_requires_explicit_bidirectional_allowlists(tmp_path) -> None:
+    path = tmp_path / "config.json"
+    path.write_text(
+        json.dumps({"reticulum": {"enabled": True}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="destination_hashes"):
+        load_config(path)
+
+    path.write_text(
+        json.dumps(
+            {
+                "reticulum": {
+                    "enabled": True,
+                    "destination_hashes": ["11" * 16],
+                    "source_allowlist": ["22" * 16],
+                    "storage_path": str(tmp_path / "rns"),
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(path)
+    assert config.reticulum.destination_hashes == frozenset({b"\x11" * 16})
+    assert config.reticulum.source_allowlist == frozenset({b"\x22" * 16})
 
 
 def test_identity_role_and_presence_interval_are_configurable(tmp_path) -> None:
@@ -272,6 +320,8 @@ def test_identity_and_flood_policies_are_bounded(tmp_path) -> None:
                     "emergency_burst": 3,
                     "bridge_rate_per_second": 10,
                     "bridge_burst": 20,
+                    "bridge_emergency_rate_per_second": 12,
+                    "bridge_emergency_burst": 24,
                 },
             }
         ),
@@ -281,6 +331,8 @@ def test_identity_and_flood_policies_are_bounded(tmp_path) -> None:
     config = load_config(path)
     assert config.identity_verification.unknown_signed_policy == "reject"
     assert config.flood.sender_burst == 8
+    assert config.flood.bridge_emergency_rate_per_second == 12
+    assert config.flood.bridge_emergency_burst == 24
 
     path.write_text(
         json.dumps(

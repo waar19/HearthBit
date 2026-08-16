@@ -21,6 +21,8 @@ otros dispositivos con el servicio compatible).
   `_hearthbit._tcp.local` y anti-loop fuera del frame BitChat.
 - Bridges MQTT 5 y Matrix opt-in para mensajes públicos firmados, sin
   transportar datos privados.
+- Bridge Reticulum/LXMF opt-in para mensajes públicos firmados y verificados
+  entre destinos relay autorizados explícitamente; nunca exporta tráfico privado.
 - Servicio systemd, contenedor y add-on local de Home Assistant.
 
 Las reglas de relay coinciden con el firmware ancla: no se reenvían paquetes
@@ -56,8 +58,8 @@ política D-Bus permita a ese usuario registrar GATT y advertising; si lo
 deniega, añada una regla local limitada a `org.bluez` y no convierta el
 servicio en root.
 
-La unidad base solo permite `AF_UNIX` y `AF_BLUETOOTH`. Si activa LAN, MQTT o
-Matrix, instale el drop-in de red:
+La unidad base solo permite `AF_UNIX` y `AF_BLUETOOTH`. Si activa LAN, MQTT,
+Matrix o Reticulum, instale el drop-in de red:
 
 ```bash
 sudo install -D -m 0644 /opt/hearthbit-relay/systemd/hearthbit-relay-network.conf \
@@ -107,6 +109,11 @@ importantes son:
   [`../docs/mqtt-bridge.md`](../docs/mqtt-bridge.md).
 - `matrix`: bridge desactivado, HTTPS y allowlist de emisores. Consulte
   [`../docs/matrix-bridge.md`](../docs/matrix-bridge.md).
+- `reticulum`: bridge LXMF desactivado, con hashes de destino y origen de 16
+  bytes autorizados explícitamente. Instálelo con
+  `pip install -e ".[reticulum]"`. Solo transporta mensajes públicos firmados
+  y verificados; las coordenadas de emergencia siguen bloqueadas salvo
+  consentimiento del operador.
 - `store.max_bytes`, `store.max_packets` y `store.packet_ttl_seconds`: límites
   duros de persistencia.
 - `store.require_signature`: exige el flag de firma antes de persistir.
@@ -114,7 +121,10 @@ importantes son:
   persisten.
 
 La expiración TLV de un `CourierEnvelope` siempre reduce, nunca amplía, la
-retención configurada.
+retención configurada. `EMERGENCY_ACK 0x2B` solo se persiste si es dirigido,
+firmado y tiene el payload registrado; su retención nunca supera 48 horas
+aunque `store.packet_ttl_seconds` sea mayor. El ACK ambiguo legado `0x29`
+siempre se purga.
 
 ### Administración de confianza
 

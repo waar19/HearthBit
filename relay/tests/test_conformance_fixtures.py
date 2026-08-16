@@ -9,6 +9,12 @@ import pytest
 from hearthbit_relay.protocol import (
     FragmentReassembler,
     PacketError,
+    TYPE_BEACON_CONTROL,
+    TYPE_EMERGENCY_ACK,
+    TYPE_EMERGENCY_CAPABILITY,
+    TYPE_HBT_CAPABILITY,
+    TYPE_LEGACY_HBT_CAPABILITY,
+    TYPE_RANGING_CONTROL,
     canonical_packet_bytes,
     decode_courier_envelope,
     decode_extension_envelope,
@@ -129,3 +135,34 @@ def test_extension_envelope_is_bounded_and_exact() -> None:
     assert envelope.payload == b"\x01"
     with pytest.raises(PacketError, match="extension"):
         decode_extension_envelope(fixture("extension.envelope.truncated"))
+
+
+def test_emergency_extension_payloads_match_registered_types() -> None:
+    ids_and_types = {
+        "extension.beacon_control.request": TYPE_BEACON_CONTROL,
+        "extension.ranging_control.request": TYPE_RANGING_CONTROL,
+        "extension.emergency_capability.v1": TYPE_EMERGENCY_CAPABILITY,
+        "extension.hbt_capability.canonical": TYPE_HBT_CAPABILITY,
+        "extension.emergency_ack.v1": TYPE_EMERGENCY_ACK,
+    }
+    for fixture_id, expected_type in ids_and_types.items():
+        assert FIXTURES[fixture_id]["expect"]["type"] == expected_type
+
+    beacon = fixture("extension.beacon_control.request")
+    assert len(beacon) == 27
+    assert (beacon[0], beacon[1], beacon[-1]) == (1, 1, 0x07)
+
+    ranging = fixture("extension.ranging_control.request")
+    assert len(ranging) == 41
+    assert ranging[:4] == bytes((1, 2, 4, 3))
+    assert ranging[-3:] == bytes.fromhex("aabbcc")
+
+    assert fixture("extension.emergency_capability.v1") == b"\x01\x01"
+    assert fixture("extension.hbt_capability.canonical") == b"\x01"
+    assert fixture("extension.emergency_ack.v1") == b"\x01" + bytes(range(32))
+
+
+def test_legacy_type_0x24_requires_exact_hbt_shape() -> None:
+    assert TYPE_LEGACY_HBT_CAPABILITY == 0x24
+    assert fixture("extension.legacy_0x24.hbt_alias") == b"\x01"
+    assert fixture("extension.legacy_0x24.prekey_candidate") != b"\x01"

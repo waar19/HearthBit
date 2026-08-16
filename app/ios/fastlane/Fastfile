@@ -1,0 +1,32 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Compila HearthBit y lo distribuye por TestFlight"
+  lane :beta do
+    team_id = ENV.fetch("APPLE_TEAM_ID")
+    UI.user_error!("APPLE_TEAM_ID debe tener 10 caracteres A-Z/0-9") unless team_id.match?(/\A[A-Z0-9]{10}\z/)
+
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("APP_STORE_CONNECT_KEY_ID"),
+      issuer_id: ENV.fetch("APP_STORE_CONNECT_ISSUER_ID"),
+      key_content: ENV.fetch("APP_STORE_CONNECT_KEY_BASE64"),
+      is_key_content_base64: true
+    )
+
+    ipa_path = build_app(
+      workspace: "Runner.xcworkspace",
+      scheme: "Runner",
+      clean: true,
+      export_method: "app-store",
+      output_directory: "../build/ios/ipa",
+      output_name: "HearthBit.ipa",
+      xcargs: "DEVELOPMENT_TEAM=#{team_id}"
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: ipa_path,
+      skip_waiting_for_build_processing: true
+    )
+  end
+end

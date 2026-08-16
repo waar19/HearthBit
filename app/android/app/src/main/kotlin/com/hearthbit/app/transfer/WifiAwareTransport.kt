@@ -32,11 +32,11 @@ import kotlin.concurrent.thread
  * Transporte Wi-Fi Aware (NAN): datos directos entre teléfonos sin punto de
  * acceso ni Google Play Services.
  *
- * El emisor publica el servicio con el `transferId` (secreto, negociado por
- * BLE dentro de Noise) como identificador; el receptor se suscribe, pide el
- * data path cifrado con una passphrase derivada del mismo `transferId` y
- * descarga el contenedor por TCP. El contenido viaja además cifrado extremo a
- * extremo (contenedor HBT), así que la radio solo ve bytes opacos.
+ * El `transferId` se negocia por BLE dentro de Noise y nunca se anuncia. Para
+ * el descubrimiento se publica un token efímero derivado y para el data path
+ * se usa una passphrase WPA3 derivada con otro dominio criptográfico. El
+ * contenido viaja además cifrado extremo a extremo (contenedor HBT), así que
+ * la radio solo ve bytes opacos.
  *
  * Requiere API 29 (WifiAwareNetworkSpecifier con puerto). Cualquier fallo se
  * reporta a Flutter, que cae automáticamente a Nearby, LAN, BLE u óptico.
@@ -67,13 +67,15 @@ internal class WifiAwareTransport(
     fun sendFile(transferId: String, filePath: String) {
         stop()
         this.transferId = transferId
+        val discoveryToken = WifiAwareSecrets.discoveryToken(transferId)
         attach(transferId) { awareSession ->
             val server = ServerSocket(0)
             serverSocket = server
             acceptAndStream(transferId, server, filePath)
             val config = PublishConfig.Builder()
                 .setServiceName(SERVICE_NAME)
-                .setServiceSpecificInfo(transferId.toByteArray())
+                .setServiceSpecificInfo(PROTOCOL_VERSION)
+                .setMatchFilter(listOf(discoveryToken))
                 .build()
             awareSession.publish(
                 config,
@@ -90,7 +92,7 @@ internal class WifiAwareTransport(
                         requestNetwork(
                             transferId,
                             WifiAwareNetworkSpecifier.Builder(publishSession, peer)
-                                .setPskPassphrase(passphrase(transferId))
+                                .setPskPassphrase(WifiAwareSecrets.passphrase(transferId))
                                 .setPort(server.localPort)
                                 .build(),
                             onPeerInfo = null,
@@ -112,9 +114,11 @@ internal class WifiAwareTransport(
     fun receiveFile(transferId: String, destinationPath: String) {
         stop()
         this.transferId = transferId
+        val discoveryToken = WifiAwareSecrets.discoveryToken(transferId)
         attach(transferId) { awareSession ->
             val config = SubscribeConfig.Builder()
                 .setServiceName(SERVICE_NAME)
+                .setMatchFilter(listOf(discoveryToken))
                 .build()
             awareSession.subscribe(
                 config,
@@ -128,14 +132,14 @@ internal class WifiAwareTransport(
                         serviceSpecificInfo: ByteArray?,
                         matchFilter: List<ByteArray>?,
                     ) {
-                        if (serviceSpecificInfo?.decodeToString() != transferId) return
+                        if (serviceSpecificInfo?.contentEquals(PROTOCOL_VERSION) != true) return
                         val subscribeSession =
                             discovery as? SubscribeDiscoverySession ?: return
                         subscribeSession.sendMessage(peer, 0, REQUEST)
                         requestNetwork(
                             transferId,
                             WifiAwareNetworkSpecifier.Builder(subscribeSession, peer)
-                                .setPskPassphrase(passphrase(transferId))
+                                .setPskPassphrase(WifiAwareSecrets.passphrase(transferId))
                                 .build(),
                         ) { network, info ->
                             download(transferId, network, info, destinationPath)
@@ -335,12 +339,10 @@ internal class WifiAwareTransport(
         )
     }
 
-    /** La passphrase WPA3 del data path se deriva del transferId secreto. */
-    private fun passphrase(transferId: String): String = "hbt-$transferId"
-
     private companion object {
         const val SERVICE_NAME = "hearthbit-hbt"
         const val BUFFER_SIZE = 64 * 1024
         val REQUEST = "REQ".toByteArray()
+        val PROTOCOL_VERSION = byteArrayOf(1)
     }
 }

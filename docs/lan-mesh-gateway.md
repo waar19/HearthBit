@@ -2,7 +2,8 @@
 
 ## Alcance
 
-E2 añade un enlace local TCP entre relays y teléfonos. Transporta cada frame
+E2 añade un enlace local TCP entre relays y teléfonos, y entre teléfonos.
+Transporta cada frame
 BitChat v1/v2 completo como bytes opacos; no está limitado a HBT y no
 implementa MQTT, Matrix ni servicios cloud.
 
@@ -14,12 +15,18 @@ confianza.
 
 - Servicio mDNS: `_hearthbit._tcp.local`.
 - Puerto predeterminado del relay: `45893/TCP`.
-- Cada proceso deriva un `gateway_id` estable de 16 bytes de su identidad
-  X25519. La app usa un ID aleatorio durante la vida del cliente.
+- Cada proceso deriva o genera un `gateway_id` de 16 bytes. La app lo conserva
+  durante la vida del servicio y ahora anuncia también su servidor.
 - El relay anuncia PTR, SRV, TXT (`gid=<hex>`) y A. También navega el mismo
   servicio, por lo que puede actuar como servidor y cliente LAN.
 - Si dos relays abren conexiones simultáneas, el ID menor conserva el socket
   saliente y el mayor el entrante. Solo queda un enlace lógico por par.
+- La app aplica la misma regla. El servidor autenticado usa `45893/TCP`; el
+  canal público de emergencia usa `45894/TCP`. Ambos puertos se anuncian en
+  TXT (`gid`, `secure`, `eport`).
+- Wi‑Fi Direct Android reutiliza el HELLO y framing `HBEM` en
+  `45895/TCP` dentro del grupo P2P. DNS-SD anuncia `emergencyPort=45895` y
+  `secure=0`; no expone mensajes normales ni privados.
 
 Android mantiene un `MulticastLock` únicamente mientras el discovery opt-in
 está activo. iOS declara `_hearthbit._tcp` en `NSBonjourServices` y explica el
@@ -50,6 +57,17 @@ exacta y nunca se reutiliza.
 
 La PSK no se anuncia, no se guarda en el protocolo y no atraviesa Flutter
 channels. En móvil permanece en el cliente Dart que posee el socket.
+
+### Canal público de emergencia
+
+Durante un SOS puede habilitarse un segundo socket sin PSK. No es una malla
+general abierta: solo admite `ANNOUNCE` con marcador de preemergencia,
+`MESSAGE` SOS/check-in y `EMERGENCY_ACK`. Android e iOS decodifican y clasifican
+el frame antes de exponerlo a este socket, y vuelven a aplicar en el ingreso
+normal identidad autofirmada, Ed25519, reloj, deduplicación y flood control.
+Flutter limita cada peer a 30 frames por minuto y cierra la conexión al
+excederlo. Mensajes normales, tramas privadas y transferencias nunca cruzan el
+canal abierto.
 
 ## Framing
 
@@ -137,6 +155,10 @@ seguro o aprovisionamiento presencial. No la incruste en el repositorio ni la
 registre en logs. `stop()` cierra discovery/socket, deshabilita los channels
 raw y libera el multicast lock. Ningún código inicia este servicio por defecto.
 
+`LanGatewayController.setEmergencyMode(true)` activa temporalmente el canal
+abierto y el servidor entre teléfonos aunque no exista una PSK. Al desactivar
+el SOS restaura el modo PSK configurado o detiene LAN por completo.
+
 ## Pruebas
 
 ```powershell
@@ -160,8 +182,8 @@ decremento TTL por cada relay.
   y durante la ventana que iOS mantenga activa la app.
 - iOS mostrará el consentimiento de red local la primera vez. Si se deniega,
   discovery no encuentra gateways hasta cambiarlo en Ajustes.
-- El cliente móvil mantiene una conexión LAN simultánea. El relay admite varias
-  y enlaza redes LAN/BLE.
+- El móvil mantiene una conexión autenticada y una conexión pública de
+  emergencia simultáneas. El relay admite varias y enlaza redes LAN/BLE.
 - El relay Python se ejecuta en Windows para pruebas de loopback, pero el
   transporte BlueZ real requiere Linux. Windows Firewall puede solicitar
   autorización para mDNS/TCP y varias apps no siempre pueden compartir 5353;

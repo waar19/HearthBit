@@ -38,15 +38,12 @@ internal class StoreForwardCache(context: Context) {
         )
         if (entries.none { it.encoded == encoded }) {
             entries += Entry(
-                now + if (emergency) EMERGENCY_LIFETIME_MS else LIFETIME_MS,
+                StoreForwardRetentionPolicy.expiryAt(now, emergency),
                 encoded,
             )
         }
         write(
-            entries.sortedWith(
-                compareBy<Entry> { entry -> isEmergency(entry) }
-                    .thenBy(Entry::expiry),
-            ).takeLast(MAX_ENTRIES),
+            retain(entries, now),
         )
     }
 
@@ -89,6 +86,17 @@ internal class StoreForwardCache(context: Context) {
         readValid(now).mapNotNull(::decode).filter(MeshProtocol::isEmergencyPublicPacket)
 
     @Synchronized
+    fun latestLocalSos(
+        localSenderId: ByteArray,
+        startedAt: Long,
+        now: Long = System.currentTimeMillis(),
+    ): MeshProtocol.Packet? = EmergencyRebroadcastPolicy.selectLocalSos(
+        packets = emergencyBroadcasts(now),
+        localSenderId = localSenderId,
+        startedAt = startedAt,
+    )
+
+    @Synchronized
     fun emergencyByHash(canonicalHash: String): MeshProtocol.Packet? {
         val normalized = canonicalHash.lowercase()
         return emergencyBroadcasts().firstOrNull {
@@ -104,17 +112,33 @@ internal class StoreForwardCache(context: Context) {
         legacyPreferences.edit().clear().commit()
     }
 
-    private fun readValid(now: Long): List<Entry> = preferences
-        .getStringSet(KEY_ENTRIES, emptySet())
-        .orEmpty()
-        .mapNotNull { value ->
-            val separator = value.indexOf(':')
-            if (separator <= 0) return@mapNotNull null
-            val expiry = value.substring(0, separator).toLongOrNull() ?: return@mapNotNull null
-            if (expiry <= now) return@mapNotNull null
-            Entry(expiry, value.substring(separator + 1))
-        }
-        .sortedBy(Entry::expiry)
+    private fun readValid(now: Long): List<Entry> = retain(
+        preferences
+            .getStringSet(KEY_ENTRIES, emptySet())
+            .orEmpty()
+            .mapNotNull { value ->
+                val separator = value.indexOf(':')
+                if (separator <= 0) return@mapNotNull null
+                val expiry = value.substring(0, separator).toLongOrNull()
+                    ?: return@mapNotNull null
+                Entry(expiry, value.substring(separator + 1))
+            },
+        now,
+    ).sortedBy(Entry::expiry)
+
+    private fun retain(entries: List<Entry>, now: Long): List<Entry> =
+        StoreForwardRetentionPolicy.retain(
+            entries.map { entry ->
+                val packet = decode(entry)
+                StoreForwardRetentionItem(
+                    expiry = entry.expiry,
+                    value = entry,
+                    emergency = packet?.let(MeshProtocol::isEmergencyPublicPacket) == true,
+                    replaySafe = packet?.let(::isReplaySafe) == true,
+                )
+            },
+            now,
+        ).map { it.value }
 
     private fun write(entries: List<Entry>) {
         check(
@@ -132,20 +156,21 @@ internal class StoreForwardCache(context: Context) {
             .getOrNull()
             ?.let(MeshProtocol::decode)
 
-    private fun isEmergency(entry: Entry): Boolean =
-        decode(entry)?.let(MeshProtocol::isEmergencyPublicPacket) == true
-
-    private fun isReplaySafe(packet: MeshProtocol.Packet): Boolean =
-        packet.type != MeshProtocol.TYPE_NOISE_HANDSHAKE &&
-            packet.type != MeshProtocol.TYPE_NOISE_ENCRYPTED &&
-            packet.type != MeshProtocol.TYPE_BEACON_CONTROL
+    private fun isReplaySafe(packet: MeshProtocol.Packet): Boolean {
+        val fragmentOriginalType = if (packet.type == MeshProtocol.TYPE_FRAGMENT) {
+            MeshProtocol.decodeFragmentPayload(packet.payload)?.originalType
+        } else {
+            null
+        }
+        return StoreForwardRetentionPolicy.isPacketReplaySafe(
+            packetType = packet.type,
+            fragmentedOriginalType = fragmentOriginalType,
+        )
+    }
 
     private companion object {
         const val LEGACY_PREFERENCES = "hearthbit_store_forward"
         const val ENCRYPTED_PREFERENCES = "hearthbit_store_forward_encrypted"
         const val KEY_ENTRIES = "packets"
-        const val MAX_ENTRIES = 100
-        const val LIFETIME_MS = 12 * 60 * 60 * 1_000L
-        const val EMERGENCY_LIFETIME_MS = 24 * 60 * 60 * 1_000L
     }
 }

@@ -72,6 +72,55 @@ class TransferCrypto {
     );
   }
 
+  static Future<TransferCipher> deriveSealedCipher({
+    required SimpleKeyPair ephemeralKeyPair,
+    required List<int> recipientPublicKey,
+    required List<int> packageId,
+  }) async {
+    final shared = await _x25519.sharedSecretKey(
+      keyPair: ephemeralKeyPair,
+      remotePublicKey: SimplePublicKey(
+        recipientPublicKey,
+        type: KeyPairType.x25519,
+      ),
+    );
+    return _deriveSealedCipher(shared: shared, packageId: packageId);
+  }
+
+  static Future<TransferCipher> deriveSealedCipherFromSecret({
+    required List<int> sharedSecret,
+    required List<int> packageId,
+  }) {
+    if (sharedSecret.length != 32) {
+      throw const FormatException('Invalid X25519 shared secret');
+    }
+    return _deriveSealedCipher(
+      shared: SecretKey(sharedSecret),
+      packageId: packageId,
+    );
+  }
+
+  static Future<TransferCipher> _deriveSealedCipher({
+    required SecretKey shared,
+    required List<int> packageId,
+  }) async {
+    if (packageId.length != 16) {
+      throw const FormatException('Invalid sealed package id');
+    }
+    final hkdf = Hkdf(hmac: Hmac.sha256(), outputLength: 52);
+    final material = await hkdf.deriveKey(
+      secretKey: shared,
+      nonce: packageId,
+      info: 'hearthbit/sealed/v1'.codeUnits,
+    );
+    final bytes = await material.extractBytes();
+    return TransferCipher._(
+      SecretKey(bytes.sublist(0, 32)),
+      Uint8List.fromList(bytes.sublist(32, 52)),
+      Uint8List.fromList(packageId),
+    );
+  }
+
   /// SHA-256 de un archivo, leyendo por bloques para no cargarlo en memoria.
   static Future<String> hashFile(File file) async {
     final digest = await hashFileBytes(file);

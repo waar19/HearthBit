@@ -25,10 +25,21 @@ import com.hearthbit.app.mesh.MeshRuntime
 import com.hearthbit.app.mesh.RescueModeStore
 import com.hearthbit.app.transfer.NearbyTransport
 import com.hearthbit.app.transfer.WifiAwareTransport
+import com.hearthbit.app.transfer.WifiDirectTransport
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
+
+internal const val ACTION_OPEN_EMERGENCY = "com.hearthbit.app.OPEN_EMERGENCY"
+private val SMS_FORMATTING = Regex("""[\s()\-]""")
+private val SMS_RECIPIENT = Regex("""^\+?[0-9]{5,15}$""")
+
+internal fun normalizeNativeSmsRecipient(value: String): String? {
+    val normalized = value.trim().replace(SMS_FORMATTING, "")
+    return normalized.takeIf(SMS_RECIPIENT::matches)
+}
 
 class MainActivity : FlutterActivity() {
     private var permissionResult: MethodChannel.Result? = null
@@ -38,6 +49,7 @@ class MainActivity : FlutterActivity() {
     private var lanMulticastLock: WifiManager.MulticastLock? = null
     private var emergencyShortcutChannel: MethodChannel? = null
     private var emergencyShortcutPending = false
+    private var pendingHbtImportIntent: Intent? = null
     private val nearbyTransport by lazy {
         NearbyTransport(applicationContext) { event ->
             runOnUiThread { transferEvents?.success(event) }
@@ -52,9 +64,16 @@ class MainActivity : FlutterActivity() {
             null
         }
     }
+    private val wifiDirectTransport by lazy {
+        WifiDirectTransport(applicationContext) { event ->
+            runOnUiThread { transferEvents?.success(event) }
+        }
+    }
 
     override fun onDestroy() {
         setLanMulticastEnabled(false)
+        wifiAwareTransport?.stop()
+        if (wifiDirectTransport.isSupported()) wifiDirectTransport.stop()
         super.onDestroy()
     }
 
@@ -62,6 +81,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
         emergencyShortcutPending = intent?.action == ACTION_OPEN_EMERGENCY
+        if (isHbtImportIntent(intent)) pendingHbtImportIntent = intent
         emergencyShortcutChannel = MethodChannel(messenger, EMERGENCY_SHORTCUT_CHANNEL).apply {
             setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -82,6 +102,7 @@ class MainActivity : FlutterActivity() {
                         "peripheralMode" to true,
                         "acousticSonar" to true,
                         "radioRanging" to (Build.VERSION.SDK_INT >= 36),
+                        "meshtastic" to true,
                         "nodeRoles" to listOf(
                             "PHONE_RELAY",
                             "PHONE_BEACON",
@@ -90,6 +111,9 @@ class MainActivity : FlutterActivity() {
                         ),
                     ),
                 )
+                "getMeshDiagnostics" -> runMethod(result) {
+                    MeshRuntime.engine(this).diagnosticSnapshot()
+                }
                 "getSimCountry" -> {
                     val country = runCatching {
                         getSystemService(TelephonyManager::class.java)
@@ -139,7 +163,7 @@ class MainActivity : FlutterActivity() {
                             lastPingAt = call.argument<Number>("lastPingAt")?.toLong() ?: 0L,
                             expiresAt = call.argument<Number>("expiresAt")?.toLong() ?: 0L,
                             intervalMs = call.argument<Number>("intervalMs")?.toLong()
-                                ?: 120_000L,
+                                ?: RescueModeStore.DEFAULT_INTERVAL_MS,
                             locationPrecision =
                                 call.argument<String>("locationPrecision")
                                     ?: RescueModeStore.LOCATION_APPROXIMATE,
@@ -160,6 +184,12 @@ class MainActivity : FlutterActivity() {
                         enabled = call.argument<Boolean>("enabled") == true,
                         gatewayId = call.argument<String>("gatewayId"),
                         maxFrameSize = call.argument<Number>("maxFrameSize")?.toInt() ?: 2_048,
+                    )
+                    null
+                }
+                "configureMeshtasticBridge" -> runMethod(result) {
+                    MeshRuntime.engine(this).configureMeshtasticBridge(
+                        enabled = call.argument<Boolean>("enabled") == true,
                     )
                     null
                 }
@@ -191,6 +221,20 @@ class MainActivity : FlutterActivity() {
                     )
                     null
                 }
+                "injectEmergencyQrFrames" -> runMethod(result) {
+                    MeshRuntime.engine(this).injectEmergencyQrFrames(
+                        announcementFrame =
+                            requireNotNull(call.argument<ByteArray>("announcementFrame")),
+                        messageFrame = requireNotNull(call.argument<ByteArray>("messageFrame")),
+                    )
+                    null
+                }
+                "injectEmergencyLanFrame" -> runMethod(result) {
+                    MeshRuntime.engine(this).injectEmergencyLanFrame(
+                        requireNotNull(call.argument<ByteArray>("frame")),
+                    )
+                    null
+                }
                 "sendPublic" -> runMethod(result) {
                     MeshRuntime.engine(this).sendPublic(
                         call.argument<String>("content").orEmpty(),
@@ -209,6 +253,22 @@ class MainActivity : FlutterActivity() {
                         requireNotNull(call.argument<String>("peerId")),
                     )
                     null
+                }
+                "composeEmergencySms" -> runMethod(result) {
+                    val recipient = normalizeNativeSmsRecipient(
+                        requireNotNull(call.argument<String>("recipient")),
+                    ) ?: throw IllegalArgumentException("invalid_sms_recipient")
+                    val body = requireNotNull(call.argument<String>("body"))
+                    val intent = Intent(
+                        Intent.ACTION_SENDTO,
+                        Uri.parse("smsto:${Uri.encode(recipient, "+")}"),
+                    ).putExtra("sms_body", body)
+                    if (intent.resolveActivity(packageManager) == null) {
+                        false
+                    } else {
+                        startActivity(intent)
+                        true
+                    }
                 }
                 "sendSos" -> runMethod(result) {
                     MeshRuntime.engine(this).sendSos(
@@ -276,6 +336,17 @@ class MainActivity : FlutterActivity() {
                         requireNotNull(call.argument<ByteArray>("signature")),
                     )
                 }
+                "getSealedTransferRecipient" -> runMethod(result) {
+                    MeshRuntime.engine(this).sealedTransferRecipient(
+                        requireNotNull(call.argument<String>("peerId")),
+                    )
+                }
+                "deriveSealedOpenSecret" -> runMethod(result) {
+                    MeshRuntime.engine(this).deriveSealedOpenSecret(
+                        requireNotNull(call.argument<ByteArray>("ephemeralPublicKey")),
+                        requireNotNull(call.argument<String>("recipientPeerId")),
+                    )
+                }
                 "panicWipe" -> runMethod(result) {
                     MeshRuntime.engine(this).panicWipe()
                     MeshRuntime.stateSnapshot()
@@ -307,7 +378,7 @@ class MainActivity : FlutterActivity() {
                     val minutes = (call.argument<Number>("minutes")?.toLong() ?: 15L)
                     MeshRuntime.engine(this).setRadarConsent(
                         enabled = call.argument<Boolean>("enabled") == true,
-                        durationMs = minutes.coerceIn(1L, 20L) * 60_000L,
+                        durationMs = minutes.coerceIn(1L, 30L) * 60_000L,
                     )
                     null
                 }
@@ -401,8 +472,15 @@ class MainActivity : FlutterActivity() {
                     mapOf(
                         "nearby" to nearbyAvailable(),
                         "wifiAware" to wifiAwareAvailable(),
+                        "wifiDirect" to wifiDirectAvailable(),
+                        "multipeer" to false,
                     ),
                 )
+                "consumeInitialHbtImport" -> runMethod(result) {
+                    val importIntent = pendingHbtImportIntent
+                    pendingHbtImportIntent = null
+                    importIntent?.let(::copyHbtImportToCache)
+                }
                 "nearbySendFile" -> runMethod(result) {
                     nearbyTransport.sendFile(
                         requireNotNull(call.argument<String>("transferId")),
@@ -445,6 +523,24 @@ class MainActivity : FlutterActivity() {
                     wifiAwareTransport?.stop()
                     null
                 }
+                "wifiDirectSendFile" -> runMethod(result) {
+                    wifiDirectTransport.sendFile(
+                        requireNotNull(call.argument<String>("transferId")),
+                        requireNotNull(call.argument<String>("filePath")),
+                    )
+                    null
+                }
+                "wifiDirectReceiveFile" -> runMethod(result) {
+                    wifiDirectTransport.receiveFile(
+                        requireNotNull(call.argument<String>("transferId")),
+                        requireNotNull(call.argument<String>("destinationPath")),
+                    )
+                    null
+                }
+                "wifiDirectStop" -> runMethod(result) {
+                    wifiDirectTransport.stop()
+                    null
+                }
                 else -> result.notImplemented()
             }
         }
@@ -465,9 +561,55 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent.action != ACTION_OPEN_EMERGENCY) return
-        emergencyShortcutPending = true
-        emergencyShortcutChannel?.invokeMethod("openEmergency", null)
+        if (intent.action == ACTION_OPEN_EMERGENCY) {
+            emergencyShortcutPending = true
+            emergencyShortcutChannel?.invokeMethod("openEmergency", null)
+        }
+        if (isHbtImportIntent(intent)) {
+            Thread {
+                runCatching { copyHbtImportToCache(intent) }
+                    .onSuccess { path ->
+                        if (path != null) {
+                            runOnUiThread {
+                                transferEvents?.success(
+                                    mapOf("type" to "hbtImport", "path" to path),
+                                )
+                            }
+                        }
+                    }
+            }.start()
+        }
+    }
+
+    private fun isHbtImportIntent(intent: Intent?): Boolean {
+        val action = intent?.action
+        return action == Intent.ACTION_VIEW || action == Intent.ACTION_SEND
+    }
+
+    private fun copyHbtImportToCache(intent: Intent): String? {
+        @Suppress("DEPRECATION")
+        val uri = when (intent.action) {
+            Intent.ACTION_VIEW -> intent.data
+            Intent.ACTION_SEND -> intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+            else -> null
+        } ?: return null
+        val directory = File(cacheDir, "hbt-imports").apply { mkdirs() }
+        val destination = File(directory, "import-${System.currentTimeMillis()}.hbt")
+        contentResolver.openInputStream(uri)?.use { input ->
+            destination.outputStream().buffered().use { output ->
+                val buffer = ByteArray(64 * 1024)
+                var total = 0L
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    total += read
+                    require(total <= MAXIMUM_HBT_IMPORT_BYTES) { "HBT import is too large" }
+                    output.write(buffer, 0, read)
+                }
+                require(total > 0) { "HBT import is empty" }
+            }
+        } ?: return null
+        return destination.absolutePath
     }
 
     private fun nearbyAvailable(): Boolean =
@@ -498,6 +640,9 @@ class MainActivity : FlutterActivity() {
         val manager = getSystemService(WifiAwareManager::class.java)
         return manager?.isAvailable == true
     }
+
+    private fun wifiDirectAvailable(): Boolean =
+        packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_DIRECT)
 
     private fun prepareInstalledApk(result: MethodChannel.Result) {
         Thread {
@@ -743,10 +888,10 @@ class MainActivity : FlutterActivity() {
         const val TRANSFER_METHOD_CHANNEL = "com.hearthbit.transfer/methods"
         const val TRANSFER_EVENT_CHANNEL = "com.hearthbit.transfer/events"
         const val EMERGENCY_SHORTCUT_CHANNEL = "com.hearthbit.emergency/shortcut"
-        const val ACTION_OPEN_EMERGENCY = "com.hearthbit.app.OPEN_EMERGENCY"
         const val PERMISSION_REQUEST = 7402
         const val BACKGROUND_LOCATION_REQUEST = 7403
         const val FAMILY_NOTIFICATION_PERMISSION_REQUEST = 7404
         const val FAMILY_NOTIFICATION_CHANNEL = "family_emergency"
+        const val MAXIMUM_HBT_IMPORT_BYTES = 700L * 1024 * 1024
     }
 }

@@ -1,5 +1,8 @@
 import asyncio
+import time
 from dataclasses import replace
+
+import pytest
 
 from hearthbit_relay.config import (
     FloodConfig,
@@ -9,6 +12,7 @@ from hearthbit_relay.config import (
 )
 from hearthbit_relay.core import RelayCore
 from hearthbit_relay.identity import (
+    ANNOUNCEMENT_CLOCK_WINDOW_MS,
     NodeRole,
     RelayIdentity,
     encode_announcement,
@@ -22,7 +26,9 @@ from hearthbit_relay.link import (
     LinkReliability,
 )
 from hearthbit_relay.protocol import (
+    EMERGENCY_ACK_RETENTION_SECONDS,
     TYPE_ANNOUNCE,
+    TYPE_EMERGENCY_ACK,
     TYPE_FRAGMENT,
     TYPE_HBT_CAPABILITY,
     TYPE_NODE_CAPABILITY,
@@ -67,6 +73,10 @@ def relay_config() -> RelayConfig:
     )
 
 
+def _announcement_clock_ms() -> int:
+    return 0
+
+
 def signed_message(
     identity: RelayIdentity,
     *,
@@ -94,6 +104,35 @@ def signed_message(
         sender_id=identity.peer_id,
         payload=payload,
         route=route,
+        signature=identity.sign(canonical_packet_bytes(unsigned)),
+        pad=True,
+    )
+
+
+def signed_emergency_ack(
+    identity: RelayIdentity,
+    *,
+    timestamp_ms: int,
+    recipient_id: bytes | None = b"target01",
+    payload: bytes = b"\x01" + b"h" * 32,
+) -> bytes:
+    unsigned = decode_packet(
+        encode_packet(
+            message_type=TYPE_EMERGENCY_ACK,
+            ttl=7,
+            timestamp_ms=timestamp_ms,
+            sender_id=identity.peer_id,
+            recipient_id=recipient_id,
+            payload=payload,
+        )
+    )
+    return encode_packet(
+        message_type=TYPE_EMERGENCY_ACK,
+        ttl=7,
+        timestamp_ms=timestamp_ms,
+        sender_id=identity.peer_id,
+        recipient_id=recipient_id,
+        payload=payload,
         signature=identity.sign(canonical_packet_bytes(unsigned)),
         pad=True,
     )
@@ -133,7 +172,11 @@ def fragment_frames(
 async def test_relay_deduplicates_decrements_ttl_and_replays_store(tmp_path) -> None:
     config = relay_config()
     store = PacketStore(config.store)
-    core = RelayCore(config, store)
+    core = RelayCore(
+        config,
+        store,
+        announcement_clock_ms=_announcement_clock_ms,
+    )
     source = MemoryLink("source")
     live_peer = MemoryLink("live")
     await core.register_link(source)
@@ -160,6 +203,83 @@ async def test_relay_deduplicates_decrements_ttl_and_replays_store(tmp_path) -> 
     replayed = await core.register_link(later_peer)
     assert replayed == 1
     assert later_peer.sent == live_peer.sent
+    store.close()
+
+
+async def test_current_emergency_ack_is_stored_directed_and_bounded(
+    tmp_path,
+) -> None:
+    config = relay_config()
+    store = PacketStore(config.store)
+    core = RelayCore(
+        config,
+        store,
+        announcement_clock_ms=_announcement_clock_ms,
+    )
+    live_peer = MemoryLink("live")
+    await core.register_link(live_peer)
+    remote = RelayIdentity.load_or_create(tmp_path / "remote-ack.json")
+    await core.inbound(
+        "source",
+        remote.build_announcement(nickname="Remote", timestamp_ms=100),
+    )
+    live_peer.sent.clear()
+    now_ms = time.time_ns() // 1_000_000
+    raw = signed_emergency_ack(remote, timestamp_ms=now_ms)
+
+    result = await core.inbound("source", raw)
+
+    assert result.accepted and result.forwarded == 1 and result.stored
+    [pending] = store.pending_for("later", limit=10, now_ms=now_ms)
+    assert decode_packet(pending.packet).message_type == TYPE_EMERGENCY_ACK
+    assert pending.expires_at_ms <= (
+        now_ms + EMERGENCY_ACK_RETENTION_SECONDS * 1000
+    )
+    later = MemoryLink("later")
+    assert await core.register_link(later) == 1
+    assert decode_packet(later.sent[0]).message_type == TYPE_EMERGENCY_ACK
+    store.close()
+
+
+@pytest.mark.parametrize(
+    ("recipient_id", "payload"),
+    [
+        (None, b"\x01" + b"h" * 32),
+        (b"target01", b"\x02" + b"h" * 32),
+        (b"target01", b"\x01short"),
+    ],
+)
+async def test_ineligible_current_emergency_ack_is_not_stored(
+    tmp_path,
+    recipient_id: bytes | None,
+    payload: bytes,
+) -> None:
+    config = relay_config()
+    store = PacketStore(config.store)
+    core = RelayCore(
+        config,
+        store,
+        announcement_clock_ms=_announcement_clock_ms,
+    )
+    remote = RelayIdentity.load_or_create(
+        tmp_path / f"remote-{len(payload)}-{recipient_id is None}.json"
+    )
+    await core.inbound(
+        "source",
+        remote.build_announcement(nickname="Remote", timestamp_ms=100),
+    )
+    raw = signed_emergency_ack(
+        remote,
+        timestamp_ms=time.time_ns() // 1_000_000,
+        recipient_id=recipient_id,
+        payload=payload,
+    )
+
+    result = await core.inbound("source", raw)
+
+    assert result.accepted
+    assert not result.stored
+    assert store.packet_count() == 0
     store.close()
 
 
@@ -217,7 +337,11 @@ async def test_unsigned_packets_relay_live_but_are_not_persisted() -> None:
 async def test_v2_route_is_relayed_without_changes_other_than_ttl(tmp_path) -> None:
     config = relay_config()
     store = PacketStore(config.store)
-    core = RelayCore(config, store)
+    core = RelayCore(
+        config,
+        store,
+        announcement_clock_ms=_announcement_clock_ms,
+    )
     peer = MemoryLink("peer")
     await core.register_link(peer)
     remote = RelayIdentity.load_or_create(tmp_path / "remote.json")
@@ -261,7 +385,11 @@ async def test_ephemeral_announcements_and_capabilities_are_never_persisted(
         store=replace(base.store, message_types=ephemeral_types),
     )
     store = PacketStore(config.store)
-    core = RelayCore(config, store)
+    core = RelayCore(
+        config,
+        store,
+        announcement_clock_ms=_announcement_clock_ms,
+    )
     peer = MemoryLink("peer")
     await core.register_link(peer)
 
@@ -355,7 +483,11 @@ async def test_identity_is_announced_periodically(tmp_path) -> None:
 async def test_invalid_announcement_is_not_relayed(tmp_path) -> None:
     config = relay_config()
     store = PacketStore(config.store)
-    core = RelayCore(config, store)
+    core = RelayCore(
+        config,
+        store,
+        announcement_clock_ms=_announcement_clock_ms,
+    )
     peer = MemoryLink("peer")
     await core.register_link(peer)
     identity = RelayIdentity.load_or_create(tmp_path / "identity.json")
@@ -372,12 +504,42 @@ async def test_invalid_announcement_is_not_relayed(tmp_path) -> None:
     store.close()
 
 
+async def test_stale_announcement_is_not_relayed_or_pinned(tmp_path) -> None:
+    config = relay_config()
+    store = PacketStore(config.store)
+    now_ms = 10_000_000
+    core = RelayCore(
+        config,
+        store,
+        announcement_clock_ms=lambda: now_ms,
+    )
+    peer = MemoryLink("peer")
+    await core.register_link(peer)
+    identity = RelayIdentity.load_or_create(tmp_path / "identity.json")
+    peer.sent.clear()
+    stale = identity.build_announcement(
+        nickname="Stale",
+        timestamp_ms=now_ms - ANNOUNCEMENT_CLOCK_WINDOW_MS - 1,
+    )
+
+    result = await core.inbound("source", stale)
+
+    assert not result.accepted
+    assert result.reason == "invalid-announce"
+    assert peer.sent == []
+    store.close()
+
+
 async def test_known_identity_verifies_signatures_and_rejects_key_rotation(
     tmp_path,
 ) -> None:
     config = relay_config()
     store = PacketStore(config.store)
-    core = RelayCore(config, store)
+    core = RelayCore(
+        config,
+        store,
+        announcement_clock_ms=_announcement_clock_ms,
+    )
     peer = MemoryLink("peer")
     await core.register_link(peer)
     identity = RelayIdentity.load_or_create(tmp_path / "identity.json")
@@ -428,7 +590,11 @@ async def test_pinned_identity_survives_core_restart(tmp_path) -> None:
     attacker = RelayIdentity.load_or_create(tmp_path / "attacker.json")
 
     first_store = PacketStore(config.store)
-    first = RelayCore(config, first_store)
+    first = RelayCore(
+        config,
+        first_store,
+        announcement_clock_ms=_announcement_clock_ms,
+    )
     assert (
         await first.inbound(
             "source",
@@ -438,7 +604,11 @@ async def test_pinned_identity_survives_core_restart(tmp_path) -> None:
     first_store.close()
 
     second_store = PacketStore(config.store)
-    second = RelayCore(config, second_store)
+    second = RelayCore(
+        config,
+        second_store,
+        announcement_clock_ms=_announcement_clock_ms,
+    )
     valid = await second.inbound(
         "source",
         signed_message(identity, payload=b"after-restart", timestamp_ms=2),
@@ -532,7 +702,13 @@ async def test_rate_limit_reserves_capacity_for_emergency() -> None:
     store.close()
 
 
-async def test_external_bridge_has_independent_bucket_and_sos_reserve() -> None:
+@pytest.mark.parametrize(
+    "bridge_id",
+    ("mqtt:bridge-a", "matrix:bridge-a", "reticulum:bridge-a"),
+)
+async def test_external_bridge_has_independent_bucket_and_sos_reserve(
+    bridge_id: str,
+) -> None:
     config = replace(
         relay_config(),
         flood=FloodConfig(
@@ -542,6 +718,8 @@ async def test_external_bridge_has_independent_bucket_and_sos_reserve() -> None:
             emergency_burst=2,
             bridge_rate_per_second=0.001,
             bridge_burst=1,
+            bridge_emergency_rate_per_second=0.001,
+            bridge_emergency_burst=1,
         ),
     )
     store = PacketStore(config.store)
@@ -558,22 +736,28 @@ async def test_external_bridge_has_independent_bucket_and_sos_reserve() -> None:
 
     assert (
         await core.inbound(
-            "mqtt:bridge-a",
+            bridge_id,
             packet(b"sender01", b"normal", 1),
         )
     ).accepted
     assert (
         await core.inbound(
-            "mqtt:bridge-a",
+            bridge_id,
             packet(b"sender02", b"normal", 2),
         )
     ).reason == "rate-limited"
     assert (
         await core.inbound(
-            "mqtt:bridge-a",
+            bridge_id,
             packet(b"sender03", b"SOS|help||", 3),
         )
     ).accepted
+    assert (
+        await core.inbound(
+            bridge_id,
+            packet(b"sender04", b"SOS|help||", 4),
+        )
+    ).reason == "rate-limited"
     store.close()
 
 
@@ -615,7 +799,11 @@ async def test_fragmented_announce_pins_identity_without_second_forward(
 ) -> None:
     config = relay_config()
     store = PacketStore(config.store)
-    core = RelayCore(config, store)
+    core = RelayCore(
+        config,
+        store,
+        announcement_clock_ms=_announcement_clock_ms,
+    )
     peer = MemoryLink("peer")
     await core.register_link(peer)
     identity = RelayIdentity.load_or_create(tmp_path / "identity.json")
@@ -650,7 +838,11 @@ async def test_invalid_fragmented_announce_does_not_pin_identity(tmp_path) -> No
         ),
     )
     store = PacketStore(config.store)
-    core = RelayCore(config, store)
+    core = RelayCore(
+        config,
+        store,
+        announcement_clock_ms=_announcement_clock_ms,
+    )
     identity = RelayIdentity.load_or_create(tmp_path / "identity.json")
     announce = bytearray(
         identity.build_announcement(nickname="Invalid", timestamp_ms=1)
@@ -676,7 +868,11 @@ async def test_fragmented_signed_message_is_stored_without_second_forward(
 ) -> None:
     config = relay_config()
     store = PacketStore(config.store)
-    core = RelayCore(config, store)
+    core = RelayCore(
+        config,
+        store,
+        announcement_clock_ms=_announcement_clock_ms,
+    )
     peer = MemoryLink("peer")
     await core.register_link(peer)
     identity = RelayIdentity.load_or_create(tmp_path / "identity.json")

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
+import re
 from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -20,6 +22,10 @@ LOGGER = logging.getLogger(__name__)
 
 SOS_PREFIX = b"SOS|"
 CHECKIN_MARKER = b"[HB-CHECKIN|"
+_DECIMAL_NUMBER = re.compile(
+    r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
+)
+_CHECKIN_STATUSES = frozenset({"OK", "HELP", "INJURED"})
 
 
 def has_emergency_coordinates(payload: bytes) -> bool:
@@ -29,24 +35,43 @@ def has_emergency_coordinates(payload: bytes) -> bool:
     except UnicodeDecodeError:
         return False
     if text.startswith("SOS|"):
-        fields = text.split("|")
-        if len(fields) < 4:
+        fields = text.rsplit("|", 2)
+        if len(fields) != 3:
             return False
-        return _coordinates_present(fields[-2], fields[-1])
+        _, latitude, longitude = fields
+        return _coordinates_present(latitude, longitude)
     marker = text.rfind("[HB-CHECKIN|")
-    if marker < 0 or not text.endswith("]"):
+    if marker <= 0 or text[marker - 1] != "\n" or not text.endswith("]"):
         return False
     fields = text[marker + len("[HB-CHECKIN|") : -1].split("|")
-    return len(fields) == 5 and _coordinates_present(fields[2], fields[3])
+    if (
+        len(fields) != 5
+        or fields[0] not in _CHECKIN_STATUSES
+        or not fields[1].isdigit()
+        or int(fields[1]) <= 0
+        or fields[4] != "1"
+    ):
+        return False
+    return _coordinates_present(fields[2], fields[3])
 
 
 def _coordinates_present(latitude: str, longitude: str) -> bool:
+    if (
+        _DECIMAL_NUMBER.fullmatch(latitude) is None
+        or _DECIMAL_NUMBER.fullmatch(longitude) is None
+    ):
+        return False
     try:
         lat = float(latitude)
         lon = float(longitude)
     except ValueError:
         return False
-    return -90 <= lat <= 90 and -180 <= lon <= 180
+    return (
+        math.isfinite(lat)
+        and math.isfinite(lon)
+        and -90 <= lat <= 90
+        and -180 <= lon <= 180
+    )
 
 
 class BoundedIngressQueue:
@@ -204,7 +229,7 @@ class PublicBridgePolicy:
         except PacketError:
             return None
 
-        identity = validate_announcement(announcement_packet)
+        identity = validate_announcement(announcement_packet, now_ms=now_ms)
         actual_kind = public_message_kind(packet)
         if (
             identity is None
@@ -248,7 +273,7 @@ class PublicBridgePolicy:
         raw: bytes,
         now_ms: int,
     ) -> None:
-        announcement = validate_announcement(packet)
+        announcement = validate_announcement(packet, now_ms=now_ms)
         if (
             announcement is None
             or not self.valid_announcement_timestamp(packet, now_ms)

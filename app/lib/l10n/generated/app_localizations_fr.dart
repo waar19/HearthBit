@@ -75,6 +75,13 @@ class AppLocalizationsFr extends AppLocalizations {
       'Activée. Des observateurs proches peuvent corréler cet appareil grâce à un identifiant radio stable et les messages publics restent lisibles par le réseau.';
 
   @override
+  String get meshtasticInteropTitle => 'Radio Meshtastic longue portée';
+
+  @override
+  String get meshtasticInteropBody =>
+      'Désactivée par défaut. Une fois activée, HearthBit se connecte à une radio Meshtastic proche. Le contenu privé reste chiffré de bout en bout sur le maillage LoRa.';
+
+  @override
   String get externalPresenceNoChat =>
       'Présence réseau externe · sans discussion';
 
@@ -192,6 +199,89 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get sosDefaultMessage => 'J\'ai besoin d\'aide';
+
+  @override
+  String get sosQrTitle => 'SOS par QR';
+
+  @override
+  String get sosQrShowInstructions =>
+      'Montrez ce code à une autre personne. HearthBit pourra relayer le SOS et toute caméra pourra lire le texte de secours.';
+
+  @override
+  String get sosQrFallbackTitle => 'Informations lisibles sans l\'application';
+
+  @override
+  String get sosQrOpen => 'AFFICHER LE QR SOS';
+
+  @override
+  String get sosQrScan => 'SCANNER ET RELAYER UN SOS';
+
+  @override
+  String get acousticSosListen => 'ÉCOUTER LES SOS SONORES';
+
+  @override
+  String get acousticSosStopListening => 'ARRÊTER L’ÉCOUTE ACOUSTIQUE';
+
+  @override
+  String get sosChannelsTitle => 'SOS envoyé ou préparé via';
+
+  @override
+  String get sosQrRelayTitle => 'SOS trouvé';
+
+  @override
+  String get sosQrRelayAction => 'RELAYER LE SOS';
+
+  @override
+  String get sosQrInvalid =>
+      'Le QR ne contient pas de SOS HearthBit signé valide.';
+
+  @override
+  String get sosQrRelayed => 'SOS validé et ajouté au réseau maillé';
+
+  @override
+  String get emergencySmsOpen => 'Prévenir un contact de confiance par SMS';
+
+  @override
+  String get emergencySmsTitle => 'SMS d\'urgence';
+
+  @override
+  String get emergencySmsBody =>
+      'Préparez un message pour un contact de confiance. Votre application de messagerie s\'ouvrira pour le vérifier et l\'envoyer.';
+
+  @override
+  String get emergencySmsRecipient => 'Téléphone du contact de confiance';
+
+  @override
+  String get emergencySmsMessage => 'Message d\'urgence';
+
+  @override
+  String get emergencySmsDisclaimer =>
+      'Le message n\'est pas envoyé automatiquement et ne remplace pas un appel aux services d\'urgence officiels.';
+
+  @override
+  String get emergencySmsCompose => 'OUVRIR LA MESSAGERIE';
+
+  @override
+  String get emergencySmsUnavailable =>
+      'Aucune application de messagerie compatible';
+
+  @override
+  String get emergencySmsInvalidRecipient =>
+      'Saisissez un numéro de téléphone valide';
+
+  @override
+  String emergencySmsBodyWithoutLocation(String message) {
+    return 'Alerte d\'urgence HearthBit : $message. Ce SMS ne remplace pas les services d\'urgence officiels.';
+  }
+
+  @override
+  String emergencySmsBodyWithLocation(
+    String message,
+    String latitude,
+    String longitude,
+  ) {
+    return 'Alerte d\'urgence HearthBit : $message. Coordonnées : $latitude, $longitude. Ce SMS ne remplace pas les services d\'urgence officiels.';
+  }
 
   @override
   String get sosReceivedTitle => 'Alertes reçues';
@@ -439,7 +529,33 @@ class AppLocalizationsFr extends AppLocalizations {
   String get transportWifiAware => 'Wi-Fi Aware';
 
   @override
+  String get transportWifiDirect => 'Wi-Fi Direct';
+
+  @override
+  String get transportMultipeer => 'Multipeer';
+
+  @override
+  String get transportShare => 'Partager avec une autre application';
+
+  @override
   String get transportOptical => 'QR optique';
+
+  @override
+  String get transferExport => 'PARTAGER';
+
+  @override
+  String get transferImport => 'Ouvrir un paquet HearthBit';
+
+  @override
+  String get sealedTransferSend => 'Envoyer scellé via une autre application';
+
+  @override
+  String get sealedImportTitle => 'Fichier scellé vérifié';
+
+  @override
+  String sealedImportBody(String fileName, String sender) {
+    return '$fileName a été signé par le contact vérifié $sender. L’enregistrer ?';
+  }
 
   @override
   String get actionReject => 'REFUSER';
@@ -655,6 +771,69 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get diagnosticsExportError =>
       'Impossible d\'exporter le rapport de diagnostic';
+
+  @override
+  String get diagnosticsTitle => 'Diagnostic';
+
+  @override
+  String get diagnosticsRefreshTooltip => 'Actualiser le diagnostic';
+
+  @override
+  String get diagnosticsMeshSection => 'Maillage';
+
+  @override
+  String get diagnosticsPlatform => 'Plateforme';
+
+  @override
+  String get diagnosticsStatus => 'État';
+
+  @override
+  String get diagnosticsNearbyDevices => 'Appareils à proximité';
+
+  @override
+  String get diagnosticsAdvertising => 'Annonce BLE';
+
+  @override
+  String get diagnosticsMeshScan => 'Balayage du maillage';
+
+  @override
+  String get diagnosticsGenericScan => 'Balayage des signaux génériques';
+
+  @override
+  String get diagnosticsEnergySection => 'Énergie';
+
+  @override
+  String get diagnosticsBattery => 'Batterie';
+
+  @override
+  String get diagnosticsPowerProfile => 'Profil énergétique';
+
+  @override
+  String get diagnosticsBleDutyCycle => 'Cycle d\'activité BLE';
+
+  @override
+  String get diagnosticsScanStarts => 'Démarrages du balayage';
+
+  @override
+  String get diagnosticsStoreForward => 'File de stockage et retransmission';
+
+  @override
+  String get diagnosticsTransportsSection => 'Transports actifs';
+
+  @override
+  String get diagnosticsNoActiveTransports => 'Aucun transport actif signalé';
+
+  @override
+  String get diagnosticsEventsSection => 'Événements récents';
+
+  @override
+  String get diagnosticsNoEvents => 'Aucun événement de diagnostic';
+
+  @override
+  String get diagnosticsEnabled => 'Actif';
+
+  @override
+  String get diagnosticsDisabled => 'Inactif';
 
   @override
   String get openLinkError => 'Impossible d\'ouvrir le lien';
@@ -908,6 +1087,14 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get radarSonarTooNoisy =>
       'Les signaux n’ont pas pu être mesurés. Réduisez le bruit, laissez les téléphones découverts et réessayez.';
+
+  @override
+  String get radarSonarRemoteMicrophoneRequired =>
+      'L’autre téléphone n’a pas autorisé l’accès au microphone pour le sonar.';
+
+  @override
+  String get radarSonarSelfChirpMissing =>
+      'Ce téléphone n’a pas détecté son propre signal. Déconnectez les écouteurs Bluetooth, dégagez le haut-parleur et réessayez.';
 
   @override
   String get radarSweepEstimateWarning =>
@@ -1487,41 +1674,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String apkOfferSent(String peer) {
     return 'APK proposée à $peer. Le transfert signalera une erreur si aucun transport rapide adapté n’est disponible.';
   }
-
-  @override
-  String get firstAidOpen => 'OUVRIR LES PREMIERS SECOURS HORS LIGNE';
-
-  @override
-  String get firstAidTitle => 'Premiers secours hors ligne';
-
-  @override
-  String get firstAidDisclaimer =>
-      'Appelez les secours locaux. Ce guide ne remplace ni l’aide professionnelle ni la formation. Les pratiques varient : suivez l’opérateur et les autorités.';
-
-  @override
-  String get firstAidChooseTopic => 'Choisissez ce qui se passe';
-
-  @override
-  String get firstAidEnglishFallback =>
-      'Cette traduction n’a pas pu être vérifiée. Le guide anglais validé est affiché.';
-
-  @override
-  String get firstAidSteps => 'Agir maintenant';
-
-  @override
-  String get firstAidWarnings => 'À éviter';
-
-  @override
-  String get firstAidSources => 'Sources et informations de révision';
-
-  @override
-  String firstAidReviewed(String date) {
-    return 'Contenu révisé le $date';
-  }
-
-  @override
-  String get firstAidLoadError =>
-      'Impossible de charger le guide hors ligne validé. Ne vous fiez pas à des informations incomplètes ; appelez les secours locaux.';
 
   @override
   String get familyTitle => 'Groupe familial';

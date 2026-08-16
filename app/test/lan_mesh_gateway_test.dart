@@ -11,6 +11,10 @@ void main() {
           const LanMeshGatewayConfig(enabled: true, psk: [1, 2, 3]).validate(),
       throwsArgumentError,
     );
+    const LanMeshGatewayConfig(
+      enabled: true,
+      emergencyOpenMode: true,
+    ).validate();
   });
 
   test('hello authenticates peer and negotiates maximum frame', () {
@@ -64,5 +68,44 @@ void main() {
     final query = LanMdnsCodec.query();
     expect(query, containsAllInOrder('_hearthbit'.codeUnits));
     expect(query.length, greaterThan(20));
+  });
+
+  test('mDNS anuncia puertos seguro y de emergencia entre teléfonos', () {
+    final gateway = Uint8List.fromList(List.generate(16, (index) => index));
+    final response = LanMdnsCodec.response(
+      gatewayId: gateway,
+      port: 45893,
+      emergencyPort: 45894,
+    );
+
+    final endpoints = LanMdnsCodec.parse(response!, '192.168.1.20');
+    expect(endpoints, hasLength(1));
+    expect(endpoints.single.gatewayId, gateway);
+    expect(endpoints.single.port, 45893);
+    expect(endpoints.single.emergencyPort, 45894);
+    expect(endpoints.single.secureAvailable, isTrue);
+  });
+
+  test('canal de emergencia negocia límites y aplica rate limit', () {
+    final gateway = Uint8List.fromList(List.generate(16, (index) => index));
+    final hello = EmergencyLanFraming.buildHello(
+      gatewayId: gateway,
+      maximumFrameSize: 2048,
+    );
+    final peer = EmergencyLanFraming.parseHello(hello);
+
+    expect(peer.gatewayId, gateway);
+    expect(peer.maximumFrameSize, 2048);
+
+    final limiter = EmergencyLanRateLimiter();
+    final now = DateTime.utc(2026);
+    for (var index = 0; index < 30; index++) {
+      expect(limiter.allow('peer', now: now), isTrue);
+    }
+    expect(limiter.allow('peer', now: now), isFalse);
+    expect(
+      limiter.allow('peer', now: now.add(const Duration(minutes: 2))),
+      isTrue,
+    );
   });
 }

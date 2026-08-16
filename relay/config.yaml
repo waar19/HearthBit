@@ -34,10 +34,12 @@ options:
   flood:
     sender_rate_per_second: 8
     sender_burst: 32
-    emergency_rate_per_second: 2
-    emergency_burst: 8
+    emergency_rate_per_second: 8
+    emergency_burst: 32
     bridge_rate_per_second: 20
     bridge_burst: 64
+    bridge_emergency_rate_per_second: 20
+    bridge_emergency_burst: 64
   lan:
     enabled: false
     listen_host: "127.0.0.1"
@@ -95,6 +97,15 @@ options:
     private_opaque:
       enabled: false
       peer_ids: []
+  reticulum:
+    enabled: false
+    storage_path: "/data/reticulum"
+    rns_config_path: ""
+    destination_hashes: []
+    source_allowlist: []
+    max_frame_size: 2048
+    max_gateway_hops: 8
+    allow_sensitive_emergency_coordinates: false
   store:
     path: "/data/relay.db"
     max_bytes: 67108864
@@ -106,6 +117,7 @@ options:
     message_types:
       - "0x02"
       - "0x04"
+      - "0x2B"
 schema:
   adapter: str
   local_name: str
@@ -128,6 +140,8 @@ schema:
     emergency_burst: int
     bridge_rate_per_second: float
     bridge_burst: int
+    bridge_emergency_rate_per_second: float
+    bridge_emergency_burst: int
   lan:
     enabled: bool
     listen_host: str
@@ -189,6 +203,17 @@ schema:
       enabled: bool
       peer_ids:
         - str
+  reticulum:
+    enabled: bool
+    storage_path: str
+    rns_config_path: str
+    destination_hashes:
+      - str
+    source_allowlist:
+      - str
+    max_frame_size: int
+    max_gateway_hops: int
+    allow_sensitive_emergency_coordinates: bool
   store:
     path: str
     max_bytes: int

@@ -77,10 +77,15 @@ internal object MeshRelayPolicy {
         packetType: Byte,
         ttl: Int,
         addressedToLocalNode: Boolean,
+        hasDirectedRecipient: Boolean = true,
     ): Boolean {
         if (!role.relaysPackets || ttl <= 1) return false
         return when (packetType) {
-            MeshProtocol.TYPE_BEACON_CONTROL -> false
+            MeshProtocol.TYPE_BEACON_CONTROL ->
+                ttl == BeaconControlProtocol.INITIAL_TTL &&
+                    hasDirectedRecipient &&
+                    !addressedToLocalNode
+            MeshProtocol.TYPE_RANGING_CONTROL -> false
             MeshProtocol.TYPE_NOISE_HANDSHAKE,
             MeshProtocol.TYPE_NOISE_ENCRYPTED,
             -> !addressedToLocalNode

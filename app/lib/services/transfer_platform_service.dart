@@ -4,9 +4,8 @@ import 'package:flutter/services.dart';
 
 /// Puente al canal nativo de transferencias (`com.hearthbit.transfer/*`).
 ///
-/// Hoy cubre Nearby Connections (Android) y la detección de Wi‑Fi Aware.
-/// En iOS los métodos Nearby responden `nearbyUnavailable`, y el selector de
-/// transporte cae automáticamente a LAN, BLE u óptico.
+/// Cubre Nearby Connections, Wi‑Fi Aware, Wi‑Fi Direct y
+/// MultipeerConnectivity según las capacidades de cada plataforma.
 class TransferPlatformService {
   static const _methods = MethodChannel('com.hearthbit.transfer/methods');
   static const _events = EventChannel('com.hearthbit.transfer/events');
@@ -16,7 +15,7 @@ class TransferPlatformService {
       .where((event) => event is Map)
       .cast<Map<Object?, Object?>>();
 
-  /// Capacidades reales del dispositivo: {nearby: bool, wifiAware: bool}.
+  /// Capacidades reales del dispositivo.
   Future<Map<Object?, Object?>> getTransferCapabilities() async {
     try {
       final result = await _methods.invokeMapMethod<Object?, Object?>(
@@ -24,9 +23,29 @@ class TransferPlatformService {
       );
       return result ?? const {};
     } on MissingPluginException {
-      return const {'nearby': false, 'wifiAware': false};
+      return const {
+        'nearby': false,
+        'wifiAware': false,
+        'wifiDirect': false,
+        'multipeer': false,
+      };
     } on PlatformException {
-      return const {'nearby': false, 'wifiAware': false};
+      return const {
+        'nearby': false,
+        'wifiAware': false,
+        'wifiDirect': false,
+        'multipeer': false,
+      };
+    }
+  }
+
+  Future<String?> consumeInitialHbtImport() async {
+    try {
+      return await _methods.invokeMethod<String>('consumeInitialHbtImport');
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
     }
   }
 
@@ -95,6 +114,66 @@ class TransferPlatformService {
       });
     } on MissingPluginException {
       // Plataforma sin Wi-Fi Aware; no hay nada que detener.
+    }
+  }
+
+  Future<void> wifiDirectSendFile({
+    required String transferId,
+    required String filePath,
+  }) {
+    return _methods.invokeMethod<void>('wifiDirectSendFile', {
+      'transferId': transferId,
+      'filePath': filePath,
+    });
+  }
+
+  Future<void> wifiDirectReceiveFile({
+    required String transferId,
+    required String destinationPath,
+  }) {
+    return _methods.invokeMethod<void>('wifiDirectReceiveFile', {
+      'transferId': transferId,
+      'destinationPath': destinationPath,
+    });
+  }
+
+  Future<void> wifiDirectStop(String transferId) async {
+    try {
+      await _methods.invokeMethod<void>('wifiDirectStop', {
+        'transferId': transferId,
+      });
+    } on MissingPluginException {
+      // Plataforma sin Wi-Fi Direct.
+    }
+  }
+
+  Future<void> multipeerSendFile({
+    required String transferId,
+    required String filePath,
+  }) {
+    return _methods.invokeMethod<void>('multipeerSendFile', {
+      'transferId': transferId,
+      'filePath': filePath,
+    });
+  }
+
+  Future<void> multipeerReceiveFile({
+    required String transferId,
+    required String destinationPath,
+  }) {
+    return _methods.invokeMethod<void>('multipeerReceiveFile', {
+      'transferId': transferId,
+      'destinationPath': destinationPath,
+    });
+  }
+
+  Future<void> multipeerStop(String transferId) async {
+    try {
+      await _methods.invokeMethod<void>('multipeerStop', {
+        'transferId': transferId,
+      });
+    } on MissingPluginException {
+      // Plataforma sin MultipeerConnectivity.
     }
   }
 }

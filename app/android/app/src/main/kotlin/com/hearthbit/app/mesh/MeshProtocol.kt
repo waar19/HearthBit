@@ -20,12 +20,14 @@ internal object MeshProtocol {
     const val TYPE_FRAGMENT: Byte = 0x20
     const val TYPE_REQUEST_SYNC: Byte = 0x21
     const val TYPE_RADAR_CONTROL: Byte = 0x23
-    const val TYPE_HBT_CAPABILITY: Byte = 0x24
+    const val TYPE_LEGACY_HBT_CAPABILITY: Byte = 0x24
     const val TYPE_NODE_CAPABILITY: Byte = 0x25
     const val TYPE_BEACON_CONTROL: Byte = 0x26
     const val TYPE_RANGING_CONTROL: Byte = 0x27
     const val TYPE_EMERGENCY_CAPABILITY: Byte = 0x28
-    const val TYPE_EMERGENCY_ACK: Byte = 0x29
+    const val TYPE_LEGACY_EMERGENCY_ACK: Byte = 0x29
+    const val TYPE_HBT_CAPABILITY: Byte = 0x2A
+    const val TYPE_EMERGENCY_ACK: Byte = 0x2B
     const val EMERGENCY_PROTOCOL_VERSION: Byte = 0x01
     const val TTL: Byte = 7
     const val HBT_VERSION: Byte = 0x01
@@ -70,6 +72,7 @@ internal object MeshProtocol {
         val signingPublicKey: ByteArray,
         val supportsTransfers: Boolean,
         val isInfrastructure: Boolean,
+        val emergencyPreannounce: Boolean,
     )
 
     data class PrivateMessage(val id: String, val content: String)
@@ -391,6 +394,7 @@ internal object MeshProtocol {
         nickname: String,
         noisePublicKey: ByteArray,
         signingPublicKey: ByteArray,
+        emergencyPreannounce: Boolean = false,
     ): ByteArray {
         val nicknameBytes = nickname.toByteArray(Charsets.UTF_8).take(31).toByteArray()
         return buildList {
@@ -408,6 +412,11 @@ internal object MeshProtocol {
             add(0x05)
             add(0x01)
             add(0x00)
+            if (emergencyPreannounce) {
+                add(EMERGENCY_PREANNOUNCE_TLV)
+                add(0x01)
+                add(EMERGENCY_PREANNOUNCE_VALUE)
+            }
         }.map(Int::toByte).toByteArray()
     }
 
@@ -418,6 +427,7 @@ internal object MeshProtocol {
         var signingKey: ByteArray? = null
         var supportsTransfers = false
         var isInfrastructure = false
+        var emergencyPreannounce = false
         while (offset + 2 <= payload.size) {
             val type = payload[offset++].toInt() and 0xFF
             val length = payload[offset++].toInt() and 0xFF
@@ -436,10 +446,21 @@ internal object MeshProtocol {
                     isInfrastructure = value.isNotEmpty() &&
                         (value[0].toInt() and 0x01) != 0
                 }
+                EMERGENCY_PREANNOUNCE_TLV -> {
+                    emergencyPreannounce = value.size == 1 &&
+                        value[0].toInt() and 0xFF == EMERGENCY_PREANNOUNCE_VALUE
+                }
             }
         }
         if (nickname == null || noiseKey?.size != 32 || signingKey?.size != 32) return null
-        Announcement(nickname, noiseKey, signingKey, supportsTransfers, isInfrastructure)
+        Announcement(
+            nickname,
+            noiseKey,
+            signingKey,
+            supportsTransfers,
+            isInfrastructure,
+            emergencyPreannounce,
+        )
     }.getOrNull()
 
     fun packetId(packet: Packet): ByteArray {
@@ -683,6 +704,10 @@ internal object MeshProtocol {
         return isEmergencyPublicPacketPayload(content)
     }
 
+    fun isSosPublicPacket(packet: Packet): Boolean =
+        packet.type == TYPE_MESSAGE &&
+            packet.payload.toString(Charsets.UTF_8).startsWith("SOS|")
+
     fun isEmergencyPublicPacketPayload(content: String): Boolean =
         content.startsWith("SOS|") || content.contains("[HB-CHECKIN|")
 
@@ -693,6 +718,12 @@ internal object MeshProtocol {
         payload.size == 2 &&
             payload[0] == EMERGENCY_PROTOCOL_VERSION &&
             payload[1].toInt() and 0x01 != 0
+
+    fun isHbtCapabilityType(type: Byte): Boolean =
+        type == TYPE_HBT_CAPABILITY || type == TYPE_LEGACY_HBT_CAPABILITY
+
+    fun isEmergencyAcknowledgementType(type: Byte): Boolean =
+        type == TYPE_EMERGENCY_ACK || type == TYPE_LEGACY_EMERGENCY_ACK
 
     fun encodeEmergencyAcknowledgement(canonicalHash: ByteArray): ByteArray {
         require(canonicalHash.size == 32)
@@ -865,6 +896,8 @@ internal object MeshProtocol {
     const val FRAGMENT_HEADER_SIZE = 13
     const val FRAGMENT_ID_SIZE = 8
     private const val HBT_CAPABILITY_TLV = 0xF0
+    private const val EMERGENCY_PREANNOUNCE_TLV = 0xF1
+    private const val EMERGENCY_PREANNOUNCE_VALUE = 0x01
     private const val INFRASTRUCTURE_TLV = 0xB1
     const val SYNC_FLAG_ANNOUNCE = 1L shl 0
     const val SYNC_FLAG_MESSAGE = 1L shl 1

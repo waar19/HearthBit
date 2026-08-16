@@ -238,6 +238,17 @@ class _TransferCardState extends State<_TransferCard> {
           child: Text(context.l10n.actionReject),
         ),
         const SizedBox(width: 8),
+        if (transfers.canAcceptExternal(record.id)) ...[
+          OutlinedButton.icon(
+            onPressed: () => transfers.acceptOffer(
+              record.id,
+              preferredTransport: TransferTransport.external,
+            ),
+            icon: const Icon(Icons.ios_share),
+            label: Text(context.l10n.transportShare),
+          ),
+          const SizedBox(width: 8),
+        ],
         FilledButton(
           onPressed: () => transfers.acceptOffer(record.id),
           child: Text(context.l10n.actionAccept),
@@ -246,6 +257,18 @@ class _TransferCardState extends State<_TransferCard> {
     }
     if (record.isActive) {
       return [
+        if (transfers.canShareExternal(record.id))
+          FilledButton.icon(
+            onPressed: () {
+              final box = context.findRenderObject() as RenderBox?;
+              final origin = box == null || !box.hasSize
+                  ? null
+                  : box.localToGlobal(Offset.zero) & box.size;
+              transfers.shareExternalPackage(record.id, origin: origin);
+            },
+            icon: const Icon(Icons.share),
+            label: Text(context.l10n.transferExport),
+          ),
         TextButton(
           onPressed: () => transfers.cancel(record.id),
           child: Text(context.l10n.actionCancel),
@@ -320,6 +343,9 @@ String _transportLabel(BuildContext context, TransferTransport transport) =>
       TransferTransport.nearby => context.l10n.transportNearby,
       TransferTransport.wifiAware => context.l10n.transportWifiAware,
       TransferTransport.optical => context.l10n.transportOptical,
+      TransferTransport.wifiDirect => context.l10n.transportWifiDirect,
+      TransferTransport.multipeer => context.l10n.transportMultipeer,
+      TransferTransport.external => context.l10n.transportShare,
     };
 
 String _formatBytes(int bytes) {

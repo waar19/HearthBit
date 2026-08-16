@@ -10,10 +10,11 @@ import '../models/mesh_models.dart';
 import '../services/app_preferences.dart';
 import 'emergency_contacts_screen.dart';
 import 'emergency_gateway_card.dart';
-import 'first_aid_guide_screen.dart';
 import 'map_screen.dart';
+import 'optical_receive_screen.dart';
 import 'radar_screen.dart';
 import 'rescue_power_cards.dart';
+import 'sos_qr_screen.dart';
 
 class EmergencyScreen extends StatelessWidget {
   const EmergencyScreen({
@@ -72,6 +73,78 @@ class EmergencyScreen extends StatelessWidget {
             icon: const Icon(Icons.stop_circle_outlined),
             label: Text(context.l10n.emergencyStopRescue),
           ),
+        if (controller.rescueMode && controller.latestSosQr != null) ...[
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => SosQrScreen(bundle: controller.latestSosQr!),
+              ),
+            ),
+            icon: const Icon(Icons.qr_code_2),
+            label: Text(context.l10n.sosQrOpen),
+          ),
+        ],
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => OpticalReceiveScreen(mesh: controller),
+            ),
+          ),
+          icon: const Icon(Icons.qr_code_scanner),
+          label: Text(context.l10n.sosQrScan),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: controller.acousticSosListening
+              ? controller.stopAcousticSosListening
+              : controller.startAcousticSosListening,
+          icon: Icon(
+            controller.acousticSosListening
+                ? Icons.hearing_disabled
+                : Icons.hearing,
+          ),
+          label: Text(
+            controller.acousticSosListening
+                ? context.l10n.acousticSosStopListening
+                : context.l10n.acousticSosListen,
+          ),
+        ),
+        if (controller.rescueMode &&
+            controller.emergencyChannelsUsed.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Semantics(
+            liveRegion: true,
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.l10n.sosChannelsTitle,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: controller.emergencyChannelsUsed
+                          .map(
+                            (channel) => Chip(
+                              label: Text(_emergencyChannelLabel(channel)),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          )
+                          .toList(growable: false),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
         if (controller.lastError != null) ...[
           const SizedBox(height: 8),
           Semantics(
@@ -139,21 +212,17 @@ class EmergencyScreen extends StatelessWidget {
         FilledButton.icon(
           onPressed: () => Navigator.of(context).push(
             MaterialPageRoute<void>(
-              builder: (_) => const FirstAidGuideScreen(),
-            ),
-          ),
-          icon: const Icon(Icons.health_and_safety_outlined),
-          label: Text(context.l10n.firstAidOpen),
-        ),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(
               builder: (_) => EmergencyContactsScreen(preferences: preferences),
             ),
           ),
           icon: const Icon(Icons.contact_phone_outlined),
           label: Text(context.l10n.emergencyContactsOpen),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: () => _composeEmergencySms(context),
+          icon: const Icon(Icons.sms_outlined),
+          label: Text(context.l10n.emergencySmsOpen),
         ),
         const SizedBox(height: 12),
         FilledButton.tonalIcon(
@@ -402,6 +471,116 @@ class EmergencyScreen extends StatelessWidget {
     );
   }
 
+  Future<void> _composeEmergencySms(BuildContext context) async {
+    final recipientController = TextEditingController();
+    final messageController = TextEditingController(
+      text: context.l10n.sosDefaultMessage,
+    );
+    var precision = SosLocationPrecision.approximate;
+    final draft = await showDialog<_EmergencySmsDraft>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          icon: const Icon(Icons.sms_outlined),
+          title: Text(context.l10n.emergencySmsTitle),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(context.l10n.emergencySmsBody),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: recipientController,
+                  keyboardType: TextInputType.phone,
+                  autofillHints: const [AutofillHints.telephoneNumber],
+                  decoration: InputDecoration(
+                    labelText: context.l10n.emergencySmsRecipient,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: messageController,
+                  maxLength: 160,
+                  minLines: 2,
+                  maxLines: 4,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.emergencySmsMessage,
+                  ),
+                ),
+                RadioGroup<SosLocationPrecision>(
+                  groupValue: precision,
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => precision = value);
+                    }
+                  },
+                  child: Column(
+                    children: [
+                      RadioListTile<SosLocationPrecision>(
+                        value: SosLocationPrecision.approximate,
+                        title: Text(context.l10n.sosLocationApproximate),
+                      ),
+                      RadioListTile<SosLocationPrecision>(
+                        value: SosLocationPrecision.exact,
+                        title: Text(context.l10n.sosLocationExact),
+                      ),
+                      RadioListTile<SosLocationPrecision>(
+                        value: SosLocationPrecision.none,
+                        title: Text(context.l10n.sosLocationNone),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  context.l10n.emergencySmsDisclaimer,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(context.l10n.actionCancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                _EmergencySmsDraft(
+                  recipient: recipientController.text,
+                  message: messageController.text,
+                  precision: precision,
+                ),
+              ),
+              child: Text(context.l10n.emergencySmsCompose),
+            ),
+          ],
+        ),
+      ),
+    );
+    recipientController.dispose();
+    messageController.dispose();
+    if (draft == null || !context.mounted) return;
+    try {
+      final opened = await controller.composeEmergencySms(
+        recipient: draft.recipient,
+        message: draft.message,
+        locationPrecision: draft.precision,
+      );
+      if (!opened && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.emergencySmsUnavailable)),
+        );
+      }
+    } on FormatException {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.emergencySmsInvalidRecipient)),
+      );
+    }
+  }
+
   Widget? _radarButton(BuildContext context, MeshMessage message) {
     if (message.isMine) return null;
     final peer = controller.peerById(message.senderPeerId);
@@ -423,6 +602,29 @@ class EmergencyScreen extends StatelessWidget {
       icon: const Icon(Icons.radar),
     );
   }
+}
+
+String _emergencyChannelLabel(String channel) => switch (channel) {
+  'ble' => 'BLE',
+  'lan' => 'Wi-Fi LAN',
+  'wifiDirect' => 'Wi-Fi Direct',
+  'wifiAware' => 'Wi-Fi Aware',
+  'multipeer' => 'Multipeer',
+  'qr' => 'QR',
+  'audio' => 'Audio',
+  _ => channel,
+};
+
+class _EmergencySmsDraft {
+  const _EmergencySmsDraft({
+    required this.recipient,
+    required this.message,
+    required this.precision,
+  });
+
+  final String recipient;
+  final String message;
+  final SosLocationPrecision precision;
 }
 
 class _EmergencyDeliveryPanel extends StatelessWidget {

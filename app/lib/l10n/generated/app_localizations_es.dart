@@ -75,6 +75,13 @@ class AppLocalizationsEs extends AppLocalizations {
       'Activada. Observadores cercanos pueden correlacionar este dispositivo mediante un identificador de radio estable y los mensajes públicos siguen siendo legibles por la malla.';
 
   @override
+  String get meshtasticInteropTitle => 'Radio Meshtastic de largo alcance';
+
+  @override
+  String get meshtasticInteropBody =>
+      'Desactivada por defecto. Al activarla, HearthBit conecta un radio Meshtastic cercano. El contenido privado mantiene su cifrado extremo a extremo en la malla LoRa.';
+
+  @override
   String get externalPresenceNoChat => 'Presencia de red externa · sin chat';
 
   @override
@@ -192,6 +199,89 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get sosDefaultMessage => 'Necesito ayuda';
+
+  @override
+  String get sosQrTitle => 'SOS por QR';
+
+  @override
+  String get sosQrShowInstructions =>
+      'Muestra este código a otra persona. HearthBit podrá retransmitir el SOS y cualquier cámara podrá leer el texto de respaldo.';
+
+  @override
+  String get sosQrFallbackTitle => 'Información legible sin la aplicación';
+
+  @override
+  String get sosQrOpen => 'MOSTRAR SOS POR QR';
+
+  @override
+  String get sosQrScan => 'ESCANEAR Y RETRANSMITIR SOS';
+
+  @override
+  String get acousticSosListen => 'ESCUCHAR SOS POR SONIDO';
+
+  @override
+  String get acousticSosStopListening => 'DETENER ESCUCHA ACÚSTICA';
+
+  @override
+  String get sosChannelsTitle => 'SOS enviado o preparado por';
+
+  @override
+  String get sosQrRelayTitle => 'SOS encontrado';
+
+  @override
+  String get sosQrRelayAction => 'RETRANSMITIR SOS';
+
+  @override
+  String get sosQrInvalid =>
+      'El QR no contiene un SOS HearthBit válido y firmado.';
+
+  @override
+  String get sosQrRelayed => 'SOS validado y añadido a la malla';
+
+  @override
+  String get emergencySmsOpen => 'Avisar por SMS a un contacto de confianza';
+
+  @override
+  String get emergencySmsTitle => 'SMS de emergencia';
+
+  @override
+  String get emergencySmsBody =>
+      'Prepara un mensaje para un contacto de confianza. Se abrirá tu aplicación de mensajes para que lo revises y lo envíes.';
+
+  @override
+  String get emergencySmsRecipient => 'Teléfono del contacto de confianza';
+
+  @override
+  String get emergencySmsMessage => 'Mensaje de emergencia';
+
+  @override
+  String get emergencySmsDisclaimer =>
+      'No se envía automáticamente ni sustituye una llamada a los servicios oficiales de emergencia.';
+
+  @override
+  String get emergencySmsCompose => 'ABRIR APLICACIÓN DE MENSAJES';
+
+  @override
+  String get emergencySmsUnavailable =>
+      'No hay una aplicación de mensajes compatible';
+
+  @override
+  String get emergencySmsInvalidRecipient =>
+      'Introduce un número de teléfono válido';
+
+  @override
+  String emergencySmsBodyWithoutLocation(String message) {
+    return 'Alerta de emergencia de HearthBit: $message. Este SMS no sustituye los servicios oficiales de emergencia.';
+  }
+
+  @override
+  String emergencySmsBodyWithLocation(
+    String message,
+    String latitude,
+    String longitude,
+  ) {
+    return 'Alerta de emergencia de HearthBit: $message. Coordenadas: $latitude, $longitude. Este SMS no sustituye los servicios oficiales de emergencia.';
+  }
 
   @override
   String get sosReceivedTitle => 'Alertas recibidas';
@@ -439,7 +529,33 @@ class AppLocalizationsEs extends AppLocalizations {
   String get transportWifiAware => 'Wi-Fi Aware';
 
   @override
+  String get transportWifiDirect => 'Wi-Fi Direct';
+
+  @override
+  String get transportMultipeer => 'Multipeer';
+
+  @override
+  String get transportShare => 'Compartir con otra app';
+
+  @override
   String get transportOptical => 'QR óptico';
+
+  @override
+  String get transferExport => 'COMPARTIR';
+
+  @override
+  String get transferImport => 'Abrir paquete HearthBit';
+
+  @override
+  String get sealedTransferSend => 'Enviar sellado por otra app';
+
+  @override
+  String get sealedImportTitle => 'Archivo sellado verificado';
+
+  @override
+  String sealedImportBody(String fileName, String sender) {
+    return '$fileName fue firmado por el contacto verificado $sender. ¿Guardarlo?';
+  }
 
   @override
   String get actionReject => 'RECHAZAR';
@@ -656,6 +772,70 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get diagnosticsExportError =>
       'No se pudo exportar el informe de diagnóstico';
+
+  @override
+  String get diagnosticsTitle => 'Diagnóstico';
+
+  @override
+  String get diagnosticsRefreshTooltip => 'Actualizar diagnóstico';
+
+  @override
+  String get diagnosticsMeshSection => 'Malla';
+
+  @override
+  String get diagnosticsPlatform => 'Plataforma';
+
+  @override
+  String get diagnosticsStatus => 'Estado';
+
+  @override
+  String get diagnosticsNearbyDevices => 'Dispositivos cercanos';
+
+  @override
+  String get diagnosticsAdvertising => 'Anuncio BLE';
+
+  @override
+  String get diagnosticsMeshScan => 'Escaneo de malla';
+
+  @override
+  String get diagnosticsGenericScan => 'Escaneo de señales genéricas';
+
+  @override
+  String get diagnosticsEnergySection => 'Energía';
+
+  @override
+  String get diagnosticsBattery => 'Batería';
+
+  @override
+  String get diagnosticsPowerProfile => 'Perfil de energía';
+
+  @override
+  String get diagnosticsBleDutyCycle => 'Ciclo activo BLE';
+
+  @override
+  String get diagnosticsScanStarts => 'Inicios de escaneo';
+
+  @override
+  String get diagnosticsStoreForward => 'Cola de guardar y reenviar';
+
+  @override
+  String get diagnosticsTransportsSection => 'Transportes activos';
+
+  @override
+  String get diagnosticsNoActiveTransports =>
+      'No se informó ningún transporte activo';
+
+  @override
+  String get diagnosticsEventsSection => 'Eventos recientes';
+
+  @override
+  String get diagnosticsNoEvents => 'Aún no hay eventos de diagnóstico';
+
+  @override
+  String get diagnosticsEnabled => 'Activo';
+
+  @override
+  String get diagnosticsDisabled => 'Inactivo';
 
   @override
   String get openLinkError => 'No se pudo abrir el enlace';
@@ -909,6 +1089,14 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get radarSonarTooNoisy =>
       'No fue posible medir los chirridos. Reduce el ruido, deja ambos teléfonos descubiertos e inténtalo de nuevo.';
+
+  @override
+  String get radarSonarRemoteMicrophoneRequired =>
+      'El otro teléfono no autorizó el uso del micrófono para el sonar.';
+
+  @override
+  String get radarSonarSelfChirpMissing =>
+      'Este teléfono no detectó su propia señal. Desconecta auriculares Bluetooth, descubre el altavoz y vuelve a intentarlo.';
 
   @override
   String get radarSweepEstimateWarning =>
@@ -1487,41 +1675,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String apkOfferSent(String peer) {
     return 'APK ofrecido a $peer. La transferencia mostrará un error si no hay un transporte rápido adecuado.';
   }
-
-  @override
-  String get firstAidOpen => 'ABRIR PRIMEROS AUXILIOS OFFLINE';
-
-  @override
-  String get firstAidTitle => 'Primeros auxilios offline';
-
-  @override
-  String get firstAidDisclaimer =>
-      'Llama a emergencias locales. Esta guía no sustituye la ayuda profesional ni la formación. Las prácticas locales varían: sigue al operador y a las autoridades.';
-
-  @override
-  String get firstAidChooseTopic => 'Elige qué está ocurriendo';
-
-  @override
-  String get firstAidEnglishFallback =>
-      'No se pudo verificar esta traducción. Se muestra la guía validada en inglés.';
-
-  @override
-  String get firstAidSteps => 'Actúa ahora';
-
-  @override
-  String get firstAidWarnings => 'Evita';
-
-  @override
-  String get firstAidSources => 'Fuentes e información de revisión';
-
-  @override
-  String firstAidReviewed(String date) {
-    return 'Contenido revisado el $date';
-  }
-
-  @override
-  String get firstAidLoadError =>
-      'No se pudo cargar la guía offline validada. No uses información incompleta; llama a emergencias locales.';
 
   @override
   String get familyTitle => 'Grupo familiar';

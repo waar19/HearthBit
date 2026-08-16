@@ -3,6 +3,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hearth_bit/services/beacon_control_protocol.dart';
+import 'package:hearth_bit/services/ranging_control_protocol.dart';
 import 'package:hearth_bit/services/transfer_protocol.dart';
 
 void main() {
@@ -37,6 +39,49 @@ void main() {
     expect(
       TransferFrame.decode(fixtures.bytes('hbt.invalid.truncated')),
       isNull,
+    );
+  });
+
+  test('extensiones de emergencia comparten payloads canónicos', () {
+    final beacon = BeaconControlProtocol.decode(
+      fixtures.bytes('extension.beacon_control.request'),
+    );
+    expect(beacon?.action, BeaconControlAction.request);
+    expect(beacon?.flags, BeaconControlFlags.all);
+
+    final ranging = RangingControlProtocol.decode(
+      fixtures.bytes('extension.ranging_control.request'),
+    );
+    expect(ranging?.action, RangingControlAction.request);
+    expect(ranging?.technology, RangingTechnology.acoustic);
+    expect(ranging?.round, 3);
+    expect(ranging?.opaqueData, Uint8List.fromList([0xaa, 0xbb, 0xcc]));
+
+    expect(
+      fixtures.bytes('extension.emergency_capability.v1'),
+      Uint8List.fromList([1, 1]),
+    );
+    final ack = fixtures.bytes('extension.emergency_ack.v1');
+    expect(ack, hasLength(33));
+    expect(ack.first, 1);
+    expect(
+      ack.sublist(1),
+      Uint8List.fromList(List<int>.generate(32, (i) => i)),
+    );
+    expect(
+      fixtures.bytes('extension.hbt_capability.canonical'),
+      Uint8List.fromList([1]),
+    );
+  });
+
+  test('legacy 0x24 se distingue por estructura exacta', () {
+    expect(
+      fixtures.bytes('extension.legacy_0x24.hbt_alias'),
+      Uint8List.fromList([1]),
+    );
+    expect(
+      fixtures.bytes('extension.legacy_0x24.prekey_candidate'),
+      isNot(Uint8List.fromList([1])),
     );
   });
 }

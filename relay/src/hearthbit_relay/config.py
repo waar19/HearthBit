@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 from .identity import NodeRole
 from .protocol import (
     TYPE_COURIER_ENVELOPE,
+    TYPE_EMERGENCY_ACK,
     TYPE_MESSAGE,
 )
 
@@ -29,6 +30,7 @@ class StoreConfig:
             {
                 TYPE_MESSAGE,
                 TYPE_COURIER_ENVELOPE,
+                TYPE_EMERGENCY_ACK,
             }
         )
     )
@@ -124,6 +126,20 @@ class MatrixConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ReticulumConfig:
+    """Opt-in encrypted LXMF link between explicitly trusted destinations."""
+
+    enabled: bool = False
+    storage_path: str = "/var/lib/hearthbit-relay/reticulum"
+    rns_config_path: str = ""
+    destination_hashes: frozenset[bytes] = field(default_factory=frozenset)
+    source_allowlist: frozenset[bytes] = field(default_factory=frozenset)
+    max_frame_size: int = 2048
+    max_gateway_hops: int = 8
+    allow_sensitive_emergency_coordinates: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class IdentityVerificationConfig:
     """Trust-on-first-valid-ANNOUNCE policy for signed mesh packets."""
 
@@ -136,10 +152,12 @@ class FloodConfig:
 
     sender_rate_per_second: float = 8.0
     sender_burst: int = 32
-    emergency_rate_per_second: float = 2.0
-    emergency_burst: int = 8
+    emergency_rate_per_second: float = 8.0
+    emergency_burst: int = 32
     bridge_rate_per_second: float = 20.0
     bridge_burst: int = 64
+    bridge_emergency_rate_per_second: float = 20.0
+    bridge_emergency_burst: int = 64
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,6 +182,7 @@ class RelayConfig:
     lan: LanConfig = field(default_factory=LanConfig)
     mqtt: MqttConfig = field(default_factory=MqttConfig)
     matrix: MatrixConfig = field(default_factory=MatrixConfig)
+    reticulum: ReticulumConfig = field(default_factory=ReticulumConfig)
 
     @property
     def adapter_path(self) -> str:
@@ -175,6 +194,7 @@ _DEFAULT_LAN = LanConfig()
 _DEFAULT_MQTT = MqttConfig()
 _DEFAULT_MATRIX_PRIVATE = MatrixPrivateConfig()
 _DEFAULT_MATRIX = MatrixConfig()
+_DEFAULT_RETICULUM = ReticulumConfig()
 _DEFAULT_IDENTITY_VERIFICATION = IdentityVerificationConfig()
 _DEFAULT_FLOOD = FloodConfig()
 _DEFAULT_RELAY = RelayConfig()
@@ -446,6 +466,44 @@ def load_config(path: str | Path | None) -> RelayConfig:
         ),
         private_opaque=matrix_private,
     )
+    reticulum_raw = raw.get("reticulum", {})
+    if not isinstance(reticulum_raw, dict):
+        raise ValueError("'reticulum' must be a JSON object")
+    reticulum = ReticulumConfig(
+        enabled=bool(reticulum_raw.get("enabled", _DEFAULT_RETICULUM.enabled)),
+        storage_path=str(
+            reticulum_raw.get("storage_path", _DEFAULT_RETICULUM.storage_path)
+        ),
+        rns_config_path=str(
+            reticulum_raw.get("rns_config_path", _DEFAULT_RETICULUM.rns_config_path)
+        ),
+        destination_hashes=_parse_hex_set(
+            reticulum_raw.get("destination_hashes", []),
+            "reticulum.destination_hashes",
+            16,
+        ),
+        source_allowlist=_parse_hex_set(
+            reticulum_raw.get("source_allowlist", []),
+            "reticulum.source_allowlist",
+            16,
+        ),
+        max_frame_size=_positive_int(
+            reticulum_raw,
+            "max_frame_size",
+            _DEFAULT_RETICULUM.max_frame_size,
+        ),
+        max_gateway_hops=_positive_int(
+            reticulum_raw,
+            "max_gateway_hops",
+            _DEFAULT_RETICULUM.max_gateway_hops,
+        ),
+        allow_sensitive_emergency_coordinates=bool(
+            reticulum_raw.get(
+                "allow_sensitive_emergency_coordinates",
+                _DEFAULT_RETICULUM.allow_sensitive_emergency_coordinates,
+            )
+        ),
+    )
     identity_raw = raw.get("identity_verification", {})
     if not isinstance(identity_raw, dict):
         raise ValueError("'identity_verification' must be a JSON object")
@@ -497,6 +555,16 @@ def load_config(path: str | Path | None) -> RelayConfig:
             "bridge_burst",
             _DEFAULT_FLOOD.bridge_burst,
         ),
+        bridge_emergency_rate_per_second=_positive_number(
+            flood_raw,
+            "bridge_emergency_rate_per_second",
+            _DEFAULT_FLOOD.bridge_emergency_rate_per_second,
+        ),
+        bridge_emergency_burst=_positive_int(
+            flood_raw,
+            "bridge_emergency_burst",
+            _DEFAULT_FLOOD.bridge_emergency_burst,
+        ),
     )
     identity_path = str(raw.get("identity_path", _DEFAULT_RELAY.identity_path))
     trust_store_value = raw.get("trust_store_path")
@@ -534,6 +602,7 @@ def load_config(path: str | Path | None) -> RelayConfig:
         lan=lan,
         mqtt=mqtt,
         matrix=matrix,
+        reticulum=reticulum,
     )
     if "/" in config.adapter or not config.adapter:
         raise ValueError("'adapter' must be a BlueZ adapter name such as hci0")
@@ -602,7 +671,15 @@ def load_config(path: str | Path | None) -> RelayConfig:
         raise ValueError("'matrix.max_bridge_hops' cannot exceed 32")
     if config.matrix.inbound_queue_size > 4096:
         raise ValueError("'matrix.inbound_queue_size' cannot exceed 4096")
-    if config.flood.sender_burst > 10_000 or config.flood.bridge_burst > 10_000:
+    if any(
+        burst > 10_000
+        for burst in (
+            config.flood.sender_burst,
+            config.flood.emergency_burst,
+            config.flood.bridge_burst,
+            config.flood.bridge_emergency_burst,
+        )
+    ):
         raise ValueError("flood burst limits cannot exceed 10000")
     if config.matrix.private_opaque.enabled:
         raise ValueError(
@@ -649,6 +726,29 @@ def load_config(path: str | Path | None) -> RelayConfig:
         if not config.matrix.access_token_env and not config.matrix.access_token_file:
             raise ValueError(
                 "Matrix access token requires an environment variable or token file"
+            )
+    if not 1 <= config.reticulum.max_frame_size <= 65_535:
+        raise ValueError("'reticulum.max_frame_size' must be between 1 and 65535")
+    if config.reticulum.max_frame_size < config.max_packet_size:
+        raise ValueError(
+            "'reticulum.max_frame_size' cannot be smaller than 'max_packet_size'"
+        )
+    if config.reticulum.max_gateway_hops > 32:
+        raise ValueError("'reticulum.max_gateway_hops' cannot exceed 32")
+    if config.reticulum.enabled:
+        if not config.reticulum.storage_path:
+            raise ValueError(
+                "'reticulum.storage_path' is required when Reticulum is enabled"
+            )
+        if not config.reticulum.destination_hashes:
+            raise ValueError(
+                "'reticulum.destination_hashes' must explicitly authorize at "
+                "least one LXMF destination"
+            )
+        if not config.reticulum.source_allowlist:
+            raise ValueError(
+                "'reticulum.source_allowlist' must explicitly authorize at "
+                "least one LXMF source"
             )
     return config
 

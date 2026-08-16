@@ -43,6 +43,188 @@ inicio/fin UTC, resultado, primer criterio incumplido y hashes SHA-256 de la
 evidencia. No agregue coordenadas, seriales, MAC, peer IDs, claves ni mensajes
 reales.
 
+## Protocolo P0 de reloj, rescate y enlaces críticos
+
+Todos estos casos empiezan en `PENDING`. Use una ejecución nueva por caso:
+`RUN-<UTC>-<CASE_ID>`, y marcadores
+`<CASE_ID>-<RUN>-<PASO>-<ORIGEN>-<DESTINO>`. La topología debe usar solo los
+alias `HB-S25`, `HB-IP`, `HB-R1`, `HB-R2`, `MT-A`, `MT-B`, `LR-A` y `LR-B`.
+Registre versiones, batería, estado foreground/background, tiempos UTC,
+distancias aproximadas, TTL, conteo de copias y resultado; no registre
+coordenadas reales, contenido personal, nombres Bluetooth, MAC, seriales, peer
+IDs, claves ni payloads privados.
+
+La evidencia mínima por caso es: `capture.json`, log saneado por nodo observado,
+informe con el marcador y el primer criterio incumplido, capturas de UI
+redactadas cuando el criterio sea visual y SHA-256 de cada archivo. Los logs de
+radio o serie se conservan solo desde cinco segundos antes del marcador hasta
+cinco segundos después del resultado. Un test automatizado, una compilación o
+la mera visibilidad de un peer no sustituyen la evidencia física.
+
+### P0-SOS-CLOCK-01 — desfase de reloj del SOS
+
+**Topología:** enlace directo `HB-IP (víctima) ↔ HB-S25 (rescatista)`, sin
+relay, Wi-Fi ni datos móviles. Antes de empezar anote la zona horaria y active
+fecha/hora automáticas en ambos equipos. Use un perfil de prueba nuevo en el
+iPhone y confirme que el S25 no conserva su identidad ni un `ANNOUNCE` previo.
+
+1. Ajuste manualmente `HB-IP` a **30 minutos en el pasado**. Envíe primero un
+   mensaje estándar firmado con marcador `...-OLD-STANDARD-IP-S25`; debe ser
+   rechazado. Emita después `ANNOUNCE` con TTL completo 7 seguido
+   inmediatamente por `...-PAST-SOS-IP-S25`.
+2. Confirme que el S25 acepta una sola copia del SOS y conserva su vigencia de
+   hasta 24 horas, sin aceptar por ello el mensaje estándar viejo.
+3. Ajuste `HB-IP` a **30 minutos en el futuro** y repita con
+   `...-FUTURE-SOS-IP-S25`; debe rechazarse porque supera +10 minutos.
+4. Repita los límites -24 h y +10 min si el cliente permite timestamp
+   determinista. Al terminar, restaure fecha/hora y zona automáticas y
+   compruebe sincronización antes de cualquier otro caso.
+
+**PASS:** estándar viejo rechazado; `ANNOUNCE` previo TTL 7 y SOS atrasado
+aceptados una vez; SOS adelantado más de 10 min rechazado; reloj restaurado.
+**FAIL:** se acepta tráfico estándar viejo, se pierde el SOS atrasado válido,
+se acepta el futuro prohibido, el TTL no es 7 o queda el reloj alterado.
+
+### P0-SOS-BATTERY-01 — rescate con batería crítica
+
+**Topología:** `HB-S25 (víctima) ↔ HB-IP (rescatista)` directa. Lleve el S25 a
+10 % o menos sin activar el rol `PHONE_BEACON`; anote porcentaje y temperatura.
+
+1. Active Modo Rescate en el S25, bloquee la pantalla y déjelo en segundo plano.
+2. Capture durante al menos 15 minutos dos ciclos de ping con marcador
+   `...-SOS-S25-IP`; confirme escaneo continuo, sin pausa del perfil crítico.
+3. Aleje y acerque el iPhone entre pings; el siguiente SOS debe descubrirse y
+   entregarse una sola vez. Registre batería inicial/final, duración y consumo
+   porcentual; detenga la prueba si el equipo se calienta o llega a 3 %.
+
+**PASS:** rescate activo mantiene scan continuo a ≤10 %, entrega el SOS y deja
+medición de consumo. **FAIL:** entra en pausas críticas, requiere abrir la app,
+no entrega, duplica o no se registró batería/duración.
+
+### P0-BT-RECOVERY-01 — recuperación Bluetooth Android
+
+**Topología:** `HB-S25 (víctima) ↔ HB-IP (rescatista)`, rescate activo y ambas
+apps inicialmente en segundo plano.
+
+1. Confirme un ping `...-BEFORE-OFF-S25-IP`. Apague Bluetooth desde ajustes
+   rápidos del S25 durante 60 segundos sin abrir HearthBit.
+2. Reactive Bluetooth sin abrir HearthBit ni desbloquear más de lo necesario.
+3. Espere el siguiente intervalo. Capture transición OFF→ON, reactivación de
+   scan/GATT y marcador `...-AFTER-ON-S25-IP`.
+
+**PASS:** recuperación automática y siguiente ping entregado una vez sin abrir
+la app. **FAIL:** servicio detenido, scan no vuelve, requiere interacción,
+pierde/duplica el ping o continúa transmitiendo mientras Bluetooth está OFF.
+
+### P0-RESCUE-RESTART-01 — START_STICKY y alarma persistida
+
+**Topología:** `HB-S25 (víctima) ↔ HB-IP (rescatista)`, intervalo conocido de
+rescate y pantalla bloqueada.
+
+1. Reciba `...-BEFORE-KILL-S25-IP` y anote `lastPingAt` saneado y la próxima
+   hora prevista. Mate solo el proceso con ADB y repita, en otra ejecución,
+   mediante el gestor/OEM; no pulse «Detener» ni «Forzar detención».
+2. Mantenga la app cerrada. Verifique que `AlarmManager` o `START_STICKY`
+   reconstruye el schedule desde estado persistido.
+3. Confirme `...-AFTER-RESTART-S25-IP` dentro del siguiente intervalo y cuente
+   copias. Repita matando justo después de un ping para comprobar que el
+   `lastPingAt` persistido impide un duplicado inmediato.
+
+**PASS:** reanuda sin abrir la app, el ping debido ocurre una vez y el recién
+persistido no se duplica. **FAIL:** pierde estado, exige abrir la app, duplica o
+emite después de expirar. «Forzar detención» de Android es un caso de
+plataforma distinto y debe registrarse `BLOCKED_PLATFORM`, no como recuperación
+exitosa de `START_STICKY`.
+
+### P0-IOS-FORCEQUIT-01 — límite de force-quit en iOS
+
+**Topología:** `HB-IP (víctima) ↔ HB-S25 (rescatista)`, rescate activo.
+
+1. Confirme `...-BEFORE-FORCEQUIT-IP-S25`; después cierre HearthBit
+   explícitamente desde el selector de apps.
+2. Espere dos intervalos sin reabrirla y compruebe desde el S25 que no hay
+   restauración fiable, anuncios ni nuevos pings.
+3. Verifique que la guía/UI operativa advierte que force-quit impide el rescate
+   en segundo plano hasta reabrir la app.
+
+El resultado esperado de plataforma es `BLOCKED_PLATFORM` (o `FAIL` de
+continuidad), nunca `PASS`: iOS bloquea la restauración BLE tras force-quit y
+la app no debe prometer una solución imposible. El caso solo cumple su objetivo
+documental si la ausencia de ping y la advertencia quedan evidenciadas.
+
+### P0-RADAR-30M-01 — renovación de consentimiento
+
+**Topología:** `HB-S25 (rescatista) ↔ HB-IP (víctima)` directa; Modo Rescate en
+la víctima con ping periódico. Mantenga la búsqueda activa por más de 10 min.
+
+1. Tras `...-PING-01-IP-S25`, abra radar y anote expiración remota esperada
+   `timestamp + 30 min`.
+2. Observe al menos dos pings posteriores `...-PING-02` y `...-PING-03`; cada
+   uno debe renovar la ventana otros 30 min y el radar debe seguir midiendo sin
+   pedir consentimiento nuevamente.
+3. En una ejecución separada detenga los pings sin enviar `STOP`; espere 30 min
+   desde el último ping y confirme que radar expira y deja de medir.
+
+**PASS:** búsqueda supera 10 min, cada ping renueva 30 min y la ausencia de
+pings causa expiración. **FAIL:** conserva el límite viejo de 10 min, no
+renueva, renueva sin ping, permanece activo tras vencer o exige reabrir la app.
+
+### P0-BEACON-HOP-01 — control de baliza con un relay
+
+**Topología aislada:** `HB-S25 (rescatista) ↔ HB-R1 ↔ HB-IP (víctima)`;
+`HB-S25` y `HB-IP` no deben tener enlace directo. Para el control negativo
+inserte `HB-R2` y aísle `HB-IP` de `HB-R1`.
+
+1. Con `HB-R1` apagado, `...-REQUEST-S25-IP` no debe llegar. Enciéndalo y emita
+   un request firmado con TTL 2.
+2. Confirme un único forward en `HB-R1`, TTL 2→1 y actuación solo después del
+   grant local. El relay no debe aplicar el control.
+3. En la topología `HB-S25 ↔ HB-R1 ↔ HB-R2 ↔ HB-IP`, repita
+   `...-TWO-RELAYS-S25-IP`; no debe llegar ni reenviarse desde TTL 1.
+4. Con iOS actuando, envíe HearthBit a background. iOS debe detener la baliza y
+   el rescatista debe ver el estado `STOP`/detenido, sin prometer actuación en
+   background.
+
+**PASS:** solo un relay, TTL 2→1, control negativo de dos relays y STOP visible
+al pasar iOS a background. **FAIL:** enlace directo no descartado, segundo
+relay, TTL incorrecto, actuación sin grant, relay actuando o estado remoto
+oculta el STOP.
+
+### P0-MESHTASTIC-QUEUE-01 — prioridad crítica en radio real
+
+**Hardware/topología:** dos nodos Meshtastic compatibles `MT-A ↔ LoRa ↔ MT-B`,
+con `HB-S25 ↔ BLE ↔ MT-A` y receptor conectado a `MT-B`. Sin ambos radios,
+marque `BLOCKED_HARDWARE`.
+
+1. Sature la cola BLE con al menos 64 frames estándar
+   `...-STANDARD-<NN>`, manteniendo el enlace LoRa ocupado.
+2. Envíe inmediatamente `...-SOS-CRITICAL-S25-DST`.
+3. Correlacione log saneado de evicción, `requestAck`, TX/RX Meshtastic y
+   recepción final; no conserve payloads de otros canales.
+
+**PASS:** el SOS crítico reemplaza al estándar más antiguo, sale antes que el
+backlog y llega una vez; la cola nunca supera 64. **FAIL:** se rechaza/retrasa
+detrás del backlog, expulsa otro crítico, excede capacidad o duplica.
+
+### P0-LORA-ATOMIC-01 — frame opaco íntegro
+
+**Hardware/topología:** `HB-S25 ↔ BLE ↔ LR-A ↔ LoRa ↔ LR-B ↔ BLE ↔ HB-IP`,
+sin enlace BLE directo entre teléfonos. Requiere radios configurados y
+autorización normativa; de lo contrario use `BLOCKED_HARDWARE` o
+`BLOCKED_REGULATORY`.
+
+1. Envíe simultáneamente frames estándar deterministas y un SOS crítico
+   `...-ATOMIC-SOS-S25-IP`, incluyendo un frame cercano al MTU admitido.
+2. Capture en ambos extremos longitud, SHA-256 y contador de cada frame opaco,
+   sin guardar su contenido. Introduzca una pérdida/reintento de radio.
+3. Confirme que cada entrega corresponde a un frame completo: nunca mezcle
+   bytes de dos frames, entregue prefijos ni reconstruya un frame parcial.
+
+**PASS:** mismo tamaño y SHA-256 extremo a extremo, una entrega completa por
+marcador y ningún parcial/intercalado aun con reintento. **FAIL:** hash o
+longitud distintos, entrega parcial, mezcla, duplicado no deduplicado o SOS
+bloqueado por tráfico estándar.
+
 ## Matriz mínima
 
 1. Instale HearthBit en dos Android.
@@ -639,6 +821,36 @@ Con dos teléfonos y la malla activa:
    señal): las bandas de distancia deben degradarse, nunca congelar la UI.
 6. Combinaciones requeridas: Android→Android, Android→iPhone (objetivo iOS en
    primer plano y en segundo plano), iPhone→Android.
+
+En Android, el radar o el modo rescate mantienen el escaneo BLE continuo incluso
+con batería al 10 % o menos. Esto prioriza el descubrimiento de emergencia, pero
+puede acelerar considerablemente la descarga; registre el consumo y conecte el
+cargador cuando sea posible. El rol explícito `PHONE_BEACON` conserva su modo de
+supervivencia sin escaneo.
+
+### P0-SONAR-NOISE-01 — Escucha acústica con ruido y ecos
+
+Requiere Android e iPhone, cinta métrica y una fuente de música o voz:
+
+1. Conceda micrófono en ambos teléfonos, desconecte auriculares Bluetooth y
+   coloque los dispositivos descubiertos a 1, 3, 5 y 10 m.
+2. Mida tres veces en silencio y registre distancia, error y confianza.
+3. Repita con conversación y música grave a volumen normal junto a uno de los
+   teléfonos. Deben completarse al menos dos rondas válidas de cinco intentos,
+   sin mostrar distancias fuera del margen declarado.
+4. Coloque uno de los teléfonos a 30–50 cm de una pared para provocar eco. El
+   eco posterior a la señal local no debe reemplazar la señal remota.
+5. Cubra el altavoz local o conecte auriculares Bluetooth. La app debe indicar
+   que falta la señal propia, no confundirlo con ruido ambiental.
+6. Quite el permiso de micrófono primero al iniciador y luego al receptor. El
+   iniciador debe ofrecer abrir ajustes; cuando falla el receptor, el otro
+   teléfono debe informar que el permiso remoto no fue concedido.
+7. Repita con una versión anterior en un extremo. La sesión debe iniciar por el
+   fallback de 1,5 s aunque no reciba `acousticReady`.
+
+Criterio P0: ninguna ejecución puede producir una distancia válida a partir de
+un eco, ni quedar activa más de 25 s. Compare tasa de éxito, error absoluto y
+confianza con la compilación anterior.
 
 ## Evidencia a registrar
 

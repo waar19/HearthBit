@@ -18,6 +18,17 @@ class EmergencyDirectory {
     'FR',
     'CN',
     'JP',
+    'CL',
+    'PE',
+    'EC',
+    'ID',
+    'PH',
+    'TR',
+    'GT',
+    'NP',
+    'IT',
+    'TW',
+    'NZ',
   };
 
   final int schemaVersion;
@@ -75,7 +86,7 @@ class EmergencyDirectory {
     if (sourceIds.length != sources.length) {
       throw const FormatException('Source IDs must be unique');
     }
-    final countries = _objects(json, 'countries', maxLength: 20)
+    final countries = _objects(json, 'countries', maxLength: 24)
         .map(
           (country) =>
               EmergencyCountry.fromJson(country, allowedSourceIds: sourceIds),

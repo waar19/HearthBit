@@ -28,7 +28,10 @@ void main() {
   });
 
   test('does not export messages, identities, keys, coordinates or errors', () {
-    final log = DiagnosticsLog(persist: false);
+    final log = DiagnosticsLog(
+      persist: false,
+      clock: () => DateTime.utc(2026, 8, 13, 12),
+    );
     log.error(
       'flutter uncaught',
       error: _SensitiveError(),
@@ -41,6 +44,9 @@ void main() {
         'peerId': 'alice',
         'latitude': 4.6,
         'keyMaterial': 'secret',
+        'macAddress': 'AA:BB:CC:DD:EE:FF',
+        'senderId': 'sender-sensitive',
+        'recipient': '+56912345678',
         'status': 'degraded',
       },
     );
@@ -53,6 +59,9 @@ void main() {
     expect(exported, isNot(contains('alice')));
     expect(exported, isNot(contains('4.6')));
     expect(exported, isNot(contains('secret')));
+    expect(exported, isNot(contains('AA:BB')));
+    expect(exported, isNot(contains('sender-sensitive')));
+    expect(exported, isNot(contains('+569')));
     expect(exported, isNot(contains('Users/person')));
   });
 

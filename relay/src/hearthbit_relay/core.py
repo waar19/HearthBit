@@ -14,8 +14,10 @@ from .identity import (
 )
 from .link import RelayLink
 from .protocol import (
+    EMERGENCY_ACK_RETENTION_SECONDS,
     EPHEMERAL_MESSAGE_TYPES,
     TYPE_ANNOUNCE,
+    TYPE_EMERGENCY_ACK,
     TYPE_FRAGMENT,
     TYPE_MESSAGE,
     TYPE_NOISE_HANDSHAKE,
@@ -25,6 +27,7 @@ from .protocol import (
     PacketError,
     courier_expiry_ms,
     decode_packet,
+    is_storable_emergency_ack,
     legacy_relay_fingerprint,
     relay_fingerprint,
 )
@@ -72,6 +75,7 @@ class RelayCore:
         *,
         trust_store: TrustStore | None = None,
         monotonic: Callable[[], float] | None = None,
+        announcement_clock_ms: Callable[[], int] | None = None,
     ) -> None:
         self.config = config
         self.store = store
@@ -84,6 +88,7 @@ class RelayCore:
         self._reassembler = FragmentReassembler()
         self._buckets: dict[tuple[str, bytes], _TokenBucket] = {}
         self._monotonic = monotonic or time.monotonic
+        self._announcement_clock_ms = announcement_clock_ms or _now_ms
 
     async def start(self) -> None:
         if self.identity is None or self._presence_task is not None:
@@ -257,7 +262,10 @@ class RelayCore:
         can_store = True
         async with self._identity_lock:
             if packet.message_type == TYPE_ANNOUNCE:
-                announcement = validate_announcement(packet)
+                announcement = validate_announcement(
+                    packet,
+                    now_ms=self._announcement_clock_ms(),
+                )
                 if announcement is None:
                     LOGGER.warning("invalid ANNOUNCE identity from %s", source_id)
                     return "invalid-announce", False
@@ -370,8 +378,20 @@ class RelayCore:
             return False
         if policy.require_signature and not packet.has_signature:
             return False
+        if (
+            packet.message_type == TYPE_EMERGENCY_ACK
+            and not is_storable_emergency_ack(packet)
+        ):
+            return False
 
         expires_at = now_ms + policy.packet_ttl_seconds * 1000
+        if packet.message_type == TYPE_EMERGENCY_ACK:
+            ack_window_ms = EMERGENCY_ACK_RETENTION_SECONDS * 1000
+            expires_at = min(
+                expires_at,
+                now_ms + ack_window_ms,
+                packet.timestamp_ms + ack_window_ms,
+            )
         courier_expiry = courier_expiry_ms(packet)
         if courier_expiry is not None:
             expires_at = min(expires_at, courier_expiry)
@@ -410,7 +430,7 @@ class RelayCore:
             capacity=sender_capacity,
         ):
             return False
-        if source_id.startswith(("mqtt:", "matrix:")):
+        if source_id.startswith(("mqtt:", "matrix:", "reticulum:")):
             return self._consume_bucket(
                 (
                     "bridge-emergency" if emergency else "bridge",
@@ -418,12 +438,12 @@ class RelayCore:
                 ),
                 now=now,
                 rate=(
-                    policy.emergency_rate_per_second
+                    policy.bridge_emergency_rate_per_second
                     if emergency
                     else policy.bridge_rate_per_second
                 ),
                 capacity=(
-                    policy.emergency_burst
+                    policy.bridge_emergency_burst
                     if emergency
                     else policy.bridge_burst
                 ),

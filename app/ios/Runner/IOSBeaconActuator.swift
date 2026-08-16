@@ -34,7 +34,11 @@ final class IOSBeaconActuator {
 
   @discardableResult
   func start(flags: UInt8, expiresAt: UInt64, onExpired: @escaping () -> Void) -> Bool {
-    precondition(Thread.isMainThread)
+    if !Thread.isMainThread {
+      return DispatchQueue.main.sync {
+        self.start(flags: flags, expiresAt: expiresAt, onExpired: onExpired)
+      }
+    }
     let now = UInt64(Date().timeIntervalSince1970 * 1000)
     guard
       UIApplication.shared.applicationState == .active,
@@ -42,14 +46,21 @@ final class IOSBeaconActuator {
       flags & ~IOSBeaconControlProtocol.allowedFlags == 0,
       expiresAt > now,
       expiresAt <= now + IOSBeaconControlProtocol.maximumDurationMilliseconds
-    else { return false }
+    else {
+      stop()
+      return false
+    }
     let hasTorch = flags & IOSBeaconControlProtocol.flashFlag != 0 &&
       AVCaptureDevice.default(for: .video)?.hasTorch == true
     let hasSound = flags & IOSBeaconControlProtocol.soundFlag != 0
     let hasHaptics = flags & IOSBeaconControlProtocol.vibrateFlag != 0
-    guard hasTorch || hasSound || hasHaptics else { return false }
+    guard hasTorch || hasSound || hasHaptics else {
+      stop()
+      return false
+    }
 
     stop()
+    UIApplication.shared.isIdleTimerDisabled = true
     self.flags = flags
     self.expiresAt = expiresAt
     expiration = onExpired
@@ -63,7 +74,10 @@ final class IOSBeaconActuator {
   }
 
   func stop() {
-    precondition(Thread.isMainThread)
+    if !Thread.isMainThread {
+      DispatchQueue.main.sync { self.stop() }
+      return
+    }
     pulseTimer?.invalidate()
     expiryTimer?.invalidate()
     pulseTimer = nil
@@ -72,6 +86,7 @@ final class IOSBeaconActuator {
     flags = 0
     expiresAt = 0
     expiration = nil
+    UIApplication.shared.isIdleTimerDisabled = false
   }
 
   private func scheduleNextPulse() {

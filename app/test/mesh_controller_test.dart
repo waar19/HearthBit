@@ -7,6 +7,7 @@ import 'package:shared_preferences_platform_interface/shared_preferences_async_p
 
 import 'package:hearth_bit/controllers/mesh_controller.dart';
 import 'package:hearth_bit/models/mesh_models.dart';
+import 'package:hearth_bit/services/acoustic_sos.dart';
 import 'package:hearth_bit/services/app_preferences.dart';
 import 'package:hearth_bit/services/mesh_platform_service.dart';
 import 'package:hearth_bit/services/message_repository.dart';
@@ -24,6 +25,8 @@ class _FakePlatform extends MeshPlatformService {
   final List<({String requestId, bool accept})> beaconResponses = [];
   int panicWipeCalls = 0;
   final List<String> nodeRoles = [];
+  final List<String> retryEmergencyCalls = [];
+  String? retryEmergencyResult;
   final List<({String content, String? channel})> publicMessages = [];
   final List<({String peerId, String content, String? messageId})>
   privateMessages = [];
@@ -35,6 +38,7 @@ class _FakePlatform extends MeshPlatformService {
   Completer<String>? privateMessageGate;
   NativeRescueState rescueState = const NativeRescueState(active: false);
   final List<bool> rescueConfigurations = [];
+  final List<Uint8List> emergencyLanFrames = [];
 
   void emit(Map<Object?, Object?> event) => _controller.add(event);
 
@@ -139,11 +143,23 @@ class _FakePlatform extends MeshPlatformService {
     return EmergencyTransmission(
       messageId: messageId,
       canonicalHash: messageId.hashCode.toRadixString(16).padLeft(64, '0'),
+      announcementFrame: channel == 'sos'
+          ? Uint8List.fromList([1, 2, 3])
+          : null,
+      messageFrame: channel == 'sos' ? Uint8List.fromList([4, 5, 6]) : null,
     );
   }
 
   @override
-  Future<bool> retryEmergency(String canonicalHash) async => true;
+  Future<String?> retryEmergency(String canonicalHash) async {
+    retryEmergencyCalls.add(canonicalHash);
+    return retryEmergencyResult;
+  }
+
+  @override
+  Future<void> injectEmergencyLanFrame(Uint8List frame) async {
+    emergencyLanFrames.add(Uint8List.fromList(frame));
+  }
 
   @override
   Future<Map<Object?, Object?>> getPowerStatus() async => {
@@ -153,6 +169,23 @@ class _FakePlatform extends MeshPlatformService {
     'batteryLevel': 14,
     'adaptivePowerSaving': true,
     'powerProfile': 'critical',
+  };
+
+  @override
+  Future<Map<Object?, Object?>> getMeshDiagnostics() async => {
+    'platform': 'android',
+    'advertising': true,
+    'meshScanActive': true,
+    'genericScanActive': false,
+    'genericScanEnabled': true,
+    'batteryLevel': 13,
+    'powerProfile': 'powerSaver',
+    'adaptivePowerSaving': true,
+    'bleDutyCyclePercent': 27,
+    'activeScans': 1,
+    'scanStarts': 8,
+    'storeForwardEntries': 3,
+    'transports': ['ble', 'lan', 'ble'],
   };
 
   @override
@@ -218,6 +251,8 @@ class _FakeRepository extends MessageRepository {
   final List<MeshPeer> knownPeers = [];
   final List<PendingPrivateMessage> outbox = [];
   final List<EmergencyDelivery> emergencyOutbox = [];
+  final Map<String, String> emergencyAttemptLocalIds = {};
+  int acknowledgementMisses = 0;
 
   @override
   Future<List<MeshMessage>> load() async => List.of(loaded);
@@ -269,6 +304,8 @@ class _FakeRepository extends MessageRepository {
   @override
   Future<void> insertEmergencyDelivery(EmergencyDelivery delivery) async {
     emergencyOutbox.add(delivery);
+    final hash = delivery.canonicalHash;
+    if (hash != null) emergencyAttemptLocalIds[hash] = delivery.localId;
   }
 
   @override
@@ -277,6 +314,8 @@ class _FakeRepository extends MessageRepository {
       (item) => item.localId == delivery.localId,
     );
     if (index >= 0) emergencyOutbox[index] = delivery;
+    final hash = delivery.canonicalHash;
+    if (hash != null) emergencyAttemptLocalIds[hash] = delivery.localId;
   }
 
   @override
@@ -301,9 +340,12 @@ class _FakeRepository extends MessageRepository {
     required String peerId,
     required DateTime acknowledgedAt,
   }) async {
-    final index = emergencyOutbox.indexWhere(
-      (item) => item.canonicalHash == canonicalHash,
-    );
+    if (acknowledgementMisses > 0) {
+      acknowledgementMisses -= 1;
+      return null;
+    }
+    final localId = emergencyAttemptLocalIds[canonicalHash];
+    final index = emergencyOutbox.indexWhere((item) => item.localId == localId);
     if (index < 0) return null;
     final delivery = emergencyOutbox[index];
     emergencyOutbox[index] = delivery.copyWith(
@@ -319,6 +361,7 @@ class _FakeRepository extends MessageRepository {
     knownPeers.clear();
     outbox.clear();
     emergencyOutbox.clear();
+    emergencyAttemptLocalIds.clear();
   }
 
   @override
@@ -329,11 +372,55 @@ class _FakeRepository extends MessageRepository {
   }
 }
 
+class _FakeAcousticSos implements AcousticSosTransportPort {
+  List<Uint8List> broadcastFrames = const [];
+  Future<void> Function(Uint8List frame)? receiver;
+
+  @override
+  bool broadcasting = false;
+  @override
+  bool listening = false;
+
+  @override
+  Future<bool> startBroadcast(List<Uint8List> signedEmergencyFrames) async {
+    broadcastFrames = signedEmergencyFrames
+        .map(Uint8List.fromList)
+        .toList(growable: false);
+    broadcasting = true;
+    return true;
+  }
+
+  @override
+  Future<void> stopBroadcast() async {
+    broadcasting = false;
+    broadcastFrames = const [];
+  }
+
+  @override
+  Future<bool> startListening(
+    Future<void> Function(Uint8List frame) onFrame,
+  ) async {
+    receiver = onFrame;
+    listening = true;
+    return true;
+  }
+
+  @override
+  Future<void> stopListening() async {
+    receiver = null;
+    listening = false;
+  }
+
+  @override
+  Future<void> dispose() async {}
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late _FakePlatform platform;
   late _FakeRepository repository;
+  late _FakeAcousticSos acousticSos;
   late MeshController controller;
 
   setUp(() async {
@@ -341,7 +428,12 @@ void main() {
         InMemorySharedPreferencesAsync.empty();
     platform = _FakePlatform();
     repository = _FakeRepository();
-    controller = MeshController(platform: platform, repository: repository);
+    acousticSos = _FakeAcousticSos();
+    controller = MeshController(
+      platform: platform,
+      repository: repository,
+      acousticSos: acousticSos,
+    );
     await controller.initialize();
   });
 
@@ -377,6 +469,22 @@ void main() {
       ],
     };
   }
+
+  test('expone un diagnóstico agregado sin identidades de peers', () async {
+    await controller.refreshDiagnostics();
+    expect(controller.platformName, 'android');
+    expect(controller.meshAdvertising, isTrue);
+    expect(controller.meshScanActive, isTrue);
+    expect(controller.genericScanActive, isFalse);
+    expect(controller.genericScanEnabled, isTrue);
+    expect(controller.batteryLevel, 13);
+    expect(controller.powerProfile, MeshPowerProfile.powerSaver);
+    expect(controller.bleDutyCyclePercent, 27);
+    expect(controller.activeBleScans, 1);
+    expect(controller.scanStarts, 8);
+    expect(controller.storeForwardEntries, 3);
+    expect(controller.activeTransports, {'ble', 'lan'});
+  });
 
   test('un evento inválido no cancela los eventos posteriores', () async {
     platform.emit({
@@ -944,7 +1052,17 @@ void main() {
       expect(platform.sosCalls, 1);
       expect(
         platform.radarConsentCalls,
-        contains((enabled: true, minutes: 10)),
+        contains((enabled: true, minutes: 30)),
+      );
+      expect(
+        platform.radarConsentCalls
+            .where((call) => call.enabled)
+            .map((call) => call.minutes),
+        everyElement(30),
+      );
+      expect(
+        platform.radarConsentCalls.where((call) => call.enabled).length,
+        2,
       );
       expect(controller.lastRescuePing, isNotNull);
       expect(platform.rescueConfigurations.last, isTrue);
@@ -955,6 +1073,60 @@ void main() {
       expect(platform.rescueConfigurations.last, isFalse);
     },
   );
+
+  test('SOS conserva frames firmados para retransmisión por QR', () async {
+    await controller.setRescueMode(
+      true,
+      description: 'Estoy atrapado',
+      locationPrecision: SosLocationPrecision.none,
+    );
+
+    final qr = controller.latestSosQr;
+    expect(qr, isNotNull);
+    expect(qr!.announcementFrame, [1, 2, 3]);
+    expect(qr.messageFrame, [4, 5, 6]);
+    expect(qr.fallbackText, contains('Estoy atrapado'));
+    expect(qr.fallbackText, contains(controller.peerId));
+
+    await controller.setRescueMode(false);
+    expect(controller.latestSosQr, isNull);
+  });
+
+  test('baliza emite SOS firmado y la escucha lo reinyecta', () async {
+    await controller.setRescueMode(
+      true,
+      description: 'Necesito rescate',
+      locationPrecision: SosLocationPrecision.none,
+    );
+    await controller.startLocalBeacon();
+
+    expect(controller.acousticSosBroadcasting, isTrue);
+    expect(acousticSos.broadcastFrames, [
+      [1, 2, 3],
+      [4, 5, 6],
+    ]);
+    platform.emit({
+      'type': 'emergencyTransport',
+      'channels': <String>['ble', 'wifiDirect'],
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    });
+    await pumpEvents();
+    expect(
+      controller.emergencyChannelsUsed,
+      containsAll(<String>['qr', 'audio', 'ble', 'wifiDirect']),
+    );
+
+    expect(await controller.startAcousticSosListening(), isTrue);
+    await acousticSos.receiver?.call(Uint8List.fromList([9, 8, 7]));
+    expect(platform.emergencyLanFrames, [
+      [9, 8, 7],
+    ]);
+
+    await controller.stopLocalBeacon();
+    await controller.stopAcousticSosListening();
+    expect(controller.acousticSosBroadcasting, isFalse);
+    expect(controller.acousticSosListening, isFalse);
+  });
 
   test('restaura modo rescate vigente después de reiniciar Flutter', () async {
     final now = DateTime.now();
@@ -1254,6 +1426,73 @@ void main() {
     final acknowledged = controller.emergencyDeliveries.single;
     expect(acknowledged.state, EmergencyDeliveryState.acknowledged);
     expect(acknowledged.confirmationCount, 1);
+  });
+
+  test('reintenta una vez el ACK que se adelanta a la persistencia', () async {
+    platform.emit({
+      'type': 'status',
+      'status': 'active',
+      'role': 'PHONE_RELAY',
+    });
+    await pumpEvents();
+    await controller.sendSos('Ayuda');
+    final delivery = controller.emergencyDeliveries.single;
+    repository.acknowledgementMisses = 1;
+
+    platform.emit({
+      'type': 'emergencyAck',
+      'canonicalHash': delivery.canonicalHash,
+      'peerId': 'peer-racing',
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    await pumpEvents();
+
+    expect(
+      controller.emergencyDeliveries.single.state,
+      EmergencyDeliveryState.acknowledged,
+    );
+  });
+
+  test('reintento de SOS conserva el nuevo hash nativo', () async {
+    platform.emit({
+      'type': 'status',
+      'status': 'active',
+      'role': 'PHONE_RELAY',
+    });
+    await pumpEvents();
+    await controller.sendSos('Ayuda');
+    final original = controller.emergencyDeliveries.single;
+    final originalHash = original.canonicalHash;
+    const retryHash =
+        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    platform.retryEmergencyResult = retryHash;
+
+    await controller.retryEmergency(original.localId);
+
+    final retried = controller.emergencyDeliveries.single;
+    expect(platform.retryEmergencyCalls, [originalHash]);
+    expect(retried.canonicalHash, retryHash);
+    expect(repository.emergencyOutbox.single.canonicalHash, retryHash);
+    expect(platform.sosCalls, 1);
+
+    platform.emit({
+      'type': 'emergencyAck',
+      'canonicalHash': originalHash,
+      'peerId': 'peer-old-attempt',
+    });
+    platform.emit({
+      'type': 'emergencyAck',
+      'canonicalHash': retryHash,
+      'peerId': 'peer-new-attempt',
+    });
+    await pumpEvents();
+    await pumpEvents();
+
+    expect(
+      controller.emergencyDeliveries.single.state,
+      EmergencyDeliveryState.acknowledged,
+    );
+    expect(controller.emergencyDeliveries.single.confirmationCount, 2);
   });
 
   test('el borrado de pánico elimina el consentimiento local', () async {

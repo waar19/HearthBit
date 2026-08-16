@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "locale": "es",
-  "reviewedAt": "2026-08-13",
+  "reviewedAt": "2026-08-15",
   "disclaimer": "Usa estos contactos solo en el país indicado. Los números y su disponibilidad pueden cambiar. Ante peligro inmediato, sigue a las autoridades locales y al operador. Las líneas administrativas y de Cruz Roja no sustituyen el despacho de emergencias.",
   "countries": [
     {
@@ -13,7 +13,8 @@
       ],
       "organizations": [
         {"id": "ifrc", "kind": "red-cross", "name": "Federación Internacional de Sociedades de la Cruz Roja y de la Media Luna Roja", "phone": null, "url": "https://www.ifrc.org/where-we-work", "note": "Busca la sociedad de Cruz Roja o Media Luna Roja del país donde estás.", "sourceIds": ["ifrc-directory"]},
-        {"id": "family-links", "kind": "missing-persons", "name": "Restablecimiento del Contacto entre Familiares", "phone": null, "url": "https://familylinks.icrc.org/", "note": "Servicio internacional para familias separadas por conflictos, desastres o migración.", "sourceIds": ["icrc-family-links"]}
+        {"id": "family-links", "kind": "missing-persons", "name": "Restablecimiento del Contacto entre Familiares", "phone": null, "url": "https://familylinks.icrc.org/", "note": "Servicio internacional para familias separadas por conflictos, desastres o migración.", "sourceIds": ["icrc-family-links"]},
+        {"id": "sismo-detector", "kind": "disaster-management", "name": "Sismo Detector / Earthquake Network", "phone": null, "url": "https://sismo.app/", "note": "Red colaborativa de alerta temprana. Es un complemento de terceros: requiere internet y no sustituye las alertas oficiales.", "sourceIds": ["sismo-detector"]}
       ]
     },
     {
@@ -125,6 +126,137 @@
         {"id": "jrcs", "kind": "red-cross", "name": "日本赤十字社 (Cruz Roja Japonesa)", "phone": "+81334381311", "url": "https://www.jrc.or.jp/english/", "note": "Contacto general e información humanitaria; usa 110 o 119 ante peligro.", "sourceIds": ["jp-red-cross"]},
         {"id": "jp-family", "kind": "missing-persons", "name": "Cruz Roja Japonesa — contacto familiar tras desastres", "phone": null, "url": "https://www.jrc.or.jp/english/relief/2024NotoPeninsulaEarthquake.html", "note": "Orienta hacia la prefectura y autoridades responsables; los casos urgentes van a policía en 110.", "sourceIds": ["jp-family"]}
       ]
+    },
+    {
+      "code": "CL", "name": "Chile",
+      "callingNote": "Usa estos números únicamente dentro de Chile. Para peligro inmediato llama al servicio adecuado y sigue a las autoridades locales.",
+      "numbers": [
+        {"id": "cl-131", "kind": "medical", "label": "Emergencias médicas", "number": "131", "note": "Línea oficial para Emergencias médicas. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["cl-emergency"]},
+        {"id": "cl-132", "kind": "fire", "label": "Bomberos y rescate", "number": "132", "note": "Línea oficial para Bomberos y rescate. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["cl-emergency"]},
+        {"id": "cl-133", "kind": "police", "label": "Policía", "number": "133", "note": "Línea oficial para Policía. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["cl-emergency"]}
+      ],
+      "organizations": [
+        {"id": "senapred", "kind": "disaster-management", "name": "SENAPRED", "phone": null, "url": "https://www.senapred.gob.cl/", "note": "Información oficial de sismos y gestión de desastres; no sustituye una llamada de emergencia.", "sourceIds": ["cl-senapred"]}
+      ]
+    },
+    {
+      "code": "PE", "name": "Perú",
+      "callingNote": "Usa estos números únicamente dentro de Perú. Para peligro inmediato llama al servicio adecuado y sigue a las autoridades locales.",
+      "numbers": [
+        {"id": "pe-105", "kind": "police", "label": "Policía", "number": "105", "note": "Línea oficial para Policía. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["pe-emergency"]},
+        {"id": "pe-106", "kind": "medical", "label": "Emergencias médicas", "number": "106", "note": "Línea oficial para Emergencias médicas. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["pe-emergency"]},
+        {"id": "pe-115", "kind": "general", "label": "Emergencias generales", "number": "115", "note": "Línea oficial para Emergencias generales. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["pe-emergency"]},
+        {"id": "pe-116", "kind": "fire", "label": "Bomberos y rescate", "number": "116", "note": "Línea oficial para Bomberos y rescate. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["pe-emergency"]}
+      ],
+      "organizations": [
+        {"id": "indeci", "kind": "disaster-management", "name": "INDECI", "phone": null, "url": "https://www.gob.pe/indeci", "note": "Información oficial de sismos y gestión de desastres; no sustituye una llamada de emergencia.", "sourceIds": ["pe-indeci"]}
+      ]
+    },
+    {
+      "code": "EC", "name": "Ecuador",
+      "callingNote": "Usa estos números únicamente dentro de Ecuador. Para peligro inmediato llama al servicio adecuado y sigue a las autoridades locales.",
+      "numbers": [
+        {"id": "ec-911", "kind": "general", "label": "Emergencias generales", "number": "911", "note": "Línea oficial para Emergencias generales. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["ec-emergency"]}
+      ],
+      "organizations": [
+        {"id": "igepn", "kind": "disaster-management", "name": "Instituto Geofísico — EPN", "phone": null, "url": "https://www.igepn.edu.ec/", "note": "Información oficial de sismos y gestión de desastres; no sustituye una llamada de emergencia.", "sourceIds": ["ec-igepn"]}
+      ]
+    },
+    {
+      "code": "ID", "name": "Indonesia",
+      "callingNote": "Usa estos números únicamente dentro de Indonesia. Para peligro inmediato llama al servicio adecuado y sigue a las autoridades locales.",
+      "numbers": [
+        {"id": "id-112", "kind": "general", "label": "Emergencias generales", "number": "112", "note": "Línea oficial para Emergencias generales. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["id-emergency"]},
+        {"id": "id-110", "kind": "police", "label": "Policía", "number": "110", "note": "Línea oficial para Policía. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["id-emergency"]},
+        {"id": "id-113", "kind": "fire", "label": "Bomberos y rescate", "number": "113", "note": "Línea oficial para Bomberos y rescate. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["id-emergency"]},
+        {"id": "id-119", "kind": "medical", "label": "Emergencias médicas", "number": "119", "note": "Línea oficial para Emergencias médicas. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["id-emergency"]}
+      ],
+      "organizations": [
+        {"id": "bmkg", "kind": "disaster-management", "name": "BMKG", "phone": null, "url": "https://www.bmkg.go.id/gempabumi", "note": "Información oficial de sismos y gestión de desastres; no sustituye una llamada de emergencia.", "sourceIds": ["id-bmkg"]},
+        {"id": "bnpb", "kind": "disaster-management", "name": "BNPB", "phone": null, "url": "https://www.bnpb.go.id/", "note": "Información oficial de sismos y gestión de desastres; no sustituye una llamada de emergencia.", "sourceIds": ["id-bnpb"]}
+      ]
+    },
+    {
+      "code": "PH", "name": "Filipinas",
+      "callingNote": "Usa estos números únicamente dentro de Filipinas. Para peligro inmediato llama al servicio adecuado y sigue a las autoridades locales.",
+      "numbers": [
+        {"id": "ph-911", "kind": "general", "label": "Emergencias generales", "number": "911", "note": "Línea oficial para Emergencias generales. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["ph-emergency"]}
+      ],
+      "organizations": [
+        {"id": "phivolcs", "kind": "disaster-management", "name": "DOST-PHIVOLCS", "phone": null, "url": "https://www.phivolcs.dost.gov.ph/", "note": "Información oficial de sismos y gestión de desastres; no sustituye una llamada de emergencia.", "sourceIds": ["ph-phivolcs"]},
+        {"id": "ndrrmc", "kind": "disaster-management", "name": "NDRRMC", "phone": null, "url": "https://ndrrmc.gov.ph/", "note": "Información oficial de sismos y gestión de desastres; no sustituye una llamada de emergencia.", "sourceIds": ["ph-ndrrmc"]}
+      ]
+    },
+    {
+      "code": "TR", "name": "Turquía",
+      "callingNote": "Usa estos números únicamente dentro de Turquía. Para peligro inmediato llama al servicio adecuado y sigue a las autoridades locales.",
+      "numbers": [
+        {"id": "tr-112", "kind": "general", "label": "Emergencias generales", "number": "112", "note": "Línea oficial para Emergencias generales. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["tr-emergency"]}
+      ],
+      "organizations": [
+        {"id": "afad", "kind": "disaster-management", "name": "AFAD", "phone": null, "url": "https://www.afad.gov.tr/afad-acil-mobil-uygulamasi-afet-ve-acil-durumlarda-daima-yaninda", "note": "Información oficial de sismos y gestión de desastres; no sustituye una llamada de emergencia.", "sourceIds": ["tr-afad"]}
+      ]
+    },
+    {
+      "code": "GT", "name": "Guatemala",
+      "callingNote": "Usa estos números únicamente dentro de Guatemala. Para peligro inmediato llama al servicio adecuado y sigue a las autoridades locales.",
+      "numbers": [
+        {"id": "gt-110", "kind": "police", "label": "Policía", "number": "110", "note": "Línea oficial para Policía. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["gt-emergency"]},
+        {"id": "gt-119", "kind": "general", "label": "Emergencias generales", "number": "119", "note": "Línea oficial para Emergencias generales. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["gt-emergency"]},
+        {"id": "gt-122", "kind": "fire", "label": "Bomberos y rescate", "number": "122", "note": "Línea oficial para Bomberos y rescate. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["gt-emergency"]},
+        {"id": "gt-123", "kind": "fire", "label": "Bomberos y rescate", "number": "123", "note": "Línea oficial para Bomberos y rescate. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["gt-emergency"]},
+        {"id": "gt-125", "kind": "medical", "label": "Emergencias médicas", "number": "125", "note": "Línea oficial para Emergencias médicas. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["gt-emergency"]}
+      ],
+      "organizations": [
+        {"id": "conred", "kind": "disaster-management", "name": "CONRED", "phone": null, "url": "https://conred.gob.gt/", "note": "Información oficial de sismos y gestión de desastres; no sustituye una llamada de emergencia.", "sourceIds": ["gt-conred"]}
+      ]
+    },
+    {
+      "code": "NP", "name": "Nepal",
+      "callingNote": "Usa estos números únicamente dentro de Nepal. Para peligro inmediato llama al servicio adecuado y sigue a las autoridades locales.",
+      "numbers": [
+        {"id": "np-100", "kind": "police", "label": "Policía", "number": "100", "note": "Línea oficial para Policía. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["np-emergency"]},
+        {"id": "np-101", "kind": "fire", "label": "Bomberos y rescate", "number": "101", "note": "Línea oficial para Bomberos y rescate. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["np-emergency"]},
+        {"id": "np-102", "kind": "medical", "label": "Emergencias médicas", "number": "102", "note": "Línea oficial para Emergencias médicas. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["np-emergency"]},
+        {"id": "np-1234", "kind": "general", "label": "Emergencias generales", "number": "1234", "note": "Línea oficial para Emergencias generales. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["np-emergency"]}
+      ],
+      "organizations": [
+        {"id": "bipad", "kind": "disaster-management", "name": "BIPAD Disaster Risk Reduction Portal", "phone": null, "url": "https://bipadportal.gov.np/", "note": "Información oficial de sismos y gestión de desastres; no sustituye una llamada de emergencia.", "sourceIds": ["np-bipad"]}
+      ]
+    },
+    {
+      "code": "IT", "name": "Italia",
+      "callingNote": "Usa estos números únicamente dentro de Italia. Para peligro inmediato llama al servicio adecuado y sigue a las autoridades locales.",
+      "numbers": [
+        {"id": "it-112", "kind": "general", "label": "Emergencias generales", "number": "112", "note": "Línea oficial para Emergencias generales. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["it-emergency"]}
+      ],
+      "organizations": [
+        {"id": "it-civil-protection", "kind": "disaster-management", "name": "Dipartimento della Protezione Civile", "phone": null, "url": "https://www.protezionecivile.gov.it/", "note": "Información oficial de sismos y gestión de desastres; no sustituye una llamada de emergencia.", "sourceIds": ["it-civil"]},
+        {"id": "ingv", "kind": "disaster-management", "name": "INGV Terremoti", "phone": null, "url": "https://play.google.com/store/apps/details?id=it.ingv.terremoti", "note": "Información oficial de sismos y gestión de desastres; no sustituye una llamada de emergencia.", "sourceIds": ["it-ingv"]}
+      ]
+    },
+    {
+      "code": "TW", "name": "Taiwán",
+      "callingNote": "Usa estos números únicamente dentro de Taiwán. Para peligro inmediato llama al servicio adecuado y sigue a las autoridades locales.",
+      "numbers": [
+        {"id": "tw-110", "kind": "police", "label": "Policía", "number": "110", "note": "Línea oficial para Policía. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["tw-emergency"]},
+        {"id": "tw-119", "kind": "medical", "label": "Emergencias médicas", "number": "119", "note": "Línea oficial para Emergencias médicas. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["tw-emergency"]},
+        {"id": "tw-112", "kind": "general", "label": "Emergencias generales", "number": "112", "note": "Línea oficial para Emergencias generales. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["tw-emergency"]}
+      ],
+      "organizations": [
+        {"id": "cwa", "kind": "disaster-management", "name": "Central Weather Administration", "phone": null, "url": "https://scweb.cwa.gov.tw/en-us/", "note": "Información oficial de sismos y gestión de desastres; no sustituye una llamada de emergencia.", "sourceIds": ["tw-cwa"]}
+      ]
+    },
+    {
+      "code": "NZ", "name": "Nueva Zelanda",
+      "callingNote": "Usa estos números únicamente dentro de Nueva Zelanda. Para peligro inmediato llama al servicio adecuado y sigue a las autoridades locales.",
+      "numbers": [
+        {"id": "nz-111", "kind": "general", "label": "Emergencias generales", "number": "111", "note": "Línea oficial para Emergencias generales. La cobertura puede variar; indica tu ubicación exacta.", "sourceIds": ["nz-emergency"]}
+      ],
+      "organizations": [
+        {"id": "nema", "kind": "disaster-management", "name": "National Emergency Management Agency", "phone": null, "url": "https://www.civildefence.govt.nz/", "note": "Información oficial de sismos y gestión de desastres; no sustituye una llamada de emergencia.", "sourceIds": ["nz-nema"]},
+        {"id": "geonet", "kind": "disaster-management", "name": "GeoNet", "phone": null, "url": "https://www.geonet.org.nz/", "note": "Información oficial de sismos y gestión de desastres; no sustituye una llamada de emergencia.", "sourceIds": ["nz-geonet"]}
+      ]
     }
   ],
   "sources": [
@@ -162,6 +294,33 @@
     {"id": "jp-emergency", "title": "Llamadas de emergencia", "publisher": "Agencia de Servicios de Inmigración de Japón", "url": "https://www.moj.go.jp/isa/content/001453712.pdf", "accessed": "2026-08-13"},
     {"id": "jp-disaster", "title": "Gestión de desastres", "publisher": "Gabinete de Japón", "url": "https://www.bousai.go.jp/index-e.html", "accessed": "2026-08-13"},
     {"id": "jp-red-cross", "title": "Cruz Roja Japonesa", "publisher": "Cruz Roja Japonesa", "url": "https://www.jrc.or.jp/english/about/glance/", "accessed": "2026-08-13"},
-    {"id": "jp-family", "title": "Información para quienes perdieron contacto familiar", "publisher": "Cruz Roja Japonesa", "url": "https://www.jrc.or.jp/english/relief/2024NotoPeninsulaEarthquake.html", "accessed": "2026-08-13"}
+    {"id": "jp-family", "title": "Información para quienes perdieron contacto familiar", "publisher": "Cruz Roja Japonesa", "url": "https://www.jrc.or.jp/english/relief/2024NotoPeninsulaEarthquake.html", "accessed": "2026-08-13"},
+    {"id": "cl-emergency", "title": "Emergency numbers in Chile", "publisher": "Government of Chile", "url": "https://www.consulado.gob.cl/emergencias-en-chile", "accessed": "2026-08-15"},
+    {"id": "cl-senapred", "title": "SENAPRED", "publisher": "SENAPRED", "url": "https://www.senapred.gob.cl/", "accessed": "2026-08-15"},
+    {"id": "pe-emergency", "title": "Emergency telephone numbers", "publisher": "Government of Peru", "url": "https://www.gob.pe/547-telefonos-de-emergencia", "accessed": "2026-08-15"},
+    {"id": "pe-indeci", "title": "National Institute of Civil Defence", "publisher": "INDECI", "url": "https://www.gob.pe/indeci", "accessed": "2026-08-15"},
+    {"id": "ec-emergency", "title": "Integrated Security Service ECU 911", "publisher": "ECU 911", "url": "https://www.ecu911.gob.ec/servicio-integrado-de-seguridad-ecu-911/", "accessed": "2026-08-15"},
+    {"id": "ec-igepn", "title": "Official seismic monitoring", "publisher": "Instituto Geofísico EPN", "url": "https://www.igepn.edu.ec/", "accessed": "2026-08-15"},
+    {"id": "id-emergency", "title": "Emergency Call Service 112", "publisher": "Komdigi Indonesia", "url": "https://layanan112.komdigi.go.id/tentang", "accessed": "2026-08-15"},
+    {"id": "id-bmkg", "title": "Earthquake and tsunami information", "publisher": "BMKG", "url": "https://www.bmkg.go.id/gempabumi", "accessed": "2026-08-15"},
+    {"id": "id-bnpb", "title": "National Disaster Management Agency", "publisher": "BNPB", "url": "https://www.bnpb.go.id/", "accessed": "2026-08-15"},
+    {"id": "ph-emergency", "title": "Philippine emergency hotlines", "publisher": "Government of the Philippines", "url": "https://ehotlines.e.gov.ph/", "accessed": "2026-08-15"},
+    {"id": "ph-phivolcs", "title": "Official earthquake and volcano monitoring", "publisher": "DOST-PHIVOLCS", "url": "https://www.phivolcs.dost.gov.ph/", "accessed": "2026-08-15"},
+    {"id": "ph-ndrrmc", "title": "National disaster management", "publisher": "NDRRMC", "url": "https://ndrrmc.gov.ph/", "accessed": "2026-08-15"},
+    {"id": "tr-emergency", "title": "112 Emergency Call Centre", "publisher": "Ministry of Interior of Türkiye", "url": "https://www.112.gov.tr/tum-acil-numaralar-112de-toplandi-merkezicerik", "accessed": "2026-08-15"},
+    {"id": "tr-afad", "title": "AFAD Emergency mobile application", "publisher": "AFAD", "url": "https://www.afad.gov.tr/afad-acil-mobil-uygulamasi-afet-ve-acil-durumlarda-daima-yaninda", "accessed": "2026-08-15"},
+    {"id": "gt-emergency", "title": "Official emergency numbers", "publisher": "CONRED", "url": "https://conred.gob.gt/temporada-de-lluvias-2022-conozca-los-numeros-de-emergencia/", "accessed": "2026-08-15"},
+    {"id": "gt-conred", "title": "National Coordinator for Disaster Reduction", "publisher": "CONRED", "url": "https://conred.gob.gt/", "accessed": "2026-08-15"},
+    {"id": "np-emergency", "title": "Emergency Services Information", "publisher": "Ncell", "url": "https://www.ncell.com.np/en/individual/emergency-services-information", "accessed": "2026-08-15"},
+    {"id": "np-bipad", "title": "National disaster information portal", "publisher": "Government of Nepal", "url": "https://bipadportal.gov.np/", "accessed": "2026-08-15"},
+    {"id": "it-emergency", "title": "Single European emergency number 112", "publisher": "Italian Ministry of Health", "url": "https://www.salute.gov.it/new/it/tema/112-118-e-pronto-soccorso/numero-unico-europeo-le-emergenze-nue-112/", "accessed": "2026-08-15"},
+    {"id": "it-civil", "title": "Civil Protection Department", "publisher": "Government of Italy", "url": "https://www.protezionecivile.gov.it/", "accessed": "2026-08-15"},
+    {"id": "it-ingv", "title": "Official INGV Terremoti application", "publisher": "INGV", "url": "https://play.google.com/store/apps/details?id=it.ingv.terremoti", "accessed": "2026-08-15"},
+    {"id": "tw-emergency", "title": "119 and 112 emergency calls", "publisher": "National Fire Agency", "url": "https://www.nfa.gov.tw/cht/index.php?act=article&code=print&ids=66&article_id=795", "accessed": "2026-08-15"},
+    {"id": "tw-cwa", "title": "Official earthquake monitoring and warnings", "publisher": "Central Weather Administration", "url": "https://scweb.cwa.gov.tw/en-us/", "accessed": "2026-08-15"},
+    {"id": "nz-emergency", "title": "111 emergency service", "publisher": "New Zealand Government", "url": "https://www.govt.nz/browse/law-crime-and-justice/crimes-and-emergencies/111-emergency-service/", "accessed": "2026-08-15"},
+    {"id": "nz-nema", "title": "Official civil defence alerts", "publisher": "NEMA", "url": "https://www.civildefence.govt.nz/", "accessed": "2026-08-15"},
+    {"id": "nz-geonet", "title": "Official geohazard monitoring", "publisher": "GeoNet", "url": "https://www.geonet.org.nz/", "accessed": "2026-08-15"},
+    {"id": "sismo-detector", "title": "Earthquake Network", "publisher": "Futura Innovation SRL", "url": "https://sismo.app/", "accessed": "2026-08-15"}
   ]
 }

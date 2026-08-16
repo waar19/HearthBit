@@ -42,6 +42,26 @@ internal object MeshScanHealthPolicy {
     }
 }
 
+internal object MeshScanSchedulingPolicy {
+    fun highPerformanceRequested(
+        radarActive: Boolean,
+        rescueActive: Boolean,
+    ): Boolean = radarActive || rescueActive
+
+    fun shouldUseDutyCycle(
+        profile: PowerProfile,
+        highPerformanceRequested: Boolean,
+    ): Boolean = profile.usesDutyCycle && !highPerformanceRequested
+
+    fun shouldScanContinuously(
+        profile: PowerProfile,
+        highPerformanceRequested: Boolean,
+        recoveryScanActive: Boolean,
+    ): Boolean =
+        profile.scanMode != null &&
+            (!shouldUseDutyCycle(profile, highPerformanceRequested) || recoveryScanActive)
+}
+
 internal object MeshKeepAlivePolicy {
     private const val NORMAL_INTERVAL_MS = 30_000L
     private const val SAVING_INTERVAL_MS = 90_000L

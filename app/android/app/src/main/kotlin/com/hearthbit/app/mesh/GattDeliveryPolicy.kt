@@ -114,6 +114,7 @@ internal object GattFramePriority {
                 packet.type == MeshProtocol.TYPE_FRAGMENT ||
                     MeshProtocol.isEmergencyPublicPacket(packet)
             MeshProtocol.TYPE_EMERGENCY_CAPABILITY,
+            MeshProtocol.TYPE_LEGACY_EMERGENCY_ACK,
             MeshProtocol.TYPE_EMERGENCY_ACK,
             MeshProtocol.TYPE_RADAR_CONTROL,
             MeshProtocol.TYPE_BEACON_CONTROL,

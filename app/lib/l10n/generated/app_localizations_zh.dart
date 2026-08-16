@@ -75,6 +75,13 @@ class AppLocalizationsZh extends AppLocalizations {
       '已开启。附近观察者可通过固定无线标识符关联此设备，网状网络仍可读取公开消息。';
 
   @override
+  String get meshtasticInteropTitle => 'Meshtastic 远距离无线电';
+
+  @override
+  String get meshtasticInteropBody =>
+      '默认关闭。启用后，HearthBit 会连接附近的一台 Meshtastic 无线电。私密内容在 LoRa 网状网络中仍保持端到端加密。';
+
+  @override
   String get externalPresenceNoChat => '外部网络设备 · 无法聊天';
 
   @override
@@ -184,6 +191,84 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sosDefaultMessage => '我需要帮助';
+
+  @override
+  String get sosQrTitle => '二维码 SOS';
+
+  @override
+  String get sosQrShowInstructions =>
+      '请向他人展示此代码。HearthBit 可以转发 SOS，普通相机也能读取备用文字。';
+
+  @override
+  String get sosQrFallbackTitle => '无需应用即可阅读的信息';
+
+  @override
+  String get sosQrOpen => '显示 SOS 二维码';
+
+  @override
+  String get sosQrScan => '扫描并转发 SOS';
+
+  @override
+  String get acousticSosListen => '监听声音 SOS';
+
+  @override
+  String get acousticSosStopListening => '停止声音监听';
+
+  @override
+  String get sosChannelsTitle => 'SOS 已发送或已准备的渠道';
+
+  @override
+  String get sosQrRelayTitle => '发现 SOS';
+
+  @override
+  String get sosQrRelayAction => '转发 SOS';
+
+  @override
+  String get sosQrInvalid => '二维码不包含有效且已签名的 HearthBit SOS。';
+
+  @override
+  String get sosQrRelayed => 'SOS 已验证并加入网状网络';
+
+  @override
+  String get emergencySmsOpen => '通过短信通知可信联系人';
+
+  @override
+  String get emergencySmsTitle => '紧急短信';
+
+  @override
+  String get emergencySmsBody => '为可信联系人准备一条短信。系统将打开短信应用，供你检查并发送。';
+
+  @override
+  String get emergencySmsRecipient => '可信联系人的电话号码';
+
+  @override
+  String get emergencySmsMessage => '紧急消息';
+
+  @override
+  String get emergencySmsDisclaimer => '短信不会自动发送，也不能替代拨打官方紧急服务电话。';
+
+  @override
+  String get emergencySmsCompose => '打开短信应用';
+
+  @override
+  String get emergencySmsUnavailable => '没有兼容的短信应用';
+
+  @override
+  String get emergencySmsInvalidRecipient => '请输入有效的电话号码';
+
+  @override
+  String emergencySmsBodyWithoutLocation(String message) {
+    return 'HearthBit 紧急警报：$message。此短信不能替代官方紧急服务。';
+  }
+
+  @override
+  String emergencySmsBodyWithLocation(
+    String message,
+    String latitude,
+    String longitude,
+  ) {
+    return 'HearthBit 紧急警报：$message。坐标：$latitude, $longitude。此短信不能替代官方紧急服务。';
+  }
 
   @override
   String get sosReceivedTitle => '收到的警报';
@@ -411,7 +496,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transportWifiAware => 'Wi-Fi Aware';
 
   @override
+  String get transportWifiDirect => 'Wi-Fi Direct';
+
+  @override
+  String get transportMultipeer => 'Multipeer';
+
+  @override
+  String get transportShare => '使用其他应用分享';
+
+  @override
   String get transportOptical => '光学二维码';
+
+  @override
+  String get transferExport => '分享';
+
+  @override
+  String get transferImport => '打开 HearthBit 文件包';
+
+  @override
+  String get sealedTransferSend => '通过其他应用加密发送';
+
+  @override
+  String get sealedImportTitle => '已验证的加密文件';
+
+  @override
+  String sealedImportBody(String fileName, String sender) {
+    return '$fileName 已由可信联系人 $sender 签名。是否保存？';
+  }
 
   @override
   String get actionReject => '拒绝';
@@ -617,6 +728,69 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get diagnosticsExportError => '无法导出诊断报告';
+
+  @override
+  String get diagnosticsTitle => '诊断';
+
+  @override
+  String get diagnosticsRefreshTooltip => '刷新诊断信息';
+
+  @override
+  String get diagnosticsMeshSection => '网状网络';
+
+  @override
+  String get diagnosticsPlatform => '平台';
+
+  @override
+  String get diagnosticsStatus => '状态';
+
+  @override
+  String get diagnosticsNearbyDevices => '附近设备';
+
+  @override
+  String get diagnosticsAdvertising => 'BLE 广播';
+
+  @override
+  String get diagnosticsMeshScan => '网状网络扫描';
+
+  @override
+  String get diagnosticsGenericScan => '通用信号扫描';
+
+  @override
+  String get diagnosticsEnergySection => '电量';
+
+  @override
+  String get diagnosticsBattery => '电池';
+
+  @override
+  String get diagnosticsPowerProfile => '电源配置';
+
+  @override
+  String get diagnosticsBleDutyCycle => 'BLE 活跃占比';
+
+  @override
+  String get diagnosticsScanStarts => '扫描启动次数';
+
+  @override
+  String get diagnosticsStoreForward => '存储转发队列';
+
+  @override
+  String get diagnosticsTransportsSection => '活跃传输方式';
+
+  @override
+  String get diagnosticsNoActiveTransports => '未报告活跃传输方式';
+
+  @override
+  String get diagnosticsEventsSection => '最近事件';
+
+  @override
+  String get diagnosticsNoEvents => '尚无诊断事件';
+
+  @override
+  String get diagnosticsEnabled => '活跃';
+
+  @override
+  String get diagnosticsDisabled => '未活跃';
 
   @override
   String get openLinkError => '无法打开链接';
@@ -854,6 +1028,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get radarSonarTooNoisy => '无法测量啁啾信号。请降低环境噪声，勿遮挡两部手机，然后重试。';
+
+  @override
+  String get radarSonarRemoteMicrophoneRequired => '另一部手机未允许声纳使用麦克风。';
+
+  @override
+  String get radarSonarSelfChirpMissing => '此手机未检测到自身信号。请断开蓝牙耳机、勿遮挡扬声器，然后重试。';
 
   @override
   String get radarSweepEstimateWarning =>
@@ -1399,39 +1579,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String apkOfferSent(String peer) {
     return '已向 $peer 提供 APK。如果没有合适的高速传输方式，传输将显示错误。';
   }
-
-  @override
-  String get firstAidOpen => '打开离线急救指南';
-
-  @override
-  String get firstAidTitle => '离线急救';
-
-  @override
-  String get firstAidDisclaimer =>
-      '请拨打当地急救电话。本指南不能替代专业救助或培训。各地做法不同，请听从接线员和当地部门的指示。';
-
-  @override
-  String get firstAidChooseTopic => '选择当前情况';
-
-  @override
-  String get firstAidEnglishFallback => '无法验证此翻译，现显示已验证的英文指南。';
-
-  @override
-  String get firstAidSteps => '立即行动';
-
-  @override
-  String get firstAidWarnings => '请勿这样做';
-
-  @override
-  String get firstAidSources => '来源与审核信息';
-
-  @override
-  String firstAidReviewed(String date) {
-    return '内容审核日期：$date';
-  }
-
-  @override
-  String get firstAidLoadError => '无法加载已验证的离线指南。请勿依赖不完整的信息；请拨打当地急救电话。';
 
   @override
   String get familyTitle => '家庭群组';

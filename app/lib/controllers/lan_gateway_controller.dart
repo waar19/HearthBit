@@ -26,6 +26,9 @@ class LanGatewayController extends ChangeNotifier {
   final FlutterSecureStorage _secureStorage;
 
   StreamSubscription<LanGatewayStatus>? _statusSubscription;
+  List<int>? _psk;
+  bool _configuredEnabled = false;
+  bool emergencyMode = false;
   LanGatewayStatus status = const LanGatewayStatus(
     enabled: false,
     connected: false,
@@ -41,6 +44,8 @@ class LanGatewayController extends ChangeNotifier {
     final enabled = await _preferences.getBool(_enabledKey) ?? false;
     final encoded = await _secureStorage.read(key: _pskKey);
     final psk = _decodePsk(encoded);
+    _configuredEnabled = enabled && psk != null;
+    _psk = psk;
     if (!enabled || psk == null) {
       if (enabled) await _preferences.setBool(_enabledKey, false);
       return;
@@ -55,19 +60,52 @@ class LanGatewayController extends ChangeNotifier {
     }
     await _secureStorage.write(key: _pskKey, value: base64Encode(psk));
     await _preferences.setBool(_enabledKey, true);
-    await _service.start(LanMeshGatewayConfig(enabled: true, psk: psk));
+    _configuredEnabled = true;
+    _psk = psk;
+    await _restartService();
   }
 
   Future<void> disable() async {
     await _preferences.setBool(_enabledKey, false);
-    await _service.stop();
-    status = const LanGatewayStatus(enabled: false, connected: false);
+    _configuredEnabled = false;
+    if (emergencyMode) {
+      await _restartService();
+    } else {
+      await _service.stop();
+    }
+    if (!emergencyMode) {
+      status = const LanGatewayStatus(enabled: false, connected: false);
+    }
     notifyListeners();
   }
 
   Future<void> panicWipe() async {
+    emergencyMode = false;
     await disable();
     await _secureStorage.delete(key: _pskKey);
+    _psk = null;
+  }
+
+  Future<void> setEmergencyMode(bool active) async {
+    if (emergencyMode == active) return;
+    emergencyMode = active;
+    await _restartService();
+    notifyListeners();
+  }
+
+  Future<void> _restartService() async {
+    final psk = _configuredEnabled ? _psk ?? const <int>[] : const <int>[];
+    if (!_configuredEnabled && !emergencyMode) {
+      await _service.stop();
+      return;
+    }
+    await _service.start(
+      LanMeshGatewayConfig(
+        enabled: true,
+        psk: psk,
+        emergencyOpenMode: emergencyMode,
+      ),
+    );
   }
 
   String generatePairingKey() {

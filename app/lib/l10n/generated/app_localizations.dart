@@ -220,6 +220,18 @@ abstract class AppLocalizations {
   /// **'On. Nearby observers can correlate this device through a stable radio identifier, and public messages remain readable by the mesh.'**
   String get privacyBitchatInteropWarning;
 
+  /// No description provided for @meshtasticInteropTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Meshtastic long-range radio'**
+  String get meshtasticInteropTitle;
+
+  /// No description provided for @meshtasticInteropBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Off by default. When enabled, HearthBit connects to one nearby Meshtastic radio. Private content stays end-to-end encrypted over its LoRa mesh.'**
+  String get meshtasticInteropBody;
+
   /// No description provided for @externalPresenceNoChat.
   ///
   /// In en, this message translates to:
@@ -435,6 +447,148 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'I need help'**
   String get sosDefaultMessage;
+
+  /// No description provided for @sosQrTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS by QR'**
+  String get sosQrTitle;
+
+  /// No description provided for @sosQrShowInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Show this code to another person. HearthBit can relay the SOS, and any camera can read the fallback text.'**
+  String get sosQrShowInstructions;
+
+  /// No description provided for @sosQrFallbackTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Readable information without the app'**
+  String get sosQrFallbackTitle;
+
+  /// No description provided for @sosQrOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'SHOW SOS QR'**
+  String get sosQrOpen;
+
+  /// No description provided for @sosQrScan.
+  ///
+  /// In en, this message translates to:
+  /// **'SCAN AND RELAY SOS'**
+  String get sosQrScan;
+
+  /// No description provided for @acousticSosListen.
+  ///
+  /// In en, this message translates to:
+  /// **'LISTEN FOR SOUND SOS'**
+  String get acousticSosListen;
+
+  /// No description provided for @acousticSosStopListening.
+  ///
+  /// In en, this message translates to:
+  /// **'STOP ACOUSTIC LISTENING'**
+  String get acousticSosStopListening;
+
+  /// No description provided for @sosChannelsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS sent or prepared through'**
+  String get sosChannelsTitle;
+
+  /// No description provided for @sosQrRelayTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS found'**
+  String get sosQrRelayTitle;
+
+  /// No description provided for @sosQrRelayAction.
+  ///
+  /// In en, this message translates to:
+  /// **'RELAY SOS'**
+  String get sosQrRelayAction;
+
+  /// No description provided for @sosQrInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'The QR does not contain a valid signed HearthBit SOS.'**
+  String get sosQrInvalid;
+
+  /// No description provided for @sosQrRelayed.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS validated and added to the mesh'**
+  String get sosQrRelayed;
+
+  /// No description provided for @emergencySmsOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Notify a trusted contact by SMS'**
+  String get emergencySmsOpen;
+
+  /// No description provided for @emergencySmsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency SMS'**
+  String get emergencySmsTitle;
+
+  /// No description provided for @emergencySmsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Prepare a text message for a trusted contact. Your messaging app will open so you can review and send it.'**
+  String get emergencySmsBody;
+
+  /// No description provided for @emergencySmsRecipient.
+  ///
+  /// In en, this message translates to:
+  /// **'Trusted contact phone number'**
+  String get emergencySmsRecipient;
+
+  /// No description provided for @emergencySmsMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency message'**
+  String get emergencySmsMessage;
+
+  /// No description provided for @emergencySmsDisclaimer.
+  ///
+  /// In en, this message translates to:
+  /// **'This does not send automatically and does not replace a call to official emergency services.'**
+  String get emergencySmsDisclaimer;
+
+  /// No description provided for @emergencySmsCompose.
+  ///
+  /// In en, this message translates to:
+  /// **'OPEN MESSAGING APP'**
+  String get emergencySmsCompose;
+
+  /// No description provided for @emergencySmsUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No compatible messaging app is available'**
+  String get emergencySmsUnavailable;
+
+  /// No description provided for @emergencySmsInvalidRecipient.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid phone number'**
+  String get emergencySmsInvalidRecipient;
+
+  /// No description provided for @emergencySmsBodyWithoutLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'HearthBit emergency alert: {message}. This SMS does not replace official emergency services.'**
+  String emergencySmsBodyWithoutLocation(String message);
+
+  /// No description provided for @emergencySmsBodyWithLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'HearthBit emergency alert: {message}. Coordinates: {latitude}, {longitude}. This SMS does not replace official emergency services.'**
+  String emergencySmsBodyWithLocation(
+    String message,
+    String latitude,
+    String longitude,
+  );
 
   /// No description provided for @sosReceivedTitle.
   ///
@@ -844,11 +998,59 @@ abstract class AppLocalizations {
   /// **'Wi-Fi Aware'**
   String get transportWifiAware;
 
+  /// No description provided for @transportWifiDirect.
+  ///
+  /// In en, this message translates to:
+  /// **'Wi-Fi Direct'**
+  String get transportWifiDirect;
+
+  /// No description provided for @transportMultipeer.
+  ///
+  /// In en, this message translates to:
+  /// **'Multipeer'**
+  String get transportMultipeer;
+
+  /// No description provided for @transportShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Share with another app'**
+  String get transportShare;
+
   /// No description provided for @transportOptical.
   ///
   /// In en, this message translates to:
   /// **'Optical QR'**
   String get transportOptical;
+
+  /// No description provided for @transferExport.
+  ///
+  /// In en, this message translates to:
+  /// **'SHARE'**
+  String get transferExport;
+
+  /// No description provided for @transferImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Open HearthBit package'**
+  String get transferImport;
+
+  /// No description provided for @sealedTransferSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send sealed through another app'**
+  String get sealedTransferSend;
+
+  /// No description provided for @sealedImportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified sealed file'**
+  String get sealedImportTitle;
+
+  /// No description provided for @sealedImportBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{fileName} was signed by verified contact {sender}. Save it?'**
+  String sealedImportBody(String fileName, String sender);
 
   /// No description provided for @actionReject.
   ///
@@ -1208,6 +1410,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not export the diagnostic report'**
   String get diagnosticsExportError;
+
+  /// No description provided for @diagnosticsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics'**
+  String get diagnosticsTitle;
+
+  /// No description provided for @diagnosticsRefreshTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh diagnostics'**
+  String get diagnosticsRefreshTooltip;
+
+  /// No description provided for @diagnosticsMeshSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Mesh'**
+  String get diagnosticsMeshSection;
+
+  /// No description provided for @diagnosticsPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'Platform'**
+  String get diagnosticsPlatform;
+
+  /// No description provided for @diagnosticsStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get diagnosticsStatus;
+
+  /// No description provided for @diagnosticsNearbyDevices.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby devices'**
+  String get diagnosticsNearbyDevices;
+
+  /// No description provided for @diagnosticsAdvertising.
+  ///
+  /// In en, this message translates to:
+  /// **'BLE advertising'**
+  String get diagnosticsAdvertising;
+
+  /// No description provided for @diagnosticsMeshScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Mesh scan'**
+  String get diagnosticsMeshScan;
+
+  /// No description provided for @diagnosticsGenericScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Generic signal scan'**
+  String get diagnosticsGenericScan;
+
+  /// No description provided for @diagnosticsEnergySection.
+  ///
+  /// In en, this message translates to:
+  /// **'Energy'**
+  String get diagnosticsEnergySection;
+
+  /// No description provided for @diagnosticsBattery.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery'**
+  String get diagnosticsBattery;
+
+  /// No description provided for @diagnosticsPowerProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Power profile'**
+  String get diagnosticsPowerProfile;
+
+  /// No description provided for @diagnosticsBleDutyCycle.
+  ///
+  /// In en, this message translates to:
+  /// **'BLE duty cycle'**
+  String get diagnosticsBleDutyCycle;
+
+  /// No description provided for @diagnosticsScanStarts.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan starts'**
+  String get diagnosticsScanStarts;
+
+  /// No description provided for @diagnosticsStoreForward.
+  ///
+  /// In en, this message translates to:
+  /// **'Store-and-forward queue'**
+  String get diagnosticsStoreForward;
+
+  /// No description provided for @diagnosticsTransportsSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Active transports'**
+  String get diagnosticsTransportsSection;
+
+  /// No description provided for @diagnosticsNoActiveTransports.
+  ///
+  /// In en, this message translates to:
+  /// **'No active transport reported'**
+  String get diagnosticsNoActiveTransports;
+
+  /// No description provided for @diagnosticsEventsSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent events'**
+  String get diagnosticsEventsSection;
+
+  /// No description provided for @diagnosticsNoEvents.
+  ///
+  /// In en, this message translates to:
+  /// **'No diagnostic events yet'**
+  String get diagnosticsNoEvents;
+
+  /// No description provided for @diagnosticsEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get diagnosticsEnabled;
+
+  /// No description provided for @diagnosticsDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Inactive'**
+  String get diagnosticsDisabled;
 
   /// No description provided for @openLinkError.
   ///
@@ -1616,6 +1944,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The chirps could not be measured. Reduce noise, keep both phones uncovered, and try again.'**
   String get radarSonarTooNoisy;
+
+  /// No description provided for @radarSonarRemoteMicrophoneRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'The other phone did not allow microphone access for sonar.'**
+  String get radarSonarRemoteMicrophoneRequired;
+
+  /// No description provided for @radarSonarSelfChirpMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone could not detect its own signal. Disconnect Bluetooth headphones, uncover the speaker, and try again.'**
+  String get radarSonarSelfChirpMissing;
 
   /// No description provided for @radarSweepEstimateWarning.
   ///
@@ -2606,66 +2946,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'APK offered to {peer}. The transfer will show an error if no suitable high-speed transport is available.'**
   String apkOfferSent(String peer);
-
-  /// No description provided for @firstAidOpen.
-  ///
-  /// In en, this message translates to:
-  /// **'OPEN OFFLINE FIRST AID'**
-  String get firstAidOpen;
-
-  /// No description provided for @firstAidTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Offline first aid'**
-  String get firstAidTitle;
-
-  /// No description provided for @firstAidDisclaimer.
-  ///
-  /// In en, this message translates to:
-  /// **'Call local emergency services. This guide does not replace professional help or training. Local practices vary: follow the operator and local authorities.'**
-  String get firstAidDisclaimer;
-
-  /// No description provided for @firstAidChooseTopic.
-  ///
-  /// In en, this message translates to:
-  /// **'Choose what is happening'**
-  String get firstAidChooseTopic;
-
-  /// No description provided for @firstAidEnglishFallback.
-  ///
-  /// In en, this message translates to:
-  /// **'This translation could not be verified. Showing the validated English guide.'**
-  String get firstAidEnglishFallback;
-
-  /// No description provided for @firstAidSteps.
-  ///
-  /// In en, this message translates to:
-  /// **'Act now'**
-  String get firstAidSteps;
-
-  /// No description provided for @firstAidWarnings.
-  ///
-  /// In en, this message translates to:
-  /// **'Avoid'**
-  String get firstAidWarnings;
-
-  /// No description provided for @firstAidSources.
-  ///
-  /// In en, this message translates to:
-  /// **'Sources and review information'**
-  String get firstAidSources;
-
-  /// No description provided for @firstAidReviewed.
-  ///
-  /// In en, this message translates to:
-  /// **'Content reviewed {date}'**
-  String firstAidReviewed(String date);
-
-  /// No description provided for @firstAidLoadError.
-  ///
-  /// In en, this message translates to:
-  /// **'The validated offline guide could not be loaded. Do not rely on incomplete information; call local emergency services.'**
-  String get firstAidLoadError;
 
   /// No description provided for @familyTitle.
   ///
