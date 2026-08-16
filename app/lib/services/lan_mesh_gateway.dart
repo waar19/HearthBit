@@ -23,6 +23,11 @@ const _recordPing = 2;
 const _helloSize = 90;
 const _gatewayIdSize = 16;
 const _maximumGatewayHops = 32;
+const _emergencyMagic = 'HBEM';
+const _emergencyVersion = 1;
+const _emergencyHelloSize = 25;
+const _defaultPeerPort = 45893;
+const _defaultEmergencyPort = 45894;
 
 class LanMeshGatewayConfig {
   const LanMeshGatewayConfig({
@@ -32,6 +37,10 @@ class LanMeshGatewayConfig {
     this.connectTimeout = const Duration(seconds: 10),
     this.idleTimeout = const Duration(seconds: 90),
     this.maxGatewayHops = 8,
+    this.peerMode = true,
+    this.emergencyOpenMode = false,
+    this.listenPort = _defaultPeerPort,
+    this.emergencyPort = _defaultEmergencyPort,
   });
 
   final bool enabled;
@@ -40,10 +49,15 @@ class LanMeshGatewayConfig {
   final Duration connectTimeout;
   final Duration idleTimeout;
   final int maxGatewayHops;
+  final bool peerMode;
+  final bool emergencyOpenMode;
+  final int listenPort;
+  final int emergencyPort;
 
   void validate() {
     if (!enabled) return;
-    if (psk.length < 32) {
+    if (psk.isNotEmpty && psk.length < 32 ||
+        psk.isEmpty && !emergencyOpenMode) {
       throw ArgumentError.value(
         psk.length,
         'psk',
@@ -55,6 +69,12 @@ class LanMeshGatewayConfig {
     }
     if (maxGatewayHops < 1 || maxGatewayHops > _maximumGatewayHops) {
       throw ArgumentError.value(maxGatewayHops, 'maxGatewayHops');
+    }
+    if (listenPort < 0 ||
+        listenPort > 65535 ||
+        emergencyPort < 0 ||
+        emergencyPort > 65535) {
+      throw ArgumentError('Invalid LAN peer port');
     }
   }
 }
@@ -96,14 +116,23 @@ class LanMeshGatewayService {
   RawDatagramSocket? _discovery;
   StreamSubscription<RawSocketEvent>? _discoverySubscription;
   StreamSubscription<Map<Object?, Object?>>? _meshSubscription;
+  ServerSocket? _server;
+  ServerSocket? _emergencyServer;
   Socket? _socket;
   _SocketReader? _reader;
   _LanCipher? _cipher;
   Timer? _queryTimer;
   Timer? _pingTimer;
   bool _connecting = false;
+  bool _emergencyConnecting = false;
   bool _stopping = false;
   Uint8List? _peerGatewayId;
+  Socket? _emergencySocket;
+  _SocketReader? _emergencyReader;
+  Uint8List? _emergencyPeerGatewayId;
+  int _emergencyMaximumFrameSize = 2048;
+  final EmergencyLanRateLimiter _emergencyRateLimiter =
+      EmergencyLanRateLimiter();
 
   Stream<LanGatewayStatus> get statuses => _statusController.stream;
 
@@ -120,6 +149,29 @@ class LanMeshGatewayService {
     _meshSubscription = _platform.events
         .where((event) => event['type'] == 'rawMeshFrame')
         .listen(_handleNativeFrame);
+    await _platform.configureLanBridge(
+      enabled: true,
+      gatewayId: _hex(_gatewayId),
+      maxFrameSize: config.maxFrameSize,
+    );
+    if (config.peerMode && config.psk.isNotEmpty) {
+      _server = await ServerSocket.bind(
+        InternetAddress.anyIPv4,
+        config.listenPort,
+        shared: true,
+      );
+      _server!.listen((socket) => unawaited(_acceptSecurePeer(socket)));
+    }
+    if (config.peerMode && config.emergencyOpenMode) {
+      _emergencyServer = await ServerSocket.bind(
+        InternetAddress.anyIPv4,
+        config.emergencyPort,
+        shared: true,
+      );
+      _emergencyServer!.listen(
+        (socket) => unawaited(_acceptEmergencyPeer(socket)),
+      );
+    }
     final discovery = await RawDatagramSocket.bind(
       InternetAddress.anyIPv4,
       _multicastPort,
@@ -147,6 +199,10 @@ class LanMeshGatewayService {
     _discoverySubscription = null;
     _discovery?.close();
     _discovery = null;
+    await _server?.close();
+    _server = null;
+    await _emergencyServer?.close();
+    _emergencyServer = null;
     await _meshSubscription?.cancel();
     _meshSubscription = null;
     try {
@@ -165,7 +221,14 @@ class LanMeshGatewayService {
     _reader = null;
     _cipher = null;
     _peerGatewayId = null;
+    _emergencySocket?.destroy();
+    _emergencySocket = null;
+    _emergencyReader = null;
+    _emergencyPeerGatewayId = null;
+    _emergencyMaximumFrameSize = 2048;
+    _emergencyRateLimiter.clear();
     _connecting = false;
+    _emergencyConnecting = false;
     _seen.clear();
   }
 
@@ -175,19 +238,99 @@ class LanMeshGatewayService {
   }
 
   void _handleDiscovery(RawSocketEvent event) {
-    if (event != RawSocketEvent.read || _connecting || _socket != null) return;
+    if (event != RawSocketEvent.read) return;
     final datagram = _discovery?.receive();
     if (datagram == null) return;
+    if (LanMdnsCodec.isQuery(datagram.data) && _config.peerMode) {
+      final response = LanMdnsCodec.response(
+        gatewayId: _gatewayId,
+        port: _server?.port,
+        emergencyPort: _emergencyServer?.port,
+      );
+      if (response != null) {
+        _discovery?.send(
+          response,
+          InternetAddress(_multicastAddress),
+          _multicastPort,
+        );
+      }
+    }
     for (final gateway in LanMdnsCodec.parse(
       datagram.data,
       datagram.address.address,
     )) {
-      if (gateway.gatewayId != null &&
-          _constantTimeEquals(gateway.gatewayId!, _gatewayId)) {
+      final peerId = gateway.gatewayId;
+      if (peerId == null || _constantTimeEquals(peerId, _gatewayId)) {
         continue;
       }
-      unawaited(_connect(gateway));
-      break;
+      // El ID menor abre la conexión; el mayor conserva la entrante.
+      if (_compareIds(_gatewayId, peerId) >= 0) continue;
+      if (_config.psk.isNotEmpty &&
+          gateway.secureAvailable &&
+          !_connecting &&
+          _socket == null) {
+        unawaited(_connect(gateway));
+      }
+      if (_config.emergencyOpenMode &&
+          gateway.emergencyPort != null &&
+          _emergencySocket == null) {
+        unawaited(_connectEmergency(gateway));
+      }
+    }
+  }
+
+  Future<void> _acceptSecurePeer(Socket socket) async {
+    if (_stopping || _socket != null) {
+      socket.destroy();
+      return;
+    }
+    socket.setOption(SocketOption.tcpNoDelay, true);
+    final reader = _SocketReader(socket);
+    try {
+      final authenticated = await LanGatewayFraming._authenticateServer(
+        reader: reader,
+        socket: socket,
+        gatewayId: _gatewayId,
+        psk: Uint8List.fromList(_config.psk),
+        maxFrameSize: _config.maxFrameSize,
+        timeout: _config.connectTimeout,
+      );
+      if (_compareIds(_gatewayId, authenticated.peerGatewayId) <= 0 ||
+          _stopping ||
+          _socket != null) {
+        socket.destroy();
+        return;
+      }
+      _socket = socket;
+      _reader = reader;
+      _cipher = authenticated.cipher;
+      _peerGatewayId = authenticated.peerGatewayId;
+      _emit(
+        LanGatewayStatus(
+          enabled: true,
+          connected: true,
+          gatewayId: _hex(authenticated.peerGatewayId),
+          endpoint: '${socket.remoteAddress.address}:${socket.remotePort}',
+        ),
+      );
+      _pingTimer = Timer.periodic(
+        Duration(
+          milliseconds: max(5000, _config.idleTimeout.inMilliseconds ~/ 3),
+        ),
+        (_) => unawaited(_sendPing()),
+      );
+      unawaited(_readLoop());
+    } catch (error) {
+      socket.destroy();
+      if (!_stopping) {
+        _emit(
+          LanGatewayStatus(
+            enabled: true,
+            connected: _emergencySocket != null,
+            error: '$error',
+          ),
+        );
+      }
     }
   }
 
@@ -218,11 +361,6 @@ class LanMeshGatewayService {
       _reader = reader;
       _cipher = authenticated.cipher;
       _peerGatewayId = authenticated.peerGatewayId;
-      await _platform.configureLanBridge(
-        enabled: true,
-        gatewayId: _hex(authenticated.peerGatewayId),
-        maxFrameSize: authenticated.maximumFrameSize,
-      );
       _emit(
         LanGatewayStatus(
           enabled: true,
@@ -249,6 +387,156 @@ class LanMeshGatewayService {
       );
     } finally {
       _connecting = false;
+    }
+  }
+
+  Future<void> _acceptEmergencyPeer(Socket socket) async {
+    if (_stopping || _emergencySocket != null) {
+      socket.destroy();
+      return;
+    }
+    final reader = _SocketReader(socket);
+    try {
+      final hello = await reader
+          .read(_emergencyHelloSize)
+          .timeout(_config.connectTimeout);
+      final peer = EmergencyLanFraming.parseHello(hello);
+      if (_compareIds(_gatewayId, peer.gatewayId) <= 0) {
+        socket.destroy();
+        return;
+      }
+      socket.add(
+        EmergencyLanFraming.buildHello(
+          gatewayId: _gatewayId,
+          maximumFrameSize: _config.maxFrameSize,
+        ),
+      );
+      await socket.flush();
+      _activateEmergencySocket(
+        socket,
+        reader,
+        peer.gatewayId,
+        peer.maximumFrameSize,
+      );
+    } catch (error) {
+      socket.destroy();
+      if (!_stopping) {
+        DiagnosticsLog.instance.warning(
+          'lan_emergency.accept.failed',
+          error: error,
+        );
+      }
+    }
+  }
+
+  Future<void> _connectEmergency(LanGatewayEndpoint gateway) async {
+    final port = gateway.emergencyPort;
+    if (port == null ||
+        _emergencyConnecting ||
+        _emergencySocket != null ||
+        _stopping) {
+      return;
+    }
+    _emergencyConnecting = true;
+    try {
+      final socket = await Socket.connect(
+        gateway.host,
+        port,
+        timeout: _config.connectTimeout,
+      );
+      final reader = _SocketReader(socket);
+      socket.add(
+        EmergencyLanFraming.buildHello(
+          gatewayId: _gatewayId,
+          maximumFrameSize: _config.maxFrameSize,
+        ),
+      );
+      await socket.flush();
+      final hello = await reader
+          .read(_emergencyHelloSize)
+          .timeout(_config.connectTimeout);
+      final peer = EmergencyLanFraming.parseHello(hello);
+      if (gateway.gatewayId != null &&
+          !_constantTimeEquals(gateway.gatewayId!, peer.gatewayId)) {
+        throw const FormatException('Emergency LAN identity changed');
+      }
+      _activateEmergencySocket(
+        socket,
+        reader,
+        peer.gatewayId,
+        peer.maximumFrameSize,
+      );
+    } catch (error) {
+      if (!_stopping) {
+        DiagnosticsLog.instance.warning(
+          'lan_emergency.connect.failed',
+          error: error,
+        );
+      }
+    } finally {
+      _emergencyConnecting = false;
+    }
+  }
+
+  void _activateEmergencySocket(
+    Socket socket,
+    _SocketReader reader,
+    Uint8List peerGatewayId,
+    int peerMaximumFrameSize,
+  ) {
+    if (_stopping || _emergencySocket != null) {
+      socket.destroy();
+      return;
+    }
+    socket.setOption(SocketOption.tcpNoDelay, true);
+    _emergencySocket = socket;
+    _emergencyReader = reader;
+    _emergencyPeerGatewayId = peerGatewayId;
+    _emergencyMaximumFrameSize = min(
+      _config.maxFrameSize,
+      peerMaximumFrameSize,
+    );
+    _emit(
+      LanGatewayStatus(
+        enabled: true,
+        connected: true,
+        gatewayId: _hex(peerGatewayId),
+        endpoint: '${socket.remoteAddress.address}:${socket.remotePort}',
+      ),
+    );
+    unawaited(_readEmergencyLoop());
+  }
+
+  Future<void> _readEmergencyLoop() async {
+    final reader = _emergencyReader;
+    final peer = _emergencyPeerGatewayId;
+    if (reader == null || peer == null) return;
+    try {
+      while (!_stopping) {
+        final frame = await EmergencyLanFraming._readFrame(
+          reader,
+          maximumFrameSize: _emergencyMaximumFrameSize,
+          timeout: _config.idleTimeout,
+        );
+        if (!_emergencyRateLimiter.allow(_hex(peer))) {
+          throw const FormatException('Emergency LAN rate limit exceeded');
+        }
+        final id = _hex(LanGatewayFraming.messageId(frame));
+        if (!_seen.add(id)) continue;
+        while (_seen.length > 4096) {
+          _seen.remove(_seen.first);
+        }
+        await _platform.injectEmergencyLanFrame(frame);
+      }
+    } catch (error) {
+      if (!_stopping) {
+        DiagnosticsLog.instance.warning(
+          'lan_emergency.read.failed',
+          error: error,
+        );
+      }
+    } finally {
+      _disconnectEmergency();
     }
   }
 
@@ -283,7 +571,7 @@ class LanMeshGatewayService {
           _seen.remove(_seen.first);
         }
         await _platform.injectRawMeshFrame(
-          gatewayId: _hex(peer),
+          gatewayId: _hex(_gatewayId),
           frame: envelope.frame,
         );
       }
@@ -307,6 +595,28 @@ class LanMeshGatewayService {
     final frame = event['frame'];
     if (frame is Uint8List) {
       unawaited(_sendFrame(frame));
+      if (event['emergencyEligible'] == true) {
+        unawaited(_sendEmergencyFrame(frame));
+      }
+    }
+  }
+
+  Future<void> _sendEmergencyFrame(Uint8List frame) async {
+    final socket = _emergencySocket;
+    if (socket == null) return;
+    try {
+      await EmergencyLanFraming.sendFrame(
+        socket,
+        frame,
+        maximumFrameSize: _emergencyMaximumFrameSize,
+      );
+    } catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'lan_emergency.send.failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      _disconnectEmergency();
     }
   }
 
@@ -356,7 +666,30 @@ class LanMeshGatewayService {
     _reader = null;
     _cipher = null;
     _peerGatewayId = null;
-    await _platform.configureLanBridge(enabled: false);
+    _emit(
+      LanGatewayStatus(
+        enabled: true,
+        connected: _emergencySocket != null,
+        gatewayId: _emergencyPeerGatewayId == null
+            ? null
+            : _hex(_emergencyPeerGatewayId!),
+      ),
+    );
+  }
+
+  void _disconnectEmergency() {
+    _emergencySocket?.destroy();
+    _emergencySocket = null;
+    _emergencyReader = null;
+    _emergencyPeerGatewayId = null;
+    _emergencyMaximumFrameSize = _config.maxFrameSize;
+    _emit(
+      LanGatewayStatus(
+        enabled: true,
+        connected: _socket != null,
+        gatewayId: _peerGatewayId == null ? null : _hex(_peerGatewayId!),
+      ),
+    );
   }
 
   void _sendQuery() {
@@ -373,20 +706,75 @@ class LanMeshGatewayService {
 }
 
 class LanGatewayEndpoint {
-  const LanGatewayEndpoint(this.host, this.port, this.gatewayId);
+  const LanGatewayEndpoint(
+    this.host,
+    this.port,
+    this.gatewayId, {
+    this.emergencyPort,
+    this.secureAvailable = true,
+  });
 
   final String host;
   final int port;
   final Uint8List? gatewayId;
+  final int? emergencyPort;
+  final bool secureAvailable;
 }
 
 class LanMdnsCodec {
+  static bool isQuery(Uint8List data) =>
+      data.length >= 12 &&
+      ByteData.sublistView(data).getUint16(2) & 0x8000 == 0;
+
   static Uint8List query() {
     final output = BytesBuilder(copy: false)
       ..add(Uint8List(12)..buffer.asByteData().setUint16(4, 1))
       ..add(_encodeName(_serviceType))
       ..add([0, 12, 0, 1]);
     return output.takeBytes();
+  }
+
+  static Uint8List? response({
+    required Uint8List gatewayId,
+    required int? port,
+    required int? emergencyPort,
+  }) {
+    if (gatewayId.length != _gatewayIdSize ||
+        port == null && emergencyPort == null) {
+      return null;
+    }
+    final id = _hex(gatewayId);
+    final instance = '$id.$_serviceType';
+    final target = '$id.local';
+    final records = <Uint8List>[];
+    final advertisedPort = port ?? emergencyPort!;
+    records.add(_dnsRecord(_serviceType, 12, _encodeName(instance)));
+    final srv = BytesBuilder(copy: false)
+      ..add([0, 0, 0, 0])
+      ..add(_u16(advertisedPort))
+      ..add(_encodeName(target));
+    records.add(_dnsRecord(instance, 33, srv.takeBytes()));
+    final textValues = <String>[
+      'gid=$id',
+      if (port != null) 'secure=1',
+      if (emergencyPort != null) 'eport=$emergencyPort',
+    ];
+    final txt = BytesBuilder(copy: false);
+    for (final value in textValues) {
+      final bytes = utf8.encode(value);
+      txt
+        ..addByte(bytes.length)
+        ..add(bytes);
+    }
+    records.add(_dnsRecord(instance, 16, txt.takeBytes()));
+    final header = Uint8List(12);
+    ByteData.sublistView(header)
+      ..setUint16(2, 0x8400)
+      ..setUint16(6, records.length);
+    return (BytesBuilder(copy: false)
+          ..add(header)
+          ..add(records.expand((record) => record).toList()))
+        .takeBytes();
   }
 
   static List<LanGatewayEndpoint> parse(Uint8List data, String sourceHost) {
@@ -403,6 +791,8 @@ class LanMdnsCodec {
       }
       final services = <({String name, int port, String target})>[];
       final ids = <String, Uint8List>{};
+      final emergencyPorts = <String, int>{};
+      final secureServices = <String>{};
       final addresses = <String, String>{};
       for (var index = 0; index < records; index++) {
         final named = _readName(data, offset);
@@ -432,6 +822,13 @@ class LanMdnsCodec {
             if (text.startsWith('gid=')) {
               final decoded = _decodeHex(text.substring(4));
               if (decoded?.length == _gatewayIdSize) ids[name] = decoded!;
+            } else if (text.startsWith('eport=')) {
+              final value = int.tryParse(text.substring(6));
+              if (value != null && value > 0 && value <= 65535) {
+                emergencyPorts[name] = value;
+              }
+            } else if (text == 'secure=1') {
+              secureServices.add(name);
             }
           }
         } else if (type == 1 && length == 4) {
@@ -447,6 +844,8 @@ class LanMdnsCodec {
               addresses[service.target] ?? sourceHost,
               service.port,
               ids[service.name],
+              emergencyPort: emergencyPorts[service.name],
+              secureAvailable: secureServices.contains(service.name),
             ),
           )
           .toList(growable: false);
@@ -459,6 +858,62 @@ class LanMdnsCodec {
 }
 
 class LanGatewayFraming {
+  static Future<_AuthenticatedLan> _authenticateServer({
+    required _SocketReader reader,
+    required Socket socket,
+    required Uint8List gatewayId,
+    required Uint8List psk,
+    required int maxFrameSize,
+    required Duration timeout,
+  }) async {
+    final serverHello = buildHello(
+      role: _roleServer,
+      gatewayId: gatewayId,
+      nonce: _randomBytes(32),
+      maximumFrameSize: maxFrameSize,
+      psk: psk,
+    );
+    socket.add(serverHello);
+    await socket.flush();
+    final clientHello = await reader.read(_helloSize).timeout(timeout);
+    final client = parseHello(clientHello, expectedRole: _roleClient, psk: psk);
+    if (_constantTimeEquals(client.gatewayId, gatewayId)) {
+      throw const FormatException('Cannot connect a gateway to itself');
+    }
+    final transcript = Uint8List.fromList([...serverHello, ...clientHello]);
+    final serverNonce = serverHello.sublist(22, 54);
+    final clientNonce = clientHello.sublist(22, 54);
+    final hkdf = Hkdf(hmac: Hmac.sha256(), outputLength: 64);
+    final material = await hkdf.deriveKey(
+      secretKey: SecretKey(psk),
+      nonce: [...serverNonce, ...clientNonce],
+      info: [...utf8.encode('hearthbit-lan-v1:'), ...transcript],
+    );
+    final keys = await material.extractBytes();
+    socket.add(
+      _hmac(psk, [...utf8.encode('finish:'), ...transcript, _roleServer]),
+    );
+    await socket.flush();
+    final clientFinish = await reader.read(32).timeout(timeout);
+    final expectedClientFinish = _hmac(psk, [
+      ...utf8.encode('finish:'),
+      ...transcript,
+      _roleClient,
+    ]);
+    if (!_constantTimeEquals(clientFinish, expectedClientFinish)) {
+      throw const FormatException('LAN transcript authentication failed');
+    }
+    return _AuthenticatedLan(
+      peerGatewayId: client.gatewayId,
+      maximumFrameSize: min(maxFrameSize, client.maximumFrameSize),
+      cipher: _LanCipher(
+        sendKey: Uint8List.fromList(keys.sublist(0, 32)),
+        receiveKey: Uint8List.fromList(keys.sublist(32)),
+        maximumFrameSize: min(maxFrameSize, client.maximumFrameSize),
+      ),
+    );
+  }
+
   static Future<_AuthenticatedLan> _authenticateClient({
     required _SocketReader reader,
     required Socket socket,
@@ -831,6 +1286,113 @@ class _SocketReader {
       );
     }
   }
+}
+
+class EmergencyLanPeer {
+  const EmergencyLanPeer(this.gatewayId, this.maximumFrameSize);
+
+  final Uint8List gatewayId;
+  final int maximumFrameSize;
+}
+
+class EmergencyLanFraming {
+  static Uint8List buildHello({
+    required Uint8List gatewayId,
+    required int maximumFrameSize,
+  }) {
+    if (gatewayId.length != _gatewayIdSize ||
+        maximumFrameSize < 1 ||
+        maximumFrameSize > 65535) {
+      throw const FormatException('Invalid emergency LAN hello');
+    }
+    final output = Uint8List(_emergencyHelloSize);
+    output.setRange(0, 4, ascii.encode(_emergencyMagic));
+    output[4] = _emergencyVersion;
+    output.setRange(5, 21, gatewayId);
+    ByteData.sublistView(output).setUint32(21, maximumFrameSize);
+    return output;
+  }
+
+  static EmergencyLanPeer parseHello(Uint8List bytes) {
+    if (bytes.length != _emergencyHelloSize ||
+        ascii.decode(bytes.sublist(0, 4)) != _emergencyMagic ||
+        bytes[4] != _emergencyVersion) {
+      throw const FormatException('Invalid emergency LAN peer');
+    }
+    final maximum = ByteData.sublistView(bytes).getUint32(21);
+    if (maximum < 1 || maximum > 65535) {
+      throw const FormatException('Invalid emergency LAN maximum frame');
+    }
+    return EmergencyLanPeer(Uint8List.fromList(bytes.sublist(5, 21)), maximum);
+  }
+
+  static Future<void> sendFrame(
+    Socket socket,
+    Uint8List frame, {
+    required int maximumFrameSize,
+  }) async {
+    if (frame.isEmpty || frame.length > maximumFrameSize) {
+      throw const FormatException('Emergency LAN frame exceeds limit');
+    }
+    final size = Uint8List(4)..buffer.asByteData().setUint32(0, frame.length);
+    socket
+      ..add(size)
+      ..add(frame);
+    await socket.flush();
+  }
+
+  static Future<Uint8List> _readFrame(
+    _SocketReader reader, {
+    required int maximumFrameSize,
+    required Duration timeout,
+  }) async {
+    final sizeBytes = await reader.read(4).timeout(timeout);
+    final size = ByteData.sublistView(sizeBytes).getUint32(0);
+    if (size < 1 || size > maximumFrameSize) {
+      throw const FormatException('Invalid emergency LAN frame length');
+    }
+    return reader.read(size).timeout(timeout);
+  }
+}
+
+class EmergencyLanRateLimiter {
+  final Map<String, Queue<DateTime>> _events = {};
+
+  bool allow(String source, {DateTime? now}) {
+    final current = now ?? DateTime.now();
+    final cutoff = current.subtract(const Duration(minutes: 1));
+    final events = _events.putIfAbsent(source, Queue.new);
+    while (events.isNotEmpty && events.first.isBefore(cutoff)) {
+      events.removeFirst();
+    }
+    if (events.length >= 30) return false;
+    events.addLast(current);
+    return true;
+  }
+
+  void clear() => _events.clear();
+}
+
+Uint8List _dnsRecord(String name, int type, Uint8List value) {
+  final output = BytesBuilder(copy: false)
+    ..add(_encodeName(name))
+    ..add(_u16(type))
+    ..add([0, 1])
+    ..add([0, 0, 0, 120])
+    ..add(_u16(value.length))
+    ..add(value);
+  return output.takeBytes();
+}
+
+Uint8List _u16(int value) =>
+    Uint8List(2)..buffer.asByteData().setUint16(0, value);
+
+int _compareIds(List<int> first, List<int> second) {
+  for (var index = 0; index < min(first.length, second.length); index++) {
+    final difference = first[index] - second[index];
+    if (difference != 0) return difference;
+  }
+  return first.length - second.length;
 }
 
 ({String name, int offset}) _readName(

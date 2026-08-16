@@ -218,6 +218,12 @@ class MainActivity : FlutterActivity() {
                     )
                     null
                 }
+                "injectEmergencyLanFrame" -> runMethod(result) {
+                    MeshRuntime.engine(this).injectEmergencyLanFrame(
+                        requireNotNull(call.argument<ByteArray>("frame")),
+                    )
+                    null
+                }
                 "sendPublic" -> runMethod(result) {
                     MeshRuntime.engine(this).sendPublic(
                         call.argument<String>("content").orEmpty(),

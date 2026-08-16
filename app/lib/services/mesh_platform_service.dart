@@ -244,6 +244,12 @@ class MeshPlatformService {
     });
   }
 
+  Future<void> injectEmergencyLanFrame(Uint8List frame) {
+    return _methods.invokeMethod<void>('injectEmergencyLanFrame', {
+      'frame': frame,
+    });
+  }
+
   Future<String> sendPublic(String content, {String? channel}) async {
     return (await _methods.invokeMethod<String>('sendPublic', {
       'content': content,

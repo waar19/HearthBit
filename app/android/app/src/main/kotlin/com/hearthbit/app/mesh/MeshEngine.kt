@@ -483,11 +483,15 @@ internal class MeshEngine(
                 cost = LAN_LINK_COST,
             ),
         ) { frame, _ ->
+            val emergencyEligible = MeshProtocol.decode(frame)?.let(
+                ::isOpenEmergencyLanPacket,
+            ) == true
             emit(
                 mapOf(
                     "type" to "rawMeshFrame",
                     "gatewayId" to normalized,
                     "frame" to frame.copyOf(),
+                    "emergencyEligible" to emergencyEligible,
                 ),
             )
             true
@@ -519,6 +523,33 @@ internal class MeshEngine(
         }
         receive(LanBridgePolicy.validateFrame(frame, bridge.capabilities.mtu), normalized)
     }
+
+    fun injectEmergencyLanFrame(frame: ByteArray) {
+        val packet = requireNotNull(MeshProtocol.decode(frame)) {
+            "Frame LAN de emergencia inválido"
+        }
+        require(isOpenEmergencyLanPacket(packet)) {
+            "El canal LAN abierto solo admite emergencia firmada"
+        }
+        receive(
+            LanBridgePolicy.validateFrame(frame, 2_048),
+            "lan-emergency:${MeshProtocol.hex(packet.senderId)}",
+        )
+    }
+
+    private fun isOpenEmergencyLanPacket(packet: MeshProtocol.Packet): Boolean =
+        when (packet.type) {
+            MeshProtocol.TYPE_ANNOUNCE ->
+                MeshProtocol.decodeAnnouncement(packet.payload)?.emergencyPreannounce == true
+            MeshProtocol.TYPE_MESSAGE ->
+                MeshProtocol.isEmergencyPublicPacketPayload(
+                    packet.payload.toString(Charsets.UTF_8),
+                )
+            MeshProtocol.TYPE_EMERGENCY_ACK,
+            MeshProtocol.TYPE_LEGACY_EMERGENCY_ACK,
+            -> true
+            else -> false
+        }
 
     fun injectEmergencyQrFrames(announcementFrame: ByteArray, messageFrame: ByteArray) {
         val announcement = requireNotNull(MeshProtocol.decode(announcementFrame)) {

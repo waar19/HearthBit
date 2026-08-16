@@ -690,6 +690,14 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         receive(announcementData, source: nil)
         receive(messageData, source: nil)
         result(nil)
+      case "injectEmergencyLanFrame":
+        guard
+          let data = (arguments["frame"] as? FlutterStandardTypedData)?.data,
+          let packet = IOSMeshProtocol.decode(data),
+          isOpenEmergencyLanPacket(packet)
+        else { throw IOSMeshError.invalidPayload }
+        receive(data, source: nil)
+        result(nil)
       case "sendPublic":
         let content = arguments["content"] as? String ?? ""
         result(try sendPublic(content: content, channel: arguments["channel"] as? String))
@@ -2577,7 +2585,22 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         "type": "rawMeshFrame",
         "gatewayId": gatewayID,
         "frame": FlutterStandardTypedData(bytes: bytes),
+        "emergencyEligible": isOpenEmergencyLanPacket(packet),
       ])
+    }
+  }
+
+  private func isOpenEmergencyLanPacket(_ packet: IOSMeshPacket) -> Bool {
+    switch packet.type {
+    case IOSMeshProtocol.announce:
+      return IOSMeshProtocol
+        .decodeAnnouncement(packet.payload)?.emergencyPreannounce == true
+    case IOSMeshProtocol.message:
+      return IOSMeshProtocol.isEmergency(packet)
+    case IOSMeshProtocol.emergencyAck, IOSMeshProtocol.legacyEmergencyAck:
+      return true
+    default:
+      return false
     }
   }
 
