@@ -286,7 +286,7 @@ fn assert_expected_packet(id: &str, packet: &Packet, expected: &Value) {
         assert_eq!(flags, actual_flags, "{id}: flags semánticos");
     }
     if let Some(route) = expected.get("route").and_then(Value::as_array) {
-        let actual: Vec<_> = packet.route.iter().map(|hop| hex::encode(hop)).collect();
+        let actual: Vec<_> = packet.route.iter().map(hex::encode).collect();
         let expected: Vec<_> = route
             .iter()
             .map(|value| value.as_str().unwrap().to_owned())
