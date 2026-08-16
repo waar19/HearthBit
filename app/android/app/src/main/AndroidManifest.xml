@@ -32,6 +32,7 @@
         android:usesPermissionFlags="neverForLocation" />
     <!-- Wi-Fi Aware es opcional: sin él se usa Nearby, LAN, BLE u óptico. -->
     <uses-feature android:name="android.hardware.wifi.aware" android:required="false" />
+    <uses-feature android:name="android.hardware.wifi.direct" android:required="false" />
     <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
     <application
         android:label="HearthBit"

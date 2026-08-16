@@ -179,6 +179,29 @@ internal class MeshEngine(
             }
         },
     )
+    private val wifiDirectMeshTransport = WifiDirectMeshTransport(
+        context = context,
+        onState = { state ->
+            emit(
+                mapOf(
+                    "type" to "transportStatus",
+                    "transport" to "wifiDirect",
+                    "available" to state.available,
+                    "active" to state.active,
+                    "connected" to state.connected,
+                    "groupOwner" to state.groupOwner,
+                    "groupOwnerAddress" to state.groupOwnerAddress,
+                    "reason" to state.reason,
+                ),
+            )
+        },
+        onEmergencyFrame = { frame ->
+            runCatching { injectOpenEmergencyFrame(frame, "wifi-direct") }
+                .onFailure {
+                    Log.w(LOG_TAG, "Rejected Wi-Fi Direct emergency frame", it)
+                }
+        },
+    )
 
     /**
      * Dirección MAC -> peerId de vecinos directos. Se alimenta con el peerId
@@ -242,6 +265,8 @@ internal class MeshEngine(
     private var systemPowerSave = false
     private var powerProfile = PowerProfile.BALANCED
     private var adaptivePowerSaving = false
+    @Volatile
+    private var wifiDirectDegraded = false
     @Volatile
     private var rescueModeExpiresAt =
         restoredRescueModeState.takeIf(RescueModeState::active)?.expiresAt ?: 0L
@@ -525,15 +550,19 @@ internal class MeshEngine(
     }
 
     fun injectEmergencyLanFrame(frame: ByteArray) {
+        injectOpenEmergencyFrame(frame, "lan-emergency")
+    }
+
+    private fun injectOpenEmergencyFrame(frame: ByteArray, transport: String) {
         val packet = requireNotNull(MeshProtocol.decode(frame)) {
-            "Frame LAN de emergencia inválido"
+            "Frame de emergencia inválido"
         }
         require(isOpenEmergencyLanPacket(packet)) {
-            "El canal LAN abierto solo admite emergencia firmada"
+            "El canal abierto solo admite emergencia firmada"
         }
         receive(
             LanBridgePolicy.validateFrame(frame, 2_048),
-            "lan-emergency:${MeshProtocol.hex(packet.senderId)}",
+            "$transport:${MeshProtocol.hex(packet.senderId)}",
         )
     }
 
@@ -592,6 +621,8 @@ internal class MeshEngine(
         beaconActuator.stop()
         radioRangingManager.stop()
         meshtasticBridge.stop()
+        wifiDirectMeshTransport.stop()
+        wifiDirectDegraded = false
         pendingBeaconRequests.clear()
         outgoingBeaconRequests.clear()
         seenBeaconActions.clear()
@@ -740,6 +771,7 @@ internal class MeshEngine(
         if (wasActive != isRescueModeActive()) {
             updatePowerState(batteryLevel, charging, screenOn, systemPowerSave)
         }
+        updateWifiDirectTransport()
         rescheduleEmergencyRebroadcast()
     }
 
@@ -1785,6 +1817,9 @@ internal class MeshEngine(
         val bytes = MeshProtocol.encodeForBle(packet)
         val restrictIdentity = isLocalIdentityPacket(packet) && !allowUnprovenIdentity
         broadcastBytes(bytes, excludeAddress, restrictToHearthBit = restrictIdentity)
+        if (isOpenEmergencyLanPacket(packet)) {
+            wifiDirectMeshTransport.sendEmergencyFrame(bytes)
+        }
         val emergency = MeshProtocol.isEmergencyPublicPacket(packet)
         val directed = packet.recipientId != null &&
             !packet.recipientId.contentEquals(MeshProtocol.broadcastRecipient)
@@ -3050,6 +3085,8 @@ internal class MeshEngine(
     private fun startAdvertising() {
         val advertiser = adapter.bluetoothLeAdvertiser
         if (advertiser == null) {
+            wifiDirectDegraded = true
+            updateWifiDirectTransport()
             emitError(context.getString(R.string.error_no_advertising))
             emitStatus("degraded")
             return
@@ -3085,6 +3122,8 @@ internal class MeshEngine(
                 cancelAdvertiseWatchdog()
                 advertising = true
                 advertiseAttempt = 0
+                wifiDirectDegraded = false
+                updateWifiDirectTransport()
                 emitStatus("active")
                 scheduleAdvertiseTokenRotation()
                 sendAnnouncement()
@@ -3094,6 +3133,8 @@ internal class MeshEngine(
                 if (!running || generation != advertiseGeneration) return
                 cancelAdvertiseWatchdog()
                 advertising = false
+                wifiDirectDegraded = true
+                updateWifiDirectTransport()
                 emitError(context.getString(R.string.error_advertise_failed, errorCode))
                 emitStatus("degraded")
             }
@@ -3541,6 +3582,8 @@ internal class MeshEngine(
                 advertiseAttempt += 1
                 startAdvertising()
             } else {
+                wifiDirectDegraded = true
+                updateWifiDirectTransport()
                 emitError(context.getString(R.string.error_advertise_timeout))
                 emitStatus("degraded")
             }
@@ -3718,6 +3761,20 @@ internal class MeshEngine(
 
     private fun isRescueModeActive(now: Long = System.currentTimeMillis()): Boolean =
         rescueModeExpiresAt > now
+
+    private fun updateWifiDirectTransport() {
+        val rescueActive = isRescueModeActive()
+        if (running &&
+            WifiDirectMeshPolicy.shouldRun(
+                rescueActive = rescueActive,
+                degraded = wifiDirectDegraded,
+            )
+        ) {
+            wifiDirectMeshTransport.start(rescueActive)
+        } else {
+            wifiDirectMeshTransport.stop()
+        }
+    }
 
     private fun rescheduleEmergencyRebroadcast() {
         emergencyRebroadcastRunnable?.let(mainHandler::removeCallbacks)
