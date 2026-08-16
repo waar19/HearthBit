@@ -17,6 +17,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
+import com.hearthbit.app.mesh.WifiDirectGroupCoordinator
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
@@ -67,6 +68,7 @@ internal class WifiDirectTransport(
     private var localService: WifiP2pDnsSdServiceInfo? = null
     private var serviceRequest: WifiP2pDnsSdServiceRequest? = null
     private var initiatedConnection = false
+    private var reusedExistingGroup = true
 
     @Volatile private var transferId: String? = null
     @Volatile private var sending = false
@@ -123,6 +125,7 @@ internal class WifiDirectTransport(
         sending = isSender
         sourcePath = path.takeIf { isSender }
         destinationPath = path.takeUnless { isSender }
+        WifiDirectGroupCoordinator.setTransferActive(true)
         registerReceiver()
         val actualManager = requireNotNull(manager)
         val actualChannel = channel ?: actualManager.initialize(
@@ -130,6 +133,11 @@ internal class WifiDirectTransport(
             Looper.getMainLooper(),
             null,
         ).also { channel = it }
+        actualManager.requestGroupInfo(actualChannel) { group ->
+            if (currentId() != transferId) return@requestGroupInfo
+            reusedExistingGroup = group != null
+            if (group != null) requestConnectionInfo()
+        }
         val token = WifiDirectTransferSecrets.rendezvousToken(transferId)
         if (isSender) {
             localService = WifiP2pDnsSdServiceInfo.newInstance(
@@ -171,15 +179,20 @@ internal class WifiDirectTransport(
 
     @SuppressLint("MissingPermission")
     fun stop() {
+        val preserveGroup = WifiDirectGroupCoordinator.preserveWhenTransferStops()
+        WifiDirectGroupCoordinator.setTransferActive(false)
         val actualManager = manager
         val actualChannel = channel
         if (actualManager != null && actualChannel != null) {
             serviceRequest?.let { actualManager.removeServiceRequest(actualChannel, it, null) }
             localService?.let { actualManager.removeLocalService(actualChannel, it, null) }
             actualManager.cancelConnect(actualChannel, null)
-            if (initiatedConnection) actualManager.removeGroup(actualChannel, null)
+            if (initiatedConnection && !reusedExistingGroup && !preserveGroup) {
+                actualManager.removeGroup(actualChannel, null)
+            }
         }
         initiatedConnection = false
+        reusedExistingGroup = true
         serviceRequest = null
         localService = null
         closeSockets()

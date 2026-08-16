@@ -162,10 +162,12 @@ internal class WifiDirectMeshTransport(
     fun start(rescueActive: Boolean) {
         this.rescueActive = rescueActive
         if (active) {
+            WifiDirectGroupCoordinator.setMeshActive(true)
             scheduleAutonomousGroup()
             return
         }
         if (!isSupported() || !hasPermission()) {
+            WifiDirectGroupCoordinator.setMeshActive(false)
             emit(available = false, reason = "wifi_p2p_unavailable_or_permission")
             return
         }
@@ -176,6 +178,7 @@ internal class WifiDirectMeshTransport(
             null,
         ).also { channel = it }
         active = true
+        WifiDirectGroupCoordinator.setMeshActive(true)
         registerReceiver()
         actualManager.setDnsSdResponseListeners(
             actualChannel,
@@ -215,13 +218,15 @@ internal class WifiDirectMeshTransport(
     fun stop() {
         autonomousGroupTask?.let(handler::removeCallbacks)
         autonomousGroupTask = null
+        val preserveGroup = WifiDirectGroupCoordinator.preserveWhenMeshStops()
+        WifiDirectGroupCoordinator.setMeshActive(false)
         val actualManager = manager
         val actualChannel = channel
         if (actualManager != null && actualChannel != null) {
             serviceRequest?.let { actualManager.removeServiceRequest(actualChannel, it, null) }
             localService?.let { actualManager.removeLocalService(actualChannel, it, null) }
             actualManager.cancelConnect(actualChannel, null)
-            actualManager.removeGroup(actualChannel, null)
+            if (!preserveGroup) actualManager.removeGroup(actualChannel, null)
         }
         serviceRequest = null
         localService = null

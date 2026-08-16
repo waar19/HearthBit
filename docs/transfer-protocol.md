@@ -104,6 +104,9 @@ opaco (Nearby FILE payload) o como flujo TCP (LAN).
 - Android anuncia `_hearthbit-hbt._tcp` por DNS-SD de Wi-Fi Direct. El nombre
   contiene un token SHA-256 derivado del `TRANSFER_ID`; tras formar el grupo,
   un socket TCP en el puerto 45896 autentica ese token y mueve el contenedor.
+  Si el canal SOS ya mantiene el único grupo P2P de Android, el transporte de
+  archivos lo reutiliza y ninguno de los dos canales lo desmonta mientras el
+  otro siga activo.
 - iOS anuncia `hearthbit-hbt` con `MCNearbyServiceAdvertiser`. El token
   derivado se incluye en `discoveryInfo` y `MCSession` exige cifrado. El
   contenedor se entrega con `sendResource`.

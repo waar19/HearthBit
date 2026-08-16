@@ -27,4 +27,18 @@ class WifiDirectMeshPolicyTest {
             WifiDirectEmergencyFraming.parseMaximumFrameSize(hello.copyOf().also { it[0] = 0 })
         }
     }
+
+    @Test
+    fun `conserva el grupo mientras el otro canal sigue activo`() {
+        WifiDirectGroupCoordinator.setMeshActive(true)
+        WifiDirectGroupCoordinator.setTransferActive(true)
+
+        assertTrue(WifiDirectGroupCoordinator.preserveWhenMeshStops())
+        assertTrue(WifiDirectGroupCoordinator.preserveWhenTransferStops())
+
+        WifiDirectGroupCoordinator.setTransferActive(false)
+        assertFalse(WifiDirectGroupCoordinator.preserveWhenMeshStops())
+        WifiDirectGroupCoordinator.setMeshActive(false)
+        assertFalse(WifiDirectGroupCoordinator.preserveWhenTransferStops())
+    }
 }
