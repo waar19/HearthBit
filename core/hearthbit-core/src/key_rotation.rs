@@ -28,13 +28,13 @@ impl KeyRotation {
             return Err(ProtocolError::UnsupportedVersion(payload[0]));
         }
 
-        let old_peer_id = payload[1..9]
+        let old_peer_id: [u8; 8] = payload[1..9]
             .try_into()
             .map_err(|_| ProtocolError::Truncated)?;
-        let new_noise_public_key = payload[9..41]
+        let new_noise_public_key: [u8; 32] = payload[9..41]
             .try_into()
             .map_err(|_| ProtocolError::Truncated)?;
-        let new_signing_public_key = payload[41..73]
+        let new_signing_public_key: [u8; 32] = payload[41..73]
             .try_into()
             .map_err(|_| ProtocolError::Truncated)?;
         let timestamp = u64::from_be_bytes(

@@ -47,9 +47,8 @@ fn validates_every_packet_decode_fixture() {
             continue;
         }
 
-        let packet = decoded.unwrap_or_else(|error| {
-            panic!("{} debía decodificarse: {error}", fixture.id)
-        });
+        let packet =
+            decoded.unwrap_or_else(|error| panic!("{} debía decodificarse: {error}", fixture.id));
         assert_expected_packet(&fixture.id, &packet, &fixture.expect);
     }
 }
@@ -187,13 +186,9 @@ fn decodes_shared_key_rotation_fixture() {
 #[test]
 fn explicitly_accounts_for_non_packet_fixtures() {
     let suite = Suite::load();
-    let implemented: BTreeSet<_> = [
-        "packet.decode",
-        "packet.canonical",
-        "key-rotation.decode",
-    ]
-    .into_iter()
-    .collect();
+    let implemented: BTreeSet<_> = ["packet.decode", "packet.canonical", "key-rotation.decode"]
+        .into_iter()
+        .collect();
     // Fase 7 se limita al frame de malla y rotación de clave. Estos codecs se
     // mantienen en sus implementaciones actuales hasta las fases FFI.
     let intentionally_omitted: BTreeSet<_> = [

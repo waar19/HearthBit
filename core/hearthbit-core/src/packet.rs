@@ -94,7 +94,7 @@ impl Packet {
         }
         validate_drill_shape(self, flags, false)?;
 
-        let size_prefix = match (self.version, original_size) {
+        let size_prefix: usize = match (self.version, original_size) {
             (_, None) => 0,
             (1, Some(_)) => 2,
             (2, Some(_)) => 4,
@@ -174,13 +174,10 @@ impl Packet {
     }
 
     /// Verifica Ed25519 con la comprobación estricta de `ed25519-dalek`.
-    pub fn verify_signature(
-        &self,
-        public_key: &[u8; 32],
-    ) -> Result<(), ProtocolError> {
+    pub fn verify_signature(&self, public_key: &[u8; 32]) -> Result<(), ProtocolError> {
         let signature_bytes = self.signature.ok_or(ProtocolError::MissingSignature)?;
-        let verifying_key = VerifyingKey::from_bytes(public_key)
-            .map_err(|_| ProtocolError::InvalidPublicKey)?;
+        let verifying_key =
+            VerifyingKey::from_bytes(public_key).map_err(|_| ProtocolError::InvalidPublicKey)?;
         let signature = Signature::from_bytes(&signature_bytes);
         verifying_key
             .verify_strict(&self.canonical_signing_bytes()?, &signature)
@@ -400,10 +397,7 @@ fn is_valid_drill_message(payload: &[u8]) -> bool {
     let Ok(content) = std::str::from_utf8(payload) else {
         return false;
     };
-    if content.starts_with("SOS|")
-        || content.contains("[HB-CHECKIN|")
-        || !content.ends_with(']')
-    {
+    if content.starts_with("SOS|") || content.contains("[HB-CHECKIN|") || !content.ends_with(']') {
         return false;
     }
     let Some(marker) = content.rfind(DRILL_MARKER) else {
@@ -450,9 +444,7 @@ fn decode_compressed(version: u8, payload: &[u8]) -> Result<Vec<u8>, ProtocolErr
     let expected_size = if version == 1 {
         u16::from_be_bytes([payload[0], payload[1]]) as usize
     } else {
-        u32::from_be_bytes([
-            payload[0], payload[1], payload[2], payload[3],
-        ]) as usize
+        u32::from_be_bytes([payload[0], payload[1], payload[2], payload[3]]) as usize
     };
     if expected_size == 0 || expected_size > MAX_PAYLOAD_LENGTH {
         return Err(ProtocolError::PayloadTooLarge(expected_size));
@@ -484,9 +476,7 @@ fn looks_like_zlib(input: &[u8]) -> bool {
     }
     let cmf = input[0];
     let flg = input[1];
-    cmf & 0x0f == 8
-        && cmf >> 4 <= 7
-        && (u16::from(cmf) * 256 + u16::from(flg)) % 31 == 0
+    cmf & 0x0f == 8 && cmf >> 4 <= 7 && (u16::from(cmf) * 256 + u16::from(flg)) % 31 == 0
 }
 
 fn inflate_exact(
