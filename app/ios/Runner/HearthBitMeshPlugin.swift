@@ -413,7 +413,15 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     // no ofrece data path por passphrase PSK, por lo que no interopera con
     // Android). Si no está soportado, Dart cae automáticamente a LAN/BLE.
     let transferEvents = HearthBitTransferEventHandler()
+    HearthBitFileImportBridge.shared.setEmitter { event in
+      transferEvents.emit(event)
+    }
     let wifiAwareTransport = HearthBitWiFiAwareTransport { event in
+      DispatchQueue.main.async {
+        transferEvents.emit(event)
+      }
+    }
+    let multipeerFileTransport = HearthBitMultipeerFileTransport { event in
       DispatchQueue.main.async {
         transferEvents.emit(event)
       }
@@ -429,13 +437,20 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         result([
           "nearby": false,
           "wifiAware": HearthBitWiFiAwareTransport.isSupported,
+          "wifiDirect": false,
+          "multipeer": true,
         ])
+      case "consumeInitialHbtImport":
+        result(HearthBitFileImportBridge.shared.consumeInitial())
       case "nearbyStop":
         result(nil)
       case "wifiAwareStop":
         if let transferId = arguments?["transferId"] as? String {
           wifiAwareTransport.stop(transferId: transferId)
         }
+        result(nil)
+      case "multipeerStop":
+        multipeerFileTransport.stop()
         result(nil)
       case "nearbySendFile", "nearbyReceiveFile":
         result(
@@ -496,6 +511,41 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           return
         }
         wifiAwareTransport.receiveFile(
+          transferId: transferId,
+          destinationPath: destinationPath
+        )
+        result(nil)
+      case "multipeerSendFile":
+        guard
+          let transferId = arguments?["transferId"] as? String,
+          let filePath = arguments?["filePath"] as? String
+        else {
+          result(
+            FlutterError(
+              code: "bad_arguments",
+              message: "multipeerSendFile requires transferId and filePath",
+              details: nil
+            )
+          )
+          return
+        }
+        multipeerFileTransport.sendFile(transferId: transferId, filePath: filePath)
+        result(nil)
+      case "multipeerReceiveFile":
+        guard
+          let transferId = arguments?["transferId"] as? String,
+          let destinationPath = arguments?["destinationPath"] as? String
+        else {
+          result(
+            FlutterError(
+              code: "bad_arguments",
+              message: "multipeerReceiveFile requires transferId and destinationPath",
+              details: nil
+            )
+          )
+          return
+        }
+        multipeerFileTransport.receiveFile(
           transferId: transferId,
           destinationPath: destinationPath
         )
@@ -867,14 +917,38 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           let data = arguments["data"] as? FlutterStandardTypedData,
           let signature = arguments["signature"] as? FlutterStandardTypedData
         else { throw IOSMeshError.peerUnavailable }
-        let verified = peers[peerID].map {
-          IOSMeshIdentity.verifyBytes(
-            data.data,
-            signature: signature.data,
-            key: $0.signingPublicKey
-          )
+        let signingKey = peers[peerID.lowercased()]?.signingPublicKey
+          ?? peerIdentityPins.pin(for: peerID)?.signingPublicKey
+        let verified = signingKey.map {
+          IOSMeshIdentity.verifyBytes(data.data, signature: signature.data, key: $0)
         } ?? false
         result(verified)
+      case "getSealedTransferRecipient":
+        guard
+          identity != nil,
+          let peerID = arguments["peerId"] as? String,
+          let pin = peerIdentityPins.pin(for: peerID)
+        else { throw IOSMeshError.peerUnavailable }
+        result([
+          "senderPeerId": identity.peerIDHex,
+          "recipientPeerId": peerID.lowercased(),
+          "noisePublicKey": FlutterStandardTypedData(bytes: pin.noisePublicKey),
+          "signingPublicKey": FlutterStandardTypedData(bytes: pin.signingPublicKey),
+          "verified": true,
+        ])
+      case "deriveSealedOpenSecret":
+        guard
+          identity != nil,
+          let ephemeral = arguments["ephemeralPublicKey"] as? FlutterStandardTypedData,
+          let recipientPeerID = arguments["recipientPeerId"] as? String,
+          recipientPeerID.lowercased() == identity.peerIDHex,
+          let publicKey = try? Curve25519.KeyAgreement.PublicKey(
+            rawRepresentation: ephemeral.data
+          )
+        else { throw IOSMeshError.peerUnavailable }
+        let shared = try identity.noisePrivateKey.sharedSecretFromKeyAgreement(with: publicKey)
+        let secret = shared.withUnsafeBytes { Data($0) }
+        result(FlutterStandardTypedData(bytes: secret))
       case "panicWipe":
         // Limpiar también si Flutter cree que la malla ya estaba detenida.
         stopInternal(notify: true)

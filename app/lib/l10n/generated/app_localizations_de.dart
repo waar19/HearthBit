@@ -529,7 +529,33 @@ class AppLocalizationsDe extends AppLocalizations {
   String get transportWifiAware => 'Wi-Fi Aware';
 
   @override
+  String get transportWifiDirect => 'Wi-Fi Direct';
+
+  @override
+  String get transportMultipeer => 'Multipeer';
+
+  @override
+  String get transportShare => 'Mit einer anderen App teilen';
+
+  @override
   String get transportOptical => 'Optischer QR';
+
+  @override
+  String get transferExport => 'TEILEN';
+
+  @override
+  String get transferImport => 'HearthBit-Paket öffnen';
+
+  @override
+  String get sealedTransferSend => 'Versiegelt über eine andere App senden';
+
+  @override
+  String get sealedImportTitle => 'Verifizierte versiegelte Datei';
+
+  @override
+  String sealedImportBody(String fileName, String sender) {
+    return '$fileName wurde vom verifizierten Kontakt $sender signiert. Speichern?';
+  }
 
   @override
   String get actionReject => 'ABLEHNEN';

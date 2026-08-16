@@ -18,4 +18,15 @@ import UIKit
       with: engineBridge.applicationRegistrar.messenger()
     )
   }
+
+  override func application(
+    _ app: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+  ) -> Bool {
+    if HearthBitFileImportBridge.shared.accept(url) {
+      return true
+    }
+    return super.application(app, open: url, options: options)
+  }
 }

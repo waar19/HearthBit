@@ -10,6 +10,46 @@ class RunnerTests: XCTestCase {
   private let sender = Data([1, 2, 3, 4, 5, 6, 7, 8])
   private let fragmentID = Data([9, 8, 7, 6, 5, 4, 3, 2])
 
+  func testMultipeerFileTokenAndContainerPolicy() {
+    let first = IOSMultipeerFilePolicy.rendezvousToken(
+      "00112233445566778899aabbccddeeff"
+    )
+    let same = IOSMultipeerFilePolicy.rendezvousToken(
+      "00112233445566778899aabbccddeeff"
+    )
+    let other = IOSMultipeerFilePolicy.rendezvousToken(
+      "ffeeddccbbaa99887766554433221100"
+    )
+
+    XCTAssertEqual(first.count, 24)
+    XCTAssertEqual(first, same)
+    XCTAssertNotEqual(first, other)
+    XCTAssertFalse(IOSMultipeerFilePolicy.acceptsContainerSize(0))
+    XCTAssertTrue(IOSMultipeerFilePolicy.acceptsContainerSize(1))
+    XCTAssertTrue(
+      IOSMultipeerFilePolicy.acceptsContainerSize(
+        IOSMultipeerFilePolicy.maximumContainerBytes
+      )
+    )
+    XCTAssertFalse(
+      IOSMultipeerFilePolicy.acceptsContainerSize(
+        IOSMultipeerFilePolicy.maximumContainerBytes + 1
+      )
+    )
+  }
+
+  func testSealedTransferX25519AgreementMatchesBothSides() throws {
+    let sender = Curve25519.KeyAgreement.PrivateKey()
+    let recipient = Curve25519.KeyAgreement.PrivateKey()
+    let senderSecret = try sender.sharedSecretFromKeyAgreement(with: recipient.publicKey)
+    let recipientSecret = try recipient.sharedSecretFromKeyAgreement(with: sender.publicKey)
+    let senderBytes = senderSecret.withUnsafeBytes { Data($0) }
+    let recipientBytes = recipientSecret.withUnsafeBytes { Data($0) }
+
+    XCTAssertEqual(senderBytes.count, 32)
+    XCTAssertEqual(senderBytes, recipientBytes)
+  }
+
   func testEmergencyRetriesRenewTimestampFingerprintAndHash() throws {
     let original = IOSMeshPacket(
       type: IOSMeshProtocol.message,

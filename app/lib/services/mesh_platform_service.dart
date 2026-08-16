@@ -80,6 +80,20 @@ class NativeRescueState {
   final SosLocationPrecision locationPrecision;
 }
 
+class SealedTransferRecipient {
+  const SealedTransferRecipient({
+    required this.senderPeerId,
+    required this.recipientPeerId,
+    required this.noisePublicKey,
+    required this.signingPublicKey,
+  });
+
+  final String senderPeerId;
+  final String recipientPeerId;
+  final Uint8List noisePublicKey;
+  final Uint8List signingPublicKey;
+}
+
 class MeshPlatformService {
   static const _methods = MethodChannel('com.hearthbit.mesh/methods');
   static const _events = EventChannel('com.hearthbit.mesh/events');
@@ -545,5 +559,51 @@ class MeshPlatformService {
           'signature': signature,
         }) ??
         false;
+  }
+
+  Future<SealedTransferRecipient> getSealedTransferRecipient(
+    String peerId,
+  ) async {
+    final result = await _methods.invokeMapMethod<Object?, Object?>(
+      'getSealedTransferRecipient',
+      {'peerId': peerId},
+    );
+    final senderPeerId = result?['senderPeerId'] as String?;
+    final recipientPeerId = result?['recipientPeerId'] as String?;
+    final noisePublicKey = result?['noisePublicKey'] as Uint8List?;
+    final signingPublicKey = result?['signingPublicKey'] as Uint8List?;
+    if (senderPeerId == null ||
+        recipientPeerId == null ||
+        noisePublicKey?.length != 32 ||
+        signingPublicKey?.length != 32 ||
+        result?['verified'] != true) {
+      throw StateError('Unknown or unverified sealed-transfer recipient');
+    }
+    return SealedTransferRecipient(
+      senderPeerId: senderPeerId,
+      recipientPeerId: recipientPeerId,
+      noisePublicKey: noisePublicKey!,
+      signingPublicKey: signingPublicKey!,
+    );
+  }
+
+  Future<Uint8List> deriveSealedOpenSecret(
+    Uint8List ephemeralPublicKey,
+    String recipientPeerId,
+  ) async {
+    if (ephemeralPublicKey.length != 32) {
+      throw const FormatException('Invalid sealed-transfer ephemeral key');
+    }
+    final result = await _methods.invokeMethod<Uint8List>(
+      'deriveSealedOpenSecret',
+      {
+        'ephemeralPublicKey': ephemeralPublicKey,
+        'recipientPeerId': recipientPeerId,
+      },
+    );
+    if (result?.length != 32) {
+      throw StateError('Native sealed-transfer key agreement failed');
+    }
+    return result!;
   }
 }

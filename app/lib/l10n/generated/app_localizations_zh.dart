@@ -496,7 +496,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transportWifiAware => 'Wi-Fi Aware';
 
   @override
+  String get transportWifiDirect => 'Wi-Fi Direct';
+
+  @override
+  String get transportMultipeer => 'Multipeer';
+
+  @override
+  String get transportShare => '使用其他应用分享';
+
+  @override
   String get transportOptical => '光学二维码';
+
+  @override
+  String get transferExport => '分享';
+
+  @override
+  String get transferImport => '打开 HearthBit 文件包';
+
+  @override
+  String get sealedTransferSend => '通过其他应用加密发送';
+
+  @override
+  String get sealedImportTitle => '已验证的加密文件';
+
+  @override
+  String sealedImportBody(String fileName, String sender) {
+    return '$fileName 已由可信联系人 $sender 签名。是否保存？';
+  }
 
   @override
   String get actionReject => '拒绝';

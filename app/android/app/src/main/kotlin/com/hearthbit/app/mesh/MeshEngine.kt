@@ -1151,8 +1151,46 @@ internal class MeshEngine(
     fun signPayload(data: ByteArray): ByteArray = identity.signBytes(data)
 
     fun verifyPeerSignature(peerIdHex: String, data: ByteArray, signature: ByteArray): Boolean {
-        val peer = peers[peerIdHex] ?: return false
-        return identity.verifyBytes(data, signature, peer.signingPublicKey)
+        val key = peers[peerIdHex]?.signingPublicKey ?: when (
+            val lookup = peerTrustStore.lookup(peerIdHex)
+        ) {
+            is PeerTrustLookup.Pinned -> lookup.keys.signingPublicKey
+            PeerTrustLookup.Invalid,
+            PeerTrustLookup.Unknown,
+            -> return false
+        }
+        return identity.verifyBytes(data, signature, key)
+    }
+
+    fun sealedTransferRecipient(peerIdHex: String): Map<String, Any> {
+        val normalized = peerIdHex.lowercase()
+        val keys = when (val lookup = peerTrustStore.lookup(normalized)) {
+            is PeerTrustLookup.Pinned -> lookup.keys
+            PeerTrustLookup.Invalid,
+            PeerTrustLookup.Unknown,
+            -> throw IllegalArgumentException("unknown_sealed_recipient")
+        }
+        return mapOf(
+            "senderPeerId" to identity.peerIdHex,
+            "recipientPeerId" to normalized,
+            "noisePublicKey" to keys.noisePublicKey,
+            "signingPublicKey" to keys.signingPublicKey,
+            "verified" to true,
+        )
+    }
+
+    fun deriveSealedOpenSecret(
+        ephemeralPublicKey: ByteArray,
+        recipientPeerId: String,
+    ): ByteArray {
+        require(ephemeralPublicKey.size == 32) { "invalid_ephemeral_public_key" }
+        require(recipientPeerId.lowercase() == identity.peerIdHex) {
+            "sealed_package_for_different_recipient"
+        }
+        return SealedTransferCrypto.deriveSharedSecret(
+            identity.noisePrivateKey,
+            ephemeralPublicKey,
+        )
     }
 
     private fun sendEncryptedFrame(peerIdHex: String, frame: ByteArray) {

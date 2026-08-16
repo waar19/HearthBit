@@ -25,10 +25,12 @@ import com.hearthbit.app.mesh.MeshRuntime
 import com.hearthbit.app.mesh.RescueModeStore
 import com.hearthbit.app.transfer.NearbyTransport
 import com.hearthbit.app.transfer.WifiAwareTransport
+import com.hearthbit.app.transfer.WifiDirectTransport
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 
 internal const val ACTION_OPEN_EMERGENCY = "com.hearthbit.app.OPEN_EMERGENCY"
 private val SMS_FORMATTING = Regex("""[\s()\-]""")
@@ -47,6 +49,7 @@ class MainActivity : FlutterActivity() {
     private var lanMulticastLock: WifiManager.MulticastLock? = null
     private var emergencyShortcutChannel: MethodChannel? = null
     private var emergencyShortcutPending = false
+    private var pendingHbtImportIntent: Intent? = null
     private val nearbyTransport by lazy {
         NearbyTransport(applicationContext) { event ->
             runOnUiThread { transferEvents?.success(event) }
@@ -61,9 +64,16 @@ class MainActivity : FlutterActivity() {
             null
         }
     }
+    private val wifiDirectTransport by lazy {
+        WifiDirectTransport(applicationContext) { event ->
+            runOnUiThread { transferEvents?.success(event) }
+        }
+    }
 
     override fun onDestroy() {
         setLanMulticastEnabled(false)
+        wifiAwareTransport?.stop()
+        if (wifiDirectTransport.isSupported()) wifiDirectTransport.stop()
         super.onDestroy()
     }
 
@@ -71,6 +81,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
         emergencyShortcutPending = intent?.action == ACTION_OPEN_EMERGENCY
+        if (isHbtImportIntent(intent)) pendingHbtImportIntent = intent
         emergencyShortcutChannel = MethodChannel(messenger, EMERGENCY_SHORTCUT_CHANNEL).apply {
             setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -325,6 +336,17 @@ class MainActivity : FlutterActivity() {
                         requireNotNull(call.argument<ByteArray>("signature")),
                     )
                 }
+                "getSealedTransferRecipient" -> runMethod(result) {
+                    MeshRuntime.engine(this).sealedTransferRecipient(
+                        requireNotNull(call.argument<String>("peerId")),
+                    )
+                }
+                "deriveSealedOpenSecret" -> runMethod(result) {
+                    MeshRuntime.engine(this).deriveSealedOpenSecret(
+                        requireNotNull(call.argument<ByteArray>("ephemeralPublicKey")),
+                        requireNotNull(call.argument<String>("recipientPeerId")),
+                    )
+                }
                 "panicWipe" -> runMethod(result) {
                     MeshRuntime.engine(this).panicWipe()
                     MeshRuntime.stateSnapshot()
@@ -450,8 +472,15 @@ class MainActivity : FlutterActivity() {
                     mapOf(
                         "nearby" to nearbyAvailable(),
                         "wifiAware" to wifiAwareAvailable(),
+                        "wifiDirect" to wifiDirectAvailable(),
+                        "multipeer" to false,
                     ),
                 )
+                "consumeInitialHbtImport" -> runMethod(result) {
+                    val importIntent = pendingHbtImportIntent
+                    pendingHbtImportIntent = null
+                    importIntent?.let(::copyHbtImportToCache)
+                }
                 "nearbySendFile" -> runMethod(result) {
                     nearbyTransport.sendFile(
                         requireNotNull(call.argument<String>("transferId")),
@@ -494,6 +523,24 @@ class MainActivity : FlutterActivity() {
                     wifiAwareTransport?.stop()
                     null
                 }
+                "wifiDirectSendFile" -> runMethod(result) {
+                    wifiDirectTransport.sendFile(
+                        requireNotNull(call.argument<String>("transferId")),
+                        requireNotNull(call.argument<String>("filePath")),
+                    )
+                    null
+                }
+                "wifiDirectReceiveFile" -> runMethod(result) {
+                    wifiDirectTransport.receiveFile(
+                        requireNotNull(call.argument<String>("transferId")),
+                        requireNotNull(call.argument<String>("destinationPath")),
+                    )
+                    null
+                }
+                "wifiDirectStop" -> runMethod(result) {
+                    wifiDirectTransport.stop()
+                    null
+                }
                 else -> result.notImplemented()
             }
         }
@@ -514,9 +561,55 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent.action != ACTION_OPEN_EMERGENCY) return
-        emergencyShortcutPending = true
-        emergencyShortcutChannel?.invokeMethod("openEmergency", null)
+        if (intent.action == ACTION_OPEN_EMERGENCY) {
+            emergencyShortcutPending = true
+            emergencyShortcutChannel?.invokeMethod("openEmergency", null)
+        }
+        if (isHbtImportIntent(intent)) {
+            Thread {
+                runCatching { copyHbtImportToCache(intent) }
+                    .onSuccess { path ->
+                        if (path != null) {
+                            runOnUiThread {
+                                transferEvents?.success(
+                                    mapOf("type" to "hbtImport", "path" to path),
+                                )
+                            }
+                        }
+                    }
+            }.start()
+        }
+    }
+
+    private fun isHbtImportIntent(intent: Intent?): Boolean {
+        val action = intent?.action
+        return action == Intent.ACTION_VIEW || action == Intent.ACTION_SEND
+    }
+
+    private fun copyHbtImportToCache(intent: Intent): String? {
+        @Suppress("DEPRECATION")
+        val uri = when (intent.action) {
+            Intent.ACTION_VIEW -> intent.data
+            Intent.ACTION_SEND -> intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+            else -> null
+        } ?: return null
+        val directory = File(cacheDir, "hbt-imports").apply { mkdirs() }
+        val destination = File(directory, "import-${System.currentTimeMillis()}.hbt")
+        contentResolver.openInputStream(uri)?.use { input ->
+            destination.outputStream().buffered().use { output ->
+                val buffer = ByteArray(64 * 1024)
+                var total = 0L
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    total += read
+                    require(total <= MAXIMUM_HBT_IMPORT_BYTES) { "HBT import is too large" }
+                    output.write(buffer, 0, read)
+                }
+                require(total > 0) { "HBT import is empty" }
+            }
+        } ?: return null
+        return destination.absolutePath
     }
 
     private fun nearbyAvailable(): Boolean =
@@ -547,6 +640,9 @@ class MainActivity : FlutterActivity() {
         val manager = getSystemService(WifiAwareManager::class.java)
         return manager?.isAvailable == true
     }
+
+    private fun wifiDirectAvailable(): Boolean =
+        packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_DIRECT)
 
     private fun prepareInstalledApk(result: MethodChannel.Result) {
         Thread {
@@ -796,5 +892,6 @@ class MainActivity : FlutterActivity() {
         const val BACKGROUND_LOCATION_REQUEST = 7403
         const val FAMILY_NOTIFICATION_PERMISSION_REQUEST = 7404
         const val FAMILY_NOTIFICATION_CHANNEL = "family_emergency"
+        const val MAXIMUM_HBT_IMPORT_BYTES = 700L * 1024 * 1024
     }
 }

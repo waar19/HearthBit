@@ -507,7 +507,33 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transportWifiAware => 'Wi-Fi Aware';
 
   @override
+  String get transportWifiDirect => 'Wi-Fi Direct';
+
+  @override
+  String get transportMultipeer => 'Multipeer';
+
+  @override
+  String get transportShare => '別のアプリで共有';
+
+  @override
   String get transportOptical => '光学 QR';
+
+  @override
+  String get transferExport => '共有';
+
+  @override
+  String get transferImport => 'HearthBit パッケージを開く';
+
+  @override
+  String get sealedTransferSend => '別のアプリで暗号化送信';
+
+  @override
+  String get sealedImportTitle => '検証済みの暗号化ファイル';
+
+  @override
+  String sealedImportBody(String fileName, String sender) {
+    return '$fileName は検証済み連絡先 $sender によって署名されています。保存しますか？';
+  }
 
   @override
   String get actionReject => '拒否';

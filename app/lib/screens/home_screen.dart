@@ -57,7 +57,7 @@ enum _AppMenuAction {
   panicWipe,
 }
 
-enum _PeerTransferAction { file, apk }
+enum _PeerTransferAction { file, sealed, apk }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -211,6 +211,31 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (!mounted) return;
       setState(() => _tab = 2);
       _syncGenericPresenceScan();
+    } catch (error) {
+      if (!mounted) return;
+      final detail = error is StateError ? error.message : '$error';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.offerFileError(detail))),
+      );
+    }
+  }
+
+  Future<void> _sendSealedFileTo(MeshPeer peer) async {
+    final file = await openFile();
+    if (file == null || !mounted) return;
+    final box = context.findRenderObject() as RenderBox?;
+    final origin = box == null || !box.hasSize
+        ? null
+        : box.localToGlobal(Offset.zero) & box.size;
+    try {
+      await widget.transfers.shareSealedFile(
+        peer: peer,
+        filePath: file.path,
+        fileName: file.name,
+        origin: origin,
+      );
+      if (!mounted) return;
+      setState(() => _tab = 2);
     } catch (error) {
       if (!mounted) return;
       final detail = error is StateError ? error.message : '$error';
@@ -856,27 +881,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Widget _peerTransferButton(MeshPeer peer, {required bool online}) {
-    final enabled = canOfferFileToPeer(peer, isOnline: online);
-    final tooltip = !online
-        ? context.l10n.peerOffline
-        : peer.supportsTransfers
+    final liveTransferEnabled = canOfferFileToPeer(peer, isOnline: online);
+    final sealedEnabled = peer.hearthbitVerified;
+    final tooltip = liveTransferEnabled
         ? context.l10n.tooltipSendFile
+        : sealedEnabled
+        ? context.l10n.sealedTransferSend
+        : !online
+        ? context.l10n.peerOffline
         : context.l10n.peerDoesNotSupportTransfers;
-    if (!ApkShareService.isSupportedPlatform) {
-      return IconButton(
-        tooltip: tooltip,
-        onPressed: enabled ? () => _sendFileTo(peer) : null,
-        icon: const Icon(Icons.attach_file),
-      );
-    }
     return PopupMenuButton<_PeerTransferAction>(
       tooltip: tooltip,
-      enabled: enabled,
+      enabled: liveTransferEnabled || sealedEnabled,
       icon: const Icon(Icons.attach_file),
       onSelected: (action) {
         switch (action) {
           case _PeerTransferAction.file:
             _sendFileTo(peer);
+          case _PeerTransferAction.sealed:
+            _sendSealedFileTo(peer);
           case _PeerTransferAction.apk:
             _sendApkTo(peer);
         }
@@ -884,6 +907,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       itemBuilder: (context) => [
         PopupMenuItem(
           value: _PeerTransferAction.file,
+          enabled: liveTransferEnabled,
           child: ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.description_outlined),
@@ -891,13 +915,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
         ),
         PopupMenuItem(
-          value: _PeerTransferAction.apk,
+          value: _PeerTransferAction.sealed,
+          enabled: peer.hearthbitVerified,
           child: ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.android),
-            title: Text(context.l10n.sendApkToPeer),
+            leading: const Icon(Icons.lock_outline),
+            title: Text(context.l10n.sealedTransferSend),
           ),
         ),
+        if (ApkShareService.isSupportedPlatform)
+          PopupMenuItem(
+            value: _PeerTransferAction.apk,
+            enabled: liveTransferEnabled,
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.android),
+              title: Text(context.l10n.sendApkToPeer),
+            ),
+          ),
       ],
     );
   }

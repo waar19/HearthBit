@@ -43,6 +43,24 @@ internal object TransferProtocol {
     const val TAG_CHUNK_BITMAP = 0x11
     const val TAG_REASON = 0x12
     const val TAG_RECEIVED_COUNT = 0x14
+
+    const val TRANSPORT_BLE = 1
+    const val TRANSPORT_LAN = 2
+    const val TRANSPORT_NEARBY = 4
+    const val TRANSPORT_WIFI_AWARE = 8
+    const val TRANSPORT_OPTICAL = 16
+    const val TRANSPORT_WIFI_DIRECT = 32
+    const val TRANSPORT_MULTIPEER = 64
+    const val TRANSPORT_EXTERNAL = 128
+
+    const val TRANSPORT_ID_BLE = 0
+    const val TRANSPORT_ID_LAN = 1
+    const val TRANSPORT_ID_NEARBY = 2
+    const val TRANSPORT_ID_WIFI_AWARE = 3
+    const val TRANSPORT_ID_OPTICAL = 4
+    const val TRANSPORT_ID_WIFI_DIRECT = 5
+    const val TRANSPORT_ID_MULTIPEER = 6
+    const val TRANSPORT_ID_EXTERNAL = 7
 }
 
 internal class TransferFrame(

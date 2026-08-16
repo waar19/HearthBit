@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:ui';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
@@ -16,24 +17,39 @@ import '../services/at_rest_file_cipher.dart';
 import '../services/backup_protection.dart';
 import '../services/lan_transport.dart';
 import '../services/mesh_platform_service.dart';
+import '../services/hbt_package.dart';
+import '../services/hbt_share_service.dart';
+import '../services/sealed_transfer_package.dart';
 import '../services/transfer_crypto.dart';
 import '../services/transfer_platform_service.dart';
 import '../services/transfer_protocol.dart';
 import '../services/transfer_repository.dart';
 
+class PendingSealedImport {
+  const PendingSealedImport({
+    required this.packagePath,
+    required this.metadata,
+  });
+
+  final String packagePath;
+  final SealedPackageMetadata metadata;
+}
+
 /// Orquesta las transferencias de archivos: ofertas firmadas por BLE,
-/// negociación de transporte (LAN > Nearby > BLE) y cifrado de extremo a
-/// extremo con verificación SHA-256.
+/// negociación de transporte multicanal y cifrado de extremo a extremo con
+/// verificación SHA-256.
 class TransferController extends ChangeNotifier {
   TransferController(
     this._mesh, {
     TransferPlatformService? platform,
     TransferRepository? repository,
     AtRestFileCipher? fileCipher,
+    HbtShareService? shareService,
     this.offerLifetime = defaultOfferLifetime,
   }) : _platform = platform ?? TransferPlatformService(),
        _repository = repository ?? TransferRepository(),
-       _fileCipher = fileCipher ?? AtRestFileCipher();
+       _fileCipher = fileCipher ?? AtRestFileCipher(),
+       _shareService = shareService ?? HbtShareService();
 
   static const int bleChunkSize = 350;
   static const int bleMaxInlineBytes = 256 * 1024;
@@ -70,6 +86,7 @@ class TransferController extends ChangeNotifier {
   final TransferPlatformService _platform;
   final TransferRepository _repository;
   final AtRestFileCipher _fileCipher;
+  final HbtShareService _shareService;
   final Duration offerLifetime;
 
   final List<TransferRecord> _transfers = [];
@@ -80,8 +97,11 @@ class TransferController extends ChangeNotifier {
   StreamSubscription<Map<Object?, Object?>>? _platformSubscription;
   bool nearbySupported = false;
   bool wifiAwareSupported = false;
+  bool wifiDirectSupported = false;
+  bool multipeerSupported = false;
   DateTime _priorityUntil = DateTime.fromMillisecondsSinceEpoch(0);
   String? lastError;
+  PendingSealedImport? pendingSealedImport;
 
   List<TransferRecord> get transfers => List.unmodifiable(_transfers);
 
@@ -165,6 +185,12 @@ class TransferController extends ChangeNotifier {
     nearbySupported = capabilities['nearby'] as bool? ?? false;
     wifiAwareSupported =
         wifiAwareFeatureFlag && (capabilities['wifiAware'] as bool? ?? false);
+    wifiDirectSupported = capabilities['wifiDirect'] as bool? ?? false;
+    multipeerSupported = capabilities['multipeer'] as bool? ?? false;
+    final initialImport = await _platform.consumeInitialHbtImport();
+    if (initialImport != null) {
+      unawaited(importHbtPackage(initialImport));
+    }
     for (final record in resumableIncoming) {
       await _requestResume(record);
     }
@@ -201,8 +227,15 @@ class TransferController extends ChangeNotifier {
     final chunkSize = allowsBle ? bleChunkSize : defaultChunkSize;
 
     var transports = TransferProtocol.transportLan;
+    transports |= TransferProtocol.transportExternal;
     if (nearbySupported) transports |= TransferProtocol.transportNearby;
     if (wifiAwareSupported) transports |= TransferProtocol.transportWifiAware;
+    if (wifiDirectSupported) {
+      transports |= TransferProtocol.transportWifiDirect;
+    }
+    if (multipeerSupported) {
+      transports |= TransferProtocol.transportMultipeer;
+    }
     if (allowsBle) {
       transports |= TransferProtocol.transportBle;
     }
@@ -247,6 +280,8 @@ class TransferController extends ChangeNotifier {
         'bleAllowed': allowsBle,
         'nearbyAvailable': nearbySupported,
         'wifiAwareAvailable': wifiAwareSupported,
+        'wifiDirectAvailable': wifiDirectSupported,
+        'multipeerAvailable': multipeerSupported,
       },
     );
     notifyListeners();
@@ -277,7 +312,27 @@ class TransferController extends ChangeNotifier {
   // Entrada: aceptar o rechazar ofertas
   // ---------------------------------------------------------------------
 
-  Future<void> acceptOffer(String transferId) async {
+  bool canAcceptExternal(String transferId) {
+    final record = _find(transferId);
+    final session = _sessions[transferId];
+    return record?.direction == TransferDirection.incoming &&
+        record?.state == TransferState.offered &&
+        session != null &&
+        session.offeredTransports & TransferProtocol.transportExternal != 0;
+  }
+
+  bool canShareExternal(String transferId) {
+    final record = _find(transferId);
+    final session = _sessions[transferId];
+    return record?.direction == TransferDirection.outgoing &&
+        record?.transport == TransferTransport.external &&
+        session?.externalPackagePath != null;
+  }
+
+  Future<void> acceptOffer(
+    String transferId, {
+    TransferTransport? preferredTransport,
+  }) async {
     final record = _find(transferId);
     final session = _sessions[transferId];
     if (record == null ||
@@ -295,7 +350,11 @@ class TransferController extends ChangeNotifier {
     session.bitmap = ChunkBitmap(record.chunkCount);
     record.filePath = await _incomingPath(record, partial: true);
     record.state = TransferState.connecting;
-    record.transport = _chooseTransport(record, session);
+    record.transport =
+        preferredTransport == TransferTransport.external &&
+            session.offeredTransports & TransferProtocol.transportExternal != 0
+        ? TransferTransport.external
+        : _chooseTransport(record, session);
     if (record.transport == null) {
       DiagnosticsLog.instance.warning('transfer.accept.no_transport');
       _fail(record, currentL10n.terrNoTransport);
@@ -321,8 +380,14 @@ class TransferController extends ChangeNotifier {
       await _startNearbyReceive(record, session);
     } else if (record.transport == TransferTransport.wifiAware) {
       await _startWifiAwareReceive(record, session);
+    } else if (record.transport == TransferTransport.wifiDirect) {
+      await _startWifiDirectReceive(record, session);
+    } else if (record.transport == TransferTransport.multipeer) {
+      await _startMultipeerReceive(record, session);
     }
-    _armConnectTimeout(record, session);
+    if (record.transport != TransferTransport.external) {
+      _armConnectTimeout(record, session);
+    }
   }
 
   Future<void> rejectOffer(String transferId, {String? reason}) async {
@@ -398,6 +463,234 @@ class TransferController extends ChangeNotifier {
     _transfers.insert(0, record);
     _trimTransfersInMemory();
     await _repository.save(record);
+    notifyListeners();
+  }
+
+  Future<void> shareExternalPackage(String transferId, {Rect? origin}) async {
+    final record = _find(transferId);
+    final packagePath = _sessions[transferId]?.externalPackagePath;
+    if (record == null || packagePath == null) {
+      throw StateError('HBTX package is not ready');
+    }
+    await _shareService.share(
+      path: packagePath,
+      fileName: '${p.basenameWithoutExtension(record.fileName)}.hbt',
+      origin: origin,
+    );
+  }
+
+  Future<void> shareSealedFile({
+    required MeshPeer peer,
+    required String filePath,
+    required String fileName,
+    String? mimeType,
+    Rect? origin,
+  }) async {
+    if (!peer.hearthbitVerified) {
+      throw StateError('Sealed transfer requires a verified HearthBit contact');
+    }
+    final source = File(filePath);
+    final fileSize = await source.length();
+    if (fileSize <= 0 || fileSize > maxFileBytes) {
+      throw StateError(currentL10n.terrFileSize);
+    }
+    final recipient = await _mesh.getSealedTransferRecipient(peer.id);
+    final packageId = _randomBytes(16);
+    final keyPair = await TransferCrypto.generateEphemeralKeyPair();
+    final ephemeralPublic = await TransferCrypto.publicKeyBytes(keyPair);
+    final cipher = await TransferCrypto.deriveSealedCipher(
+      ephemeralKeyPair: keyPair,
+      recipientPublicKey: recipient.noisePublicKey,
+      packageId: packageId,
+    );
+    final temporary = await getTemporaryDirectory();
+    final package = File(
+      p.join(temporary.path, 'sealed-${_hex(packageId)}.hbt'),
+    );
+    final sha256 = await TransferCrypto.hashFileBytes(source);
+    final safeName = sanitizeFileName(fileName);
+    await SealedTransferPackage.create(
+      source: source,
+      destination: package,
+      packageId: packageId,
+      senderPeerId: recipient.senderPeerId,
+      recipientPeerId: recipient.recipientPeerId,
+      ephemeralPublicKey: ephemeralPublic,
+      fileName: safeName,
+      mimeType: mimeType ?? _guessMime(safeName),
+      chunkSize: defaultChunkSize,
+      sha256: sha256,
+      cipher: cipher,
+      sign: _mesh.signPayload,
+    );
+    try {
+      await _shareService.share(
+        path: package.path,
+        fileName: '${p.basenameWithoutExtension(safeName)}.hbt',
+        origin: origin,
+      );
+      final record = TransferRecord(
+        id: _hex(packageId),
+        peerId: peer.id,
+        peerNickname: peer.nickname,
+        direction: TransferDirection.outgoing,
+        fileName: safeName,
+        mimeType: mimeType ?? _guessMime(safeName),
+        fileSize: fileSize,
+        sha256Hex: _hex(sha256),
+        chunkSize: defaultChunkSize,
+        state: TransferState.completed,
+        transport: TransferTransport.external,
+        bytesDone: fileSize,
+        filePath: filePath,
+      );
+      _transfers.insert(0, record);
+      _trimTransfersInMemory();
+      await _repository.save(record);
+      notifyListeners();
+    } finally {
+      if (await package.exists()) await package.delete();
+    }
+  }
+
+  Future<void> importHbtPackage(String path) async {
+    final package = File(path);
+    try {
+      final header = await HbtPackageProtocol.inspect(package);
+      if (header.kind == HbtPackageKind.sealed) {
+        await _importSealedPackage(package);
+        return;
+      }
+      final transferId = _hex(header.transferId);
+      final record = _find(transferId);
+      final session = _sessions[transferId];
+      if (record == null ||
+          session == null ||
+          record.direction != TransferDirection.incoming ||
+          record.transport != TransferTransport.external ||
+          session.cipher == null) {
+        throw const FormatException('HBTX package has no accepted session');
+      }
+      final containerPath = await _incomingPath(
+        record,
+        partial: true,
+        suffix: '.enc',
+      );
+      await HbtPackageProtocol.extractExchange(
+        package: package,
+        header: header,
+        destination: File(containerPath),
+      );
+      session.containerPath = containerPath;
+      record.state = TransferState.transferring;
+      notifyListeners();
+      await _finishContainerTransfer(record);
+    } catch (error) {
+      lastError = '${currentL10n.terrTransport}: $error';
+      notifyListeners();
+    } finally {
+      if (await package.exists()) {
+        await package.delete();
+      }
+    }
+  }
+
+  Future<void> _importSealedPackage(File package) async {
+    final metadata = await SealedTransferPackage.inspect(package);
+    final validSignature = await _mesh.verifyPeerSignature(
+      metadata.senderPeerId,
+      metadata.signedHeader,
+      metadata.signature,
+    );
+    if (!validSignature) {
+      throw const FormatException('Unknown sender or invalid HBTS signature');
+    }
+    if (_find(_hex(metadata.packageId)) != null) {
+      throw const FormatException('Sealed package was already imported');
+    }
+    final directory = await _transfersDirectory();
+    final retained = File(
+      p.join(directory.path, 'pending-${_hex(metadata.packageId)}.hbt'),
+    );
+    await package.copy(retained.path);
+    final previous = pendingSealedImport;
+    pendingSealedImport = PendingSealedImport(
+      packagePath: retained.path,
+      metadata: metadata,
+    );
+    if (previous != null) {
+      final old = File(previous.packagePath);
+      if (await old.exists()) await old.delete();
+    }
+    notifyListeners();
+  }
+
+  Future<void> acceptPendingSealedImport() async {
+    final pending = pendingSealedImport;
+    if (pending == null) return;
+    pendingSealedImport = null;
+    final metadata = pending.metadata;
+    final package = File(pending.packagePath);
+    File? partial;
+    try {
+      final sharedSecret = await _mesh.deriveSealedOpenSecret(
+        metadata.ephemeralPublicKey,
+        metadata.recipientPeerId,
+      );
+      final cipher = await TransferCrypto.deriveSealedCipherFromSecret(
+        sharedSecret: sharedSecret,
+        packageId: metadata.packageId,
+      );
+      final record = TransferRecord(
+        id: _hex(metadata.packageId),
+        peerId: metadata.senderPeerId,
+        peerNickname: metadata.senderPeerId.substring(0, 8),
+        direction: TransferDirection.incoming,
+        fileName: metadata.fileName,
+        mimeType: metadata.mimeType,
+        fileSize: metadata.fileSize,
+        sha256Hex: _hex(metadata.sha256),
+        chunkSize: metadata.chunkSize,
+        state: TransferState.transferring,
+        transport: TransferTransport.external,
+      );
+      partial = File(await _incomingPath(record, partial: true));
+      await SealedTransferPackage.decrypt(
+        package: package,
+        metadata: metadata,
+        destination: partial,
+        cipher: cipher,
+      );
+      final digest = await TransferCrypto.hashFile(partial);
+      if (digest != record.sha256Hex) {
+        throw const FormatException('Sealed plaintext SHA-256 mismatch');
+      }
+      final finalPath = await _incomingPath(record, partial: false);
+      await partial.rename(finalPath);
+      record
+        ..filePath = finalPath
+        ..bytesDone = record.fileSize
+        ..state = TransferState.completed;
+      await _protectCompletedFile(record);
+      _transfers.insert(0, record);
+      _trimTransfersInMemory();
+      await _repository.save(record);
+    } catch (error) {
+      if (partial != null && await partial.exists()) await partial.delete();
+      lastError = '${currentL10n.terrTransport}: $error';
+    } finally {
+      if (await package.exists()) await package.delete();
+      notifyListeners();
+    }
+  }
+
+  Future<void> rejectPendingSealedImport() async {
+    final pending = pendingSealedImport;
+    pendingSealedImport = null;
+    if (pending != null) {
+      final package = File(pending.packagePath);
+      if (await package.exists()) await package.delete();
+    }
     notifyListeners();
   }
 
@@ -617,6 +910,15 @@ class TransferController extends ChangeNotifier {
       case TransferTransport.wifiAware:
         await _startWifiAwareSend(record, session);
         break;
+      case TransferTransport.wifiDirect:
+        await _startWifiDirectSend(record, session);
+        break;
+      case TransferTransport.multipeer:
+        await _startMultipeerSend(record, session);
+        break;
+      case TransferTransport.external:
+        await _prepareExternalSend(record, session);
+        break;
       case TransferTransport.ble:
         await _startBleSend(record, session);
         break;
@@ -646,11 +948,42 @@ class TransferController extends ChangeNotifier {
     if (record.transport == TransferTransport.lan &&
         offered & TransferProtocol.transportLan != 0) {
       transport = TransferTransport.lan;
+    } else if (record.transport == TransferTransport.nearby &&
+        offered & TransferProtocol.transportNearby != 0 &&
+        nearbySupported) {
+      transport = TransferTransport.nearby;
+    } else if (record.transport == TransferTransport.wifiAware &&
+        offered & TransferProtocol.transportWifiAware != 0 &&
+        wifiAwareSupported) {
+      transport = TransferTransport.wifiAware;
+    } else if (record.transport == TransferTransport.wifiDirect &&
+        offered & TransferProtocol.transportWifiDirect != 0 &&
+        wifiDirectSupported) {
+      transport = TransferTransport.wifiDirect;
+    } else if (record.transport == TransferTransport.multipeer &&
+        offered & TransferProtocol.transportMultipeer != 0 &&
+        multipeerSupported) {
+      transport = TransferTransport.multipeer;
+    } else if (record.transport == TransferTransport.external &&
+        offered & TransferProtocol.transportExternal != 0) {
+      transport = TransferTransport.external;
     } else if (record.transport == TransferTransport.ble &&
         offered & TransferProtocol.transportBle != 0) {
       transport = TransferTransport.ble;
     } else if (offered & TransferProtocol.transportLan != 0) {
       transport = TransferTransport.lan;
+    } else if (offered & TransferProtocol.transportNearby != 0 &&
+        nearbySupported) {
+      transport = TransferTransport.nearby;
+    } else if (offered & TransferProtocol.transportWifiAware != 0 &&
+        wifiAwareSupported) {
+      transport = TransferTransport.wifiAware;
+    } else if (offered & TransferProtocol.transportWifiDirect != 0 &&
+        wifiDirectSupported) {
+      transport = TransferTransport.wifiDirect;
+    } else if (offered & TransferProtocol.transportMultipeer != 0 &&
+        multipeerSupported) {
+      transport = TransferTransport.multipeer;
     } else if (offered & TransferProtocol.transportBle != 0 &&
         allowsBleTransfer(mimeType: record.mimeType, bytes: record.fileSize)) {
       transport = TransferTransport.ble;
@@ -675,7 +1008,9 @@ class TransferController extends ChangeNotifier {
         record,
         failTransferOnError: false,
       );
-      _armConnectTimeout(record, session);
+      if (transport != TransferTransport.external) {
+        _armConnectTimeout(record, session);
+      }
     } catch (error) {
       lastError = currentL10n.terrNoMeshSession('$error');
     }
@@ -704,6 +1039,25 @@ class TransferController extends ChangeNotifier {
     final allowed =
         (transport == TransferTransport.lan &&
             session.offeredTransports & TransferProtocol.transportLan != 0) ||
+        (transport == TransferTransport.nearby &&
+            nearbySupported &&
+            session.offeredTransports & TransferProtocol.transportNearby !=
+                0) ||
+        (transport == TransferTransport.wifiAware &&
+            wifiAwareSupported &&
+            session.offeredTransports & TransferProtocol.transportWifiAware !=
+                0) ||
+        (transport == TransferTransport.wifiDirect &&
+            wifiDirectSupported &&
+            session.offeredTransports & TransferProtocol.transportWifiDirect !=
+                0) ||
+        (transport == TransferTransport.multipeer &&
+            multipeerSupported &&
+            session.offeredTransports & TransferProtocol.transportMultipeer !=
+                0) ||
+        (transport == TransferTransport.external &&
+            session.offeredTransports & TransferProtocol.transportExternal !=
+                0) ||
         (transport == TransferTransport.ble &&
             session.offeredTransports & TransferProtocol.transportBle != 0);
     if (!allowed) return;
@@ -715,7 +1069,17 @@ class TransferController extends ChangeNotifier {
     await _saveResumeState(record, session);
     if (transport == TransferTransport.lan) {
       await _startLanSend(record, session);
-    } else {
+    } else if (transport == TransferTransport.nearby) {
+      await _startNearbySend(record, session);
+    } else if (transport == TransferTransport.wifiAware) {
+      await _startWifiAwareSend(record, session);
+    } else if (transport == TransferTransport.wifiDirect) {
+      await _startWifiDirectSend(record, session);
+    } else if (transport == TransferTransport.multipeer) {
+      await _startMultipeerSend(record, session);
+    } else if (transport == TransferTransport.external) {
+      await _prepareExternalSend(record, session);
+    } else if (transport == TransferTransport.ble) {
       await _startBleSend(record, session, remoteBitmap: remoteBitmap);
     }
   }
@@ -828,6 +1192,11 @@ class TransferController extends ChangeNotifier {
   }
 
   void _handlePlatformEvent(Map<Object?, Object?> event) {
+    if (event['type'] == 'hbtImport') {
+      final path = event['path'] as String?;
+      if (path != null) unawaited(importHbtPackage(path));
+      return;
+    }
     final transferId = event['transferId'] as String?;
     if (transferId == null) return;
     final record = _find(transferId);
@@ -835,6 +1204,8 @@ class TransferController extends ChangeNotifier {
     switch (event['type']) {
       case 'nearbyProgress':
       case 'wifiAwareProgress':
+      case 'wifiDirectProgress':
+      case 'multipeerProgress':
         final bytes = event['bytes'] as int? ?? 0;
         record.state = TransferState.transferring;
         // El contenedor cifrado añade 24 bytes por chunk; se aproxima.
@@ -843,10 +1214,14 @@ class TransferController extends ChangeNotifier {
         break;
       case 'nearbyDone':
       case 'wifiAwareDone':
+      case 'wifiDirectDone':
+      case 'multipeerDone':
         unawaited(_finishContainerTransfer(record));
         break;
       case 'nearbyError':
       case 'wifiAwareError':
+      case 'wifiDirectError':
+      case 'multipeerError':
         DiagnosticsLog.instance.warning(
           'transfer.transport.failed',
           data: {'transportEvent': event['type'] as String? ?? 'unknown'},
@@ -944,6 +1319,60 @@ class TransferController extends ChangeNotifier {
       );
     } catch (error) {
       _fail(record, currentL10n.terrWifiAwareStart('$error'));
+    }
+  }
+
+  Future<void> _startWifiDirectSend(
+    TransferRecord record,
+    _TransferSession session,
+  ) async {
+    try {
+      final container = await _encryptContainer(record, session);
+      session.containerPath = container.path;
+      await _platform.wifiDirectSendFile(
+        transferId: record.id,
+        filePath: container.path,
+      );
+    } catch (error) {
+      _fail(record, '${currentL10n.terrTransport}: $error');
+    }
+  }
+
+  Future<void> _startMultipeerSend(
+    TransferRecord record,
+    _TransferSession session,
+  ) async {
+    try {
+      final container = await _encryptContainer(record, session);
+      session.containerPath = container.path;
+      await _platform.multipeerSendFile(
+        transferId: record.id,
+        filePath: container.path,
+      );
+    } catch (error) {
+      _fail(record, '${currentL10n.terrTransport}: $error');
+    }
+  }
+
+  Future<void> _prepareExternalSend(
+    TransferRecord record,
+    _TransferSession session,
+  ) async {
+    try {
+      final container = await _encryptContainer(record, session);
+      session.containerPath = container.path;
+      final temporary = await getTemporaryDirectory();
+      final package = File(p.join(temporary.path, 'hbt-${record.id}.hbt'));
+      await HbtPackageProtocol.writeExchange(
+        container: container,
+        transferId: _fromHex(record.id),
+        destination: package,
+      );
+      session.externalPackagePath = package.path;
+      record.state = TransferState.connecting;
+      notifyListeners();
+    } catch (error) {
+      _fail(record, '${currentL10n.terrTransport}: $error');
     }
   }
 
@@ -1064,8 +1493,55 @@ class TransferController extends ChangeNotifier {
     }
   }
 
-  /// Cierre común de Nearby y Wi-Fi Aware: ambos entregan el contenedor
-  /// cifrado completo como un único archivo.
+  Future<void> _startWifiDirectReceive(
+    TransferRecord record,
+    _TransferSession session,
+  ) async {
+    final container = await _incomingPath(
+      record,
+      partial: true,
+      suffix: '.enc',
+    );
+    session.containerPath = container;
+    try {
+      await _platform.wifiDirectReceiveFile(
+        transferId: record.id,
+        destinationPath: container,
+      );
+    } catch (error) {
+      await _receiverFallback(
+        record,
+        session,
+        '${currentL10n.terrTransport}: $error',
+      );
+    }
+  }
+
+  Future<void> _startMultipeerReceive(
+    TransferRecord record,
+    _TransferSession session,
+  ) async {
+    final container = await _incomingPath(
+      record,
+      partial: true,
+      suffix: '.enc',
+    );
+    session.containerPath = container;
+    try {
+      await _platform.multipeerReceiveFile(
+        transferId: record.id,
+        destinationPath: container,
+      );
+    } catch (error) {
+      await _receiverFallback(
+        record,
+        session,
+        '${currentL10n.terrTransport}: $error',
+      );
+    }
+  }
+
+  /// Cierre común de transportes que entregan el contenedor cifrado completo.
   Future<void> _finishContainerTransfer(TransferRecord record) async {
     final session = _sessions[record.id];
     if (record.direction == TransferDirection.outgoing) {
@@ -1126,6 +1602,10 @@ class TransferController extends ChangeNotifier {
       await _startNearbyReceive(record, session);
     } else if (next == TransferTransport.wifiAware) {
       await _startWifiAwareReceive(record, session);
+    } else if (next == TransferTransport.wifiDirect) {
+      await _startWifiDirectReceive(record, session);
+    } else if (next == TransferTransport.multipeer) {
+      await _startMultipeerReceive(record, session);
     }
     _armConnectTimeout(record, session);
   }
@@ -1199,6 +1679,12 @@ class TransferController extends ChangeNotifier {
       if (offered & TransferProtocol.transportWifiAware != 0 &&
           wifiAwareSupported)
         TransferTransport.wifiAware,
+      if (offered & TransferProtocol.transportWifiDirect != 0 &&
+          wifiDirectSupported)
+        TransferTransport.wifiDirect,
+      if (offered & TransferProtocol.transportMultipeer != 0 &&
+          multipeerSupported)
+        TransferTransport.multipeer,
       if (!preferBle && bleAvailable) TransferTransport.ble,
     ];
     for (final candidate in candidates) {
@@ -1350,8 +1836,14 @@ class TransferController extends ChangeNotifier {
       final container = File(session!.containerPath!);
       if (await container.exists()) await container.delete();
     }
+    if (session?.externalPackagePath != null) {
+      final package = File(session!.externalPackagePath!);
+      if (await package.exists()) await package.delete();
+    }
     await _platform.nearbyStop(record.id);
     await _platform.wifiAwareStop(record.id);
+    await _platform.wifiDirectStop(record.id);
+    await _platform.multipeerStop(record.id);
     await _protectCompletedFile(record);
     _trimTransfersInMemory();
     await _repository.save(
@@ -1441,6 +1933,9 @@ class TransferController extends ChangeNotifier {
     TransferTransport.nearby => TransferProtocol.transportIdNearby,
     TransferTransport.wifiAware => TransferProtocol.transportIdWifiAware,
     TransferTransport.optical => TransferProtocol.transportIdOptical,
+    TransferTransport.wifiDirect => TransferProtocol.transportIdWifiDirect,
+    TransferTransport.multipeer => TransferProtocol.transportIdMultipeer,
+    TransferTransport.external => TransferProtocol.transportIdExternal,
   };
 
   TransferTransport? _transportFromId(int id) => switch (id) {
@@ -1449,6 +1944,9 @@ class TransferController extends ChangeNotifier {
     TransferProtocol.transportIdNearby => TransferTransport.nearby,
     TransferProtocol.transportIdWifiAware => TransferTransport.wifiAware,
     TransferProtocol.transportIdOptical => TransferTransport.optical,
+    TransferProtocol.transportIdWifiDirect => TransferTransport.wifiDirect,
+    TransferProtocol.transportIdMultipeer => TransferTransport.multipeer,
+    TransferProtocol.transportIdExternal => TransferTransport.external,
     _ => null,
   };
 
@@ -1502,6 +2000,7 @@ class _TransferSession {
   Timer? expiryTimer;
   Timer? connectTimer;
   String? containerPath;
+  String? externalPackagePath;
   final Set<TransferTransport> triedTransports = {};
   final StreamController<int> ackController = StreamController.broadcast();
 }

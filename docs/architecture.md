@@ -43,17 +43,21 @@
 2. Aceptada la oferta, ambos lados derivan una clave X25519 efímera y cifran
    cada chunk con XChaCha20-Poly1305; el receptor verifica el SHA-256 final.
 3. El selector de transporte prueba en orden: **LAN/hotspot** (TCP + cifrado
-   de aplicación), **Nearby Connections** (Android), **Wi-Fi Aware**
-   (Android 10+, feature flag), y **BLE inline** para archivos ≤ 256 KiB.
-   Cada fallo cae automáticamente al siguiente transporte.
+   de aplicación), **Nearby Connections** (Android), **Wi-Fi Aware**,
+   **Wi-Fi Direct** (Android), **MultipeerConnectivity** (iOS) y **BLE
+   inline** para archivos ≤ 256 KiB. Cada fallo cae automáticamente al
+   siguiente transporte.
 4. El **modo óptico** (QR + códigos fountain LT) funciona sin ninguna radio:
    el emisor muestra símbolos rateless y el receptor filma hasta reconstruir
    y verificar el archivo. Si además hay sesión de malla, una trama HBT
    `COMPLETE` detiene al emisor al instante.
-5. En iOS, Nearby y Wi-Fi Aware aún no están disponibles: el selector usa
-   LAN, BLE u óptico. Las fotos grandes pueden comprimirse con el perfil de
-   emergencia (1600 px, JPEG 70) antes de ofrecerse.
-6. Un SOS en la malla frena los transportes de datos durante unos segundos:
+5. El formato `.hbt` permite usar Quick Share, AirDrop, mensajería o USB.
+   `HBTX` mueve el contenedor opaco de una sesión OFFER/ACCEPT cercana;
+   `HBTS` es autocontenido, está sellado a la clave X25519 persistente de un
+   contacto conocido y su cabecera está firmada con Ed25519.
+6. Android y iOS registran `application/x-hearthbit`. Al abrir un `HBTS`, la
+   app muestra nombre y remitente verificado antes de descifrar y guardar.
+7. Un SOS en la malla frena los transportes de datos durante unos segundos:
    el chat de emergencia siempre tiene prioridad sobre los archivos.
 
 ## Modo rescate y energía

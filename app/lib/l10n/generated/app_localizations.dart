@@ -998,11 +998,59 @@ abstract class AppLocalizations {
   /// **'Wi-Fi Aware'**
   String get transportWifiAware;
 
+  /// No description provided for @transportWifiDirect.
+  ///
+  /// In en, this message translates to:
+  /// **'Wi-Fi Direct'**
+  String get transportWifiDirect;
+
+  /// No description provided for @transportMultipeer.
+  ///
+  /// In en, this message translates to:
+  /// **'Multipeer'**
+  String get transportMultipeer;
+
+  /// No description provided for @transportShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Share with another app'**
+  String get transportShare;
+
   /// No description provided for @transportOptical.
   ///
   /// In en, this message translates to:
   /// **'Optical QR'**
   String get transportOptical;
+
+  /// No description provided for @transferExport.
+  ///
+  /// In en, this message translates to:
+  /// **'SHARE'**
+  String get transferExport;
+
+  /// No description provided for @transferImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Open HearthBit package'**
+  String get transferImport;
+
+  /// No description provided for @sealedTransferSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send sealed through another app'**
+  String get sealedTransferSend;
+
+  /// No description provided for @sealedImportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified sealed file'**
+  String get sealedImportTitle;
+
+  /// No description provided for @sealedImportBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{fileName} was signed by verified contact {sender}. Save it?'**
+  String sealedImportBody(String fileName, String sender);
 
   /// No description provided for @actionReject.
   ///

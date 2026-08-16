@@ -3,7 +3,8 @@
 Protocolo de control y datos para transferir archivos entre nodos HearthBit.
 El plano de control viaja por la malla BLE dentro de la sesión Noise ya
 autenticada (tipo interno `0x30`), y el plano de datos usa el transporte
-negociado (BLE, LAN/hotspot, Nearby Connections, Wi‑Fi Aware u óptico).
+negociado (BLE, LAN/hotspot, Nearby Connections, Wi‑Fi Aware, Wi‑Fi Direct,
+MultipeerConnectivity, intercambio externo u óptico).
 
 Los UUID BLE, los tipos de paquete de malla y el handshake Noise XX no
 cambian: siguen siendo los de BitChat.
@@ -47,12 +48,12 @@ rechazar tramas con versión distinta de `0x01`.
 | 0x04 | FILE_SIZE       | u64, bytes del archivo en claro |
 | 0x05 | SHA256          | 32 bytes, hash del archivo en claro |
 | 0x06 | CHUNK_SIZE      | u32, bytes de cada chunk en claro |
-| 0x07 | TRANSPORTS      | u32, máscara: 1 BLE, 2 LAN, 4 NEARBY, 8 WIFI_AWARE, 16 OPTICAL |
+| 0x07 | TRANSPORTS      | u32, máscara: 1 BLE, 2 LAN, 4 NEARBY, 8 WIFI_AWARE, 16 OPTICAL, 32 WIFI_DIRECT, 64 MULTIPEER, 128 EXTERNAL |
 | 0x08 | EPHEMERAL_KEY   | 32 bytes, clave pública X25519 efímera |
 | 0x09 | EXPIRES_AT      | u64, epoch ms; la oferta caduca y se descarta |
 | 0x0A | SENDER_PEER_ID  | 8 bytes, peer ID BitChat del emisor |
 | 0x0B | SIGNATURE       | 64 bytes, Ed25519 |
-| 0x0C | TRANSPORT       | u8: 0 BLE, 1 LAN, 2 NEARBY, 3 WIFI_AWARE, 4 OPTICAL |
+| 0x0C | TRANSPORT       | u8: 0 BLE, 1 LAN, 2 NEARBY, 3 WIFI_AWARE, 4 OPTICAL, 5 WIFI_DIRECT, 6 MULTIPEER, 7 EXTERNAL |
 | 0x0D | ENDPOINT        | UTF-8 `ip:puerto` (LAN/Wi‑Fi Aware) |
 | 0x0E | TOKEN           | 16 bytes, token de conexión de un solo uso |
 | 0x0F | CHUNK_INDEX     | u32 |
@@ -98,18 +99,66 @@ repetido: [CHUNK_INDEX u32][longitud u32][cifrado_i]
 Esto permite reanudar por chunk y transferir el contenedor como archivo
 opaco (Nearby FILE payload) o como flujo TCP (LAN).
 
+### Wi-Fi Direct y MultipeerConnectivity
+
+- Android anuncia `_hearthbit-hbt._tcp` por DNS-SD de Wi-Fi Direct. El nombre
+  contiene un token SHA-256 derivado del `TRANSFER_ID`; tras formar el grupo,
+  un socket TCP en el puerto 45896 autentica ese token y mueve el contenedor.
+- iOS anuncia `hearthbit-hbt` con `MCNearbyServiceAdvertiser`. El token
+  derivado se incluye en `discoveryInfo` y `MCSession` exige cifrado. El
+  contenedor se entrega con `sendResource`.
+- Ambos son planos de datos: OFFER, ACCEPT, fallback y COMPLETE siguen
+  viajando por la sesión Noise.
+
+## Paquetes `.hbt` externos
+
+Android registra `application/x-hearthbit` para `ACTION_VIEW`/`ACTION_SEND`;
+iOS registra el UTI `com.hearthbit.hbt`. Hay dos formatos:
+
+### HBTX v1: contenedor de una sesión
+
+```
+[magic "HBTX"][versión u8][TRANSFER_ID 16B][payloadLen u64][contenedor .enc]
+```
+
+HBTX no incluye claves. El receptor debe haber aceptado previamente la oferta
+con `TRANSPORT=7`; solo entonces conserva la efímera local necesaria para
+derivar la clave. Quick Share, AirDrop o cualquier otra app transportan bytes
+opacos. Al importar, HearthBit casa `TRANSFER_ID`, descifra y verifica SHA-256.
+
+### HBTS v1: paquete sellado autocontenido
+
+```
+[magic "HBTS"][versión u8][packageId 16B]
+[senderPeerId 8B][recipientPeerId 8B][ephemeralX25519 32B]
+[fileSize u64][chunkSize u32][sha256 32B]
+[nameLen u16][name][mimeLen u16][mime]
+[signature Ed25519 64B]
+repetido: [chunkIndex u32][cipherLen u32][ciphertext+MAC]
+```
+
+El emisor deriva `X25519(efímera, estática_del_destinatario)` y aplica
+HKDF-SHA256 con `salt=packageId`, `info="hearthbit/sealed/v1"`. La cabecera
+anterior a `signature` queda firmada con la identidad Ed25519 del emisor. El
+receptor exige que `recipientPeerId` sea su identidad, valida la firma contra
+el pin persistente del contacto, muestra el remitente antes de guardar,
+descifra con su estática X25519 y verifica el SHA-256 final. El paquete puede
+viajar sin una sesión de malla activa y solo el destinatario puede abrirlo.
+
 ## Negociación de transporte
 
 1. El emisor manda OFFER por BLE con la máscara TRANSPORTS que soporta.
 2. El receptor responde ACCEPT con el TRANSPORT elegido (el mejor de la
-   intersección, orden de preferencia: LAN > NEARBY > WIFI_AWARE > BLE) y su
-   clave efímera. Si tiene chunks previos, adjunta CHUNK_BITMAP.
+   intersección, orden de preferencia: LAN > NEARBY > WIFI_AWARE >
+   WIFI_DIRECT > MULTIPEER > BLE) y su clave efímera. Si tiene chunks
+   previos, adjunta CHUNK_BITMAP. EXTERNAL y OPTICAL se eligen manualmente.
 3. Para LAN, el emisor abre un socket TCP y envía TRANSPORT_HINT con
    ENDPOINT y TOKEN; el receptor se conecta, envía el TOKEN y su bitmap, y
    el emisor transmite los chunks que falten.
 4. Si el transporte falla, cualquiera de los dos envía TRANSPORT_HINT con el
    siguiente transporte de la lista y se reintenta. BLE es el último recurso
-   para archivos ≤ 256 KiB; el modo óptico se elige manualmente.
+   automático para archivos ≤ 256 KiB; los modos EXTERNAL y OPTICAL se
+   eligen manualmente.
 
 ## Límites y política
 

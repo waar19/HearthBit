@@ -527,7 +527,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transportWifiAware => 'Wi-Fi Aware';
 
   @override
+  String get transportWifiDirect => 'Wi-Fi Direct';
+
+  @override
+  String get transportMultipeer => 'Multipeer';
+
+  @override
+  String get transportShare => 'Share with another app';
+
+  @override
   String get transportOptical => 'Optical QR';
+
+  @override
+  String get transferExport => 'SHARE';
+
+  @override
+  String get transferImport => 'Open HearthBit package';
+
+  @override
+  String get sealedTransferSend => 'Send sealed through another app';
+
+  @override
+  String get sealedImportTitle => 'Verified sealed file';
+
+  @override
+  String sealedImportBody(String fileName, String sender) {
+    return '$fileName was signed by verified contact $sender. Save it?';
+  }
 
   @override
   String get actionReject => 'REJECT';

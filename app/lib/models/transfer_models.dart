@@ -13,7 +13,16 @@ enum TransferState {
   failed,
 }
 
-enum TransferTransport { ble, lan, nearby, wifiAware, optical }
+enum TransferTransport {
+  ble,
+  lan,
+  nearby,
+  wifiAware,
+  optical,
+  wifiDirect,
+  multipeer,
+  external,
+}
 
 class TransferRecord {
   TransferRecord({

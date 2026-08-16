@@ -33,6 +33,43 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>HearthBit Transfer</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.hearthbit.hbt</string>
+			</array>
+		</dict>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>HearthBit Transfer</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.hearthbit.hbt</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>hbt</string>
+				</array>
+				<key>public.mime-type</key>
+				<string>application/x-hearthbit</string>
+			</dict>
+		</dict>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
@@ -54,6 +91,8 @@
 		<string>_hearthbit._tcp</string>
 		<string>_hearthbit-sos._tcp</string>
 		<string>_hearthbit-sos._udp</string>
+		<string>_hearthbit-hbt._tcp</string>
+		<string>_hearthbit-hbt._udp</string>
 	</array>
 	<!-- iOS 26 Wi-Fi Aware: servicio alineado con el nombre Android
 	     `hearthbit-hbt` (formato RFC 6763). Los valores Publishable y

@@ -7,6 +7,7 @@ import 'package:hearth_bit/controllers/transfer_controller.dart';
 import 'package:hearth_bit/models/mesh_models.dart';
 import 'package:hearth_bit/models/transfer_models.dart';
 import 'package:hearth_bit/services/mesh_platform_service.dart';
+import 'package:hearth_bit/services/hbt_package.dart';
 import 'package:hearth_bit/services/transfer_crypto.dart';
 import 'package:hearth_bit/services/transfer_platform_service.dart';
 import 'package:hearth_bit/services/transfer_protocol.dart';
@@ -40,12 +41,21 @@ class _MeshPlatform extends MeshPlatformService {
 }
 
 class _TransferPlatform extends TransferPlatformService {
-  _TransferPlatform({this.nearby = false, this.wifiAware = false});
+  _TransferPlatform({
+    this.nearby = false,
+    this.wifiAware = false,
+    this.wifiDirect = false,
+    this.multipeer = false,
+  });
 
   final eventsController = StreamController<Map<Object?, Object?>>.broadcast();
   final bool nearby;
   final bool wifiAware;
+  final bool wifiDirect;
+  final bool multipeer;
   final nearbyReceives = <String>[];
+  final wifiDirectReceives = <String>[];
+  final multipeerReceives = <String>[];
   final stopped = <String>[];
 
   @override
@@ -55,6 +65,8 @@ class _TransferPlatform extends TransferPlatformService {
   Future<Map<Object?, Object?>> getTransferCapabilities() async => {
     'nearby': nearby,
     'wifiAware': wifiAware,
+    'wifiDirect': wifiDirect,
+    'multipeer': multipeer,
   };
 
   @override
@@ -74,6 +86,32 @@ class _TransferPlatform extends TransferPlatformService {
   @override
   Future<void> wifiAwareStop(String transferId) async {
     stopped.add('wifiAware:$transferId');
+  }
+
+  @override
+  Future<void> wifiDirectReceiveFile({
+    required String transferId,
+    required String destinationPath,
+  }) async {
+    wifiDirectReceives.add(transferId);
+  }
+
+  @override
+  Future<void> multipeerReceiveFile({
+    required String transferId,
+    required String destinationPath,
+  }) async {
+    multipeerReceives.add(transferId);
+  }
+
+  @override
+  Future<void> wifiDirectStop(String transferId) async {
+    stopped.add('wifiDirect:$transferId');
+  }
+
+  @override
+  Future<void> multipeerStop(String transferId) async {
+    stopped.add('multipeer:$transferId');
   }
 }
 
@@ -250,6 +288,9 @@ void main() {
     expect(transports & TransferProtocol.transportBle, isNonZero);
     expect(transports & TransferProtocol.transportNearby, isZero);
     expect(transports & TransferProtocol.transportWifiAware, isNonZero);
+    expect(transports & TransferProtocol.transportWifiDirect, isZero);
+    expect(transports & TransferProtocol.transportMultipeer, isZero);
+    expect(transports & TransferProtocol.transportExternal, isNonZero);
   });
 
   test('rejects unsupported peers and empty files', () async {
@@ -324,6 +365,105 @@ void main() {
 
     expect(record.transport, TransferTransport.nearby);
     expect(platform.nearbyReceives, [record.id]);
+  });
+
+  test('selects Wi-Fi Direct and Multipeer when each is available', () async {
+    controller.dispose();
+    await platform.eventsController.close();
+    platform = _TransferPlatform(wifiDirect: true, multipeer: true);
+    controller = TransferController(
+      mesh,
+      platform: platform,
+      repository: repository,
+    );
+    await controller.initialize();
+    final directOffer = await _offerFrame(
+      transports:
+          TransferProtocol.transportWifiDirect |
+          TransferProtocol.transportMultipeer,
+    );
+    mesh.eventsController.add({
+      'type': 'transferFrame',
+      'peerId': _peer().id,
+      'frame': directOffer.encode(),
+    });
+    await pumpEventQueue();
+
+    final record = controller.transfers.single;
+    await controller.acceptOffer(record.id);
+
+    expect(record.transport, TransferTransport.wifiDirect);
+    expect(platform.wifiDirectReceives, [record.id]);
+
+    platform.eventsController.add({
+      'type': 'wifiDirectError',
+      'transferId': record.id,
+      'message': 'direct failed',
+    });
+    await _waitUntil(() => record.transport == TransferTransport.multipeer);
+    expect(platform.multipeerReceives, [record.id]);
+  });
+
+  test('imports HBTX only after matching an accepted session', () async {
+    final transferId = Uint8List.fromList(List.generate(16, (index) => index));
+    final senderKey = await TransferCrypto.generateEphemeralKeyPair();
+    final plaintext = Uint8List.fromList('share-sheet payload'.codeUnits);
+    final digest = await TransferCrypto.hashBytes(plaintext);
+    final offer = TransferFrame(TransferProtocol.typeOffer)
+      ..setBytes(TransferProtocol.tagTransferId, transferId)
+      ..setUtf8(TransferProtocol.tagFileName, 'share.txt')
+      ..setUtf8(TransferProtocol.tagMimeType, 'text/plain')
+      ..setU64(TransferProtocol.tagFileSize, plaintext.length)
+      ..setBytes(TransferProtocol.tagSha256, digest)
+      ..setU32(TransferProtocol.tagChunkSize, TransferController.bleChunkSize)
+      ..setU32(
+        TransferProtocol.tagTransports,
+        TransferProtocol.transportExternal,
+      )
+      ..setBytes(
+        TransferProtocol.tagEphemeralKey,
+        await TransferCrypto.publicKeyBytes(senderKey),
+      )
+      ..setU64(
+        TransferProtocol.tagExpiresAt,
+        DateTime.now().add(const Duration(minutes: 1)).millisecondsSinceEpoch,
+      )
+      ..setBytes(TransferProtocol.tagSignature, Uint8List(64));
+    mesh.eventsController.add({
+      'type': 'transferFrame',
+      'peerId': _peer().id,
+      'frame': offer.encode(),
+    });
+    await pumpEventQueue();
+    final record = controller.transfers.single;
+    await controller.acceptOffer(
+      record.id,
+      preferredTransport: TransferTransport.external,
+    );
+    final accept = TransferFrame.decode(mesh.sentFrames.last)!;
+    final senderCipher = await TransferCrypto.deriveCipher(
+      localKeyPair: senderKey,
+      remotePublicKey: accept.bytes(TransferProtocol.tagEphemeralKey)!,
+      transferId: transferId,
+    );
+    final encrypted = await senderCipher.encryptChunk(0, plaintext);
+    final container = File('${temporaryDirectory.path}/session.enc');
+    final header = Uint8List(8);
+    ByteData.sublistView(header)
+      ..setUint32(0, 0)
+      ..setUint32(4, encrypted.length);
+    await container.writeAsBytes([...header, ...encrypted]);
+    final package = File('${temporaryDirectory.path}/session.hbt');
+    await HbtPackageProtocol.writeExchange(
+      container: container,
+      transferId: transferId,
+      destination: package,
+    );
+
+    await controller.importHbtPackage(package.path);
+
+    expect(record.state, TransferState.completed);
+    expect(await File(record.filePath!).readAsString(), 'share-sheet payload');
   });
 
   test('prefers BLE and auto-accepts small incoming voice notes', () async {
