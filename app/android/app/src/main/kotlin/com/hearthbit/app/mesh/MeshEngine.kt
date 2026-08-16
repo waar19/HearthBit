@@ -2611,8 +2611,13 @@ internal class MeshEngine(
                 }
                 val request = PendingBeaconRequest(senderHex, peer.nickname, control)
                 pendingBeaconRequests[requestId] = request
-                // Radar y rescate autorizan medición, no control del hardware.
-                // Sonido, flash y vibración siempre requieren confirmación.
+                val autoAccepted = BeaconControlProtocol.shouldAutoAccept(
+                    rescueModeActive = isRescueModeActive(now),
+                    localRadarConsentUntil = activeLocalRadarConsentUntil(),
+                    hearthbitVerified = peer.hearthbitVerified,
+                    knownRelationship = isKnownRelationship(senderHex),
+                    now = now,
+                )
                 emit(
                     mapOf(
                         "type" to "beaconRequest",
@@ -2621,9 +2626,13 @@ internal class MeshEngine(
                         "nickname" to peer.nickname,
                         "expiresAt" to control.expiresAt,
                         "flags" to control.flags,
-                        "autoAccepted" to false,
+                        "autoAccepted" to autoAccepted,
                     ),
                 )
+                if (autoAccepted) {
+                    pendingBeaconRequests.remove(requestId)
+                    respondToBeaconRequest(request, accept = true, autoAccepted = true)
+                }
             }
             BeaconControlProtocol.ACTION_GRANT -> {
                 val outgoing = outgoingBeaconRequests[requestId] ?: return

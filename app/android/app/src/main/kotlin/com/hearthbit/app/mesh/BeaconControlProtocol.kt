@@ -82,8 +82,16 @@ internal object BeaconControlProtocol {
     fun hasValidTimestamp(timestamp: Long, now: Long = System.currentTimeMillis()): Boolean =
         timestamp in (now - CLOCK_SKEW_MS)..(now + CLOCK_SKEW_MS)
 
-    fun shouldAutoAccept(localRadarConsentUntil: Long, now: Long = System.currentTimeMillis()): Boolean =
-        localRadarConsentUntil > now
+    fun shouldAutoAccept(
+        rescueModeActive: Boolean,
+        localRadarConsentUntil: Long,
+        hearthbitVerified: Boolean,
+        knownRelationship: Boolean,
+        now: Long = System.currentTimeMillis(),
+    ): Boolean =
+        hearthbitVerified &&
+            knownRelationship &&
+            (rescueModeActive || localRadarConsentUntil > now)
 
     fun isValidTtl(ttl: Int): Boolean = ttl == 1 || ttl == INITIAL_TTL
 

@@ -127,12 +127,54 @@ class BeaconControlProtocolTest {
     }
 
     @Test
-    fun `solo autoacepta si el consentimiento local ya estaba activo`() {
+    fun `solo autoacepta en emergencia o radar para una relacion verificada`() {
         val now = 5_000L
 
-        assertFalse(BeaconControlProtocol.shouldAutoAccept(0, now))
-        assertFalse(BeaconControlProtocol.shouldAutoAccept(now, now))
-        assertTrue(BeaconControlProtocol.shouldAutoAccept(now + 1, now))
+        assertFalse(
+            BeaconControlProtocol.shouldAutoAccept(
+                rescueModeActive = true,
+                localRadarConsentUntil = 0,
+                hearthbitVerified = false,
+                knownRelationship = true,
+                now = now,
+            ),
+        )
+        assertFalse(
+            BeaconControlProtocol.shouldAutoAccept(
+                rescueModeActive = true,
+                localRadarConsentUntil = 0,
+                hearthbitVerified = true,
+                knownRelationship = false,
+                now = now,
+            ),
+        )
+        assertTrue(
+            BeaconControlProtocol.shouldAutoAccept(
+                rescueModeActive = true,
+                localRadarConsentUntil = 0,
+                hearthbitVerified = true,
+                knownRelationship = true,
+                now = now,
+            ),
+        )
+        assertTrue(
+            BeaconControlProtocol.shouldAutoAccept(
+                rescueModeActive = false,
+                localRadarConsentUntil = now + 1,
+                hearthbitVerified = true,
+                knownRelationship = true,
+                now = now,
+            ),
+        )
+        assertFalse(
+            BeaconControlProtocol.shouldAutoAccept(
+                rescueModeActive = false,
+                localRadarConsentUntil = now,
+                hearthbitVerified = true,
+                knownRelationship = true,
+                now = now,
+            ),
+        )
     }
 
     private fun assertNotNullAndReturn(

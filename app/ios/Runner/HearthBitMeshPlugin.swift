@@ -3399,8 +3399,14 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         control: control
       )
       pendingBeaconRequests[requestID] = request
-      // Radar y rescate autorizan medición, no control del hardware.
-      // Sonido, flash y vibración siempre requieren confirmación.
+      let rescueModeActive = (try? IOSRescueModeStore.load().active) ?? false
+      let autoAccepted = IOSBeaconControlProtocol.shouldAutoAccept(
+        rescueModeActive: rescueModeActive,
+        localRadarConsentUntil: activeLocalRadarConsentUntil(),
+        hearthbitVerified: peer.hearthbitVerified,
+        knownRelationship: securePeerIDs.contains(senderID),
+        now: currentMilliseconds()
+      )
       emit([
         "type": "beaconRequest",
         "requestId": requestID,
@@ -3408,8 +3414,12 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         "nickname": peer.nickname,
         "expiresAt": control.expiresAt,
         "flags": Int(control.flags),
-        "autoAccepted": false,
+        "autoAccepted": autoAccepted,
       ])
+      if autoAccepted {
+        pendingBeaconRequests.removeValue(forKey: requestID)
+        respondToBeaconRequest(request, accept: true, autoAccepted: true)
+      }
     case IOSBeaconControlProtocol.grantAction:
       guard
         let outgoing = outgoingBeaconRequests[requestID],
@@ -5199,8 +5209,16 @@ enum IOSBeaconControlProtocol {
     return timestamp >= earliest && timestamp <= now + clockSkewMilliseconds
   }
 
-  static func shouldAutoAccept(localRadarConsentUntil: UInt64, now: UInt64) -> Bool {
-    localRadarConsentUntil > now
+  static func shouldAutoAccept(
+    rescueModeActive: Bool,
+    localRadarConsentUntil: UInt64,
+    hearthbitVerified: Bool,
+    knownRelationship: Bool,
+    now: UInt64
+  ) -> Bool {
+    hearthbitVerified &&
+      knownRelationship &&
+      (rescueModeActive || localRadarConsentUntil > now)
   }
 
   static func isValidTTL(_ ttl: UInt8) -> Bool {

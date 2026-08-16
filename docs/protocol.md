@@ -272,6 +272,11 @@ que no sea destinatario solo reenvía y nunca aplica el control. En iOS la
 actuación se detiene al pasar la app a segundo plano; no se declara audio de
 fondo.
 
+La autoaceptación exige simultáneamente modo rescate o consentimiento de radar
+activo, identidad HearthBit verificada y una relación segura previa con el
+solicitante. Una firma válida por sí sola no autoriza flash, sonido ni
+vibración.
+
 ## Privacidad de balizas BLE genéricas en Android
 
 - El escáner de presencia no lee ni transmite a Flutter el nombre Bluetooth

@@ -298,8 +298,9 @@ expiración y firma se validan antes de cualquier cambio de estado.
 `REQUEST` nunca activa hardware por sí solo. La actuación requiere un `GRANT`
 local, producido por aceptación manual o por la política de autoaceptación ya
 autorizada. El receptor **MAY** autoaceptar únicamente si ya tenía activo el
-modo rescate o un consentimiento de radar local; en cualquier otro estado
-requiere aceptación explícita. Rechazar produce `REVOKE`. `STOP` detiene una
+modo rescate o un consentimiento de radar local, la identidad HearthBit del
+emisor está verificada y existe una relación segura previa; en cualquier otro
+estado requiere aceptación explícita. Rechazar produce `REVOKE`. `STOP` detiene una
 concesión con el mismo nonce. La actuación termina al expirar, al pasar iOS a
 segundo plano, al desconectar el plugin o al detenerse localmente.
 

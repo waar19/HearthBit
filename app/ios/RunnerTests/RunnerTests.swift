@@ -688,10 +688,40 @@ class RunnerTests: XCTestCase {
     XCTAssertFalse(IOSBeaconControlProtocol.isValidTTL(3))
     XCTAssertFalse(IOSNoiseReplayPolicy.isStoreForwardSafe(decoded))
     XCTAssertFalse(
-      IOSBeaconControlProtocol.shouldAutoAccept(localRadarConsentUntil: now, now: now)
+      IOSBeaconControlProtocol.shouldAutoAccept(
+        rescueModeActive: true,
+        localRadarConsentUntil: 0,
+        hearthbitVerified: false,
+        knownRelationship: true,
+        now: now
+      )
+    )
+    XCTAssertFalse(
+      IOSBeaconControlProtocol.shouldAutoAccept(
+        rescueModeActive: true,
+        localRadarConsentUntil: 0,
+        hearthbitVerified: true,
+        knownRelationship: false,
+        now: now
+      )
     )
     XCTAssertTrue(
-      IOSBeaconControlProtocol.shouldAutoAccept(localRadarConsentUntil: now + 1, now: now)
+      IOSBeaconControlProtocol.shouldAutoAccept(
+        rescueModeActive: true,
+        localRadarConsentUntil: 0,
+        hearthbitVerified: true,
+        knownRelationship: true,
+        now: now
+      )
+    )
+    XCTAssertTrue(
+      IOSBeaconControlProtocol.shouldAutoAccept(
+        rescueModeActive: false,
+        localRadarConsentUntil: now + 1,
+        hearthbitVerified: true,
+        knownRelationship: true,
+        now: now
+      )
     )
   }
 
