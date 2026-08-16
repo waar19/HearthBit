@@ -212,6 +212,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get sosQrScan => 'SOSをスキャンして中継';
 
   @override
+  String get acousticSosListen => '音響SOSを待ち受ける';
+
+  @override
+  String get acousticSosStopListening => '音響待ち受けを停止';
+
+  @override
   String get sosQrRelayTitle => 'SOSを検出しました';
 
   @override

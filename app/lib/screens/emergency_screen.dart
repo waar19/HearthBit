@@ -96,6 +96,22 @@ class EmergencyScreen extends StatelessWidget {
           icon: const Icon(Icons.qr_code_scanner),
           label: Text(context.l10n.sosQrScan),
         ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: controller.acousticSosListening
+              ? controller.stopAcousticSosListening
+              : controller.startAcousticSosListening,
+          icon: Icon(
+            controller.acousticSosListening
+                ? Icons.hearing_disabled
+                : Icons.hearing,
+          ),
+          label: Text(
+            controller.acousticSosListening
+                ? context.l10n.acousticSosStopListening
+                : context.l10n.acousticSosListen,
+          ),
+        ),
         if (controller.lastError != null) ...[
           const SizedBox(height: 8),
           Semantics(

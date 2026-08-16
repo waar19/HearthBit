@@ -209,6 +209,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sosQrScan => '扫描并转发 SOS';
 
   @override
+  String get acousticSosListen => '监听声音 SOS';
+
+  @override
+  String get acousticSosStopListening => '停止声音监听';
+
+  @override
   String get sosQrRelayTitle => '发现 SOS';
 
   @override

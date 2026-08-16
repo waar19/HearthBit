@@ -68,6 +68,8 @@
   "sosQrFallbackTitle": "アプリなしで読める情報",
   "sosQrOpen": "SOS QRを表示",
   "sosQrScan": "SOSをスキャンして中継",
+  "acousticSosListen": "音響SOSを待ち受ける",
+  "acousticSosStopListening": "音響待ち受けを停止",
   "sosQrRelayTitle": "SOSを検出しました",
   "sosQrRelayAction": "SOSを中継",
   "sosQrInvalid": "QRに有効な署名済みHearthBit SOSが含まれていません。",

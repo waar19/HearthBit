@@ -68,6 +68,8 @@
   "sosQrFallbackTitle": "Información legible sin la aplicación",
   "sosQrOpen": "MOSTRAR SOS POR QR",
   "sosQrScan": "ESCANEAR Y RETRANSMITIR SOS",
+  "acousticSosListen": "ESCUCHAR SOS POR SONIDO",
+  "acousticSosStopListening": "DETENER ESCUCHA ACÚSTICA",
   "sosQrRelayTitle": "SOS encontrado",
   "sosQrRelayAction": "RETRANSMITIR SOS",
   "sosQrInvalid": "El QR no contiene un SOS HearthBit válido y firmado.",

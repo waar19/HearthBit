@@ -7,6 +7,7 @@ import 'package:shared_preferences_platform_interface/shared_preferences_async_p
 
 import 'package:hearth_bit/controllers/mesh_controller.dart';
 import 'package:hearth_bit/models/mesh_models.dart';
+import 'package:hearth_bit/services/acoustic_sos.dart';
 import 'package:hearth_bit/services/app_preferences.dart';
 import 'package:hearth_bit/services/mesh_platform_service.dart';
 import 'package:hearth_bit/services/message_repository.dart';
@@ -37,6 +38,7 @@ class _FakePlatform extends MeshPlatformService {
   Completer<String>? privateMessageGate;
   NativeRescueState rescueState = const NativeRescueState(active: false);
   final List<bool> rescueConfigurations = [];
+  final List<Uint8List> emergencyLanFrames = [];
 
   void emit(Map<Object?, Object?> event) => _controller.add(event);
 
@@ -152,6 +154,11 @@ class _FakePlatform extends MeshPlatformService {
   Future<String?> retryEmergency(String canonicalHash) async {
     retryEmergencyCalls.add(canonicalHash);
     return retryEmergencyResult;
+  }
+
+  @override
+  Future<void> injectEmergencyLanFrame(Uint8List frame) async {
+    emergencyLanFrames.add(Uint8List.fromList(frame));
   }
 
   @override
@@ -365,11 +372,55 @@ class _FakeRepository extends MessageRepository {
   }
 }
 
+class _FakeAcousticSos implements AcousticSosTransportPort {
+  List<Uint8List> broadcastFrames = const [];
+  Future<void> Function(Uint8List frame)? receiver;
+
+  @override
+  bool broadcasting = false;
+  @override
+  bool listening = false;
+
+  @override
+  Future<bool> startBroadcast(List<Uint8List> signedEmergencyFrames) async {
+    broadcastFrames = signedEmergencyFrames
+        .map(Uint8List.fromList)
+        .toList(growable: false);
+    broadcasting = true;
+    return true;
+  }
+
+  @override
+  Future<void> stopBroadcast() async {
+    broadcasting = false;
+    broadcastFrames = const [];
+  }
+
+  @override
+  Future<bool> startListening(
+    Future<void> Function(Uint8List frame) onFrame,
+  ) async {
+    receiver = onFrame;
+    listening = true;
+    return true;
+  }
+
+  @override
+  Future<void> stopListening() async {
+    receiver = null;
+    listening = false;
+  }
+
+  @override
+  Future<void> dispose() async {}
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late _FakePlatform platform;
   late _FakeRepository repository;
+  late _FakeAcousticSos acousticSos;
   late MeshController controller;
 
   setUp(() async {
@@ -377,7 +428,12 @@ void main() {
         InMemorySharedPreferencesAsync.empty();
     platform = _FakePlatform();
     repository = _FakeRepository();
-    controller = MeshController(platform: platform, repository: repository);
+    acousticSos = _FakeAcousticSos();
+    controller = MeshController(
+      platform: platform,
+      repository: repository,
+      acousticSos: acousticSos,
+    );
     await controller.initialize();
   });
 
@@ -1034,6 +1090,32 @@ void main() {
 
     await controller.setRescueMode(false);
     expect(controller.latestSosQr, isNull);
+  });
+
+  test('baliza emite SOS firmado y la escucha lo reinyecta', () async {
+    await controller.setRescueMode(
+      true,
+      description: 'Necesito rescate',
+      locationPrecision: SosLocationPrecision.none,
+    );
+    await controller.startLocalBeacon();
+
+    expect(controller.acousticSosBroadcasting, isTrue);
+    expect(acousticSos.broadcastFrames, [
+      [1, 2, 3],
+      [4, 5, 6],
+    ]);
+
+    expect(await controller.startAcousticSosListening(), isTrue);
+    await acousticSos.receiver?.call(Uint8List.fromList([9, 8, 7]));
+    expect(platform.emergencyLanFrames, [
+      [9, 8, 7],
+    ]);
+
+    await controller.stopLocalBeacon();
+    await controller.stopAcousticSosListening();
+    expect(controller.acousticSosBroadcasting, isFalse);
+    expect(controller.acousticSosListening, isFalse);
   });
 
   test('restaura modo rescate vigente después de reiniciar Flutter', () async {

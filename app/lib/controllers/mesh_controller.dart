@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
+import '../services/acoustic_sos.dart';
 import '../services/app_preferences.dart';
 import '../services/beacon_control_protocol.dart';
 import '../services/diagnostics_log.dart';
@@ -61,8 +62,10 @@ class MeshController extends ChangeNotifier {
     MessageRepository? repository,
     PeerLocationTracker? locationTracker,
     AppPreferences? preferences,
+    AcousticSosTransportPort? acousticSos,
   }) : _platform = platform ?? MeshPlatformService(),
        _repository = repository ?? MessageRepository(),
+       _providedAcousticSos = acousticSos,
        _preferences = preferences,
        _drillModeEnabled = preferences?.drillModeEnabled ?? false,
        _privateMode = preferences?.privacyPrivateMode ?? true,
@@ -88,6 +91,10 @@ class MeshController extends ChangeNotifier {
 
   final MeshPlatformService _platform;
   final MessageRepository _repository;
+  final AcousticSosTransportPort? _providedAcousticSos;
+  AcousticSosTransportPort? _createdAcousticSos;
+  AcousticSosTransportPort get _acousticSos =>
+      _providedAcousticSos ?? (_createdAcousticSos ??= AcousticSosTransport());
   final AppPreferences? _preferences;
   final PeerLocationTracker peerLocations;
   final List<MeshMessage> _messages = [];
@@ -131,6 +138,8 @@ class MeshController extends ChangeNotifier {
   bool localBeaconActive = false;
   DateTime? localBeaconExpiresAt;
   OpticalEmergencyBundle? latestSosQr;
+  bool acousticSosListening = false;
+  bool acousticSosBroadcasting = false;
 
   // Modo rescate: reenvía el SOS con ubicación actualizada periódicamente.
   bool rescueMode = false;
@@ -435,6 +444,8 @@ class MeshController extends ChangeNotifier {
       rescueStartedAt = null;
       rescueExpiresAt = null;
       latestSosQr = null;
+      await (_providedAcousticSos ?? _createdAcousticSos)?.stopBroadcast();
+      acousticSosBroadcasting = false;
       _stopRadarLocationSharing();
       if (wasRescueActive || radarConsentActive) {
         await revokeRadarConsent();
@@ -973,10 +984,41 @@ class MeshController extends ChangeNotifier {
     await _run<void>(
       () => _platform.startLocalBeacon(flags: flags, duration: duration),
     );
+    if (lastError != null) return;
+    final sos = latestSosQr;
+    if (flags & BeaconControlFlags.sound != 0 && sos != null) {
+      acousticSosBroadcasting = await _acousticSos.startBroadcast([
+        sos.announcementFrame,
+        sos.messageFrame,
+      ]);
+      notifyListeners();
+    }
   }
 
   Future<void> stopLocalBeacon() async {
     await _run<void>(_platform.stopLocalBeacon);
+    await (_providedAcousticSos ?? _createdAcousticSos)?.stopBroadcast();
+    acousticSosBroadcasting = false;
+    notifyListeners();
+  }
+
+  Future<bool> startAcousticSosListening() async {
+    final started =
+        await _run<bool>(
+          () => _acousticSos.startListening((frame) async {
+            await _run<void>(() => _platform.injectEmergencyLanFrame(frame));
+          }),
+        ) ??
+        false;
+    acousticSosListening = started;
+    notifyListeners();
+    return started;
+  }
+
+  Future<void> stopAcousticSosListening() async {
+    await _acousticSos.stopListening();
+    acousticSosListening = false;
+    notifyListeners();
   }
 
   Future<void> respondToBeaconRequest(bool accept) async {
@@ -1331,6 +1373,8 @@ class MeshController extends ChangeNotifier {
 
   Future<void> panicWipe() async {
     await setRescueMode(false);
+    await (_providedAcousticSos ?? _createdAcousticSos)?.stopListening();
+    acousticSosListening = false;
     await _preferences?.setMeshDesiredActive(false);
     final freshIdentity = await _platform.panicWipe();
     await _repository.destroy();
@@ -2011,6 +2055,8 @@ class MeshController extends ChangeNotifier {
     peerLocations.removeListener(_notifyLocationChanged);
     peerLocations.dispose();
     unawaited(_repository.close());
+    final acousticSos = _providedAcousticSos ?? _createdAcousticSos;
+    if (acousticSos != null) unawaited(acousticSos.dispose());
     super.dispose();
   }
 }

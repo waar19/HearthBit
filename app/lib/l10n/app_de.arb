@@ -68,6 +68,8 @@
   "sosQrFallbackTitle": "Lesbare Informationen ohne App",
   "sosQrOpen": "SOS-QR ANZEIGEN",
   "sosQrScan": "SOS SCANNEN UND WEITERLEITEN",
+  "acousticSosListen": "NACH AKUSTISCHEM SOS SUCHEN",
+  "acousticSosStopListening": "AKUSTISCHE SUCHE STOPPEN",
   "sosQrRelayTitle": "SOS gefunden",
   "sosQrRelayAction": "SOS WEITERLEITEN",
   "sosQrInvalid": "Der QR-Code enthält keinen gültigen signierten HearthBit-SOS.",

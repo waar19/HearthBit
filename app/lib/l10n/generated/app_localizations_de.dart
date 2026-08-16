@@ -217,6 +217,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get sosQrScan => 'SOS SCANNEN UND WEITERLEITEN';
 
   @override
+  String get acousticSosListen => 'NACH AKUSTISCHEM SOS SUCHEN';
+
+  @override
+  String get acousticSosStopListening => 'AKUSTISCHE SUCHE STOPPEN';
+
+  @override
   String get sosQrRelayTitle => 'SOS gefunden';
 
   @override

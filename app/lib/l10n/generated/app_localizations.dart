@@ -478,6 +478,18 @@ abstract class AppLocalizations {
   /// **'SCAN AND RELAY SOS'**
   String get sosQrScan;
 
+  /// No description provided for @acousticSosListen.
+  ///
+  /// In en, this message translates to:
+  /// **'LISTEN FOR SOUND SOS'**
+  String get acousticSosListen;
+
+  /// No description provided for @acousticSosStopListening.
+  ///
+  /// In en, this message translates to:
+  /// **'STOP ACOUSTIC LISTENING'**
+  String get acousticSosStopListening;
+
   /// No description provided for @sosQrRelayTitle.
   ///
   /// In en, this message translates to:

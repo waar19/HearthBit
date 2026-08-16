@@ -72,6 +72,8 @@
   "sosQrFallbackTitle": "Readable information without the app",
   "sosQrOpen": "SHOW SOS QR",
   "sosQrScan": "SCAN AND RELAY SOS",
+  "acousticSosListen": "LISTEN FOR SOUND SOS",
+  "acousticSosStopListening": "STOP ACOUSTIC LISTENING",
   "sosQrRelayTitle": "SOS found",
   "sosQrRelayAction": "RELAY SOS",
   "sosQrInvalid": "The QR does not contain a valid signed HearthBit SOS.",
