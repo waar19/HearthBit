@@ -23,6 +23,10 @@ controladores no deben interpretar directamente el discriminador `type`.
 - `beaconRequest`, `beaconRequestResolved`, `beaconState`.
 - `message`: mapa compatible con `MeshMessage`.
 - `error`, `wiped`, `emergencyAck`, `rescuePing`.
+- `emergencyTransport`: `channels` (`List<String>`) y `timestamp`; informa
+  portadoras que aceptaron el fan-out, no una confirmación de recepción.
+- `transportStatus`: estado operativo de una portadora; se conserva como evento
+  desconocido hasta que una pantalla necesite su detalle.
 
 ## Eventos consumidos por `RadarScreen`
 

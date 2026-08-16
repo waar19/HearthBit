@@ -1841,10 +1841,26 @@ internal class MeshEngine(
         rememberSyncPacket(packet)
         val bytes = MeshProtocol.encodeForBle(packet)
         val restrictIdentity = isLocalIdentityPacket(packet) && !allowUnprovenIdentity
-        broadcastBytes(bytes, excludeAddress, restrictToHearthBit = restrictIdentity)
+        val linkKinds = broadcastBytes(
+            bytes,
+            excludeAddress,
+            restrictToHearthBit = restrictIdentity,
+        )
         if (isOpenEmergencyLanPacket(packet)) {
-            wifiDirectMeshTransport.sendEmergencyFrame(bytes)
-            wifiAwareMeshLink?.send(bytes)
+            val wifiDirect = wifiDirectMeshTransport.sendEmergencyFrame(bytes)
+            val wifiAware = wifiAwareMeshLink?.send(bytes) == true
+            emit(
+                mapOf(
+                    "type" to "emergencyTransport",
+                    "channels" to EmergencyTransportEscalation.channels(
+                        ble = LinkKind.BLE in linkKinds,
+                        lan = LinkKind.LAN in linkKinds,
+                        wifiDirect = wifiDirect,
+                        wifiAware = wifiAware,
+                    ),
+                    "timestamp" to System.currentTimeMillis(),
+                ),
+            )
         }
         val emergency = MeshProtocol.isEmergencyPublicPacket(packet)
         val directed = packet.recipientId != null &&
@@ -1865,8 +1881,8 @@ internal class MeshEngine(
         bytes: ByteArray,
         excludeAddress: String?,
         restrictToHearthBit: Boolean = false,
-    ) {
-        activeLinks()
+    ): Set<LinkKind> {
+        val links = activeLinks()
             .filterNot { it.capabilities.id.substringAfter(':') == excludeAddress }
             .filter {
                 !restrictToHearthBit ||
@@ -1878,7 +1894,8 @@ internal class MeshEngine(
                         emergencyException = false,
                     )
             }
-            .forEach { sendViaLink(it, bytes) }
+        links.forEach { sendViaLink(it, bytes) }
+        return links.mapTo(mutableSetOf()) { it.capabilities.kind }
     }
 
     private fun sendHearthBitLinkProof(address: String) {

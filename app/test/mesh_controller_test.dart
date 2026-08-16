@@ -1105,6 +1105,16 @@ void main() {
       [1, 2, 3],
       [4, 5, 6],
     ]);
+    platform.emit({
+      'type': 'emergencyTransport',
+      'channels': <String>['ble', 'wifiDirect'],
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    });
+    await pumpEvents();
+    expect(
+      controller.emergencyChannelsUsed,
+      containsAll(<String>['qr', 'audio', 'ble', 'wifiDirect']),
+    );
 
     expect(await controller.startAcousticSosListening(), isTrue);
     await acousticSos.receiver?.call(Uint8List.fromList([9, 8, 7]));

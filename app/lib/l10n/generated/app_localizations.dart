@@ -490,6 +490,12 @@ abstract class AppLocalizations {
   /// **'STOP ACOUSTIC LISTENING'**
   String get acousticSosStopListening;
 
+  /// No description provided for @sosChannelsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS sent or prepared through'**
+  String get sosChannelsTitle;
+
   /// No description provided for @sosQrRelayTitle.
   ///
   /// In en, this message translates to:

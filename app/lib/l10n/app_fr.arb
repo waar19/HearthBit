@@ -70,6 +70,7 @@
   "sosQrScan": "SCANNER ET RELAYER UN SOS",
   "acousticSosListen": "ÉCOUTER LES SOS SONORES",
   "acousticSosStopListening": "ARRÊTER L’ÉCOUTE ACOUSTIQUE",
+  "sosChannelsTitle": "SOS envoyé ou préparé via",
   "sosQrRelayTitle": "SOS trouvé",
   "sosQrRelayAction": "RELAYER LE SOS",
   "sosQrInvalid": "Le QR ne contient pas de SOS HearthBit signé valide.",

@@ -103,6 +103,7 @@ class MeshController extends ChangeNotifier {
   final Map<String, MeshPeer> _knownPeers = {};
   final List<PendingPrivateMessage> _privateMessageOutbox = [];
   final List<EmergencyDelivery> _emergencyDeliveries = [];
+  final Set<String> _emergencyChannelsUsed = {};
   final Random _random = Random.secure();
 
   StreamSubscription<MeshNativeEvent>? _subscription;
@@ -179,6 +180,8 @@ class MeshController extends ChangeNotifier {
   bool get meshtasticEnabled => _meshtasticEnabled;
   List<EmergencyDelivery> get emergencyDeliveries =>
       List.unmodifiable(_emergencyDeliveries);
+  Set<String> get emergencyChannelsUsed =>
+      Set.unmodifiable(_emergencyChannelsUsed);
   bool get drillModeEnabled => _drillModeEnabled;
   List<MeshMessage> get drillMessages => List.unmodifiable(
     _messages.where((message) => message.isDrill).toList().reversed,
@@ -444,6 +447,7 @@ class MeshController extends ChangeNotifier {
       rescueStartedAt = null;
       rescueExpiresAt = null;
       latestSosQr = null;
+      _emergencyChannelsUsed.clear();
       await (_providedAcousticSos ?? _createdAcousticSos)?.stopBroadcast();
       acousticSosBroadcasting = false;
       _stopRadarLocationSharing();
@@ -462,13 +466,24 @@ class MeshController extends ChangeNotifier {
     }
     final now = DateTime.now();
     rescueMode = true;
+    _emergencyChannelsUsed.clear();
     rescueStartedAt ??= now;
     rescueExpiresAt = now.add(const Duration(hours: 24));
     notifyListeners();
     await _platform.setRadarConsent(enabled: true, minutes: 30);
     await ensureAlwaysLocation();
+    var state = await _platform.configureRescueMode(
+      active: true,
+      description: _rescueDescription,
+      startedAt: rescueStartedAt,
+      lastPingAt: now,
+      expiresAt: rescueExpiresAt,
+      interval: interval ?? rescueInterval,
+      locationPrecision: _rescueLocationPrecision,
+    );
+    _applyNativeRescueState(state);
     await _rescuePing();
-    final state = await _platform.configureRescueMode(
+    state = await _platform.configureRescueMode(
       active: true,
       description: _rescueDescription,
       startedAt: rescueStartedAt,
@@ -987,11 +1002,7 @@ class MeshController extends ChangeNotifier {
     if (lastError != null) return;
     final sos = latestSosQr;
     if (flags & BeaconControlFlags.sound != 0 && sos != null) {
-      acousticSosBroadcasting = await _acousticSos.startBroadcast([
-        sos.announcementFrame,
-        sos.messageFrame,
-      ]);
-      notifyListeners();
+      await _startAcousticSosBroadcast(sos);
     }
   }
 
@@ -1242,6 +1253,8 @@ class MeshController extends ChangeNotifier {
           messageFrame: transmission.messageFrame!,
           fallbackText: _emergencyQrFallback(delivery.content),
         );
+        _emergencyChannelsUsed.add('qr');
+        if (rescueMode) await _startAcousticSosBroadcast(latestSosQr!);
       }
       delivery = delivery.copyWith(
         state: EmergencyDeliveryState.relayed,
@@ -1275,6 +1288,24 @@ class MeshController extends ChangeNotifier {
       );
     }
     _scheduleEmergencyRetry();
+  }
+
+  Future<void> _startAcousticSosBroadcast(OpticalEmergencyBundle sos) async {
+    try {
+      acousticSosBroadcasting = await _acousticSos.startBroadcast([
+        sos.announcementFrame,
+        sos.messageFrame,
+      ]);
+      if (acousticSosBroadcasting) _emergencyChannelsUsed.add('audio');
+      notifyListeners();
+    } catch (error, stackTrace) {
+      acousticSosBroadcasting = false;
+      DiagnosticsLog.instance.warning(
+        'acoustic_sos.broadcast.failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   Duration _emergencyBackoff(int attempts) {
@@ -1719,6 +1750,8 @@ class MeshController extends ChangeNotifier {
         if (timestamp != null && timestamp > 0) {
           lastRescuePing = DateTime.fromMillisecondsSinceEpoch(timestamp);
         }
+      case MeshEmergencyTransportEvent():
+        _emergencyChannelsUsed.addAll(event.channels);
       case MeshRssiEvent() || MeshRadarDiagnosticEvent():
         // Lecturas y avisos del radar de rescate: los consume RadarScreen
         // directamente del stream; evitar redibujar toda la app.

@@ -51,6 +51,11 @@ sealed class MeshNativeEvent {
         raw,
         timestamp: _int(raw['timestamp']),
       ),
+      'emergencyTransport' => MeshEmergencyTransportEvent(
+        raw,
+        channels: _strings(raw['channels']),
+        timestamp: _int(raw['timestamp']),
+      ),
       'rangingMeasurement' => MeshRangingMeasurementEvent(
         raw,
         peerId: _string(raw['peerId']),
@@ -97,6 +102,13 @@ sealed class MeshNativeEvent {
   static String? _string(Object? value) => value is String ? value : null;
 
   static bool? _bool(Object? value) => value is bool ? value : null;
+
+  static List<String> _strings(Object? value) => switch (value) {
+    final List<Object?> values => values.whereType<String>().toList(
+      growable: false,
+    ),
+    _ => const [],
+  };
 
   static Uint8List? _bytes(Object? value) => switch (value) {
     final Uint8List bytes => bytes,
@@ -199,6 +211,17 @@ final class MeshEmergencyAckEvent extends MeshNativeEvent {
 final class MeshRescuePingEvent extends MeshNativeEvent {
   const MeshRescuePingEvent(super.raw, {required this.timestamp});
 
+  final int? timestamp;
+}
+
+final class MeshEmergencyTransportEvent extends MeshNativeEvent {
+  const MeshEmergencyTransportEvent(
+    super.raw, {
+    required this.channels,
+    required this.timestamp,
+  });
+
+  final List<String> channels;
   final int? timestamp;
 }
 

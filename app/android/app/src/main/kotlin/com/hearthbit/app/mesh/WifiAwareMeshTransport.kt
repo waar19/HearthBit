@@ -78,6 +78,7 @@ private class WifiAwareMeshTransport(
     private var awareSession: WifiAwareSession? = null
     private var publishSession: PublishDiscoverySession? = null
     private var subscribeSession: SubscribeDiscoverySession? = null
+    @Volatile
     private var active = false
     private var messageId = 1
 

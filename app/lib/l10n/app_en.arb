@@ -74,6 +74,7 @@
   "sosQrScan": "SCAN AND RELAY SOS",
   "acousticSosListen": "LISTEN FOR SOUND SOS",
   "acousticSosStopListening": "STOP ACOUSTIC LISTENING",
+  "sosChannelsTitle": "SOS sent or prepared through",
   "sosQrRelayTitle": "SOS found",
   "sosQrRelayAction": "RELAY SOS",
   "sosQrInvalid": "The QR does not contain a valid signed HearthBit SOS.",

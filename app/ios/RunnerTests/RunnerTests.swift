@@ -598,6 +598,17 @@ class RunnerTests: XCTestCase {
     )
   }
 
+  func testEmergencyEscalationReportsOnlyUsedIOSChannels() {
+    XCTAssertEqual(
+      IOSEmergencyTransportEscalation.channels(
+        ble: true,
+        lan: false,
+        multipeer: true
+      ),
+      ["ble", "multipeer"]
+    )
+  }
+
   func testPhoneBeaconDisablesDataPlanePolicy() {
     XCTAssertFalse(IOSMeshNodeRole.phoneBeacon.allowsDataPlane)
     XCTAssertFalse(IOSMeshNodeRole.phoneBeacon.relaysPackets)

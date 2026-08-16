@@ -24,6 +24,9 @@ confianza.
 - La app aplica la misma regla. El servidor autenticado usa `45893/TCP`; el
   canal público de emergencia usa `45894/TCP`. Ambos puertos se anuncian en
   TXT (`gid`, `secure`, `eport`).
+- Wi‑Fi Direct Android reutiliza el HELLO y framing `HBEM` en
+  `45895/TCP` dentro del grupo P2P. DNS-SD anuncia `emergencyPort=45895` y
+  `secure=0`; no expone mensajes normales ni privados.
 
 Android mantiene un `MulticastLock` únicamente mientras el discovery opt-in
 está activo. iOS declara `_hearthbit._tcp` en `NSBonjourServices` y explica el

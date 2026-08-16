@@ -223,6 +223,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get acousticSosStopListening => 'DETENER ESCUCHA ACÚSTICA';
 
   @override
+  String get sosChannelsTitle => 'SOS enviado o preparado por';
+
+  @override
   String get sosQrRelayTitle => 'SOS encontrado';
 
   @override

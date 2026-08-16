@@ -71,13 +71,28 @@ terminar Noise ni reinterpretar identidades.
 
 - **BLE/BitChat:** transporte base disponible en Android e iOS. En modo privado
   usa el token rotatorio y la prueba `HB-LINK1` descritos arriba.
-- **Wi-Fi Aware:** transporte de archivos grandes negociado dentro de una
+- **Wi-Fi Aware (archivos):** transporte de archivos grandes negociado dentro de una
   sesión Noise ya autenticada. Android requiere API 29 para el data path con
   puerto. El `transferId` no se anuncia: se derivan con SHA-256 y dominios
   distintos un token de descubrimiento de 16 bytes y una passphrase WPA3. Si
   Aware no está disponible, el selector cae a Nearby, LAN, BLE u óptico. iOS
   26 requiere emparejamiento del sistema y permanece deshabilitado hasta pasar
   los gates en Xcode y hardware real.
+- **Wi-Fi Aware (SOS):** en Android 8+ con hardware NAN, el servicio
+  `hearthbit-mesh` publica y suscribe a la vez. `ANNOUNCE` de emergencia y
+  `MESSAGE` SOS de hasta 255 bytes viajan como mensajes follow-up, sin data
+  path. El motor vuelve a validar identidad, firma, reloj y dedupe.
+- **Wi-Fi Direct:** Android descubre `_hearthbit._tcp` por DNS-SD. En rescate
+  crea un Group Owner autónomo si no encuentra peers; también se activa cuando
+  el advertising BLE falla. El canal público TCP usa el HELLO `HBEM` y solo
+  acepta frames públicos firmados de emergencia, con límite de 30/minuto.
+- **MultipeerConnectivity:** iOS anuncia y busca `hearthbit-sos` únicamente en
+  primer plano durante rescate o radar. La sesión exige cifrado de Apple y
+  mueve frames opacos; las firmas HearthBit siguen siendo la autoridad.
+- **Audio SOS:** 4-FSK a 15,5/16,5/17,5/18,5 kHz, 48 kHz y símbolos de 8 ms.
+  Un preámbulo de 20 símbolos precede `length u16 | frame | CRC32`. El frame
+  máximo es 320 bytes. La baliza alterna el `ANNOUNCE` de emergencia y el
+  `MESSAGE` firmados; el receptor solo los inyecta por el ingreso público.
 - **Meshtastic:** integración Android opt-in con la Device API BLE oficial
   (`6ba1b218-15a8-461f-9fa8-5dcae273eafd`). Los frames HearthBit fragmentados
   caben en payloads de hasta 180 bytes y viajan en `PortNum.PRIVATE_APP` (256).

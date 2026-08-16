@@ -12,6 +12,16 @@ enum IOSMultipeerPolicy {
   }
 }
 
+enum IOSEmergencyTransportEscalation {
+  static func channels(ble: Bool, lan: Bool, multipeer: Bool) -> [String] {
+    var channels: [String] = []
+    if ble { channels.append("ble") }
+    if lan { channels.append("lan") }
+    if multipeer { channels.append("multipeer") }
+    return channels
+  }
+}
+
 struct IOSMultipeerState {
   let active: Bool
   let connectedPeers: Int

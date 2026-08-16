@@ -2534,9 +2534,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       !allowUnprovenIdentity &&
       packet.senderID == identity.peerID &&
       IOSMeshInteropPolicy.identityPacketTypes.contains(packet.type)
-    if !restrictIdentity {
-      multipeerTransport.send(bytes)
-    }
+    let multipeerSent = !restrictIdentity && multipeerTransport.send(bytes)
     if (localRole.storesDirectedPackets || emergency && localRole.relaysPackets),
        storedPacketType != IOSMeshProtocol.radarControl,
        storedPacketType != IOSMeshProtocol.beaconControl,
@@ -2627,6 +2625,24 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         "gatewayId": gatewayID,
         "frame": FlutterStandardTypedData(bytes: bytes),
         "emergencyEligible": isOpenEmergencyLanPacket(packet),
+      ])
+    }
+    if isOpenEmergencyLanPacket(packet) {
+      let bleSent =
+        !(localCharacteristic?.subscribedCentrals?.isEmpty ?? true) ||
+        !remoteCharacteristics.isEmpty
+      let lanSent =
+        !suppressLanBridge &&
+        lanBridgeGatewayID != nil &&
+        bytes.count <= lanBridgeMaximumFrameSize
+      emit([
+        "type": "emergencyTransport",
+        "channels": IOSEmergencyTransportEscalation.channels(
+          ble: bleSent,
+          lan: lanSent,
+          multipeer: multipeerSent
+        ),
+        "timestamp": currentMilliseconds(),
       ])
     }
   }

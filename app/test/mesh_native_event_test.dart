@@ -45,6 +45,19 @@ void main() {
     expect(measurement.confidence, isNull);
   });
 
+  test('parsea canales usados por la escalada de SOS', () {
+    final event = MeshNativeEvent.parse({
+      'type': 'emergencyTransport',
+      'channels': <Object?>['ble', 'wifiAware', 7],
+      'timestamp': 1234,
+    });
+
+    expect(event, isA<MeshEmergencyTransportEvent>());
+    final transport = event as MeshEmergencyTransportEvent;
+    expect(transport.channels, ['ble', 'wifiAware']);
+    expect(transport.timestamp, 1234);
+  });
+
   test('conserva eventos desconocidos para compatibilidad futura', () {
     final event = MeshNativeEvent.parse({
       'type': 'futureCapability',

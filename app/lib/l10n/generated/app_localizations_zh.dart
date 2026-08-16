@@ -215,6 +215,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get acousticSosStopListening => '停止声音监听';
 
   @override
+  String get sosChannelsTitle => 'SOS 已发送或已准备的渠道';
+
+  @override
   String get sosQrRelayTitle => '发现 SOS';
 
   @override

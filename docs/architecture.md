@@ -18,6 +18,23 @@
 6. Los paquetes dirigidos se conservan hasta 12 horas en Android para
    reintentar su entrega cuando reaparece el destinatario.
 
+## Escalada multicanal del SOS
+
+1. El frame BitChat no cambia entre portadoras. BLE, LAN, Wi‑Fi Direct,
+   MultipeerConnectivity, Wi‑Fi Aware, QR y audio transportan el mismo
+   `ANNOUNCE` de emergencia y `MESSAGE` firmados.
+2. Android activa Wi‑Fi Direct durante SOS o degradación del advertiser BLE y
+   Wi‑Fi Aware durante SOS cuando el hardware lo soporta. iOS activa
+   MultipeerConnectivity solo con la app visible, durante SOS o radar.
+3. LAN, Wi‑Fi Direct y audio usan el ingreso público restringido: solo
+   emergencia, firma Ed25519 obligatoria, reloj acotado, rate-limit y dedupe.
+   Los frames privados nunca cruzan un canal abierto.
+4. Cada fan-out nativo emite `emergencyTransport` con las portadoras que
+   aceptaron el frame. Flutter acumula esas rutas y añade `qr` cuando el código
+   está listo y `audio` cuando la baliza inició la ráfaga.
+5. La UI distingue «enviado o preparado» de confirmación. Solo
+   `EMERGENCY_ACK` demuestra que otro peer recibió y validó el SOS.
+
 ## Transferencia de archivos (HBT)
 
 1. Las ofertas de archivo viajan como tramas HBT firmadas con Ed25519 dentro

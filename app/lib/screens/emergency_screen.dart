@@ -112,6 +112,40 @@ class EmergencyScreen extends StatelessWidget {
                 : context.l10n.acousticSosListen,
           ),
         ),
+        if (controller.rescueMode &&
+            controller.emergencyChannelsUsed.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Semantics(
+            liveRegion: true,
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.l10n.sosChannelsTitle,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: controller.emergencyChannelsUsed
+                          .map(
+                            (channel) => Chip(
+                              label: Text(_emergencyChannelLabel(channel)),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          )
+                          .toList(growable: false),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
         if (controller.lastError != null) ...[
           const SizedBox(height: 8),
           Semantics(
@@ -580,6 +614,17 @@ class EmergencyScreen extends StatelessWidget {
     );
   }
 }
+
+String _emergencyChannelLabel(String channel) => switch (channel) {
+  'ble' => 'BLE',
+  'lan' => 'Wi-Fi LAN',
+  'wifiDirect' => 'Wi-Fi Direct',
+  'wifiAware' => 'Wi-Fi Aware',
+  'multipeer' => 'Multipeer',
+  'qr' => 'QR',
+  'audio' => 'Audio',
+  _ => channel,
+};
 
 class _EmergencySmsDraft {
   const _EmergencySmsDraft({

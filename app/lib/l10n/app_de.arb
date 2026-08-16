@@ -70,6 +70,7 @@
   "sosQrScan": "SOS SCANNEN UND WEITERLEITEN",
   "acousticSosListen": "NACH AKUSTISCHEM SOS SUCHEN",
   "acousticSosStopListening": "AKUSTISCHE SUCHE STOPPEN",
+  "sosChannelsTitle": "SOS gesendet oder vorbereitet über",
   "sosQrRelayTitle": "SOS gefunden",
   "sosQrRelayAction": "SOS WEITERLEITEN",
   "sosQrInvalid": "Der QR-Code enthält keinen gültigen signierten HearthBit-SOS.",
