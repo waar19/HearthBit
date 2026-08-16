@@ -1372,6 +1372,16 @@ final class ConformanceFixtureTests: XCTestCase {
     XCTAssertEqual(v1.ttl, 7)
     XCTAssertEqual(v1.payload, Data("abc".utf8))
 
+    let drillBytes = fixtures.bytes("packet.v1.drill_message")
+    let drill = try XCTUnwrap(IOSMeshProtocol.decode(drillBytes))
+    XCTAssertTrue(drill.isDrill)
+    XCTAssertTrue(IOSMeshProtocol.isDrill(drill))
+    XCTAssertFalse(IOSMeshProtocol.isEmergency(drill))
+    var unflaggedDrill = drillBytes
+    unflaggedDrill[11] = 0x02
+    XCTAssertNil(IOSMeshProtocol.decode(unflaggedDrill))
+    XCTAssertNil(IOSMeshProtocol.decode(Data(drillBytes.dropLast(64))))
+
     let v2 = try XCTUnwrap(IOSMeshProtocol.decode(fixtures.bytes("packet.v2.route_signed")))
     XCTAssertEqual(v2.version, 2)
     XCTAssertEqual(v2.route.map(\.hexString), [

@@ -23,6 +23,11 @@ class ConformanceFixtureTest {
         assertEquals(7, v1.ttl.toInt())
         assertArrayEquals("abc".toByteArray(), v1.payload)
 
+        val drill = requireNotNull(MeshProtocol.decode(fixtures.bytes("packet.v1.drill_message")))
+        assertTrue(drill.isDrill)
+        assertTrue(MeshProtocol.isDrillPublicPacket(drill))
+        assertFalse(MeshProtocol.isEmergencyPublicPacket(drill))
+
         val v2 = requireNotNull(MeshProtocol.decode(fixtures.bytes("packet.v2.route_signed")))
         assertEquals(2, v2.version.toInt())
         assertEquals(2, v2.route.size)

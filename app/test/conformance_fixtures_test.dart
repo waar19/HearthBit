@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth_bit/services/beacon_control_protocol.dart';
+import 'package:hearth_bit/services/emergency_wire_codec.dart';
 import 'package:hearth_bit/services/ranging_control_protocol.dart';
 import 'package:hearth_bit/services/transfer_protocol.dart';
 
@@ -24,6 +25,24 @@ void main() {
     expect(offer.u64(TransferProtocol.tagFileSize), 1048576);
     expect(offer.bytes(TransferProtocol.tagSignature), hasLength(64));
     expect(offer.signedBytes(), fixtures.bytes('hbt.offer.signed_bytes'));
+  });
+
+  test('codec Dart reconoce el flag de simulacro firmado', () {
+    final bytes = fixtures.bytes('packet.v1.drill_message');
+    final frame = EmergencyWireCodec.decode(bytes);
+    expect(frame?.version, 1);
+    expect(frame?.type, EmergencyWireCodec.messageType);
+    expect(frame?.isDrill, isTrue);
+
+    final unflagged = Uint8List.fromList(bytes)
+      ..[11] = bytes[11] & ~EmergencyWireCodec.drillFlag;
+    expect(EmergencyWireCodec.decode(unflagged), isNull);
+    expect(
+      EmergencyWireCodec.decode(
+        Uint8List.fromList(bytes.sublist(0, bytes.length - 64)),
+      ),
+      isNull,
+    );
   });
 
   test('HBT decodifica chunk y rechaza version o truncamiento', () {

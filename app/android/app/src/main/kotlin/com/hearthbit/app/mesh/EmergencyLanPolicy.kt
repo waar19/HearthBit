@@ -2,6 +2,7 @@ package com.hearthbit.app.mesh
 
 internal object EmergencyLanPolicy {
     fun isOpenEmergencyLanPacket(packet: MeshProtocol.Packet): Boolean =
+        !packet.isDrill &&
         when (packet.type) {
             MeshProtocol.TYPE_ANNOUNCE ->
                 MeshProtocol.decodeAnnouncement(packet.payload)?.emergencyPreannounce == true

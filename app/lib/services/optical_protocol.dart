@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'emergency_wire_codec.dart';
+
 /// Framing de los símbolos ópticos HearthBit (HBQ v1/v2).
 ///
 /// Cada QR contiene un símbolo en base64: o bien la cabecera (metadatos y
@@ -235,10 +237,13 @@ class OpticalProtocol {
       return null;
     }
     if (content.substring(newline + 1) != fallback) return null;
+    final wire = EmergencyWireCodec.decodeBundle(announcement, message);
+    if (wire == null) return null;
     return OpticalEmergencyBundle(
       announcementFrame: announcement,
       messageFrame: message,
       fallbackText: fallback,
+      isDrill: wire.isDrill,
     );
   }
 
@@ -399,9 +404,11 @@ class OpticalEmergencyBundle {
     required this.announcementFrame,
     required this.messageFrame,
     required this.fallbackText,
+    this.isDrill = false,
   });
 
   final Uint8List announcementFrame;
   final Uint8List messageFrame;
   final String fallbackText;
+  final bool isDrill;
 }

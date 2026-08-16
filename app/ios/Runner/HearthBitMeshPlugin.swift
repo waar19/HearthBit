@@ -519,8 +519,11 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           announcement.type == IOSMeshProtocol.announce,
           message.type == IOSMeshProtocol.message,
           announcement.senderID == message.senderID,
+          announcement.isDrill == message.isDrill,
           IOSMeshProtocol.decodeAnnouncement(announcement.payload)?.emergencyPreannounce == true,
-          IOSMeshProtocol.isEmergency(message)
+          message.isDrill
+            ? IOSMeshProtocol.isDrill(message)
+            : IOSMeshProtocol.isEmergency(message)
         else { throw IOSMeshError.invalidPayload }
         receive(announcementData, source: nil)
         receive(messageData, source: nil)
@@ -530,6 +533,14 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           let data = (arguments["frame"] as? FlutterStandardTypedData)?.data,
           let packet = IOSMeshProtocol.decode(data),
           isOpenEmergencyLanPacket(packet)
+        else { throw IOSMeshError.invalidPayload }
+        receive(data, source: nil)
+        result(nil)
+      case "injectEmergencyAudioFrame":
+        guard
+          let data = (arguments["frame"] as? FlutterStandardTypedData)?.data,
+          let packet = IOSMeshProtocol.decode(data),
+          isOpenEmergencyLanPacket(packet) || isDrillAudioPacket(packet)
         else { throw IOSMeshError.invalidPayload }
         receive(data, source: nil)
         result(nil)
@@ -603,6 +614,33 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           "messageId": transmitted.id,
           "canonicalHash": IOSMeshProtocol
             .emergencyCanonicalHash(transmitted.packet).hex,
+          "announcementFrame": FlutterStandardTypedData(
+            bytes: IOSMeshProtocol.encode(announcement, padded: false)
+          ),
+          "messageFrame": FlutterStandardTypedData(
+            bytes: IOSMeshProtocol.encode(transmitted.packet, padded: false)
+          ),
+        ])
+      case "sendDrill":
+        let messageID = arguments["messageId"] as? String ?? ""
+        let content = arguments["content"] as? String ?? ""
+        guard IOSMeshProtocol.isDrillPayload(content) else {
+          throw IOSMeshError.invalidPayload
+        }
+        let announcement = createAnnouncementPacket(
+          ttl: IOSMeshProtocol.defaultTTL,
+          emergencyPreannounce: true,
+          isDrill: true
+        )
+        broadcast(announcement, allowUnprovenIdentity: true)
+        let transmitted = try transmitPublic(
+          messageID: String(messageID.prefix(255)),
+          content: content,
+          channel: "drill",
+          isDrill: true
+        )
+        result([
+          "messageId": transmitted.id,
           "announcementFrame": FlutterStandardTypedData(
             bytes: IOSMeshProtocol.encode(announcement, padded: false)
           ),
@@ -1831,7 +1869,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func transmitPublic(
     messageID: String,
     content: String,
-    channel: String?
+    channel: String?,
+    isDrill: Bool = false
   ) throws -> (id: String, packet: IOSMeshPacket) {
     guard running else { throw IOSMeshError.notRunning }
     guard localRole.canChat else { throw IOSMeshError.roleCannotChat }
@@ -1843,7 +1882,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         ttl: IOSMeshProtocol.defaultTTL,
         timestamp: UInt64(Date().timeIntervalSince1970 * 1000),
         senderID: identity.peerID,
-        payload: payload
+        payload: payload,
+        isDrill: isDrill
       )
     )
     broadcast(packet)
@@ -2198,7 +2238,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
 
   private func createAnnouncementPacket(
     ttl: UInt8,
-    emergencyPreannounce: Bool
+    emergencyPreannounce: Bool,
+    isDrill: Bool = false
   ) -> IOSMeshPacket {
     identity.sign(
       IOSMeshPacket(
@@ -2211,7 +2252,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           noisePublicKey: identity.noisePrivateKey.publicKey.rawRepresentation,
           signingPublicKey: identity.signingPrivateKey.publicKey.rawRepresentation,
           emergencyPreannounce: emergencyPreannounce
-        )
+        ),
+        isDrill: isDrill
       )
     )
   }
@@ -2458,7 +2500,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         priority: priority
       )
     }
-    if !suppressLanBridge,
+    if !packet.isDrill,
+       !suppressLanBridge,
        let gatewayID = lanBridgeGatewayID,
        bytes.count <= lanBridgeMaximumFrameSize {
       emit([
@@ -2489,6 +2532,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func isOpenEmergencyLanPacket(_ packet: IOSMeshPacket) -> Bool {
+    if packet.isDrill { return false }
     switch packet.type {
     case IOSMeshProtocol.announce:
       return IOSMeshProtocol
@@ -2497,6 +2541,18 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       return IOSMeshProtocol.isEmergency(packet)
     case IOSMeshProtocol.emergencyAck, IOSMeshProtocol.legacyEmergencyAck:
       return true
+    default:
+      return false
+    }
+  }
+
+  private func isDrillAudioPacket(_ packet: IOSMeshPacket) -> Bool {
+    switch packet.type {
+    case IOSMeshProtocol.announce:
+      return packet.isDrill &&
+        IOSMeshProtocol.decodeAnnouncement(packet.payload)?.emergencyPreannounce == true
+    case IOSMeshProtocol.message:
+      return IOSMeshProtocol.isDrill(packet)
     default:
       return false
     }
@@ -2887,7 +2943,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       IOSMeshIdentity.verify(packet, key: announcement.signingPublicKey),
       IOSAnnouncementClockPolicy.accepts(
         timestamp: packet.timestamp,
-        emergencyPreannounce: announcement.emergencyPreannounce,
+        emergencyPreannounce: announcement.emergencyPreannounce && !packet.isDrill,
         now: now
       )
     else { return nil }
@@ -3056,10 +3112,11 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         IOSMeshIdentity.verify(packet, key: peer.signingPublicKey)
       else { return }
       let emergency = IOSMeshProtocol.isEmergency(packet)
+      let drill = IOSMeshProtocol.isDrill(packet)
       guard IOSMeshInteropPolicy.shouldProcessPublicMessage(
         privateMode: privateMode,
         hearthbitVerified: peer.hearthbitVerified,
-        emergency: emergency
+        emergency: emergency || drill
       ) else { return }
       let external = IOSMeshInteropPolicy.isExternalEmergency(
         privateMode: privateMode,
@@ -3076,7 +3133,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         sendEmergencyAcknowledgement(for: packet)
       }
       if duplicateEmergency { return }
-      let message = IOSMeshProtocol.decodePublicMessage(packet.payload) ??
+      let decodedMessage = IOSMeshProtocol.decodePublicMessage(packet.payload) ??
         IOSMeshProtocol.PublicMessage(
           id: IOSMeshProtocol.fingerprint(packet).uppercased(),
           sender: peer.nickname,
@@ -3084,6 +3141,15 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           timestamp: packet.timestamp,
           channel: packet.payload.starts(with: Data("SOS|".utf8)) ? "sos" : nil
         )
+      let message = IOSMeshProtocol.PublicMessage(
+        id: decodedMessage.id,
+        sender: decodedMessage.sender,
+        content: decodedMessage.content,
+        timestamp: decodedMessage.timestamp,
+        channel: drill
+          ? "drill"
+          : (decodedMessage.channel?.lowercased() == "drill" ? nil : decodedMessage.channel)
+      )
       rememberSyncPacket(packet)
       if message.channel == "sos" {
         let now = currentMilliseconds()

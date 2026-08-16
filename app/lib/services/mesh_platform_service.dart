@@ -264,6 +264,12 @@ class MeshPlatformService {
     });
   }
 
+  Future<void> injectEmergencyAudioFrame(Uint8List frame) {
+    return _methods.invokeMethod<void>('injectEmergencyAudioFrame', {
+      'frame': frame,
+    });
+  }
+
   Future<String> sendPublic(String content, {String? channel}) async {
     return (await _methods.invokeMethod<String>('sendPublic', {
       'content': content,
@@ -333,6 +339,21 @@ class MeshPlatformService {
         messageId: await sendPublic(content, channel: channel),
       );
     }
+  }
+
+  Future<EmergencyTransmission> sendDrill({
+    required String messageId,
+    required String content,
+  }) async {
+    final result = await _methods.invokeMapMethod<Object?, Object?>(
+      'sendDrill',
+      {'messageId': messageId, 'content': content},
+    );
+    return EmergencyTransmission(
+      messageId: result?['messageId'] as String? ?? messageId,
+      announcementFrame: result?['announcementFrame'] as Uint8List?,
+      messageFrame: result?['messageFrame'] as Uint8List?,
+    );
   }
 
   Future<String?> retryEmergency(String canonicalHash) async {

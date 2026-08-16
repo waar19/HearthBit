@@ -235,6 +235,12 @@ class MainActivity : FlutterActivity() {
                     )
                     null
                 }
+                "injectEmergencyAudioFrame" -> runMethod(result) {
+                    MeshRuntime.engine(this).injectEmergencyAudioFrame(
+                        requireNotNull(call.argument<ByteArray>("frame")),
+                    )
+                    null
+                }
                 "sendPublic" -> runMethod(result) {
                     MeshRuntime.engine(this).sendPublic(
                         call.argument<String>("content").orEmpty(),
@@ -282,6 +288,12 @@ class MainActivity : FlutterActivity() {
                         messageId = requireNotNull(call.argument<String>("messageId")),
                         content = requireNotNull(call.argument<String>("content")),
                         channel = requireNotNull(call.argument<String>("channel")),
+                    )
+                }
+                "sendDrill" -> runMethod(result) {
+                    MeshRuntime.engine(this).sendDrill(
+                        messageId = requireNotNull(call.argument<String>("messageId")),
+                        content = requireNotNull(call.argument<String>("content")),
                     )
                 }
                 "retryEmergency" -> runMethod(result) {

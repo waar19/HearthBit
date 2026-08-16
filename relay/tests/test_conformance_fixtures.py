@@ -8,6 +8,7 @@ import pytest
 
 from hearthbit_relay.protocol import (
     FragmentReassembler,
+    FLAG_DRILL,
     PacketError,
     TYPE_BEACON_CONTROL,
     TYPE_EMERGENCY_ACK,
@@ -22,6 +23,7 @@ from hearthbit_relay.protocol import (
     decode_gcs,
     decode_packet,
     decode_sync_request,
+    is_drill_public_packet,
     relay_fingerprint,
 )
 
@@ -46,6 +48,11 @@ def test_manifest_pins_the_profile_source() -> None:
 def test_packet_frames_v1_v2_compression_and_negative_inputs() -> None:
     v1 = decode_packet(fixture("packet.v1.message"))
     assert (v1.version, v1.message_type, v1.ttl, v1.payload) == (1, 2, 7, b"abc")
+
+    drill = decode_packet(fixture("packet.v1.drill_message"))
+    assert drill.flags & FLAG_DRILL
+    assert drill.is_drill
+    assert is_drill_public_packet(drill)
 
     v2 = decode_packet(fixture("packet.v2.route_signed"))
     assert v2.version == 2

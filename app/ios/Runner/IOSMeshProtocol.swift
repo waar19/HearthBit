@@ -416,6 +416,7 @@ struct IOSMeshPacket {
   var signature: Data?
   var route: [Data] = []
   var isRSR = false
+  var isDrill = false
 
   func canonical() -> Data {
     var copy = self
@@ -448,6 +449,7 @@ enum IOSMeshProtocol {
   /// Trama HBT (HearthBit Transfer) encapsulada dentro de la sesión Noise.
   static let noiseTransferFrame: UInt8 = 0x30
   static let defaultTTL: UInt8 = 7
+  static let drillFlag: UInt8 = 0x20
 
   struct PublicMessage {
     let id: String
@@ -494,10 +496,42 @@ enum IOSMeshProtocol {
   }
 
   static func isEmergency(_ packet: IOSMeshPacket) -> Bool {
-    guard packet.type == message,
+    guard packet.type == message, !packet.isDrill,
           let content = String(data: packet.payload, encoding: .utf8)
     else { return false }
     return content.hasPrefix("SOS|") || content.contains("[HB-CHECKIN|")
+  }
+
+  static func isDrill(_ packet: IOSMeshPacket) -> Bool {
+    guard packet.type == message, packet.isDrill,
+          let content = String(data: packet.payload, encoding: .utf8)
+    else { return false }
+    return isDrillPayload(content)
+  }
+
+  static func isDrillPayload(_ content: String) -> Bool {
+    let marker = "[HB-DRILL|1|CHECKIN|"
+    guard
+      !content.hasPrefix("SOS|"),
+      !content.contains("[HB-CHECKIN|"),
+      content.hasSuffix("]"),
+      let range = content.range(of: marker, options: .backwards),
+      range.lowerBound > content.startIndex
+    else { return false }
+    let end = content.index(before: content.endIndex)
+    let fields = content[range.upperBound..<end].split(
+      separator: "|",
+      omittingEmptySubsequences: false
+    )
+    guard
+      fields.count == 2,
+      ["OK", "HELP", "INJURED"].contains(String(fields[0])),
+      !fields[1].isEmpty,
+      fields[1].allSatisfy(\.isNumber),
+      let timestamp = UInt64(String(fields[1])),
+      timestamp > 0
+    else { return false }
+    return true
   }
 
   static func emergencyCapabilityPayload() -> Data {
@@ -602,7 +636,7 @@ enum IOSMeshProtocol {
     precondition(packet.route.count <= 255 && packet.route.allSatisfy { $0.count == 8 })
     var payload = packet.payload
     var originalPayloadSize: Int?
-    if shouldCompress(payload), let compressed = compress(payload) {
+    if !packet.isDrill, shouldCompress(payload), let compressed = compress(payload) {
       originalPayloadSize = payload.count
       payload = compressed
     }
@@ -612,6 +646,8 @@ enum IOSMeshProtocol {
     if originalPayloadSize != nil { flags |= 0x04 }
     if packet.version >= 2 && !packet.route.isEmpty { flags |= 0x08 }
     if packet.isRSR { flags |= 0x10 }
+    if packet.isDrill { flags |= drillFlag }
+    precondition(validDrillShape(packet, flags: flags))
     var output = Data([
       packet.version,
       packet.type,
@@ -723,7 +759,7 @@ enum IOSMeshProtocol {
     let signature = flags & 0x02 != 0 ? reader.data(count: 64) : nil
     if flags & 0x02 != 0, signature == nil { return nil }
     guard reader.remaining.isEmpty else { return nil }
-    return IOSMeshPacket(
+    let packet = IOSMeshPacket(
       version: version,
       type: type,
       ttl: ttl,
@@ -733,8 +769,39 @@ enum IOSMeshProtocol {
       payload: payload,
       signature: signature,
       route: route,
-      isRSR: flags & 0x10 != 0
+      isRSR: flags & 0x10 != 0,
+      isDrill: flags & drillFlag != 0
     )
+    guard validDrillShape(packet, flags: flags, requireSignature: true) else {
+      return nil
+    }
+    return packet
+  }
+
+  private static func validDrillShape(
+    _ packet: IOSMeshPacket,
+    flags: UInt8,
+    requireSignature: Bool = false
+  ) -> Bool {
+    let content = String(data: packet.payload, encoding: .utf8) ?? ""
+    if !packet.isDrill {
+      return packet.type != message || !content.contains("[HB-DRILL|")
+    }
+    let markedPayload: Bool
+    switch packet.type {
+    case announce:
+      markedPayload = decodeAnnouncement(packet.payload)?.emergencyPreannounce == true
+    case message:
+      markedPayload = isDrillPayload(content)
+    default:
+      markedPayload = false
+    }
+    return packet.version == 1 &&
+      (!requireSignature || packet.signature != nil) &&
+      packet.recipientID == nil &&
+      packet.route.isEmpty &&
+      flags & 0x04 == 0 &&
+      markedPayload
   }
 
   static func publicMessage(

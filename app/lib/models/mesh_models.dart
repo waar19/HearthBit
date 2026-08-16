@@ -675,9 +675,7 @@ class MeshMessage {
   final MeshMessageDeliveryStatus deliveryStatus;
   final bool external;
 
-  bool get isDrill =>
-      channel?.trim().toLowerCase() == 'drill' ||
-      content.contains(DrillCheckIn.marker);
+  bool get isDrill => channel?.trim().toLowerCase() == 'drill';
 
   DrillCheckIn? get drill {
     if (!isDrill || isPrivate) return null;

@@ -172,7 +172,9 @@ internal class MeshEngine(
             )
         },
         onEmergencyFrame = { frame ->
-            runCatching { injectOpenEmergencyFrame(frame, "wifi-direct") }
+            runCatching {
+                injectEmergencyTransportFrame(frame, "wifi-direct", allowDrill = false)
+            }
                 .onFailure {
                     MeshLog.w(MeshEngineConstants.LOG_TAG, "Rejected Wi-Fi Direct emergency frame", it)
                 }
@@ -182,7 +184,9 @@ internal class MeshEngine(
         WifiAwareMeshLinkFactory.create(
             context = context,
             onFrame = { frame ->
-                runCatching { injectOpenEmergencyFrame(frame, "wifi-aware") }
+                runCatching {
+                    injectEmergencyTransportFrame(frame, "wifi-aware", allowDrill = false)
+                }
                     .onFailure {
                         MeshLog.w(MeshEngineConstants.LOG_TAG, "Rejected Wi-Fi Aware emergency frame", it)
                     }
@@ -537,15 +541,30 @@ internal class MeshEngine(
     }
 
     fun injectEmergencyLanFrame(frame: ByteArray) {
-        injectOpenEmergencyFrame(frame, "lan-emergency")
+        injectEmergencyTransportFrame(frame, "lan-emergency", allowDrill = false)
     }
 
-    private fun injectOpenEmergencyFrame(frame: ByteArray, transport: String) {
+    fun injectEmergencyAudioFrame(frame: ByteArray) {
+        injectEmergencyTransportFrame(frame, "audio-emergency", allowDrill = true)
+    }
+
+    private fun injectEmergencyTransportFrame(
+        frame: ByteArray,
+        transport: String,
+        allowDrill: Boolean,
+    ) {
         val packet = requireNotNull(MeshProtocol.decode(frame)) {
             "Frame de emergencia inválido"
         }
-        require(EmergencyLanPolicy.isOpenEmergencyLanPacket(packet)) {
-            "El canal abierto solo admite emergencia firmada"
+        val drill = allowDrill &&
+            when (packet.type) {
+                MeshProtocol.TYPE_ANNOUNCE -> packet.isDrill &&
+                    MeshProtocol.decodeAnnouncement(packet.payload)?.emergencyPreannounce == true
+                MeshProtocol.TYPE_MESSAGE -> MeshProtocol.isDrillPublicPacket(packet)
+                else -> false
+            }
+        require(EmergencyLanPolicy.isOpenEmergencyLanPacket(packet) || drill) {
+            "El transporte no admite este frame"
         }
         receive(
             LanBridgePolicy.validateFrame(frame, 2_048),
@@ -563,13 +582,16 @@ internal class MeshEngine(
         require(announcement.type == MeshProtocol.TYPE_ANNOUNCE)
         require(message.type == MeshProtocol.TYPE_MESSAGE)
         require(announcement.senderId.contentEquals(message.senderId))
+        require(announcement.isDrill == message.isDrill)
         require(
             MeshProtocol.decodeAnnouncement(announcement.payload)?.emergencyPreannounce == true,
         )
         require(
-            MeshProtocol.isEmergencyPublicPacketPayload(
-                message.payload.toString(Charsets.UTF_8),
-            ),
+            if (message.isDrill) {
+                MeshProtocol.isDrillPublicPacket(message)
+            } else {
+                MeshProtocol.isEmergencyPublicPacket(message)
+            },
         )
         val source = "qr:${MeshProtocol.hex(message.senderId)}"
         receive(announcementFrame, source)
@@ -864,6 +886,31 @@ internal class MeshEngine(
         )
     }
 
+    fun sendDrill(messageId: String, content: String): Map<String, Any> {
+        require(MeshProtocol.isDrillPublicPacketPayload(content))
+        val announcement = createAnnouncementPacket(
+            ttl = MeshProtocol.TTL,
+            emergencyPreannounce = true,
+            isDrill = true,
+        )
+        broadcast(
+            announcement,
+            excludeAddress = null,
+            allowUnprovenIdentity = true,
+        )
+        val (id, packet) = transmitPublic(
+            messageId.take(255),
+            content,
+            "drill",
+            isDrill = true,
+        )
+        return mapOf(
+            "messageId" to id,
+            "announcementFrame" to MeshProtocol.encode(announcement, padded = false),
+            "messageFrame" to MeshProtocol.encode(packet, padded = false),
+        )
+    }
+
     fun retryEmergency(canonicalHash: String): Map<String, String>? {
         val packet = storeForward.emergencyByHash(canonicalHash) ?: return null
         val retry = EmergencyRetryPolicy.rebuild(
@@ -885,6 +932,7 @@ internal class MeshEngine(
         messageId: String,
         content: String,
         channel: String?,
+        isDrill: Boolean = false,
     ): Pair<String, MeshProtocol.Packet> {
         check(localRole.canOriginateChat) {
             "El rol ${localRole.wireName} no puede originar chat"
@@ -899,6 +947,7 @@ internal class MeshEngine(
                 timestamp = System.currentTimeMillis(),
                 senderId = identity.peerId,
                 payload = payload,
+                isDrill = isDrill,
             ),
         )
         broadcast(packet)
@@ -1389,6 +1438,7 @@ internal class MeshEngine(
     private fun createAnnouncementPacket(
         ttl: Byte = if (privateMode) MeshEngineConstants.PRIVATE_ANNOUNCE_TTL else MeshProtocol.TTL,
         emergencyPreannounce: Boolean = false,
+        isDrill: Boolean = false,
     ): MeshProtocol.Packet {
         val payload = MeshProtocol.encodeAnnouncement(
             nickname,
@@ -1403,6 +1453,7 @@ internal class MeshEngine(
                 timestamp = System.currentTimeMillis(),
                 senderId = identity.peerId,
                 payload = payload,
+                isDrill = isDrill,
             ),
         )
     }
@@ -1797,6 +1848,7 @@ internal class MeshEngine(
             bytes,
             excludeAddress,
             restrictToHearthBit = restrictIdentity,
+            excludeLan = packet.isDrill,
         )
         if (EmergencyLanPolicy.isOpenEmergencyLanPacket(packet)) {
             val wifiDirect = wifiDirectMeshTransport.sendEmergencyFrame(bytes)
@@ -1833,9 +1885,11 @@ internal class MeshEngine(
         bytes: ByteArray,
         excludeAddress: String?,
         restrictToHearthBit: Boolean = false,
+        excludeLan: Boolean = false,
     ): Set<LinkKind> {
         val links = activeLinks()
             .filterNot { it.capabilities.id.substringAfter(':') == excludeAddress }
+            .filterNot { excludeLan && it.capabilities.kind == LinkKind.LAN }
             .filter {
                 !restrictToHearthBit ||
                     it.capabilities.kind != LinkKind.BLE ||
@@ -2345,10 +2399,11 @@ internal class MeshEngine(
             return
         }
         val emergency = MeshProtocol.isEmergencyPublicPacket(packet)
+        val drill = MeshProtocol.isDrillPublicPacket(packet)
         if (!MeshInteropPolicy.shouldProcessPublicMessage(
                 privateMode = privateMode,
                 hearthbitVerified = peer.hearthbitVerified,
-                emergency = emergency,
+                emergency = emergency || drill,
             )
         ) {
             MeshLog.i(
@@ -2381,9 +2436,14 @@ internal class MeshEngine(
             timestamp = packet.timestamp,
             senderPeerId = senderHex,
         )
+        val channel = if (drill) {
+            "drill"
+        } else {
+            message.channel?.takeUnless { it.equals("drill", ignoreCase = true) }
+        }
         syncStore.remember(packet)
         peer.lastSeen = System.currentTimeMillis()
-        if (message.channel == "sos") {
+        if (channel == "sos") {
             val now = System.currentTimeMillis()
             val expiresAt = RadarConsentProtocol.sosConsentExpiresAt(packet.timestamp, now)
             if (expiresAt > now) {
@@ -2399,7 +2459,7 @@ internal class MeshEngine(
             false,
             false,
             message.timestamp,
-            message.channel,
+            channel,
             external,
         )
     }

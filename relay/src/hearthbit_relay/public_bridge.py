@@ -189,6 +189,8 @@ class PublicBridgePolicy:
         except PacketError:
             return None
         if packet.message_type == TYPE_ANNOUNCE:
+            if packet.is_drill:
+                return None
             self._remember_announcement(packet, frame, now_ms)
             return None
 
@@ -232,7 +234,9 @@ class PublicBridgePolicy:
         identity = validate_announcement(announcement_packet, now_ms=now_ms)
         actual_kind = public_message_kind(packet)
         if (
-            identity is None
+            announcement_packet.is_drill
+            or packet.is_drill
+            or identity is None
             or announcement_packet.sender_id != packet.sender_id
             or not self.valid_announcement_timestamp(announcement_packet, now_ms)
             or actual_kind is None
@@ -299,6 +303,7 @@ class PublicBridgePolicy:
 def public_message_kind(packet: Packet) -> str | None:
     if (
         packet.message_type != TYPE_MESSAGE
+        or packet.is_drill
         or packet.recipient_id is not None
         or not packet.has_signature
     ):

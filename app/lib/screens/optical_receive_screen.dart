@@ -41,6 +41,7 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
   FountainDecoder? _decoder;
   String? _savedPath;
   String? _emergencyReceived;
+  bool _emergencyWasDrill = false;
   String? _error;
   bool _finishing = false;
   bool _processingEmergency = false;
@@ -81,11 +82,21 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
           barrierDismissible: false,
           builder: (dialogContext) => AlertDialog(
             icon: Icon(
-              Icons.crisis_alert,
-              color: Theme.of(dialogContext).colorScheme.error,
+              bundle.isDrill ? Icons.science_outlined : Icons.crisis_alert,
+              color: bundle.isDrill
+                  ? Theme.of(dialogContext).colorScheme.tertiary
+                  : Theme.of(dialogContext).colorScheme.error,
             ),
-            title: Text(context.l10n.sosQrRelayTitle),
-            content: SelectableText(bundle.fallbackText),
+            title: Text(
+              bundle.isDrill
+                  ? context.l10n.drillBadge
+                  : context.l10n.sosQrRelayTitle,
+            ),
+            content: SelectableText(
+              bundle.isDrill
+                  ? '${context.l10n.drillSafetyBanner}\n\n${bundle.fallbackText}'
+                  : bundle.fallbackText,
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
@@ -93,7 +104,12 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(dialogContext, true),
-                child: Text(context.l10n.sosQrRelayAction),
+                child: Text(
+                  bundle.isDrill
+                      ? '${context.l10n.drillBadge} · '
+                            '${context.l10n.deliveryRelayed}'
+                      : context.l10n.sosQrRelayAction,
+                ),
               ),
             ],
           ),
@@ -113,6 +129,7 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
       if (!mounted) return;
       setState(() {
         _emergencyReceived = bundle.fallbackText;
+        _emergencyWasDrill = bundle.isDrill;
         _processingEmergency = false;
         _error = null;
       });
@@ -371,13 +388,19 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        Icons.crisis_alert,
+                        _emergencyWasDrill
+                            ? Icons.science_outlined
+                            : Icons.crisis_alert,
                         size: 72,
-                        color: Theme.of(context).colorScheme.error,
+                        color: _emergencyWasDrill
+                            ? Theme.of(context).colorScheme.tertiary
+                            : Theme.of(context).colorScheme.error,
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        context.l10n.sosQrRelayed,
+                        _emergencyWasDrill
+                            ? context.l10n.drillSafetyBanner
+                            : context.l10n.sosQrRelayed,
                         style: Theme.of(context).textTheme.titleLarge,
                         textAlign: TextAlign.center,
                       ),

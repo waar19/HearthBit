@@ -151,6 +151,19 @@ class _FakePlatform extends MeshPlatformService {
   }
 
   @override
+  Future<EmergencyTransmission> sendDrill({
+    required String messageId,
+    required String content,
+  }) async {
+    publicMessages.add((content: content, channel: 'drill'));
+    return EmergencyTransmission(
+      messageId: messageId,
+      announcementFrame: Uint8List.fromList([1, 2, 3]),
+      messageFrame: Uint8List.fromList([4, 5, 6]),
+    );
+  }
+
+  @override
   Future<String?> retryEmergency(String canonicalHash) async {
     retryEmergencyCalls.add(canonicalHash);
     return retryEmergencyResult;
@@ -158,6 +171,11 @@ class _FakePlatform extends MeshPlatformService {
 
   @override
   Future<void> injectEmergencyLanFrame(Uint8List frame) async {
+    emergencyLanFrames.add(Uint8List.fromList(frame));
+  }
+
+  @override
+  Future<void> injectEmergencyAudioFrame(Uint8List frame) async {
     emergencyLanFrames.add(Uint8List.fromList(frame));
   }
 

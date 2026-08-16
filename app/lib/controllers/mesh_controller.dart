@@ -113,6 +113,7 @@ class MeshController extends ChangeNotifier {
   bool localBeaconActive = false;
   DateTime? localBeaconExpiresAt;
   OpticalEmergencyBundle? latestSosQr;
+  OpticalEmergencyBundle? latestDrillQr;
   bool acousticSosListening = false;
   bool acousticSosBroadcasting = false;
 
@@ -802,6 +803,9 @@ class MeshController extends ChangeNotifier {
   Future<void> deactivateDrill() async {
     if (!_drillModeEnabled && _preferences?.drillModeEnabled != true) return;
     _drillModeEnabled = false;
+    latestDrillQr = null;
+    await (_providedAcousticSos ?? _createdAcousticSos)?.stopBroadcast();
+    acousticSosBroadcasting = false;
     await _preferences?.setDrillModeEnabled(false);
     notifyListeners();
   }
@@ -819,7 +823,22 @@ class MeshController extends ChangeNotifier {
       safetyNotice: currentL10n.drillSafetyBanner,
       timestamp: DateTime.now(),
     );
-    await _run(() => _platform.sendPublic(content, channel: 'drill'));
+    final transmission = await _run(
+      () => _platform.sendDrill(
+        messageId: _newEmergencyLocalId(),
+        content: content,
+      ),
+    );
+    if (transmission?.hasQrFrames == true) {
+      latestDrillQr = OpticalEmergencyBundle(
+        announcementFrame: transmission!.announcementFrame!,
+        messageFrame: transmission.messageFrame!,
+        fallbackText: content,
+        isDrill: true,
+      );
+      await _startAcousticSosBroadcast(latestDrillQr!);
+    }
+    notifyListeners();
   }
 
   Future<void> _enforceDrillIsolation() async {
@@ -991,7 +1010,7 @@ class MeshController extends ChangeNotifier {
     final started =
         await _run<bool>(
           () => _acousticSos.startListening((frame) async {
-            await _run<void>(() => _platform.injectEmergencyLanFrame(frame));
+            await _run<void>(() => _platform.injectEmergencyAudioFrame(frame));
           }),
         ) ??
         false;

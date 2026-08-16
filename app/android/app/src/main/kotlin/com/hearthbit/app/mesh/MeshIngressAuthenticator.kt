@@ -128,7 +128,7 @@ internal class MeshIngressAuthenticator(
             }
             if (!AnnouncementClockPolicy.accepts(
                     packet.timestamp,
-                    announcement.emergencyPreannounce,
+                    announcement.emergencyPreannounce && !packet.isDrill,
                     now,
                 ) ||
                 !validateAndPin(senderHex, announcedKeys).accepted

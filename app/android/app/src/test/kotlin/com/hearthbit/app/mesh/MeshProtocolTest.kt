@@ -176,6 +176,37 @@ class MeshProtocolTest {
     }
 
     @Test
+    fun `simulacro requiere flag firmado y combinaciones exactas`() {
+        val content = "SIMULACRO\n[HB-DRILL|1|CHECKIN|HELP|1700000000000]".toByteArray()
+        val drill = MeshProtocol.Packet(
+            type = MeshProtocol.TYPE_MESSAGE,
+            ttl = 7,
+            timestamp = 1,
+            senderId = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8),
+            payload = content,
+            signature = ByteArray(64) { 0x55 },
+            isDrill = true,
+        )
+        val encoded = MeshProtocol.encode(drill, padded = false)
+
+        assertEquals(MeshProtocol.FLAG_DRILL, encoded[11].toInt() and MeshProtocol.FLAG_DRILL)
+        assertTrue(requireNotNull(MeshProtocol.decode(encoded)).isDrill)
+        assertNull(MeshProtocol.decode(encoded.copyOf().also { it[11] = 0x02 }))
+        assertNull(MeshProtocol.decode(encoded.copyOf(encoded.size - 64)))
+        assertFalse(MeshProtocol.isEmergencyPublicPacket(drill))
+        assertThrows(IllegalArgumentException::class.java) {
+            MeshProtocol.encode(
+                drill.copy(
+                    payload = "Practice\n[HB-DRILL|99|CHECKIN|HELP|1700000000000]"
+                        .toByteArray(),
+                    isDrill = false,
+                ),
+                padded = false,
+            )
+        }
+    }
+
+    @Test
     fun `la carga de mensajes coincide con el formato binario BitChat`() {
         val (_, payload) = MeshProtocol.encodePublicMessage(
             nickname = "Ana",

@@ -6,6 +6,7 @@
   "hexEncoding": "lowercase, whitespace ignored",
   "fixtures": [
     {"id":"packet.v1.message","operation":"packet.decode","blob":"blobs/packet-v1-message.hex","valid":true,"expect":{"version":1,"type":2,"ttl":7,"timestamp":1,"sender":"0102030405060708","payload":"616263"}},
+    {"id":"packet.v1.drill_message","operation":"packet.decode","blob":"blobs/packet-v1-drill-message.hex","valid":true,"expect":{"version":1,"type":2,"ttl":7,"timestamp":1,"sender":"0102030405060708","flags":34,"drill":true,"payload":"53494d554c4143524f0a5b48422d4452494c4c7c317c434845434b494e7c48454c507c313730303030303030303030305d","signatureBytes":64}},
     {"id":"packet.v2.route_signed","operation":"packet.decode","blob":"blobs/packet-v2-route-signed.hex","valid":true,"expect":{"version":2,"type":2,"ttl":7,"timestamp":72623859790382856,"sender":"0102030405060708","recipient":"ffffffffffffffff","payload":"726f7574652d7632","route":["1011121314151617","2021222324252627"],"signatureBytes":64}},
     {"id":"packet.v1.raw_deflate","operation":"packet.decode","blob":"blobs/packet-v1-raw-deflate.hex","valid":true,"expect":{"version":1,"type":1,"payloadPattern":"000102030405","payloadBytes":180,"compression":"raw-deflate"}},
     {"id":"packet.v1.zlib_read","operation":"packet.decode","blob":"blobs/packet-v1-zlib.hex","valid":true,"expect":{"version":1,"type":1,"payloadPattern":"000102030405","payloadBytes":180,"compression":"zlib-read-only"}},

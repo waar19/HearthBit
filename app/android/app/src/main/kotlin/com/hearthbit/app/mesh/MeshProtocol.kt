@@ -31,6 +31,7 @@ internal object MeshProtocol {
     const val EMERGENCY_PROTOCOL_VERSION: Byte = 0x01
     const val TTL: Byte = 7
     const val HBT_VERSION: Byte = 0x01
+    const val FLAG_DRILL = 0x20
 
     const val NOISE_PRIVATE_MESSAGE: Byte = 0x01
 
@@ -50,6 +51,7 @@ internal object MeshProtocol {
         val signature: ByteArray? = null,
         val route: List<ByteArray> = emptyList(),
         val isRsr: Boolean = false,
+        val isDrill: Boolean = false,
     ) {
         fun canonicalForSigning(): ByteArray = encode(
             copy(ttl = 0, signature = null, isRsr = false),
@@ -173,7 +175,7 @@ internal object MeshProtocol {
 
         var payload = packet.payload
         var originalPayloadSize: Int? = null
-        if (shouldCompress(payload)) {
+        if (!packet.isDrill && shouldCompress(payload)) {
             compress(payload)?.let { compressed ->
                 originalPayloadSize = payload.size
                 payload = compressed
@@ -185,6 +187,8 @@ internal object MeshProtocol {
         if (originalPayloadSize != null) flags = flags or 0x04
         if (packet.version >= 2 && packet.route.isNotEmpty()) flags = flags or 0x08
         if (packet.isRsr) flags = flags or 0x10
+        if (packet.isDrill) flags = flags or FLAG_DRILL
+        require(isValidDrillShape(packet, flags))
 
         val payloadSizeField = if (originalPayloadSize == null) {
             0
@@ -294,7 +298,7 @@ internal object MeshProtocol {
             }
             val signature = if (signatureSize > 0) ByteArray(64).also(buffer::get) else null
             if (buffer.hasRemaining()) return null
-            Packet(
+            val packet = Packet(
                 version = version,
                 type = type,
                 ttl = ttl,
@@ -305,7 +309,10 @@ internal object MeshProtocol {
                 signature = signature,
                 route = route,
                 isRsr = flags and 0x10 != 0,
+                isDrill = flags and FLAG_DRILL != 0,
             )
+            if (!isValidDrillShape(packet, flags, requireSignature = true)) return null
+            packet
         }.getOrNull()
     }
 
@@ -699,9 +706,26 @@ internal object MeshProtocol {
     }
 
     fun isEmergencyPublicPacket(packet: Packet): Boolean {
-        if (packet.type != TYPE_MESSAGE) return false
+        if (packet.type != TYPE_MESSAGE || packet.isDrill) return false
         val content = packet.payload.toString(Charsets.UTF_8)
         return isEmergencyPublicPacketPayload(content)
+    }
+
+    fun isDrillPublicPacket(packet: Packet): Boolean =
+        packet.type == TYPE_MESSAGE &&
+            packet.isDrill &&
+            isDrillPublicPacketPayload(packet.payload.toString(Charsets.UTF_8))
+
+    fun isDrillPublicPacketPayload(content: String): Boolean {
+        if (isEmergencyPublicPacketPayload(content) || !content.endsWith("]")) return false
+        val marker = content.lastIndexOf(DRILL_MARKER)
+        if (marker <= 0) return false
+        val fields = content.substring(marker + DRILL_MARKER.length, content.length - 1)
+            .split('|')
+        return fields.size == 2 &&
+            fields[0] in setOf("OK", "HELP", "INJURED") &&
+            fields[1].all(Char::isDigit) &&
+            fields[1].toLongOrNull()?.let { it > 0 } == true
     }
 
     fun isSosPublicPacket(packet: Packet): Boolean =
@@ -710,6 +734,29 @@ internal object MeshProtocol {
 
     fun isEmergencyPublicPacketPayload(content: String): Boolean =
         content.startsWith("SOS|") || content.contains("[HB-CHECKIN|")
+
+    private fun isValidDrillShape(
+        packet: Packet,
+        flags: Int,
+        requireSignature: Boolean = false,
+    ): Boolean {
+        val markedPayload = when (packet.type) {
+            TYPE_ANNOUNCE ->
+                decodeAnnouncement(packet.payload)?.emergencyPreannounce == true
+            TYPE_MESSAGE ->
+                isDrillPublicPacketPayload(packet.payload.toString(Charsets.UTF_8))
+            else -> false
+        }
+        val hasMarkerWithoutFlag = packet.type == TYPE_MESSAGE &&
+            packet.payload.toString(Charsets.UTF_8).contains("[HB-DRILL|")
+        if (!packet.isDrill) return !hasMarkerWithoutFlag
+        return packet.version == VERSION &&
+            (!requireSignature || packet.signature != null) &&
+            packet.recipientId == null &&
+            packet.route.isEmpty() &&
+            flags and 0x04 == 0 &&
+            markedPayload
+    }
 
     fun encodeEmergencyCapability(): ByteArray =
         byteArrayOf(EMERGENCY_PROTOCOL_VERSION, 0x01)
@@ -911,4 +958,5 @@ internal object MeshProtocol {
     private const val COURIER_DEFAULT_COPIES = 4
     private const val COURIER_TAG_CONTEXT = "bitchat-courier-tag-v1"
     private val SOS_PREFIX = "SOS|".toByteArray(Charsets.UTF_8)
+    private const val DRILL_MARKER = "[HB-DRILL|1|CHECKIN|"
 }

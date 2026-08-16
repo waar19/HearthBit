@@ -13,11 +13,29 @@ class SosQrScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final encoded = OpticalProtocol.encodeEmergency(bundle);
     return Scaffold(
-      appBar: AppBar(title: Text(context.l10n.sosQrTitle)),
+      appBar: AppBar(
+        title: Text(
+          bundle.isDrill ? context.l10n.drillBadge : context.l10n.sosQrTitle,
+        ),
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            if (bundle.isDrill) ...[
+              Card(
+                color: Theme.of(context).colorScheme.tertiaryContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    context.l10n.drillSafetyBanner,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             Text(
               context.l10n.sosQrShowInstructions,
               textAlign: TextAlign.center,
