@@ -1,0 +1,17 @@
+[package]
+name = "hearthbit-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Nucleo binario portable del protocolo HearthBit"
+license = "MIT"
+
+[dependencies]
+ed25519-dalek = "2.2.0"
+flate2 = "1.1.9"
+sha2 = "0.11.0"
+
+[dev-dependencies]
+hex = "0.4.3"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
