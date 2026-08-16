@@ -196,6 +196,34 @@ class AppLocalizationsJa extends AppLocalizations {
   String get sosDefaultMessage => '助けが必要です';
 
   @override
+  String get sosQrTitle => 'QRによるSOS';
+
+  @override
+  String get sosQrShowInstructions =>
+      'このコードを別の人に見せてください。HearthBitはSOSを中継でき、一般のカメラでも予備テキストを読めます。';
+
+  @override
+  String get sosQrFallbackTitle => 'アプリなしで読める情報';
+
+  @override
+  String get sosQrOpen => 'SOS QRを表示';
+
+  @override
+  String get sosQrScan => 'SOSをスキャンして中継';
+
+  @override
+  String get sosQrRelayTitle => 'SOSを検出しました';
+
+  @override
+  String get sosQrRelayAction => 'SOSを中継';
+
+  @override
+  String get sosQrInvalid => 'QRに有効な署名済みHearthBit SOSが含まれていません。';
+
+  @override
+  String get sosQrRelayed => 'SOSを検証してメッシュに追加しました';
+
+  @override
   String get emergencySmsOpen => '信頼できる連絡先へSMSで知らせる';
 
   @override

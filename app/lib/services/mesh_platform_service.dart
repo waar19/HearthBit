@@ -19,10 +19,20 @@ abstract final class RescueModeContract {
 }
 
 class EmergencyTransmission {
-  const EmergencyTransmission({required this.messageId, this.canonicalHash});
+  const EmergencyTransmission({
+    required this.messageId,
+    this.canonicalHash,
+    this.announcementFrame,
+    this.messageFrame,
+  });
 
   final String messageId;
   final String? canonicalHash;
+  final Uint8List? announcementFrame;
+  final Uint8List? messageFrame;
+
+  bool get hasQrFrames =>
+      announcementFrame?.isNotEmpty == true && messageFrame?.isNotEmpty == true;
 }
 
 class NativeRescueState {
@@ -224,6 +234,16 @@ class MeshPlatformService {
     });
   }
 
+  Future<void> injectEmergencyQrFrames({
+    required Uint8List announcementFrame,
+    required Uint8List messageFrame,
+  }) {
+    return _methods.invokeMethod<void>('injectEmergencyQrFrames', {
+      'announcementFrame': announcementFrame,
+      'messageFrame': messageFrame,
+    });
+  }
+
   Future<String> sendPublic(String content, {String? channel}) async {
     return (await _methods.invokeMethod<String>('sendPublic', {
       'content': content,
@@ -280,6 +300,8 @@ class MeshPlatformService {
       return EmergencyTransmission(
         messageId: returnedId,
         canonicalHash: (result?['canonicalHash'] as String?)?.toLowerCase(),
+        announcementFrame: result?['announcementFrame'] as Uint8List?,
+        messageFrame: result?['messageFrame'] as Uint8List?,
       );
     } on MissingPluginException {
       return EmergencyTransmission(

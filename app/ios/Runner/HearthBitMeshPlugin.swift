@@ -674,6 +674,22 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         defer { suppressLanBridge = false }
         receive(frame.data, source: nil)
         result(nil)
+      case "injectEmergencyQrFrames":
+        guard
+          let announcementData =
+            (arguments["announcementFrame"] as? FlutterStandardTypedData)?.data,
+          let messageData = (arguments["messageFrame"] as? FlutterStandardTypedData)?.data,
+          let announcement = IOSMeshProtocol.decode(announcementData),
+          let message = IOSMeshProtocol.decode(messageData),
+          announcement.type == IOSMeshProtocol.announce,
+          message.type == IOSMeshProtocol.message,
+          announcement.senderID == message.senderID,
+          IOSMeshProtocol.decodeAnnouncement(announcement.payload)?.emergencyPreannounce == true,
+          IOSMeshProtocol.isEmergency(message)
+        else { throw IOSMeshError.invalidPayload }
+        receive(announcementData, source: nil)
+        receive(messageData, source: nil)
+        result(nil)
       case "sendPublic":
         let content = arguments["content"] as? String ?? ""
         result(try sendPublic(content: content, channel: arguments["channel"] as? String))
@@ -730,11 +746,11 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         guard content.hasPrefix("SOS|") || content.contains("[HB-CHECKIN|") else {
           throw IOSMeshError.invalidPayload
         }
-        sendAnnouncement(
+        let announcement = createAnnouncementPacket(
           ttl: IOSMeshProtocol.defaultTTL,
-          allowUnprovenIdentity: true,
           emergencyPreannounce: true
         )
+        broadcast(announcement, allowUnprovenIdentity: true)
         let transmitted = try transmitPublic(
           messageID: String(messageID.prefix(255)),
           content: content,
@@ -744,6 +760,12 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           "messageId": transmitted.id,
           "canonicalHash": IOSMeshProtocol
             .emergencyCanonicalHash(transmitted.packet).hex,
+          "announcementFrame": FlutterStandardTypedData(
+            bytes: IOSMeshProtocol.encode(announcement, padded: false)
+          ),
+          "messageFrame": FlutterStandardTypedData(
+            bytes: IOSMeshProtocol.encode(transmitted.packet, padded: false)
+          ),
         ])
       case "retryEmergency":
         let canonicalHash = arguments["canonicalHash"] as? String ?? ""
@@ -2270,21 +2292,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     emergencyPreannounce: Bool = false
   ) {
     guard running, identity != nil else { return }
-    let payload = IOSMeshProtocol.announcement(
-      nickname: identity.nickname,
-      noisePublicKey: identity.noisePrivateKey.publicKey.rawRepresentation,
-      signingPublicKey: identity.signingPrivateKey.publicKey.rawRepresentation,
-      emergencyPreannounce: emergencyPreannounce
-    )
     broadcast(
-      identity.sign(
-        IOSMeshPacket(
-          type: IOSMeshProtocol.announce,
-          ttl: ttl ?? announcementTTL,
-          timestamp: UInt64(Date().timeIntervalSince1970 * 1000),
-          senderID: identity.peerID,
-          payload: payload
-        )
+      createAnnouncementPacket(
+        ttl: ttl ?? announcementTTL,
+        emergencyPreannounce: emergencyPreannounce
       ),
       allowUnprovenIdentity: allowUnprovenIdentity
     )
@@ -2296,6 +2307,26 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       updateRadarReportTimer()
       broadcastRadarConsent(grant: true)
     }
+  }
+
+  private func createAnnouncementPacket(
+    ttl: UInt8,
+    emergencyPreannounce: Bool
+  ) -> IOSMeshPacket {
+    identity.sign(
+      IOSMeshPacket(
+        type: IOSMeshProtocol.announce,
+        ttl: ttl,
+        timestamp: currentMilliseconds(),
+        senderID: identity.peerID,
+        payload: IOSMeshProtocol.announcement(
+          nickname: identity.nickname,
+          noisePublicKey: identity.noisePrivateKey.publicKey.rawRepresentation,
+          signingPublicKey: identity.signingPrivateKey.publicKey.rawRepresentation,
+          emergencyPreannounce: emergencyPreannounce
+        )
+      )
+    )
   }
 
   private func broadcastHbtCapability() {

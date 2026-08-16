@@ -141,6 +141,10 @@ class _FakePlatform extends MeshPlatformService {
     return EmergencyTransmission(
       messageId: messageId,
       canonicalHash: messageId.hashCode.toRadixString(16).padLeft(64, '0'),
+      announcementFrame: channel == 'sos'
+          ? Uint8List.fromList([1, 2, 3])
+          : null,
+      messageFrame: channel == 'sos' ? Uint8List.fromList([4, 5, 6]) : null,
     );
   }
 
@@ -1013,6 +1017,24 @@ void main() {
       expect(platform.rescueConfigurations.last, isFalse);
     },
   );
+
+  test('SOS conserva frames firmados para retransmisión por QR', () async {
+    await controller.setRescueMode(
+      true,
+      description: 'Estoy atrapado',
+      locationPrecision: SosLocationPrecision.none,
+    );
+
+    final qr = controller.latestSosQr;
+    expect(qr, isNotNull);
+    expect(qr!.announcementFrame, [1, 2, 3]);
+    expect(qr.messageFrame, [4, 5, 6]);
+    expect(qr.fallbackText, contains('Estoy atrapado'));
+    expect(qr.fallbackText, contains(controller.peerId));
+
+    await controller.setRescueMode(false);
+    expect(controller.latestSosQr, isNull);
+  });
 
   test('restaura modo rescate vigente después de reiniciar Flutter', () async {
     final now = DateTime.now();

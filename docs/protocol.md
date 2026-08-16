@@ -277,6 +277,21 @@ activo, identidad HearthBit verificada y una relación segura previa con el
 solicitante. Una firma válida por sí sola no autoriza flash, sonido ni
 vibración.
 
+## SOS óptico por QR
+
+`HEARTHBIT-SOS:1` encapsula dos frames v2 sin padding: un `ANNOUNCE` firmado con
+el marcador de preanuncio de emergencia y el `MESSAGE` SOS firmado. El texto
+visible después de la primera línea forma parte del contenedor binario y debe
+coincidir byte a byte; así una cámara genérica puede mostrar descripción,
+coordenadas e ID aunque no tenga HearthBit.
+
+El receptor solicita confirmación antes de inyectar. Android e iOS decodifican
+ambos frames, exigen el mismo remitente y un payload de emergencia, y después
+los entregan en orden al ingreso normal de la malla. Ese ingreso vuelve a
+validar identidad autofirmada, firma del mensaje, reloj, deduplicación y límites
+de flood. El SOS queda disponible para store-forward y puede viajar físicamente
+en el teléfono del rescatista hasta encontrar otro enlace.
+
 ## Privacidad de balizas BLE genéricas en Android
 
 - El escáner de presencia no lee ni transmite a Flutter el nombre Bluetooth

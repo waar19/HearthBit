@@ -210,6 +210,14 @@ class MainActivity : FlutterActivity() {
                     )
                     null
                 }
+                "injectEmergencyQrFrames" -> runMethod(result) {
+                    MeshRuntime.engine(this).injectEmergencyQrFrames(
+                        announcementFrame =
+                            requireNotNull(call.argument<ByteArray>("announcementFrame")),
+                        messageFrame = requireNotNull(call.argument<ByteArray>("messageFrame")),
+                    )
+                    null
+                }
                 "sendPublic" -> runMethod(result) {
                     MeshRuntime.engine(this).sendPublic(
                         call.argument<String>("content").orEmpty(),

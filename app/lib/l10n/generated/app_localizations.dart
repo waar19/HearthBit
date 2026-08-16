@@ -448,6 +448,60 @@ abstract class AppLocalizations {
   /// **'I need help'**
   String get sosDefaultMessage;
 
+  /// No description provided for @sosQrTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS by QR'**
+  String get sosQrTitle;
+
+  /// No description provided for @sosQrShowInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Show this code to another person. HearthBit can relay the SOS, and any camera can read the fallback text.'**
+  String get sosQrShowInstructions;
+
+  /// No description provided for @sosQrFallbackTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Readable information without the app'**
+  String get sosQrFallbackTitle;
+
+  /// No description provided for @sosQrOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'SHOW SOS QR'**
+  String get sosQrOpen;
+
+  /// No description provided for @sosQrScan.
+  ///
+  /// In en, this message translates to:
+  /// **'SCAN AND RELAY SOS'**
+  String get sosQrScan;
+
+  /// No description provided for @sosQrRelayTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS found'**
+  String get sosQrRelayTitle;
+
+  /// No description provided for @sosQrRelayAction.
+  ///
+  /// In en, this message translates to:
+  /// **'RELAY SOS'**
+  String get sosQrRelayAction;
+
+  /// No description provided for @sosQrInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'The QR does not contain a valid signed HearthBit SOS.'**
+  String get sosQrInvalid;
+
+  /// No description provided for @sosQrRelayed.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS validated and added to the mesh'**
+  String get sosQrRelayed;
+
   /// No description provided for @emergencySmsOpen.
   ///
   /// In en, this message translates to:

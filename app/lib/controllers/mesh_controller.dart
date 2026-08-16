@@ -12,6 +12,7 @@ import '../services/diagnostics_log.dart';
 import '../services/mesh_native_event.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/message_repository.dart';
+import '../services/optical_protocol.dart';
 import '../services/peer_location_tracker.dart';
 
 enum PrivateMessageSendDisposition { sent, queued, failed }
@@ -129,6 +130,7 @@ class MeshController extends ChangeNotifier {
   PendingBeaconRequest? pendingBeaconRequest;
   bool localBeaconActive = false;
   DateTime? localBeaconExpiresAt;
+  OpticalEmergencyBundle? latestSosQr;
 
   // Modo rescate: reenvía el SOS con ubicación actualizada periódicamente.
   bool rescueMode = false;
@@ -432,6 +434,7 @@ class MeshController extends ChangeNotifier {
       rescueMode = false;
       rescueStartedAt = null;
       rescueExpiresAt = null;
+      latestSosQr = null;
       _stopRadarLocationSharing();
       if (wasRescueActive || radarConsentActive) {
         await revokeRadarConsent();
@@ -1172,6 +1175,7 @@ class MeshController extends ChangeNotifier {
     try {
       String? canonicalHash = delivery.canonicalHash;
       var transmitted = false;
+      EmergencyTransmission? transmission;
       if (canonicalHash != null) {
         final retryHash = await _platform.retryEmergency(canonicalHash);
         if (retryHash != null) {
@@ -1180,14 +1184,22 @@ class MeshController extends ChangeNotifier {
         }
       }
       if (!transmitted) {
-        final result = await _platform.sendEmergency(
+        transmission = await _platform.sendEmergency(
           messageId: delivery.localId,
           content: delivery.content,
           channel: delivery.kind == EmergencyDeliveryKind.sos
               ? 'sos'
               : 'checkin',
         );
-        canonicalHash = result.canonicalHash;
+        canonicalHash = transmission.canonicalHash;
+      }
+      if (delivery.kind == EmergencyDeliveryKind.sos &&
+          transmission?.hasQrFrames == true) {
+        latestSosQr = OpticalEmergencyBundle(
+          announcementFrame: transmission!.announcementFrame!,
+          messageFrame: transmission.messageFrame!,
+          fallbackText: _emergencyQrFallback(delivery.content),
+        );
       }
       delivery = delivery.copyWith(
         state: EmergencyDeliveryState.relayed,
@@ -1230,6 +1242,20 @@ class MeshController extends ChangeNotifier {
       emergencyMaximumBackoff.inSeconds,
     );
     return Duration(seconds: seconds);
+  }
+
+  String _emergencyQrFallback(String content) {
+    final fields = content.split('|');
+    final description = fields.length > 1 && fields[1].trim().isNotEmpty
+        ? fields[1].trim()
+        : currentL10n.sosDefaultMessage;
+    final coordinates =
+        fields.length > 3 &&
+            fields[2].trim().isNotEmpty &&
+            fields[3].trim().isNotEmpty
+        ? '\nGPS: ${fields[2].trim()}, ${fields[3].trim()}'
+        : '';
+    return 'HEARTHBIT SOS\n$description$coordinates\nID: $peerId';
   }
 
   Future<void> _replaceEmergencyDelivery(EmergencyDelivery delivery) async {

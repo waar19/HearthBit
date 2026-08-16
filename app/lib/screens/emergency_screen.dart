@@ -12,8 +12,10 @@ import 'emergency_contacts_screen.dart';
 import 'emergency_gateway_card.dart';
 import 'first_aid_guide_screen.dart';
 import 'map_screen.dart';
+import 'optical_receive_screen.dart';
 import 'radar_screen.dart';
 import 'rescue_power_cards.dart';
+import 'sos_qr_screen.dart';
 
 class EmergencyScreen extends StatelessWidget {
   const EmergencyScreen({
@@ -72,6 +74,28 @@ class EmergencyScreen extends StatelessWidget {
             icon: const Icon(Icons.stop_circle_outlined),
             label: Text(context.l10n.emergencyStopRescue),
           ),
+        if (controller.rescueMode && controller.latestSosQr != null) ...[
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => SosQrScreen(bundle: controller.latestSosQr!),
+              ),
+            ),
+            icon: const Icon(Icons.qr_code_2),
+            label: Text(context.l10n.sosQrOpen),
+          ),
+        ],
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => OpticalReceiveScreen(mesh: controller),
+            ),
+          ),
+          icon: const Icon(Icons.qr_code_scanner),
+          label: Text(context.l10n.sosQrScan),
+        ),
         if (controller.lastError != null) ...[
           const SizedBox(height: 8),
           Semantics(

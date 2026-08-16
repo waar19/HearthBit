@@ -193,6 +193,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sosDefaultMessage => '我需要帮助';
 
   @override
+  String get sosQrTitle => '二维码 SOS';
+
+  @override
+  String get sosQrShowInstructions =>
+      '请向他人展示此代码。HearthBit 可以转发 SOS，普通相机也能读取备用文字。';
+
+  @override
+  String get sosQrFallbackTitle => '无需应用即可阅读的信息';
+
+  @override
+  String get sosQrOpen => '显示 SOS 二维码';
+
+  @override
+  String get sosQrScan => '扫描并转发 SOS';
+
+  @override
+  String get sosQrRelayTitle => '发现 SOS';
+
+  @override
+  String get sosQrRelayAction => '转发 SOS';
+
+  @override
+  String get sosQrInvalid => '二维码不包含有效且已签名的 HearthBit SOS。';
+
+  @override
+  String get sosQrRelayed => 'SOS 已验证并加入网状网络';
+
+  @override
   String get emergencySmsOpen => '通过短信通知可信联系人';
 
   @override

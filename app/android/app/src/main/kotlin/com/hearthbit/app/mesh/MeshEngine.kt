@@ -520,6 +520,29 @@ internal class MeshEngine(
         receive(LanBridgePolicy.validateFrame(frame, bridge.capabilities.mtu), normalized)
     }
 
+    fun injectEmergencyQrFrames(announcementFrame: ByteArray, messageFrame: ByteArray) {
+        val announcement = requireNotNull(MeshProtocol.decode(announcementFrame)) {
+            "Anuncio QR inválido"
+        }
+        val message = requireNotNull(MeshProtocol.decode(messageFrame)) {
+            "Mensaje QR inválido"
+        }
+        require(announcement.type == MeshProtocol.TYPE_ANNOUNCE)
+        require(message.type == MeshProtocol.TYPE_MESSAGE)
+        require(announcement.senderId.contentEquals(message.senderId))
+        require(
+            MeshProtocol.decodeAnnouncement(announcement.payload)?.emergencyPreannounce == true,
+        )
+        require(
+            MeshProtocol.isEmergencyPublicPacketPayload(
+                message.payload.toString(Charsets.UTF_8),
+            ),
+        )
+        val source = "qr:${MeshProtocol.hex(message.senderId)}"
+        receive(announcementFrame, source)
+        receive(messageFrame, source)
+    }
+
     @SuppressLint("MissingPermission")
     private fun stopInternal(notify: Boolean) {
         running = false
@@ -793,16 +816,17 @@ internal class MeshEngine(
         ).first
     }
 
-    fun sendEmergency(messageId: String, content: String, channel: String): Map<String, String> {
+    fun sendEmergency(messageId: String, content: String, channel: String): Map<String, Any> {
         require(channel == "sos" || channel == "checkin")
         require(MeshProtocol.isEmergencyPublicPacketPayload(content))
         // La excepción de reloj depende de este marcador firmado, nunca del
         // TTL mutable. Debe ser el paquete inmediatamente anterior.
+        val announcement = createAnnouncementPacket(
+            ttl = MeshProtocol.TTL,
+            emergencyPreannounce = true,
+        )
         broadcast(
-            createAnnouncementPacket(
-                ttl = MeshProtocol.TTL,
-                emergencyPreannounce = true,
-            ),
+            announcement,
             excludeAddress = null,
             allowUnprovenIdentity = true,
         )
@@ -812,6 +836,8 @@ internal class MeshEngine(
             "canonicalHash" to MeshProtocol.hex(
                 MeshProtocol.emergencyCanonicalHash(packet),
             ),
+            "announcementFrame" to MeshProtocol.encode(announcement, padded = false),
+            "messageFrame" to MeshProtocol.encode(packet, padded = false),
         )
     }
 

@@ -15,6 +15,8 @@ class OpticalProtocol {
   static const List<int> magic = [...magicPrefix, version];
   static const int typeHeader = 0x00;
   static const int typeData = 0x01;
+  static const int typeEmergency = 0x02;
+  static const String emergencyTextPrefix = 'HEARTHBIT-SOS:1:';
   static const int transferIdLength = 16;
   static const int sha256Length = 32;
   static const int signatureLength = 64;
@@ -22,6 +24,31 @@ class OpticalProtocol {
   static const int maximumFileSize = 64 * 1024 * 1024;
   static const int maximumChunkSize = 4096;
   static const int maximumChunkCount = 262144;
+  static const int maximumEmergencyFrameLength = 2048;
+  static const int maximumEmergencyFallbackLength = 1000;
+
+  static String encodeEmergency(OpticalEmergencyBundle bundle) {
+    final fallback = utf8.encode(bundle.fallbackText.trim());
+    if (bundle.announcementFrame.isEmpty ||
+        bundle.announcementFrame.length > maximumEmergencyFrameLength ||
+        bundle.messageFrame.isEmpty ||
+        bundle.messageFrame.length > maximumEmergencyFrameLength ||
+        fallback.isEmpty ||
+        fallback.length > maximumEmergencyFallbackLength) {
+      throw ArgumentError('Invalid emergency optical bundle');
+    }
+    final payload = BytesBuilder(copy: false)
+      ..add(magic)
+      ..addByte(typeEmergency)
+      ..add(_u16(bundle.announcementFrame.length))
+      ..add(_u16(bundle.messageFrame.length))
+      ..add(_u16(fallback.length))
+      ..add(bundle.announcementFrame)
+      ..add(bundle.messageFrame)
+      ..add(fallback);
+    final encoded = base64UrlEncode(payload.takeBytes());
+    return '$emergencyTextPrefix$encoded\n${utf8.decode(fallback)}';
+  }
 
   static String encodeHeader(OpticalHeader header) {
     final signature = header.signature;
@@ -102,6 +129,9 @@ class OpticalProtocol {
     if (content.isEmpty || content.length > maximumEncodedFrameLength) {
       return null;
     }
+    if (content.startsWith(emergencyTextPrefix)) {
+      return _decodeEmergency(content);
+    }
     Uint8List bytes;
     try {
       bytes = base64Decode(content);
@@ -150,6 +180,66 @@ class OpticalProtocol {
       default:
         return null;
     }
+  }
+
+  static OpticalEmergencyBundle? _decodeEmergency(String content) {
+    final newline = content.indexOf('\n');
+    if (newline <= emergencyTextPrefix.length ||
+        newline == content.length - 1) {
+      return null;
+    }
+    final encoded = content.substring(emergencyTextPrefix.length, newline);
+    Uint8List bytes;
+    try {
+      bytes = base64Url.decode(base64Url.normalize(encoded));
+    } on FormatException {
+      return null;
+    }
+    if (bytes.length < magic.length + 1 + 6) return null;
+    for (var index = 0; index < magic.length; index++) {
+      if (bytes[index] != magic[index]) return null;
+    }
+    if (bytes[magic.length] != typeEmergency) return null;
+    final data = ByteData.sublistView(bytes);
+    var offset = magic.length + 1;
+    final announcementLength = data.getUint16(offset);
+    offset += 2;
+    final messageLength = data.getUint16(offset);
+    offset += 2;
+    final fallbackLength = data.getUint16(offset);
+    offset += 2;
+    if (announcementLength <= 0 ||
+        announcementLength > maximumEmergencyFrameLength ||
+        messageLength <= 0 ||
+        messageLength > maximumEmergencyFrameLength ||
+        fallbackLength <= 0 ||
+        fallbackLength > maximumEmergencyFallbackLength ||
+        bytes.length !=
+            offset + announcementLength + messageLength + fallbackLength) {
+      return null;
+    }
+    final announcement = Uint8List.fromList(
+      Uint8List.sublistView(bytes, offset, offset + announcementLength),
+    );
+    offset += announcementLength;
+    final message = Uint8List.fromList(
+      Uint8List.sublistView(bytes, offset, offset + messageLength),
+    );
+    offset += messageLength;
+    String fallback;
+    try {
+      fallback = utf8.decode(
+        Uint8List.sublistView(bytes, offset, offset + fallbackLength),
+      );
+    } on FormatException {
+      return null;
+    }
+    if (content.substring(newline + 1) != fallback) return null;
+    return OpticalEmergencyBundle(
+      announcementFrame: announcement,
+      messageFrame: message,
+      fallbackText: fallback,
+    );
   }
 
   static OpticalHeader? _decodeHeader(
@@ -302,4 +392,16 @@ class OpticalDataSymbol {
   final Uint8List transferId;
   final int symbolIndex;
   final Uint8List payload;
+}
+
+class OpticalEmergencyBundle {
+  OpticalEmergencyBundle({
+    required this.announcementFrame,
+    required this.messageFrame,
+    required this.fallbackText,
+  });
+
+  final Uint8List announcementFrame;
+  final Uint8List messageFrame;
+  final String fallbackText;
 }

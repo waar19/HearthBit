@@ -22,13 +22,9 @@ import '../services/transfer_protocol.dart';
 /// el decodificador fountain. No necesita canal de retorno; si hay sesión de
 /// malla con el emisor, envía una confirmación BLE al terminar.
 class OpticalReceiveScreen extends StatefulWidget {
-  const OpticalReceiveScreen({
-    required this.transfers,
-    required this.mesh,
-    super.key,
-  });
+  const OpticalReceiveScreen({required this.mesh, this.transfers, super.key});
 
-  final TransferController transfers;
+  final TransferController? transfers;
   final MeshController mesh;
 
   @override
@@ -44,24 +40,89 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
   OpticalHeader? _header;
   FountainDecoder? _decoder;
   String? _savedPath;
+  String? _emergencyReceived;
   String? _error;
   bool _finishing = false;
+  bool _processingEmergency = false;
   bool _approvingHeader = false;
   bool _decoding = false;
   final List<(int, Uint8List)> _pendingSymbols = [];
   _OpticalTrust? _trust;
 
   void _onDetect(BarcodeCapture capture) {
-    if (_savedPath != null || _finishing) return;
+    if (_savedPath != null ||
+        _emergencyReceived != null ||
+        _finishing ||
+        _processingEmergency) {
+      return;
+    }
     for (final barcode in capture.barcodes) {
       final content = barcode.rawValue;
       if (content == null) continue;
       final symbol = OpticalProtocol.decode(content);
-      if (symbol is OpticalHeader) {
+      if (symbol is OpticalHeader && widget.transfers != null) {
         unawaited(_onHeader(symbol));
-      } else if (symbol is OpticalDataSymbol) {
+      } else if (symbol is OpticalDataSymbol && widget.transfers != null) {
         _onData(symbol);
+      } else if (symbol is OpticalEmergencyBundle) {
+        unawaited(_onEmergency(symbol));
       }
+    }
+  }
+
+  Future<void> _onEmergency(OpticalEmergencyBundle bundle) async {
+    if (_processingEmergency) return;
+    _processingEmergency = true;
+    await _scanner.stop();
+    if (!mounted) return;
+    final accepted =
+        await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            icon: Icon(
+              Icons.crisis_alert,
+              color: Theme.of(dialogContext).colorScheme.error,
+            ),
+            title: Text(context.l10n.sosQrRelayTitle),
+            content: SelectableText(bundle.fallbackText),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(context.l10n.actionReject),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(context.l10n.sosQrRelayAction),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!mounted) return;
+    if (!accepted) {
+      _processingEmergency = false;
+      await _scanner.start();
+      return;
+    }
+    try {
+      await MeshPlatformService().injectEmergencyQrFrames(
+        announcementFrame: bundle.announcementFrame,
+        messageFrame: bundle.messageFrame,
+      );
+      if (!mounted) return;
+      setState(() {
+        _emergencyReceived = bundle.fallbackText;
+        _processingEmergency = false;
+        _error = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = context.l10n.sosQrInvalid;
+        _processingEmergency = false;
+      });
+      await _scanner.start();
     }
   }
 
@@ -240,7 +301,7 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
         '${_hex(header.transferId)}_$safeName',
       );
       await File(path).writeAsBytes(data, flush: true);
-      await widget.transfers.registerOpticalReceived(
+      await widget.transfers!.registerOpticalReceived(
         transferIdHex: _hex(header.transferId),
         fileName: safeName,
         fileSize: header.fileSize,
@@ -302,7 +363,39 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(context.l10n.receiveByQr)),
       body: SafeArea(
-        child: _savedPath != null
+        child: _emergencyReceived != null
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.crisis_alert,
+                        size: 72,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        context.l10n.sosQrRelayed,
+                        style: Theme.of(context).textTheme.titleLarge,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      SelectableText(
+                        _emergencyReceived!,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: Text(context.l10n.actionDone),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : _savedPath != null
             ? Center(
                 child: Padding(
                   padding: const EdgeInsets.all(24),

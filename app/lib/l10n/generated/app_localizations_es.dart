@@ -201,6 +201,35 @@ class AppLocalizationsEs extends AppLocalizations {
   String get sosDefaultMessage => 'Necesito ayuda';
 
   @override
+  String get sosQrTitle => 'SOS por QR';
+
+  @override
+  String get sosQrShowInstructions =>
+      'Muestra este código a otra persona. HearthBit podrá retransmitir el SOS y cualquier cámara podrá leer el texto de respaldo.';
+
+  @override
+  String get sosQrFallbackTitle => 'Información legible sin la aplicación';
+
+  @override
+  String get sosQrOpen => 'MOSTRAR SOS POR QR';
+
+  @override
+  String get sosQrScan => 'ESCANEAR Y RETRANSMITIR SOS';
+
+  @override
+  String get sosQrRelayTitle => 'SOS encontrado';
+
+  @override
+  String get sosQrRelayAction => 'RETRANSMITIR SOS';
+
+  @override
+  String get sosQrInvalid =>
+      'El QR no contiene un SOS HearthBit válido y firmado.';
+
+  @override
+  String get sosQrRelayed => 'SOS validado y añadido a la malla';
+
+  @override
   String get emergencySmsOpen => 'Avisar por SMS a un contacto de confianza';
 
   @override
