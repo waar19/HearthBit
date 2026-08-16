@@ -64,7 +64,10 @@ void main() {
     final ack = fixtures.bytes('extension.emergency_ack.v1');
     expect(ack, hasLength(33));
     expect(ack.first, 1);
-    expect(ack.sublist(1), Uint8List.fromList(List<int>.generate(32, (i) => i)));
+    expect(
+      ack.sublist(1),
+      Uint8List.fromList(List<int>.generate(32, (i) => i)),
+    );
     expect(
       fixtures.bytes('extension.hbt_capability.canonical'),
       Uint8List.fromList([1]),
