@@ -28,7 +28,10 @@ void main() {
   });
 
   test('does not export messages, identities, keys, coordinates or errors', () {
-    final log = DiagnosticsLog(persist: false);
+    final log = DiagnosticsLog(
+      persist: false,
+      clock: () => DateTime.utc(2026, 8, 13, 12),
+    );
     log.error(
       'flutter uncaught',
       error: _SensitiveError(),
