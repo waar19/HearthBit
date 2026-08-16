@@ -202,6 +202,30 @@ internal class MeshEngine(
                 }
         },
     )
+    private val wifiAwareMeshLink by lazy {
+        WifiAwareMeshLinkFactory.create(
+            context = context,
+            onFrame = { frame ->
+                runCatching { injectOpenEmergencyFrame(frame, "wifi-aware") }
+                    .onFailure {
+                        Log.w(LOG_TAG, "Rejected Wi-Fi Aware emergency frame", it)
+                    }
+            },
+            onState = { state ->
+                emit(
+                    mapOf(
+                        "type" to "transportStatus",
+                        "transport" to "wifiAware",
+                        "available" to state.available,
+                        "active" to state.active,
+                        "connected" to (state.peers > 0),
+                        "connectedPeers" to state.peers,
+                        "reason" to state.reason,
+                    ),
+                )
+            },
+        )
+    }
 
     /**
      * Dirección MAC -> peerId de vecinos directos. Se alimenta con el peerId
@@ -622,6 +646,7 @@ internal class MeshEngine(
         radioRangingManager.stop()
         meshtasticBridge.stop()
         wifiDirectMeshTransport.stop()
+        wifiAwareMeshLink?.stop()
         wifiDirectDegraded = false
         pendingBeaconRequests.clear()
         outgoingBeaconRequests.clear()
@@ -1819,6 +1844,7 @@ internal class MeshEngine(
         broadcastBytes(bytes, excludeAddress, restrictToHearthBit = restrictIdentity)
         if (isOpenEmergencyLanPacket(packet)) {
             wifiDirectMeshTransport.sendEmergencyFrame(bytes)
+            wifiAwareMeshLink?.send(bytes)
         }
         val emergency = MeshProtocol.isEmergencyPublicPacket(packet)
         val directed = packet.recipientId != null &&
@@ -3773,6 +3799,16 @@ internal class MeshEngine(
             wifiDirectMeshTransport.start(rescueActive)
         } else {
             wifiDirectMeshTransport.stop()
+        }
+        if (running &&
+            WifiAwareMeshPolicy.shouldRun(
+                rescueActive = rescueActive,
+                supported = wifiAwareMeshLink != null,
+            )
+        ) {
+            wifiAwareMeshLink?.start()
+        } else {
+            wifiAwareMeshLink?.stop()
         }
     }
 
