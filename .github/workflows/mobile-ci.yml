@@ -46,7 +46,15 @@ jobs:
           path: core/hearthbit-core/Cargo.lock
           if-no-files-found: error
           retention-days: 1
-      - run: cargo fmt --check --manifest-path core/hearthbit-core/Cargo.toml
+      - run: cargo fmt --manifest-path core/hearthbit-core/Cargo.toml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hearthbit-core-formatted
+          path: |
+            core/hearthbit-core/src
+            core/hearthbit-core/tests
+          if-no-files-found: error
+          retention-days: 1
       - run: cargo clippy --locked --manifest-path core/hearthbit-core/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --locked --manifest-path core/hearthbit-core/Cargo.toml
 

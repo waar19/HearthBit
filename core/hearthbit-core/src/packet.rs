@@ -428,7 +428,7 @@ fn should_compress(input: &[u8]) -> bool {
     }
     let sample_size = input.len().min(256);
     let unique = input.iter().copied().collect::<HashSet<_>>().len();
-    unique as f64 / sample_size as f64 < 0.9
+    unique as f64 / (sample_size as f64) < 0.9
 }
 
 fn compress_raw(input: &[u8]) -> Result<Option<Vec<u8>>, ProtocolError> {
