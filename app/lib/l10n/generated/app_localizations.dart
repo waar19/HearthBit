@@ -2899,66 +2899,6 @@ abstract class AppLocalizations {
   /// **'APK offered to {peer}. The transfer will show an error if no suitable high-speed transport is available.'**
   String apkOfferSent(String peer);
 
-  /// No description provided for @firstAidOpen.
-  ///
-  /// In en, this message translates to:
-  /// **'OPEN OFFLINE FIRST AID'**
-  String get firstAidOpen;
-
-  /// No description provided for @firstAidTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Offline first aid'**
-  String get firstAidTitle;
-
-  /// No description provided for @firstAidDisclaimer.
-  ///
-  /// In en, this message translates to:
-  /// **'Call local emergency services. This guide does not replace professional help or training. Local practices vary: follow the operator and local authorities.'**
-  String get firstAidDisclaimer;
-
-  /// No description provided for @firstAidChooseTopic.
-  ///
-  /// In en, this message translates to:
-  /// **'Choose what is happening'**
-  String get firstAidChooseTopic;
-
-  /// No description provided for @firstAidEnglishFallback.
-  ///
-  /// In en, this message translates to:
-  /// **'This translation could not be verified. Showing the validated English guide.'**
-  String get firstAidEnglishFallback;
-
-  /// No description provided for @firstAidSteps.
-  ///
-  /// In en, this message translates to:
-  /// **'Act now'**
-  String get firstAidSteps;
-
-  /// No description provided for @firstAidWarnings.
-  ///
-  /// In en, this message translates to:
-  /// **'Avoid'**
-  String get firstAidWarnings;
-
-  /// No description provided for @firstAidSources.
-  ///
-  /// In en, this message translates to:
-  /// **'Sources and review information'**
-  String get firstAidSources;
-
-  /// No description provided for @firstAidReviewed.
-  ///
-  /// In en, this message translates to:
-  /// **'Content reviewed {date}'**
-  String firstAidReviewed(String date);
-
-  /// No description provided for @firstAidLoadError.
-  ///
-  /// In en, this message translates to:
-  /// **'The validated offline guide could not be loaded. Do not rely on incomplete information; call local emergency services.'**
-  String get firstAidLoadError;
-
   /// No description provided for @familyTitle.
   ///
   /// In en, this message translates to:

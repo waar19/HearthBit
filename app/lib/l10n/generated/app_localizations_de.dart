@@ -1650,41 +1650,6 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get firstAidOpen => 'OFFLINE-ERSTE-HILFE ÖFFNEN';
-
-  @override
-  String get firstAidTitle => 'Offline-Erste-Hilfe';
-
-  @override
-  String get firstAidDisclaimer =>
-      'Rufe den örtlichen Notruf. Dieser Leitfaden ersetzt keine professionelle Hilfe oder Ausbildung. Örtliche Vorgehensweisen unterscheiden sich: Befolge Leitstelle und Behörden.';
-
-  @override
-  String get firstAidChooseTopic => 'Wähle, was passiert ist';
-
-  @override
-  String get firstAidEnglishFallback =>
-      'Diese Übersetzung konnte nicht geprüft werden. Der validierte englische Leitfaden wird angezeigt.';
-
-  @override
-  String get firstAidSteps => 'Jetzt handeln';
-
-  @override
-  String get firstAidWarnings => 'Vermeiden';
-
-  @override
-  String get firstAidSources => 'Quellen und Prüfhinweise';
-
-  @override
-  String firstAidReviewed(String date) {
-    return 'Inhalt geprüft am $date';
-  }
-
-  @override
-  String get firstAidLoadError =>
-      'Der validierte Offline-Leitfaden konnte nicht geladen werden. Verlasse dich nicht auf unvollständige Angaben; rufe den örtlichen Notruf.';
-
-  @override
   String get familyTitle => 'Familiengruppe';
 
   @override

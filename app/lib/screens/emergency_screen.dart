@@ -10,7 +10,6 @@ import '../models/mesh_models.dart';
 import '../services/app_preferences.dart';
 import 'emergency_contacts_screen.dart';
 import 'emergency_gateway_card.dart';
-import 'first_aid_guide_screen.dart';
 import 'map_screen.dart';
 import 'optical_receive_screen.dart';
 import 'radar_screen.dart';
@@ -209,16 +208,6 @@ class EmergencyScreen extends StatelessWidget {
           const SizedBox(height: 12),
         ],
         EmergencyGatewayCard(controller: gateway, preferences: preferences),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => const FirstAidGuideScreen(),
-            ),
-          ),
-          icon: const Icon(Icons.health_and_safety_outlined),
-          label: Text(context.l10n.firstAidOpen),
-        ),
         const SizedBox(height: 12),
         FilledButton.icon(
           onPressed: () => Navigator.of(context).push(

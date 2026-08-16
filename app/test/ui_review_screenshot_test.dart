@@ -25,7 +25,6 @@ import 'package:hearth_bit/models/mesh_models.dart';
 import 'package:hearth_bit/screens/emergency_contacts_screen.dart';
 import 'package:hearth_bit/screens/emergency_screen.dart';
 import 'package:hearth_bit/screens/family_screen.dart';
-import 'package:hearth_bit/screens/first_aid_guide_screen.dart';
 import 'package:hearth_bit/screens/home_screen.dart';
 import 'package:hearth_bit/screens/onboarding_screen.dart';
 import 'package:hearth_bit/screens/radar_screen.dart';
@@ -602,23 +601,6 @@ void main() {
     await _pumpApp(tester, FamilyScreen(controller: family));
     await _shoot(tester, 'family_dark');
     await _audit(tester, 'family');
-    handle.dispose();
-  });
-
-  testWidgets('guía de primeros auxilios', (tester) async {
-    final handle = tester.ensureSemantics();
-    await _pumpApp(tester, const FirstAidGuideScreen());
-    await tester.pumpAndSettle();
-    await _shoot(tester, 'first_aid_list_dark');
-    await _audit(tester, 'first_aid_list');
-
-    final tiles = find.byType(ListTile);
-    if (tiles.evaluate().isNotEmpty) {
-      await tester.tap(tiles.first, warnIfMissed: false);
-      await tester.pumpAndSettle();
-      await _shoot(tester, 'first_aid_detail_dark');
-      await _audit(tester, 'first_aid_detail');
-    }
     handle.dispose();
   });
 

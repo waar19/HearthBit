@@ -21,7 +21,7 @@ PRIVACIDAD Y SEGURIDAD
 • Controles para compartir ubicación únicamente cuando lo decidas.
 
 INFORMACIÓN ÚTIL SIN RED
-Consulta guías básicas de primeros auxilios y números de emergencia guardados en la aplicación. El contenido está disponible en español, inglés, alemán, francés, chino simplificado y japonés.
+Consulta números y enlaces oficiales de emergencia guardados en la aplicación. El directorio selecciona el contenido del país cuando es posible y permanece disponible sin conexión.
 
 HearthBit funciona mejor cuando varias personas lo instalan antes de una emergencia, mantienen Bluetooth activado y conceden los permisos necesarios. El alcance, la entrega y la actividad en segundo plano dependen del teléfono, el sistema operativo, los obstáculos y las condiciones de radio.
 

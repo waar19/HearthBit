@@ -1651,41 +1651,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get firstAidOpen => 'ABRIR PRIMEROS AUXILIOS OFFLINE';
-
-  @override
-  String get firstAidTitle => 'Primeros auxilios offline';
-
-  @override
-  String get firstAidDisclaimer =>
-      'Llama a emergencias locales. Esta guía no sustituye la ayuda profesional ni la formación. Las prácticas locales varían: sigue al operador y a las autoridades.';
-
-  @override
-  String get firstAidChooseTopic => 'Elige qué está ocurriendo';
-
-  @override
-  String get firstAidEnglishFallback =>
-      'No se pudo verificar esta traducción. Se muestra la guía validada en inglés.';
-
-  @override
-  String get firstAidSteps => 'Actúa ahora';
-
-  @override
-  String get firstAidWarnings => 'Evita';
-
-  @override
-  String get firstAidSources => 'Fuentes e información de revisión';
-
-  @override
-  String firstAidReviewed(String date) {
-    return 'Contenido revisado el $date';
-  }
-
-  @override
-  String get firstAidLoadError =>
-      'No se pudo cargar la guía offline validada. No uses información incompleta; llama a emergencias locales.';
-
-  @override
   String get familyTitle => 'Grupo familiar';
 
   @override

@@ -16,7 +16,7 @@ Linux 和 Raspberry Pi 中继可以扩展网络覆盖范围。
 - 通过 Nearby Connections、局域网/热点、Wi-Fi Aware、BLE 或光学二维码传输文件。
 - 专业搜索雷达：BLE 接近度与趋势、指南针、GPS 融合、Android 16 Ranging，
   以及可选的短距离声学测距。
-- 离线急救内容、家庭群组和物理信标。
+- 离线紧急联系电话、家庭群组和物理信标。
 - 支持英语、西班牙语、德语、法语、简体中文和日语。
 
 具体能力取决于硬件和操作系统。BLE RSSI 不能提供真实方向；Android Ranging
