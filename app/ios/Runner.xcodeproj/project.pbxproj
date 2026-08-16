@@ -21,6 +21,7 @@
 		ECC000032026081200000002 /* HearthBitTransferProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECC000042026081200000002 /* HearthBitTransferProtocol.swift */; };
 		ECC000072026081400000004 /* HearthBitWiFiAwareTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECC000082026081400000004 /* HearthBitWiFiAwareTransport.swift */; };
 		ECC000052026081300000003 /* IOSBeaconActuator.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECC000062026081300000003 /* IOSBeaconActuator.swift */; };
+		ECC000092026081500000005 /* HearthBitMultipeerTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECC000102026081500000005 /* HearthBitMultipeerTransport.swift */; };
 		ECD100012026081300000001 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = ECD100022026081300000002 /* InfoPlist.strings */; };
 /* End PBXBuildFile section */
 
@@ -74,6 +75,7 @@
 		ECC000042026081200000002 /* HearthBitTransferProtocol.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HearthBitTransferProtocol.swift; sourceTree = "<group>"; };
 		ECC000082026081400000004 /* HearthBitWiFiAwareTransport.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HearthBitWiFiAwareTransport.swift; sourceTree = "<group>"; };
 		ECC000062026081300000003 /* IOSBeaconActuator.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IOSBeaconActuator.swift; sourceTree = "<group>"; };
+		ECC000102026081500000005 /* HearthBitMultipeerTransport.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HearthBitMultipeerTransport.swift; sourceTree = "<group>"; };
 		ECD100032026081300000003 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		ECD100042026081300000004 /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		ECD100052026081300000005 /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/InfoPlist.strings; sourceTree = "<group>"; };
@@ -172,6 +174,7 @@
 				ECC000042026081200000002 /* HearthBitTransferProtocol.swift */,
 				ECC000082026081400000004 /* HearthBitWiFiAwareTransport.swift */,
 				ECC000062026081300000003 /* IOSBeaconActuator.swift */,
+				ECC000102026081500000005 /* HearthBitMultipeerTransport.swift */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
@@ -410,6 +413,7 @@
 				ECC000032026081200000002 /* HearthBitTransferProtocol.swift in Sources */,
 				ECC000072026081400000004 /* HearthBitWiFiAwareTransport.swift in Sources */,
 				ECC000052026081300000003 /* IOSBeaconActuator.swift in Sources */,
+				ECC000092026081500000005 /* HearthBitMultipeerTransport.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 			);

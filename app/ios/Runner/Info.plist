@@ -52,6 +52,8 @@
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_hearthbit._tcp</string>
+		<string>_hearthbit-sos._tcp</string>
+		<string>_hearthbit-sos._udp</string>
 	</array>
 	<!-- iOS 26 Wi-Fi Aware: servicio alineado con el nombre Android
 	     `hearthbit-hbt` (formato RFC 6763). Los valores Publishable y

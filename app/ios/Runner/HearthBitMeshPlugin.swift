@@ -345,6 +345,24 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var lanBridgeGatewayID: String?
   private var lanBridgeMaximumFrameSize = 2048
   private var suppressLanBridge = false
+  private lazy var multipeerTransport = HearthBitMultipeerTransport(
+    onFrame: { [weak self] frame, _ in
+      self?.receive(frame, source: nil)
+    },
+    onState: { [weak self] state in
+      var event: [String: Any] = [
+        "type": "transportStatus",
+        "transport": "multipeer",
+        "available": true,
+        "active": state.active,
+        "connected": state.connectedPeers > 0,
+        "connectedPeers": state.connectedPeers,
+        "foregroundOnly": true,
+      ]
+      if let reason = state.reason { event["reason"] = reason }
+      self?.emit(event)
+    }
+  )
   private lazy var locationManager = CLLocationManager()
 
   /// Identificador de periférico -> peerId de vecinos directos. Se alimenta
@@ -1037,6 +1055,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func configureRescueLocationUpdates(for state: IOSRescueModeState) {
+    updateMultipeerTransport(rescueState: state)
     guard state.active else {
       if radarPeerID == nil { locationManager.stopUpdatingLocation() }
       return
@@ -1048,6 +1067,20 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     locationManager.allowsBackgroundLocationUpdates = true
     locationManager.showsBackgroundLocationIndicator = true
     locationManager.startUpdatingLocation()
+  }
+
+  private func updateMultipeerTransport(rescueState: IOSRescueModeState? = nil) {
+    let rescueActive = rescueState?.active ?? ((try? IOSRescueModeStore.load())?.active ?? false)
+    if IOSMultipeerPolicy.shouldRun(
+      meshRunning: running,
+      foreground: UIApplication.shared.applicationState == .active,
+      rescueActive: rescueActive,
+      radarActive: radarPeerID != nil
+    ) {
+      multipeerTransport.start()
+    } else {
+      multipeerTransport.stop()
+    }
   }
 
   private func handleRescueLocation(_ location: CLLocation) {
@@ -1168,6 +1201,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           self?.stopLocalBeacon()
           self?.refreshPowerState()
           self?.restartScan()
+          self?.updateMultipeerTransport()
         },
         center.addObserver(
           forName: UIApplication.didBecomeActiveNotification,
@@ -1176,6 +1210,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         ) { [weak self] _ in
           self?.refreshPowerState()
           self?.restartScan()
+          self?.updateMultipeerTransport()
         },
         center.addObserver(
           forName: UIDevice.batteryLevelDidChangeNotification,
@@ -1209,6 +1244,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func stopInternal(notify: Bool) {
     stopLocalBeacon()
     running = false
+    multipeerTransport.stop()
     stopRadar()
     stopRadarReportTimer()
     pendingBeaconRequests.removeAll()
@@ -1282,6 +1318,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       throw IOSMeshError.radarConsentRequired
     }
     radarPeerID = peerID
+    updateMultipeerTransport()
     refreshPowerState()
     restartScan()
     radarTimer?.invalidate()
@@ -1301,6 +1338,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
 
   private func stopRadar() {
     radarPeerID = nil
+    updateMultipeerTransport()
     refreshPowerState()
     radarTimer?.invalidate()
     radarTimer = nil
@@ -2496,6 +2534,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       !allowUnprovenIdentity &&
       packet.senderID == identity.peerID &&
       IOSMeshInteropPolicy.identityPacketTypes.contains(packet.type)
+    if !restrictIdentity {
+      multipeerTransport.send(bytes)
+    }
     if (localRole.storesDirectedPackets || emergency && localRole.relaysPackets),
        storedPacketType != IOSMeshProtocol.radarControl,
        storedPacketType != IOSMeshProtocol.beaconControl,

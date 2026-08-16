@@ -563,6 +563,41 @@ class RunnerTests: XCTestCase {
     XCTAssertTrue(IOSLanBridgeLifecyclePolicy.shouldClearOnStop(notify: true))
   }
 
+  func testMultipeerRunsOnlyInForegroundForRescueOrRadar() {
+    XCTAssertTrue(
+      IOSMultipeerPolicy.shouldRun(
+        meshRunning: true,
+        foreground: true,
+        rescueActive: true,
+        radarActive: false
+      )
+    )
+    XCTAssertTrue(
+      IOSMultipeerPolicy.shouldRun(
+        meshRunning: true,
+        foreground: true,
+        rescueActive: false,
+        radarActive: true
+      )
+    )
+    XCTAssertFalse(
+      IOSMultipeerPolicy.shouldRun(
+        meshRunning: true,
+        foreground: false,
+        rescueActive: true,
+        radarActive: true
+      )
+    )
+    XCTAssertFalse(
+      IOSMultipeerPolicy.shouldRun(
+        meshRunning: false,
+        foreground: true,
+        rescueActive: true,
+        radarActive: false
+      )
+    )
+  }
+
   func testPhoneBeaconDisablesDataPlanePolicy() {
     XCTAssertFalse(IOSMeshNodeRole.phoneBeacon.allowsDataPlane)
     XCTAssertFalse(IOSMeshNodeRole.phoneBeacon.relaysPackets)
