@@ -254,6 +254,11 @@
   "diagnosticsNoEvents": "診断イベントはまだありません",
   "diagnosticsEnabled": "有効",
   "diagnosticsDisabled": "無効",
+  "diagnosticsTransportOutcomesSection": "転送結果",
+  "diagnosticsTransportOutcome": "成功 {success} 件 · 失敗 {failure} 件",
+  "diagnosticsTransportAudio": "音声",
+  "diagnosticsTransportQr": "QR",
+  "diagnosticsTransportExternal": "外部共有",
   "openLinkError": "リンクを開けませんでした",
   "actionClose": "閉じる",
 

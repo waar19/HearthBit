@@ -17,6 +17,7 @@ import '../services/mesh_platform_service.dart';
 import '../services/message_repository.dart';
 import '../services/optical_protocol.dart';
 import '../services/peer_location_tracker.dart';
+import '../services/transport_diagnostics.dart';
 import '../utils/emergency_backoff.dart';
 import '../utils/emergency_coordinates.dart' as emergency_coordinates;
 import '../utils/emergency_qr_fallback.dart';
@@ -32,9 +33,12 @@ class MeshController extends ChangeNotifier {
     PeerLocationTracker? locationTracker,
     AppPreferences? preferences,
     AcousticSosTransportPort? acousticSos,
+    TransportDiagnostics? transportDiagnostics,
   }) : _platform = platform ?? MeshPlatformService(),
        _repository = repository ?? MessageRepository(),
        _providedAcousticSos = acousticSos,
+       _transportDiagnostics =
+           transportDiagnostics ?? TransportDiagnostics.instance,
        _preferences = preferences,
        _drillModeEnabled = preferences?.drillModeEnabled ?? false,
        _privateMode = preferences?.privacyPrivateMode ?? true,
@@ -61,6 +65,7 @@ class MeshController extends ChangeNotifier {
   final MeshPlatformService _platform;
   final MessageRepository _repository;
   final AcousticSosTransportPort? _providedAcousticSos;
+  final TransportDiagnostics _transportDiagnostics;
   AcousticSosTransportPort? _createdAcousticSos;
   AcousticSosTransportPort get _acousticSos =>
       _providedAcousticSos ?? (_createdAcousticSos ??= AcousticSosTransport());
@@ -991,6 +996,11 @@ class MeshController extends ChangeNotifier {
         ) ??
         false;
     acousticSosListening = started;
+    if (started) {
+      _transportDiagnostics.recordSuccess(DiagnosticTransport.audio);
+    } else {
+      _transportDiagnostics.recordFailure(DiagnosticTransport.audio);
+    }
     notifyListeners();
     return started;
   }
@@ -1223,6 +1233,7 @@ class MeshController extends ChangeNotifier {
           fallbackText: _emergencyQrFallback(delivery.content),
         );
         _emergencyChannelsUsed.add('qr');
+        _transportDiagnostics.recordSuccess(DiagnosticTransport.qr);
         if (rescueMode) await _startAcousticSosBroadcast(latestSosQr!);
       }
       delivery = delivery.copyWith(
@@ -1265,10 +1276,16 @@ class MeshController extends ChangeNotifier {
         sos.announcementFrame,
         sos.messageFrame,
       ]);
-      if (acousticSosBroadcasting) _emergencyChannelsUsed.add('audio');
+      if (acousticSosBroadcasting) {
+        _emergencyChannelsUsed.add('audio');
+        _transportDiagnostics.recordSuccess(DiagnosticTransport.audio);
+      } else {
+        _transportDiagnostics.recordFailure(DiagnosticTransport.audio);
+      }
       notifyListeners();
     } catch (error, stackTrace) {
       acousticSosBroadcasting = false;
+      _transportDiagnostics.recordFailure(DiagnosticTransport.audio);
       DiagnosticsLog.instance.warning(
         'acoustic_sos.broadcast.failed',
         error: error,

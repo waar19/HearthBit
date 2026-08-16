@@ -254,6 +254,11 @@
   "diagnosticsNoEvents": "Aún no hay eventos de diagnóstico",
   "diagnosticsEnabled": "Activo",
   "diagnosticsDisabled": "Inactivo",
+  "diagnosticsTransportOutcomesSection": "Resultados de transferencias",
+  "diagnosticsTransportOutcome": "{success} correctas · {failure} fallidas",
+  "diagnosticsTransportAudio": "Audio",
+  "diagnosticsTransportQr": "QR",
+  "diagnosticsTransportExternal": "Compartir externamente",
   "openLinkError": "No se pudo abrir el enlace",
   "actionClose": "Cerrar",
 

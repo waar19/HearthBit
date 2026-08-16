@@ -832,6 +832,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get diagnosticsDisabled => 'Inactive';
 
   @override
+  String get diagnosticsTransportOutcomesSection => 'Transfer outcomes';
+
+  @override
+  String diagnosticsTransportOutcome(int success, int failure) {
+    return '$success successful · $failure failed';
+  }
+
+  @override
+  String get diagnosticsTransportAudio => 'Audio';
+
+  @override
+  String get diagnosticsTransportQr => 'QR';
+
+  @override
+  String get diagnosticsTransportExternal => 'External share';
+
+  @override
   String get openLinkError => 'Could not open the link';
 
   @override

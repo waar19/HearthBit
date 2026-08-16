@@ -254,6 +254,11 @@
   "diagnosticsNoEvents": "尚无诊断事件",
   "diagnosticsEnabled": "活跃",
   "diagnosticsDisabled": "未活跃",
+  "diagnosticsTransportOutcomesSection": "传输结果",
+  "diagnosticsTransportOutcome": "成功 {success} 次 · 失败 {failure} 次",
+  "diagnosticsTransportAudio": "音频",
+  "diagnosticsTransportQr": "二维码",
+  "diagnosticsTransportExternal": "外部分享",
   "openLinkError": "无法打开链接",
   "actionClose": "关闭",
 

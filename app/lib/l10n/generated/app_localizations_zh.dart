@@ -793,6 +793,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnosticsDisabled => '未活跃';
 
   @override
+  String get diagnosticsTransportOutcomesSection => '传输结果';
+
+  @override
+  String diagnosticsTransportOutcome(int success, int failure) {
+    return '成功 $success 次 · 失败 $failure 次';
+  }
+
+  @override
+  String get diagnosticsTransportAudio => '音频';
+
+  @override
+  String get diagnosticsTransportQr => '二维码';
+
+  @override
+  String get diagnosticsTransportExternal => '外部分享';
+
+  @override
   String get openLinkError => '无法打开链接';
 
   @override

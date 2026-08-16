@@ -22,6 +22,7 @@ import '../services/invite_share_service.dart';
 import '../services/photo_send_preparation.dart';
 import '../services/privacy_data_eraser.dart';
 import '../services/secure_database.dart';
+import '../services/transport_diagnostics.dart';
 import '../utils/scroll_to_bottom.dart';
 import '../widgets/nickname_dialog.dart';
 import 'diagnostics_screen.dart';
@@ -1033,6 +1034,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       await widget.lanGateway?.panicWipe();
       await controller.panicWipe();
       await DiagnosticsLog.instance.clear();
+      await TransportDiagnostics.instance.clear();
       await PrivacyDataEraser.clearResidualFiles();
       await SecureDatabaseKeyStore.destroy();
       await widget.preferences.panicWipe();

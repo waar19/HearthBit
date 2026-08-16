@@ -7,11 +7,18 @@ import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../services/diagnostics_export_service.dart';
 import '../services/diagnostics_log.dart';
+import '../services/transport_diagnostics.dart';
 
 class DiagnosticsScreen extends StatefulWidget {
-  const DiagnosticsScreen({required this.controller, super.key});
+  DiagnosticsScreen({
+    required this.controller,
+    TransportDiagnostics? transportDiagnostics,
+    super.key,
+  }) : transportDiagnostics =
+           transportDiagnostics ?? TransportDiagnostics.instance;
 
   final MeshController controller;
+  final TransportDiagnostics transportDiagnostics;
 
   @override
   State<DiagnosticsScreen> createState() => _DiagnosticsScreenState();
@@ -87,9 +94,13 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: widget.controller,
+      animation: Listenable.merge([
+        widget.controller,
+        widget.transportDiagnostics,
+      ]),
       builder: (context, _) {
         final controller = widget.controller;
+        final transportDiagnostics = widget.transportDiagnostics;
         return Scaffold(
           appBar: AppBar(
             title: Text(context.l10n.diagnosticsTitle),
@@ -193,6 +204,20 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                   ),
                 ),
               ),
+              _DiagnosticCard(
+                title: context.l10n.diagnosticsTransportOutcomesSection,
+                icon: Icons.analytics_outlined,
+                rows: [
+                  for (final transport in DiagnosticTransport.values)
+                    (
+                      _transportLabel(context, transport),
+                      _transportOutcomeLabel(
+                        context,
+                        transportDiagnostics.forTransport(transport),
+                      ),
+                    ),
+                ],
+              ),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -251,6 +276,27 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   String _booleanLabel(BuildContext context, bool value) => value
       ? context.l10n.diagnosticsEnabled
       : context.l10n.diagnosticsDisabled;
+
+  String _transportOutcomeLabel(
+    BuildContext context,
+    TransportOutcomeCounters counters,
+  ) => context.l10n.diagnosticsTransportOutcome(
+    counters.successes,
+    counters.failures,
+  );
+
+  String _transportLabel(BuildContext context, DiagnosticTransport transport) {
+    return switch (transport) {
+      DiagnosticTransport.ble => context.l10n.transportBle,
+      DiagnosticTransport.lan => context.l10n.transportLan,
+      DiagnosticTransport.wifiDirect => context.l10n.transportWifiDirect,
+      DiagnosticTransport.wifiAware => context.l10n.transportWifiAware,
+      DiagnosticTransport.multipeer => context.l10n.transportMultipeer,
+      DiagnosticTransport.audio => context.l10n.diagnosticsTransportAudio,
+      DiagnosticTransport.qr => context.l10n.diagnosticsTransportQr,
+      DiagnosticTransport.external => context.l10n.diagnosticsTransportExternal,
+    };
+  }
 
   String _statusLabel(BuildContext context, MeshConnectionStatus status) {
     return switch (status) {

@@ -13,14 +13,15 @@ import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../models/pending_sealed_import.dart';
 import '../models/transfer_models.dart';
-import '../services/diagnostics_log.dart';
 import '../services/at_rest_file_cipher.dart';
 import '../services/backup_protection.dart';
+import '../services/diagnostics_log.dart';
 import '../services/lan_transport.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/hbt_package.dart';
 import '../services/hbt_share_service.dart';
 import '../services/sealed_transfer_package.dart';
+import '../services/transport_diagnostics.dart';
 import '../services/transfer_crypto.dart';
 import '../services/transfer_platform_service.dart';
 import '../services/transfer_protocol.dart';
@@ -40,11 +41,14 @@ class TransferController extends ChangeNotifier {
     TransferRepository? repository,
     AtRestFileCipher? fileCipher,
     HbtShareService? shareService,
+    TransportDiagnostics? transportDiagnostics,
     this.offerLifetime = defaultOfferLifetime,
   }) : _platform = platform ?? TransferPlatformService(),
        _repository = repository ?? TransferRepository(),
        _fileCipher = fileCipher ?? AtRestFileCipher(),
-       _shareService = shareService ?? HbtShareService();
+       _shareService = shareService ?? HbtShareService(),
+       _transportDiagnostics =
+           transportDiagnostics ?? TransportDiagnostics.instance;
 
   static const int bleChunkSize = 350;
   static const int bleMaxInlineBytes = 256 * 1024;
@@ -82,6 +86,7 @@ class TransferController extends ChangeNotifier {
   final TransferRepository _repository;
   final AtRestFileCipher _fileCipher;
   final HbtShareService _shareService;
+  final TransportDiagnostics _transportDiagnostics;
   final Duration offerLifetime;
 
   final List<TransferRecord> _transfers = [];
@@ -118,7 +123,11 @@ class TransferController extends ChangeNotifier {
           (record.direction == TransferDirection.outgoing ||
               bitmapBytes != null);
       if (!canRestore) {
+        final transport = _diagnosticTransport(record.transport);
         record.state = TransferState.failed;
+        if (transport != null) {
+          _transportDiagnostics.recordFailure(transport);
+        }
         record.error = currentL10n.terrInterrupted;
         await _repository.save(
           record,
@@ -161,7 +170,11 @@ class TransferController extends ChangeNotifier {
           resumableIncoming.add(record);
         }
       } catch (_) {
+        final transport = _diagnosticTransport(record.transport);
         record.state = TransferState.failed;
+        if (transport != null) {
+          _transportDiagnostics.recordFailure(transport);
+        }
         record.error = currentL10n.terrInterrupted;
         await _repository.save(
           record,
@@ -458,6 +471,7 @@ class TransferController extends ChangeNotifier {
     _transfers.insert(0, record);
     _trimTransfersInMemory();
     await _repository.save(record);
+    _transportDiagnostics.recordSuccess(DiagnosticTransport.qr);
     notifyListeners();
   }
 
@@ -542,6 +556,7 @@ class TransferController extends ChangeNotifier {
       _transfers.insert(0, record);
       _trimTransfersInMemory();
       await _repository.save(record);
+      _transportDiagnostics.recordSuccess(DiagnosticTransport.external);
       notifyListeners();
     } finally {
       if (await package.exists()) await package.delete();
@@ -666,6 +681,7 @@ class TransferController extends ChangeNotifier {
         ..filePath = finalPath
         ..bytesDone = record.fileSize
         ..state = TransferState.completed;
+      _transportDiagnostics.recordSuccess(DiagnosticTransport.external);
       await _protectCompletedFile(record);
       _transfers.insert(0, record);
       _trimTransfersInMemory();
@@ -774,7 +790,7 @@ class TransferController extends ChangeNotifier {
             record.peerId == peerId &&
             record.direction == TransferDirection.outgoing) {
           record.bytesDone = record.fileSize;
-          record.state = TransferState.completed;
+          _markCompleted(record);
           await _finishSession(record);
         }
         break;
@@ -1269,13 +1285,14 @@ class TransferController extends ChangeNotifier {
       final delivered = await sender.done.future;
       if (delivered) {
         record.bytesDone = record.fileSize;
-        record.state = TransferState.completed;
+        _markCompleted(record);
         await _finishSession(record);
       }
       // Si no llegó completo, el receptor decide el fallback y este lado
       // recibirá un nuevo ACCEPT o un CANCEL.
     } catch (error, stackTrace) {
       // El receptor pedirá otro transporte si su conexión falló.
+      _transportDiagnostics.recordFailure(DiagnosticTransport.lan);
       DiagnosticsLog.instance.warning(
         'transfer.lan.sender_failed',
         error: error,
@@ -1564,10 +1581,14 @@ class TransferController extends ChangeNotifier {
     _TransferSession session,
     String reason,
   ) async {
+    final failedTransport = _diagnosticTransport(record.transport);
+    if (failedTransport != null) {
+      _transportDiagnostics.recordFailure(failedTransport);
+    }
     final tried = session.triedTransports..add(record.transport!);
     final next = _chooseTransport(record, session, excluding: tried);
     if (next == null) {
-      _fail(record, reason);
+      _fail(record, reason, recordTransportFailure: false);
       final frame = TransferFrame(TransferProtocol.typeCancel)
         ..setBytes(TransferProtocol.tagTransferId, hexToBytes(record.id))
         ..setUtf8(TransferProtocol.tagReason, reason);
@@ -1617,7 +1638,7 @@ class TransferController extends ChangeNotifier {
     await partial.rename(finalPath);
     record.filePath = finalPath;
     record.bytesDone = record.fileSize;
-    record.state = TransferState.completed;
+    _markCompleted(record);
     final frame = TransferFrame(TransferProtocol.typeComplete)
       ..setBytes(TransferProtocol.tagTransferId, hexToBytes(record.id));
     try {
@@ -1805,11 +1826,20 @@ class TransferController extends ChangeNotifier {
     );
   }
 
-  void _fail(TransferRecord record, String message) {
+  void _fail(
+    TransferRecord record,
+    String message, {
+    bool recordTransportFailure = true,
+  }) {
     if (record.state == TransferState.completed) return;
+    final wasActive = record.isActive;
     record.state = TransferState.failed;
     record.error = message;
     lastError = message;
+    final transport = _diagnosticTransport(record.transport);
+    if (recordTransportFailure && wasActive && transport != null) {
+      _transportDiagnostics.recordFailure(transport);
+    }
     DiagnosticsLog.instance.warning(
       'transfer.failed',
       data: {
@@ -1819,6 +1849,28 @@ class TransferController extends ChangeNotifier {
       },
     );
     unawaited(_finishSession(record));
+  }
+
+  void _markCompleted(TransferRecord record) {
+    if (record.state == TransferState.completed) return;
+    record.state = TransferState.completed;
+    final transport = _diagnosticTransport(record.transport);
+    if (transport != null) {
+      _transportDiagnostics.recordSuccess(transport);
+    }
+  }
+
+  DiagnosticTransport? _diagnosticTransport(TransferTransport? transport) {
+    return switch (transport) {
+      TransferTransport.ble => DiagnosticTransport.ble,
+      TransferTransport.lan => DiagnosticTransport.lan,
+      TransferTransport.wifiAware => DiagnosticTransport.wifiAware,
+      TransferTransport.optical => DiagnosticTransport.qr,
+      TransferTransport.wifiDirect => DiagnosticTransport.wifiDirect,
+      TransferTransport.multipeer => DiagnosticTransport.multipeer,
+      TransferTransport.external => DiagnosticTransport.external,
+      TransferTransport.nearby || null => null,
+    };
   }
 
   Future<void> _finishSession(TransferRecord record) async {

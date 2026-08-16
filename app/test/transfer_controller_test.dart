@@ -9,9 +9,12 @@ import 'package:hearth_bit/models/transfer_models.dart';
 import 'package:hearth_bit/services/mesh_platform_service.dart';
 import 'package:hearth_bit/services/hbt_package.dart';
 import 'package:hearth_bit/services/transfer_crypto.dart';
+import 'package:hearth_bit/services/transport_diagnostics.dart';
 import 'package:hearth_bit/services/transfer_platform_service.dart';
 import 'package:hearth_bit/services/transfer_protocol.dart';
 import 'package:hearth_bit/services/transfer_repository.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 class _MeshPlatform extends MeshPlatformService {
   final eventsController = StreamController<Map<Object?, Object?>>.broadcast();
@@ -229,9 +232,12 @@ void main() {
   late _MeshPlatform mesh;
   late _TransferPlatform platform;
   late _MemoryTransferRepository repository;
+  late TransportDiagnostics transportDiagnostics;
   late TransferController controller;
 
   setUp(() async {
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.empty();
     temporaryDirectory = await Directory.systemTemp.createTemp(
       'hearthbit-transfer-test-',
     );
@@ -243,10 +249,12 @@ void main() {
     mesh = _MeshPlatform();
     platform = _TransferPlatform(wifiAware: true);
     repository = _MemoryTransferRepository();
+    transportDiagnostics = TransportDiagnostics();
     controller = TransferController(
       mesh,
       platform: platform,
       repository: repository,
+      transportDiagnostics: transportDiagnostics,
     );
     await controller.initialize();
   });
@@ -400,7 +408,11 @@ void main() {
       'transferId': record.id,
       'message': 'direct failed',
     });
-    await _waitUntil(() => record.transport == TransferTransport.multipeer);
+    await _waitUntil(
+      () =>
+          record.transport == TransferTransport.multipeer &&
+          platform.multipeerReceives.contains(record.id),
+    );
     expect(platform.multipeerReceives, [record.id]);
   });
 
@@ -463,6 +475,10 @@ void main() {
     await controller.importHbtPackage(package.path);
 
     expect(record.state, TransferState.completed);
+    expect(
+      transportDiagnostics.forTransport(DiagnosticTransport.external).successes,
+      1,
+    );
     expect(await File(record.filePath!).readAsString(), 'share-sheet payload');
   });
 

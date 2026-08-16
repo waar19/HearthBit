@@ -1537,6 +1537,36 @@ abstract class AppLocalizations {
   /// **'Inactive'**
   String get diagnosticsDisabled;
 
+  /// No description provided for @diagnosticsTransportOutcomesSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer outcomes'**
+  String get diagnosticsTransportOutcomesSection;
+
+  /// No description provided for @diagnosticsTransportOutcome.
+  ///
+  /// In en, this message translates to:
+  /// **'{success} successful · {failure} failed'**
+  String diagnosticsTransportOutcome(int success, int failure);
+
+  /// No description provided for @diagnosticsTransportAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get diagnosticsTransportAudio;
+
+  /// No description provided for @diagnosticsTransportQr.
+  ///
+  /// In en, this message translates to:
+  /// **'QR'**
+  String get diagnosticsTransportQr;
+
+  /// No description provided for @diagnosticsTransportExternal.
+  ///
+  /// In en, this message translates to:
+  /// **'External share'**
+  String get diagnosticsTransportExternal;
+
   /// No description provided for @openLinkError.
   ///
   /// In en, this message translates to:

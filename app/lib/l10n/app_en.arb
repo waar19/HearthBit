@@ -280,6 +280,12 @@
   "diagnosticsNoEvents": "No diagnostic events yet",
   "diagnosticsEnabled": "Active",
   "diagnosticsDisabled": "Inactive",
+  "diagnosticsTransportOutcomesSection": "Transfer outcomes",
+  "diagnosticsTransportOutcome": "{success} successful · {failure} failed",
+  "@diagnosticsTransportOutcome": {"placeholders": {"success": {"type": "int"}, "failure": {"type": "int"}}},
+  "diagnosticsTransportAudio": "Audio",
+  "diagnosticsTransportQr": "QR",
+  "diagnosticsTransportExternal": "External share",
   "openLinkError": "Could not open the link",
   "actionClose": "Close",
 
