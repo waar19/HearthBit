@@ -164,6 +164,23 @@ Future<ByteData> _readFont(String directory, String file) async {
   return ByteData.sublistView(bytes);
 }
 
+Future<void> _loadFontIfAvailable(
+  String family,
+  String directory,
+  List<String> files,
+) async {
+  final paths = files.map((file) => '$directory${Platform.pathSeparator}$file');
+  if (!paths.every((path) => File(path).existsSync())) {
+    debugPrint('[ui-review] skip-font:$family');
+    return;
+  }
+  final loader = FontLoader(family);
+  for (final file in files) {
+    loader.addFont(_readFont(directory, file));
+  }
+  await loader.load();
+}
+
 Future<void> _loadRealFonts() async {
   final flutterRoot =
       Platform.environment['FLUTTER_ROOT'] ?? r'C:\src\flutter-sdk';
@@ -171,15 +188,15 @@ Future<void> _loadRealFonts() async {
       '$flutterRoot${Platform.pathSeparator}bin'
       '${Platform.pathSeparator}cache${Platform.pathSeparator}artifacts'
       '${Platform.pathSeparator}material_fonts';
-  final roboto = FontLoader('Roboto')
-    ..addFont(_readFont(fontsDir, 'roboto-regular.ttf'))
-    ..addFont(_readFont(fontsDir, 'roboto-medium.ttf'))
-    ..addFont(_readFont(fontsDir, 'roboto-bold.ttf'))
-    ..addFont(_readFont(fontsDir, 'roboto-italic.ttf'));
-  await roboto.load();
-  final icons = FontLoader('MaterialIcons')
-    ..addFont(_readFont(fontsDir, 'materialicons-regular.otf'));
-  await icons.load();
+  await _loadFontIfAvailable('Roboto', fontsDir, const [
+    'roboto-regular.ttf',
+    'roboto-medium.ttf',
+    'roboto-bold.ttf',
+    'roboto-italic.ttf',
+  ]);
+  await _loadFontIfAvailable('MaterialIcons', fontsDir, const [
+    'materialicons-regular.otf',
+  ]);
 }
 
 Future<void> _pumpApp(
