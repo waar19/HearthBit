@@ -6,6 +6,8 @@ import 'package:geolocator/geolocator.dart';
 
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
+import '../models/pending_beacon_request.dart';
+import '../models/private_message_result.dart';
 import '../services/acoustic_sos.dart';
 import '../services/app_preferences.dart';
 import '../services/beacon_control_protocol.dart';
@@ -15,46 +17,13 @@ import '../services/mesh_platform_service.dart';
 import '../services/message_repository.dart';
 import '../services/optical_protocol.dart';
 import '../services/peer_location_tracker.dart';
+import '../utils/emergency_backoff.dart';
+import '../utils/emergency_coordinates.dart' as emergency_coordinates;
+import '../utils/emergency_qr_fallback.dart';
+import '../utils/id_generator.dart';
 
-enum PrivateMessageSendDisposition { sent, queued, failed }
-
-class PrivateMessageSendResult {
-  const PrivateMessageSendResult._(this.disposition, {this.error});
-
-  const PrivateMessageSendResult.sent()
-    : this._(PrivateMessageSendDisposition.sent);
-
-  const PrivateMessageSendResult.queued()
-    : this._(PrivateMessageSendDisposition.queued);
-
-  const PrivateMessageSendResult.failed(String error)
-    : this._(PrivateMessageSendDisposition.failed, error: error);
-
-  final PrivateMessageSendDisposition disposition;
-  final String? error;
-
-  bool get accepted => disposition != PrivateMessageSendDisposition.failed;
-}
-
-class PendingBeaconRequest {
-  const PendingBeaconRequest({
-    required this.requestId,
-    required this.peerId,
-    required this.nickname,
-    required this.expiresAt,
-    required this.flags,
-  });
-
-  final String requestId;
-  final String peerId;
-  final String nickname;
-  final DateTime expiresAt;
-  final int flags;
-
-  bool get wantsFlash => flags & BeaconControlFlags.flash != 0;
-  bool get wantsSound => flags & BeaconControlFlags.sound != 0;
-  bool get wantsVibration => flags & BeaconControlFlags.vibrate != 0;
-}
+export '../models/pending_beacon_request.dart';
+export '../models/private_message_result.dart';
 
 class MeshController extends ChangeNotifier {
   MeshController({
@@ -923,7 +892,7 @@ class MeshController extends ChangeNotifier {
   }
 
   static double coarsenEmergencyCoordinate(double value) =>
-      (value * 1000).round() / 1000;
+      emergency_coordinates.coarsenEmergencyCoordinate(value);
 
   Future<void> updateNickname(String value) async {
     final cleaned = value.trim();
@@ -1308,28 +1277,16 @@ class MeshController extends ChangeNotifier {
     }
   }
 
-  Duration _emergencyBackoff(int attempts) {
-    final exponent = min(max(attempts - 1, 0), 5);
-    final seconds = min(
-      15 * (1 << exponent),
-      emergencyMaximumBackoff.inSeconds,
-    );
-    return Duration(seconds: seconds);
-  }
+  Duration _emergencyBackoff(int attempts) => emergencyRetryBackoff(
+    attempts: attempts,
+    maximumBackoff: emergencyMaximumBackoff,
+  );
 
-  String _emergencyQrFallback(String content) {
-    final fields = content.split('|');
-    final description = fields.length > 1 && fields[1].trim().isNotEmpty
-        ? fields[1].trim()
-        : currentL10n.sosDefaultMessage;
-    final coordinates =
-        fields.length > 3 &&
-            fields[2].trim().isNotEmpty &&
-            fields[3].trim().isNotEmpty
-        ? '\nGPS: ${fields[2].trim()}, ${fields[3].trim()}'
-        : '';
-    return 'HEARTHBIT SOS\n$description$coordinates\nID: $peerId';
-  }
+  String _emergencyQrFallback(String content) => emergencyQrFallbackText(
+    content: content,
+    peerId: peerId,
+    defaultMessage: currentL10n.sosDefaultMessage,
+  );
 
   Future<void> _replaceEmergencyDelivery(EmergencyDelivery delivery) async {
     await _repository.updateEmergencyDelivery(delivery);
@@ -1394,13 +1351,7 @@ class MeshController extends ChangeNotifier {
     );
   }
 
-  String _newEmergencyLocalId() {
-    final randomPart = List.generate(
-      8,
-      (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0'),
-    ).join();
-    return 'EMG-${DateTime.now().microsecondsSinceEpoch}-$randomPart';
-  }
+  String _newEmergencyLocalId() => newEmergencyLocalId(_random);
 
   Future<void> panicWipe() async {
     await setRescueMode(false);
@@ -1477,10 +1428,7 @@ class MeshController extends ChangeNotifier {
     }
   }
 
-  String _newPrivateMessageLocalId() {
-    final randomPart = _random.nextInt(0x7fffffff).toRadixString(16);
-    return 'dm-${DateTime.now().microsecondsSinceEpoch}-$randomPart';
-  }
+  String _newPrivateMessageLocalId() => newPrivateMessageLocalId(_random);
 
   MeshMessage _pendingMessage(PendingPrivateMessage pending) {
     return MeshMessage(

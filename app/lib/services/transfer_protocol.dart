@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../models/transfer_models.dart';
+
 /// Codec del HearthBit Transfer Protocol (HBT) v1.
 ///
 /// Formato: `[versión u8][tipo u8][TLV...]` con TLV `[tag u8][len u16][valor]`
@@ -200,3 +202,26 @@ String sanitizeFileName(String raw) {
   }
   return cleaned.substring(0, cut);
 }
+
+int transferWireId(TransferTransport transport) => switch (transport) {
+  TransferTransport.ble => TransferProtocol.transportIdBle,
+  TransferTransport.lan => TransferProtocol.transportIdLan,
+  TransferTransport.nearby => TransferProtocol.transportIdNearby,
+  TransferTransport.wifiAware => TransferProtocol.transportIdWifiAware,
+  TransferTransport.optical => TransferProtocol.transportIdOptical,
+  TransferTransport.wifiDirect => TransferProtocol.transportIdWifiDirect,
+  TransferTransport.multipeer => TransferProtocol.transportIdMultipeer,
+  TransferTransport.external => TransferProtocol.transportIdExternal,
+};
+
+TransferTransport? transferFromWireId(int id) => switch (id) {
+  TransferProtocol.transportIdBle => TransferTransport.ble,
+  TransferProtocol.transportIdLan => TransferTransport.lan,
+  TransferProtocol.transportIdNearby => TransferTransport.nearby,
+  TransferProtocol.transportIdWifiAware => TransferTransport.wifiAware,
+  TransferProtocol.transportIdOptical => TransferTransport.optical,
+  TransferProtocol.transportIdWifiDirect => TransferTransport.wifiDirect,
+  TransferProtocol.transportIdMultipeer => TransferTransport.multipeer,
+  TransferProtocol.transportIdExternal => TransferTransport.external,
+  _ => null,
+};
