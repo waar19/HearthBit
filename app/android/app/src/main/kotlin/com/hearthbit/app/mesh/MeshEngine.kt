@@ -25,27 +25,13 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
-import android.util.Log as AndroidLog
-import com.hearthbit.app.BuildConfig
 import com.hearthbit.app.R
+import com.hearthbit.app.mesh.MeshLinkCapabilities.bleCapabilities
+import com.hearthbit.app.mesh.MeshLinkCapabilities.toEventMap
 import java.io.ByteArrayOutputStream
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-
-private object Log {
-    fun d(tag: String, message: String): Int =
-        if (BuildConfig.DEBUG) AndroidLog.d(tag, message) else 0
-
-    fun i(tag: String, message: String): Int =
-        if (BuildConfig.DEBUG) AndroidLog.i(tag, message) else 0
-
-    fun w(tag: String, message: String): Int =
-        if (BuildConfig.DEBUG) AndroidLog.w(tag, message) else 0
-
-    fun w(tag: String, message: String, error: Throwable): Int =
-        if (BuildConfig.DEBUG) AndroidLog.w(tag, message, error) else 0
-}
 
 internal class MeshEngine(
     private val context: Context,
@@ -64,24 +50,28 @@ internal class MeshEngine(
     private var noiseSessions = NoiseSessionManagerLite(identity.peerIdHex, identity.noisePrivateKey)
     private val noiseFailureTracker = NoiseFailureRecoveryTracker()
     private val relationshipPreferences = context.getSharedPreferences(
-        RELATIONSHIP_PREFERENCES,
+        MeshEngineConstants.RELATIONSHIP_PREFERENCES,
         Context.MODE_PRIVATE,
     )
     private val relationshipSecureStore =
-        KeystoreSecureStore.open(context, RELATIONSHIP_SECURE_STORE)
+        KeystoreSecureStore.open(context, MeshEngineConstants.RELATIONSHIP_SECURE_STORE)
     private val rescueModeStore = RescueModeStore(context)
     private val restoredRescueModeState = rescueModeStore.read()
     private val peersWithSessionHistory = ConcurrentHashMap.newKeySet<String>().apply {
         val legacy = relationshipPreferences
-            .getStringSet(KEY_SESSION_PEERS, emptySet())
+            .getStringSet(MeshEngineConstants.KEY_SESSION_PEERS, emptySet())
             .orEmpty()
-        addAll(relationshipSecureStore.getStringSet(KEY_SESSION_PEERS))
+        addAll(relationshipSecureStore.getStringSet(MeshEngineConstants.KEY_SESSION_PEERS))
         addAll(legacy)
         if (legacy.isNotEmpty()) {
-            check(relationshipSecureStore.putStringSet(KEY_SESSION_PEERS, toSet()))
-            relationshipPreferences.edit().remove(KEY_SESSION_PEERS).commit()
+            check(relationshipSecureStore.putStringSet(MeshEngineConstants.KEY_SESSION_PEERS, toSet()))
+            relationshipPreferences.edit().remove(MeshEngineConstants.KEY_SESSION_PEERS).commit()
         }
     }
+    private val sessionPeerHistory = MeshSessionPeerHistory(
+        peersWithSessionHistory = peersWithSessionHistory,
+        relationshipSecureStore = relationshipSecureStore,
+    )
     private val lastHandshakeAttemptByPeer = ConcurrentHashMap<String, Long>()
     private val latestAnnouncementTimestampByPeer = ConcurrentHashMap<String, Long>()
     private val seen = Collections.synchronizedMap(
@@ -90,8 +80,8 @@ internal class MeshEngine(
                 size > 2_000
         },
     )
-    private val peers = ConcurrentHashMap<String, Peer>()
-    private val pendingPrivate = ConcurrentHashMap<String, MutableList<PendingPrivate>>()
+    private val peers = ConcurrentHashMap<String, MeshPeer>()
+    private val pendingPrivate = ConcurrentHashMap<String, MutableList<PendingPrivateMessage>>()
     private val pendingFrames = ConcurrentHashMap<String, MutableList<ByteArray>>()
     private val pendingCourier =
         ConcurrentHashMap<String, MutableList<MeshProtocol.Packet>>()
@@ -109,22 +99,15 @@ internal class MeshEngine(
     private val overflowMaskByAddress = ConcurrentHashMap<String, ByteArray>()
     @Volatile
     private var learnedIosOverflowBit = relationshipPreferences
-        .getInt(KEY_IOS_OVERFLOW_BIT, -1)
+        .getInt(MeshEngineConstants.KEY_IOS_OVERFLOW_BIT, -1)
         .takeIf { it in 0 until 128 }
     private val clientCharacteristics =
         ConcurrentHashMap<String, BluetoothGattCharacteristic>()
     private val clientMaximumGattValueSizes = ConcurrentHashMap<String, Int>()
-    private val clientWriteLock = Any()
-    private val clientWriteQueues = mutableMapOf<String, GattDeliveryQueue>()
-    private val clientWritesInFlight = mutableSetOf<String>()
-    private val clientWriteOwners = mutableMapOf<String, BluetoothGatt>()
     private val clientReady = ConcurrentHashMap.newKeySet<String>()
     private val serverConnectedAddresses = ConcurrentHashMap.newKeySet<String>()
     private val serverSubscribers = ConcurrentHashMap.newKeySet<BluetoothDevice>()
     private val serverMaximumGattValueSizes = ConcurrentHashMap<String, Int>()
-    private val serverNotificationLock = Any()
-    private val serverNotificationQueues = mutableMapOf<String, GattDeliveryQueue>()
-    private val serverNotificationsInFlight = mutableSetOf<String>()
     private val storeForward = StoreForwardCache(context)
     private val emergencyFingerprints = EmergencyFingerprintCache(context)
     private val peerTrustStore = PeerTrustStore(context)
@@ -136,14 +119,7 @@ internal class MeshEngine(
     private val fragmentReassembler = MeshFragmentReassembler()
     private val packetFragmenter = MeshPacketFragmenter()
     private val lastSyncRequestByAddress = ConcurrentHashMap<String, Long>()
-    private val syncResponseTimes = ConcurrentHashMap<String, ArrayDeque<Long>>()
-    private val syncPackets = Collections.synchronizedMap(
-        object : LinkedHashMap<String, MeshProtocol.Packet>(SYNC_STORE_CAPACITY, 0.75f, true) {
-            override fun removeEldestEntry(
-                eldest: MutableMap.MutableEntry<String, MeshProtocol.Packet>?,
-            ): Boolean = size > SYNC_STORE_CAPACITY
-        },
-    )
+    private val syncStore = MeshSyncStore()
     private val remoteRadarConsents = ConcurrentHashMap<String, RemoteRadarConsent>()
     private val pendingBeaconRequests = ConcurrentHashMap<String, PendingBeaconRequest>()
     private val outgoingBeaconRequests = ConcurrentHashMap<String, OutgoingBeaconRequest>()
@@ -198,7 +174,7 @@ internal class MeshEngine(
         onEmergencyFrame = { frame ->
             runCatching { injectOpenEmergencyFrame(frame, "wifi-direct") }
                 .onFailure {
-                    Log.w(LOG_TAG, "Rejected Wi-Fi Direct emergency frame", it)
+                    MeshLog.w(MeshEngineConstants.LOG_TAG, "Rejected Wi-Fi Direct emergency frame", it)
                 }
         },
     )
@@ -208,7 +184,7 @@ internal class MeshEngine(
             onFrame = { frame ->
                 runCatching { injectOpenEmergencyFrame(frame, "wifi-aware") }
                     .onFailure {
-                        Log.w(LOG_TAG, "Rejected Wi-Fi Aware emergency frame", it)
+                        MeshLog.w(MeshEngineConstants.LOG_TAG, "Rejected Wi-Fi Aware emergency frame", it)
                     }
             },
             onState = { state ->
@@ -238,6 +214,18 @@ internal class MeshEngine(
 
     private var gattServer: BluetoothGattServer? = null
     private var serverCharacteristic: BluetoothGattCharacteristic? = null
+
+    private val gattDelivery by lazy {
+        MeshGattDeliveryCoordinator(
+            mainHandler = mainHandler,
+            onDeliveryFailure = ::emitGattDeliveryFailure,
+            isClientLinkActive = { address, gatt -> clientGatts[address] === gatt },
+            isClientReady = { address -> clientReady.contains(address) },
+            isServerLinkActive = { server, device ->
+                gattServer === server && serverSubscribers.contains(device)
+            },
+        )
+    }
 
     @Volatile
     private var running = false
@@ -308,31 +296,6 @@ internal class MeshEngine(
     @Volatile
     private var radarPeerId: String? = null
 
-    data class Peer(
-        val id: String,
-        val nickname: String,
-        val signingPublicKey: ByteArray,
-        val noisePublicKey: ByteArray,
-        var supportsTransfers: Boolean,
-        var role: MeshNodeRole = MeshNodeRole.PHONE_RELAY,
-        var hasLongRangeTrunk: Boolean = false,
-        var lastSeen: Long = System.currentTimeMillis(),
-        var supportsEmergencyAck: Boolean = false,
-        var hearthbitVerified: Boolean = supportsTransfers,
-    )
-
-    private data class PendingPrivate(val id: String, val content: String)
-    private data class RemoteRadarConsent(val expiresAt: Long, val source: String)
-    private data class PendingBeaconRequest(
-        val peerId: String,
-        val nickname: String,
-        val control: BeaconControlProtocol.Control,
-    )
-    private data class OutgoingBeaconRequest(
-        val peerId: String,
-        val expiresAt: Long,
-        val flags: Int,
-    )
     private var activeBeaconRequest: PendingBeaconRequest? = null
 
     val peerId: String get() = identity.peerIdHex
@@ -529,11 +492,11 @@ internal class MeshEngine(
                 reliability = LinkReliability.ACKNOWLEDGED,
                 background = false,
                 maxConnections = 1,
-                cost = LAN_LINK_COST,
+                cost = MeshEngineConstants.LAN_LINK_COST,
             ),
         ) { frame, _ ->
             val emergencyEligible = MeshProtocol.decode(frame)?.let(
-                ::isOpenEmergencyLanPacket,
+                EmergencyLanPolicy::isOpenEmergencyLanPacket,
             ) == true
             emit(
                 mapOf(
@@ -581,7 +544,7 @@ internal class MeshEngine(
         val packet = requireNotNull(MeshProtocol.decode(frame)) {
             "Frame de emergencia inválido"
         }
-        require(isOpenEmergencyLanPacket(packet)) {
+        require(EmergencyLanPolicy.isOpenEmergencyLanPacket(packet)) {
             "El canal abierto solo admite emergencia firmada"
         }
         receive(
@@ -589,20 +552,6 @@ internal class MeshEngine(
             "$transport:${MeshProtocol.hex(packet.senderId)}",
         )
     }
-
-    private fun isOpenEmergencyLanPacket(packet: MeshProtocol.Packet): Boolean =
-        when (packet.type) {
-            MeshProtocol.TYPE_ANNOUNCE ->
-                MeshProtocol.decodeAnnouncement(packet.payload)?.emergencyPreannounce == true
-            MeshProtocol.TYPE_MESSAGE ->
-                MeshProtocol.isEmergencyPublicPacketPayload(
-                    packet.payload.toString(Charsets.UTF_8),
-                )
-            MeshProtocol.TYPE_EMERGENCY_ACK,
-            MeshProtocol.TYPE_LEGACY_EMERGENCY_ACK,
-            -> true
-            else -> false
-        }
 
     fun injectEmergencyQrFrames(announcementFrame: ByteArray, messageFrame: ByteArray) {
         val announcement = requireNotNull(MeshProtocol.decode(announcementFrame)) {
@@ -687,18 +636,11 @@ internal class MeshEngine(
         clientCharacteristics.clear()
         clientMaximumGattValueSizes.clear()
         clientReady.clear()
-        synchronized(clientWriteLock) {
-            clientWriteQueues.clear()
-            clientWritesInFlight.clear()
-            clientWriteOwners.clear()
-        }
+        gattDelivery.clearAllClientDeliveryState()
         serverConnectedAddresses.clear()
         serverSubscribers.clear()
         serverMaximumGattValueSizes.clear()
-        synchronized(serverNotificationLock) {
-            serverNotificationQueues.clear()
-            serverNotificationsInFlight.clear()
-        }
+        gattDelivery.clearAllServerDeliveryState()
         runCatching { gattServer?.close() }
         gattServer = null
         serverCharacteristic = null
@@ -713,7 +655,7 @@ internal class MeshEngine(
         scanErrorActive = false
         fragmentReassembler.clear()
         lastSyncRequestByAddress.clear()
-        syncResponseTimes.clear()
+        syncStore.clear()
         pendingCourier.clear()
         remoteRadarConsents.clear()
         tentativeRadarReads.clear()
@@ -820,7 +762,7 @@ internal class MeshEngine(
         sendNodeCapability()
         if (running) {
             if (localRole == MeshNodeRole.PHONE_BEACON) {
-                mainHandler.postDelayed({ enterPresenceOnlyMode() }, ROLE_TRANSITION_DELAY_MS)
+                mainHandler.postDelayed({ enterPresenceOnlyMode() }, MeshEngineConstants.ROLE_TRANSITION_DELAY_MS)
             } else if (previousRole == MeshNodeRole.PHONE_BEACON) {
                 enterDataRelayMode()
             } else {
@@ -850,18 +792,11 @@ internal class MeshEngine(
         clientCharacteristics.clear()
         clientMaximumGattValueSizes.clear()
         clientReady.clear()
-        synchronized(clientWriteLock) {
-            clientWriteQueues.clear()
-            clientWritesInFlight.clear()
-            clientWriteOwners.clear()
-        }
+        gattDelivery.clearAllClientDeliveryState()
         serverConnectedAddresses.clear()
         serverSubscribers.clear()
         serverMaximumGattValueSizes.clear()
-        synchronized(serverNotificationLock) {
-            serverNotificationQueues.clear()
-            serverNotificationsInFlight.clear()
-        }
+        gattDelivery.clearAllServerDeliveryState()
         runCatching { gattServer?.close() }
         gattServer = null
         serverCharacteristic = null
@@ -880,7 +815,7 @@ internal class MeshEngine(
         startBitchatOverflowScanning()
         ensureGenericPresenceScanScheduled()
         restartAdvertising()
-        mainHandler.postDelayed({ sendAnnouncement() }, ROLE_TRANSITION_DELAY_MS)
+        mainHandler.postDelayed({ sendAnnouncement() }, MeshEngineConstants.ROLE_TRANSITION_DELAY_MS)
     }
 
     @SuppressLint("MissingPermission")
@@ -1135,7 +1070,7 @@ internal class MeshEngine(
         require(peers.containsKey(peerIdHex)) {
             context.getString(R.string.error_peer_unavailable)
         }
-        require(frame.size <= MAX_TRANSFER_FRAME) {
+        require(frame.size <= MeshEngineConstants.MAX_TRANSFER_FRAME) {
             context.getString(R.string.error_frame_too_large)
         }
         if (noiseSessions.isEstablished(peerIdHex)) {
@@ -1216,7 +1151,7 @@ internal class MeshEngine(
     fun peersSnapshot(): List<Map<String, Any?>> {
         val now = System.currentTimeMillis()
         pruneRadarConsents(now)
-        return peers.values.sortedByDescending(Peer::lastSeen).map { peer ->
+        return peers.values.sortedByDescending(MeshPeer::lastSeen).map { peer ->
             val online = isPeerOnline(peer, now)
             val consent = remoteRadarConsents[peer.id]?.takeIf { value ->
                 value.expiresAt > now
@@ -1244,7 +1179,7 @@ internal class MeshEngine(
     }
 
     private fun isPeerOnline(
-        peer: Peer,
+        peer: MeshPeer,
         now: Long = System.currentTimeMillis(),
     ): Boolean = PeerReachabilityPolicy.isOnline(peer.lastSeen, now)
 
@@ -1285,9 +1220,7 @@ internal class MeshEngine(
         relationshipSecureStore.clear()
         peersWithSessionHistory.clear()
         learnedIosOverflowBit = null
-        syncPackets.clear()
-        lastSyncRequestByAddress.clear()
-        syncResponseTimes.clear()
+        syncStore.clear()
         remoteRadarConsents.clear()
         tentativeRadarReads.clear()
         identity.clear()
@@ -1389,8 +1322,8 @@ internal class MeshEngine(
                 val gatt = mapped[address] ?: return@forEach
                 val accepted = runCatching { gatt.readRemoteRssi() }.getOrDefault(false)
                 if (radarReadPlanner.recordReadAttempt(address, accepted, now)) {
-                    Log.w(
-                        LOG_TAG,
+                    MeshLog.w(
+                        MeshEngineConstants.LOG_TAG,
                         "Radar: link ${address.takeLast(5)} not answering RSSI reads; backing off",
                     )
                 }
@@ -1401,14 +1334,14 @@ internal class MeshEngine(
                 val accepted = runCatching { gatt.readRemoteRssi() }.getOrDefault(false)
                 if (!accepted) tentativeRadarReads.remove(address)
                 if (radarReadPlanner.recordReadAttempt(address, accepted, now)) {
-                    Log.w(
-                        LOG_TAG,
+                    MeshLog.w(
+                        MeshEngineConstants.LOG_TAG,
                         "Radar: tentative link ${address.takeLast(5)} not answering RSSI reads",
                     )
                 }
             }
             if (radarReadPlanner.diagnosticDue(now)) {
-                Log.w(LOG_TAG, "Radar: no RSSI samples for target ${target.take(8)} yet")
+                MeshLog.w(MeshEngineConstants.LOG_TAG, "Radar: no RSSI samples for target ${target.take(8)} yet")
                 emit(
                     mapOf(
                         "type" to "radarDiagnostic",
@@ -1418,7 +1351,7 @@ internal class MeshEngine(
                     ),
                 )
             }
-            mainHandler.postDelayed(this, RADAR_READ_INTERVAL_MS)
+            mainHandler.postDelayed(this, MeshEngineConstants.RADAR_READ_INTERVAL_MS)
         }
     }
 
@@ -1454,7 +1387,7 @@ internal class MeshEngine(
     }
 
     private fun createAnnouncementPacket(
-        ttl: Byte = if (privateMode) PRIVATE_ANNOUNCE_TTL else MeshProtocol.TTL,
+        ttl: Byte = if (privateMode) MeshEngineConstants.PRIVATE_ANNOUNCE_TTL else MeshProtocol.TTL,
         emergencyPreannounce: Boolean = false,
     ): MeshProtocol.Packet {
         val payload = MeshProtocol.encodeAnnouncement(
@@ -1725,9 +1658,9 @@ internal class MeshEngine(
     private fun requestMissingMessages(peerIdHex: String, sourceAddress: String) {
         val now = System.currentTimeMillis()
         val previous = lastSyncRequestByAddress[sourceAddress]
-        if (previous != null && now - previous < SYNC_REQUEST_COOLDOWN_MS) return
+        if (previous != null && now - previous < MeshEngineConstants.SYNC_REQUEST_COOLDOWN_MS) return
         lastSyncRequestByAddress[sourceAddress] = now
-        val gcsFilter = MeshProtocol.encodeSyncRequest(syncSnapshot(now))
+        val gcsFilter = MeshProtocol.encodeSyncRequest(syncStore.snapshot(now))
         val packet = identity.sign(
             MeshProtocol.Packet(
                 type = MeshProtocol.TYPE_REQUEST_SYNC,
@@ -1738,13 +1671,13 @@ internal class MeshEngine(
                 payload = gcsFilter,
             ),
         )
-        Log.i(LOG_TAG, "REQUEST_SYNC sent to ${peerIdHex.take(8)}")
+        MeshLog.i(MeshEngineConstants.LOG_TAG, "REQUEST_SYNC sent to ${peerIdHex.take(8)}")
         sendBytesToAddress(MeshProtocol.encodeForBle(packet), sourceAddress)
     }
 
     private fun initiateHandshake(peerIdHex: String, now: Long = System.currentTimeMillis()) {
         val previousAttempt = lastHandshakeAttemptByPeer[peerIdHex]
-        if (previousAttempt != null && now - previousAttempt < HANDSHAKE_RETRY_THROTTLE_MS) return
+        if (previousAttempt != null && now - previousAttempt < MeshEngineConstants.HANDSHAKE_RETRY_THROTTLE_MS) return
         val peerBytes = peerIdHex.hexToBytes()
         val first = runCatching { noiseSessions.initiate(peerIdHex) }.getOrElse {
             emitError(context.getString(R.string.error_private_channel, it.message))
@@ -1769,25 +1702,6 @@ internal class MeshEngine(
         peersWithSessionHistory.contains(peerIdHex) ||
             hasPendingRelationship(peerIdHex)
 
-    @Synchronized
-    private fun rememberSessionPeer(peerIdHex: String) {
-        if (!peersWithSessionHistory.add(peerIdHex)) return
-        val overflow = peersWithSessionHistory.size - MAX_REMEMBERED_SESSION_PEERS
-        if (overflow > 0) {
-            peersWithSessionHistory.asSequence()
-                .filterNot { it == peerIdHex }
-                .take(overflow)
-                .toList()
-                .forEach(peersWithSessionHistory::remove)
-        }
-        check(
-            relationshipSecureStore.putStringSet(
-                KEY_SESSION_PEERS,
-                peersWithSessionHistory.toSet(),
-            ),
-        )
-    }
-
     private fun sendEncryptedPrivate(peerIdHex: String, id: String, content: String) {
         val privateData = MeshProtocol.encodePrivateMessage(id, content)
         val typedPayload = byteArrayOf(MeshProtocol.NOISE_PRIVATE_MESSAGE) + privateData
@@ -1795,7 +1709,7 @@ internal class MeshEngine(
             if (it is NoiseHandshakeFailure.SessionExpired) {
                 pendingPrivate.computeIfAbsent(peerIdHex) {
                     Collections.synchronizedList(mutableListOf())
-                }.add(PendingPrivate(id, content))
+                }.add(PendingPrivateMessage(id, content))
                 recoverNoiseSession(peerIdHex)
                 return
             }
@@ -1864,7 +1778,7 @@ internal class MeshEngine(
             ),
         )
         sendBytesToAddress(MeshProtocol.encodeForBle(courier), sourceAddress)
-        Log.i(LOG_TAG, "Courier deposited with anchor ${anchorId.take(8)}")
+        MeshLog.i(MeshEngineConstants.LOG_TAG, "Courier deposited with anchor ${anchorId.take(8)}")
     }
 
     private fun broadcast(packet: MeshProtocol.Packet, excludeAddress: String? = null) {
@@ -1876,7 +1790,7 @@ internal class MeshEngine(
         excludeAddress: String?,
         allowUnprovenIdentity: Boolean,
     ) {
-        rememberSyncPacket(packet)
+        syncStore.remember(packet)
         val bytes = MeshProtocol.encodeForBle(packet)
         val restrictIdentity = isLocalIdentityPacket(packet) && !allowUnprovenIdentity
         val linkKinds = broadcastBytes(
@@ -1884,7 +1798,7 @@ internal class MeshEngine(
             excludeAddress,
             restrictToHearthBit = restrictIdentity,
         )
-        if (isOpenEmergencyLanPacket(packet)) {
+        if (EmergencyLanPolicy.isOpenEmergencyLanPacket(packet)) {
             val wifiDirect = wifiDirectMeshTransport.sendEmergencyFrame(bytes)
             val wifiAware = wifiAwareMeshLink?.send(bytes) == true
             emit(
@@ -1944,7 +1858,7 @@ internal class MeshEngine(
     private fun isLocalIdentityPacket(packet: MeshProtocol.Packet): Boolean =
         privateMode &&
             packet.senderId.contentEquals(identity.peerId) &&
-            packet.type in IDENTITY_PACKET_TYPES
+            packet.type in MeshEngineConstants.IDENTITY_PACKET_TYPES
 
     private fun canSendSyncCandidate(
         packet: MeshProtocol.Packet,
@@ -1967,7 +1881,7 @@ internal class MeshEngine(
         if (characteristic != null && server != null) {
             serverSubscribers.forEach { device ->
                 val maximumSize = serverMaximumGattValueSizes[device.address]
-                    ?: DEFAULT_GATT_VALUE_SIZE
+                    ?: MeshEngineConstants.DEFAULT_GATT_VALUE_SIZE
                 links += CallbackLinkAdapter(
                     capabilities = bleCapabilities(
                         id = "ble-server:${device.address}",
@@ -1987,7 +1901,7 @@ internal class MeshEngine(
         }
         clientCharacteristics.forEach { (address, remoteCharacteristic) ->
             val gatt = clientGatts[address] ?: return@forEach
-            val maximumSize = clientMaximumGattValueSizes[address] ?: DEFAULT_GATT_VALUE_SIZE
+            val maximumSize = clientMaximumGattValueSizes[address] ?: MeshEngineConstants.DEFAULT_GATT_VALUE_SIZE
             links += CallbackLinkAdapter(
                 capabilities = bleCapabilities(
                     id = "ble-client:$address",
@@ -2009,27 +1923,90 @@ internal class MeshEngine(
         return links
     }
 
-    private fun bleCapabilities(
-        id: String,
-        mtu: Int,
-        reliability: LinkReliability,
-    ): LinkCapabilities = LinkCapabilities(
-        id = id,
-        kind = LinkKind.BLE,
-        mtu = mtu,
-        broadcast = false,
-        unicast = true,
-        reliability = reliability,
-        background = true,
-        maxConnections = MAX_BLE_CONNECTIONS,
-        cost = BLE_LINK_COST,
+    private fun enqueueClientWrites(
+        address: String,
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+        frames: List<ByteArray>,
+        critical: Boolean,
+    ): Boolean = gattDelivery.enqueueClientWrites(address, gatt, characteristic, frames, critical)
+
+    private fun markClientReady(
+        address: String,
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+    ) {
+        if (clientGatts[address] !== gatt) return
+        clientReady.add(address)
+        reconnectPeerByAddress.remove(address)?.let { peerId ->
+            addressToPeer.putIfAbsent(address, peerId)
+        }
+        autoReconnectAddresses.remove(address)
+        autoReconnectExpiryByAddress.remove(address)
+        autoReconnectFailuresByAddress.remove(address)
+        autoReconnectCooldownUntil.remove(address)
+        overflowCandidateAddresses.remove(address)
+        notifyNotificationObserver()
+        rescheduleKeepAlive()
+        sendHearthBitLinkProof(address)
+        val shouldStart = gattDelivery.hasPendingClientWrites(address) &&
+            gattDelivery.markClientWritesInFlight(address)
+        if (shouldStart) gattDelivery.writeNextClient(address, gatt, characteristic)
+    }
+
+    private fun writeNextClient(
+        address: String,
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+    ) = gattDelivery.writeNextClient(address, gatt, characteristic)
+
+    private fun handleClientWriteResult(
+        address: String,
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+        success: Boolean,
+        reason: String,
+    ) = gattDelivery.handleClientWriteResult(address, gatt, characteristic, success, reason)
+
+    private fun clearClientDeliveryState(address: String, expectedGatt: BluetoothGatt? = null) =
+        gattDelivery.clearClientDeliveryState(address, expectedGatt)
+
+    private fun enqueueServerNotifications(
+        device: BluetoothDevice,
+        server: BluetoothGattServer,
+        characteristic: BluetoothGattCharacteristic,
+        frames: List<ByteArray>,
+        critical: Boolean,
+    ): Boolean = gattDelivery.enqueueServerNotifications(
+        device,
+        server,
+        characteristic,
+        frames,
+        critical,
     )
+
+    private fun writeNextServerNotification(
+        device: BluetoothDevice,
+        server: BluetoothGattServer,
+        characteristic: BluetoothGattCharacteristic,
+    ) = gattDelivery.writeNextServerNotification(device, server, characteristic)
+
+    private fun handleServerNotificationResult(
+        device: BluetoothDevice,
+        server: BluetoothGattServer,
+        characteristic: BluetoothGattCharacteristic,
+        success: Boolean,
+        reason: String,
+    ) = gattDelivery.handleServerNotificationResult(device, server, characteristic, success, reason)
+
+    private fun clearServerDeliveryState(address: String) =
+        gattDelivery.clearServerDeliveryState(address)
 
     private fun sendViaLink(link: LinkAdapter, bytes: ByteArray): Boolean {
         val frames = packetFragmenter.prepare(bytes, link.capabilities.mtu)
         if (frames == null) {
-            Log.w(
-                LOG_TAG,
+            MeshLog.w(
+                MeshEngineConstants.LOG_TAG,
                 "Dropping ${bytes.size}-byte packet for ${link.capabilities.id} " +
                     "(limit=${link.capabilities.mtu})",
             )
@@ -2059,288 +2036,6 @@ internal class MeshEngine(
         )
     }
 
-    private fun LinkCapabilities.toEventMap(): Map<String, Any> = mapOf(
-        "id" to id,
-        "kind" to kind.name.lowercase(),
-        "mtu" to mtu,
-        "broadcast" to broadcast,
-        "unicast" to unicast,
-        "reliability" to reliability.name.lowercase(),
-        "background" to background,
-        "maxConnections" to maxConnections,
-        "cost" to cost,
-    )
-
-    @SuppressLint("MissingPermission")
-    private fun enqueueClientWrites(
-        address: String,
-        gatt: BluetoothGatt,
-        characteristic: BluetoothGattCharacteristic,
-        frames: List<ByteArray>,
-        critical: Boolean,
-    ): Boolean {
-        if (frames.isEmpty()) return true
-        if (clientGatts[address] !== gatt) return false
-        val result = synchronized(clientWriteLock) {
-            if (clientGatts[address] !== gatt) return false
-            if (clientWriteOwners[address] !== gatt) {
-                clientWriteQueues.remove(address)
-                clientWritesInFlight.remove(address)
-                clientWriteOwners[address] = gatt
-            }
-            val queue = clientWriteQueues.getOrPut(address) {
-                GattDeliveryQueue(MAX_PENDING_GATT_WRITES)
-            }
-            val accepted = queue.enqueue(frames, critical)
-            accepted to (
-                accepted &&
-                    clientReady.contains(address) &&
-                    clientWritesInFlight.add(address)
-                )
-        }
-        if (!result.first) {
-            emitGattDeliveryFailure("client", address, critical, 0, "queueFull")
-            return false
-        }
-        if (result.second) writeNextClient(address, gatt, characteristic)
-        return true
-    }
-
-    private fun markClientReady(
-        address: String,
-        gatt: BluetoothGatt,
-        characteristic: BluetoothGattCharacteristic,
-    ) {
-        if (clientGatts[address] !== gatt) return
-        clientReady.add(address)
-        reconnectPeerByAddress.remove(address)?.let { peerId ->
-            addressToPeer.putIfAbsent(address, peerId)
-        }
-        autoReconnectAddresses.remove(address)
-        autoReconnectExpiryByAddress.remove(address)
-        autoReconnectFailuresByAddress.remove(address)
-        autoReconnectCooldownUntil.remove(address)
-        overflowCandidateAddresses.remove(address)
-        notifyNotificationObserver()
-        rescheduleKeepAlive()
-        sendHearthBitLinkProof(address)
-        val shouldStart = synchronized(clientWriteLock) {
-            clientWriteQueues[address]?.size?.let { it > 0 } == true &&
-                clientWritesInFlight.add(address)
-        }
-        if (shouldStart) writeNextClient(address, gatt, characteristic)
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun writeNextClient(
-        address: String,
-        gatt: BluetoothGatt,
-        characteristic: BluetoothGattCharacteristic,
-    ) {
-        val next = synchronized(clientWriteLock) {
-            if (clientGatts[address] !== gatt || clientWriteOwners[address] !== gatt) return
-            clientWriteQueues[address]?.next()?.bytes
-        }
-        if (next == null) {
-            synchronized(clientWriteLock) {
-                if (clientWriteOwners[address] === gatt) {
-                    clientWritesInFlight.remove(address)
-                    clientWriteOwners.remove(address)
-                }
-            }
-            return
-        }
-        val accepted = runCatching {
-            if (Build.VERSION.SDK_INT >= 33) {
-                gatt.writeCharacteristic(
-                    characteristic,
-                    next,
-                    BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT,
-                ) == BluetoothStatusCodes.SUCCESS
-            } else {
-                @Suppress("DEPRECATION")
-                characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-                @Suppress("DEPRECATION")
-                characteristic.value = next
-                @Suppress("DEPRECATION")
-                gatt.writeCharacteristic(characteristic)
-            }
-        }.getOrDefault(false)
-        if (!accepted) {
-            handleClientWriteResult(
-                address,
-                gatt,
-                characteristic,
-                success = false,
-                reason = "writeRejected",
-            )
-        }
-    }
-
-    private fun handleClientWriteResult(
-        address: String,
-        gatt: BluetoothGatt,
-        characteristic: BluetoothGattCharacteristic,
-        success: Boolean,
-        reason: String,
-    ) {
-        if (clientGatts[address] !== gatt) return
-        val outcome = synchronized(clientWriteLock) {
-            if (clientWriteOwners[address] !== gatt) return
-            val queue = clientWriteQueues[address] ?: return
-            queue.complete(success).also {
-                if (queue.size == 0) clientWriteQueues.remove(address)
-            }
-        }
-        when (outcome) {
-            GattDeliveryOutcome.Advance -> writeNextClient(address, gatt, characteristic)
-            is GattDeliveryOutcome.Retry -> mainHandler.postDelayed(
-                {
-                    if (clientGatts[address] === gatt && clientReady.contains(address)) {
-                        writeNextClient(address, gatt, characteristic)
-                    }
-                },
-                outcome.delayMs,
-            )
-            is GattDeliveryOutcome.Failed -> {
-                emitGattDeliveryFailure(
-                    "client",
-                    address,
-                    outcome.frame.critical,
-                    outcome.frame.failedAttempts,
-                    reason,
-                )
-                writeNextClient(address, gatt, characteristic)
-            }
-        }
-    }
-
-    private fun clearClientDeliveryState(address: String, expectedGatt: BluetoothGatt? = null) {
-        synchronized(clientWriteLock) {
-            val owner = clientWriteOwners[address]
-            if (expectedGatt != null && owner != null && owner !== expectedGatt) return
-            clientWriteQueues.remove(address)
-            clientWritesInFlight.remove(address)
-            clientWriteOwners.remove(address)
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun enqueueServerNotifications(
-        device: BluetoothDevice,
-        server: BluetoothGattServer,
-        characteristic: BluetoothGattCharacteristic,
-        frames: List<ByteArray>,
-        critical: Boolean,
-    ): Boolean {
-        if (frames.isEmpty()) return true
-        val address = device.address
-        if (gattServer !== server || !serverSubscribers.contains(device)) return false
-        val result = synchronized(serverNotificationLock) {
-            if (gattServer !== server || !serverSubscribers.contains(device)) return false
-            val queue = serverNotificationQueues.getOrPut(address) {
-                GattDeliveryQueue(MAX_PENDING_GATT_WRITES)
-            }
-            val accepted = queue.enqueue(frames, critical)
-            accepted to (accepted && serverNotificationsInFlight.add(address))
-        }
-        if (!result.first) {
-            emitGattDeliveryFailure("server", address, critical, 0, "queueFull")
-            return false
-        }
-        if (result.second) writeNextServerNotification(device, server, characteristic)
-        return true
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun writeNextServerNotification(
-        device: BluetoothDevice,
-        server: BluetoothGattServer,
-        characteristic: BluetoothGattCharacteristic,
-    ) {
-        val address = device.address
-        if (gattServer !== server || !serverSubscribers.contains(device)) {
-            clearServerDeliveryState(address)
-            return
-        }
-        val next = synchronized(serverNotificationLock) {
-            serverNotificationQueues[address]?.next()?.bytes
-        }
-        if (next == null) {
-            synchronized(serverNotificationLock) { serverNotificationsInFlight.remove(address) }
-            return
-        }
-        val accepted = runCatching {
-            if (Build.VERSION.SDK_INT >= 33) {
-                server.notifyCharacteristicChanged(device, characteristic, false, next) ==
-                    BluetoothStatusCodes.SUCCESS
-            } else {
-                @Suppress("DEPRECATION")
-                characteristic.value = next
-                @Suppress("DEPRECATION")
-                server.notifyCharacteristicChanged(device, characteristic, false)
-            }
-        }.getOrDefault(false)
-        if (!accepted) {
-            handleServerNotificationResult(
-                device,
-                server,
-                characteristic,
-                success = false,
-                reason = "notifyRejected",
-            )
-        }
-    }
-
-    private fun handleServerNotificationResult(
-        device: BluetoothDevice,
-        server: BluetoothGattServer,
-        characteristic: BluetoothGattCharacteristic,
-        success: Boolean,
-        reason: String,
-    ) {
-        val address = device.address
-        val outcome = synchronized(serverNotificationLock) {
-            val queue = serverNotificationQueues[address] ?: return
-            queue.complete(success).also {
-                if (queue.size == 0) serverNotificationQueues.remove(address)
-            }
-        }
-        when (outcome) {
-            GattDeliveryOutcome.Advance ->
-                writeNextServerNotification(device, server, characteristic)
-            is GattDeliveryOutcome.Retry -> mainHandler.postDelayed(
-                {
-                    if (gattServer === server && serverSubscribers.contains(device)) {
-                        writeNextServerNotification(device, server, characteristic)
-                    } else {
-                        synchronized(serverNotificationLock) {
-                            serverNotificationsInFlight.remove(address)
-                        }
-                    }
-                },
-                outcome.delayMs,
-            )
-            is GattDeliveryOutcome.Failed -> {
-                emitGattDeliveryFailure(
-                    "server",
-                    address,
-                    outcome.frame.critical,
-                    outcome.frame.failedAttempts,
-                    reason,
-                )
-                writeNextServerNotification(device, server, characteristic)
-            }
-        }
-    }
-
-    private fun clearServerDeliveryState(address: String) {
-        synchronized(serverNotificationLock) {
-            serverNotificationQueues.remove(address)
-            serverNotificationsInFlight.remove(address)
-        }
-    }
-
     private fun emitGattDeliveryFailure(
         transport: String,
         address: String,
@@ -2367,27 +2062,27 @@ internal class MeshEngine(
             }
             return
         }
-        Log.d(
-            LOG_TAG,
+        MeshLog.d(
+            MeshEngineConstants.LOG_TAG,
             "RX address=${sourceAddress.takeLast(5)} bytes=${bytes.size} " +
                 "prefix=${MeshProtocol.hex(bytes.copyOfRange(0, minOf(bytes.size, 24)))}",
         )
         val packet = MeshProtocol.decode(bytes)
         if (packet == null) {
-            Log.w(LOG_TAG, "RX rejected: packet decode failed (${bytes.size} bytes)")
+            MeshLog.w(MeshEngineConstants.LOG_TAG, "RX rejected: packet decode failed (${bytes.size} bytes)")
             return
         }
         val senderHex = MeshProtocol.hex(packet.senderId)
-        Log.d(
-            LOG_TAG,
+        MeshLog.d(
+            MeshEngineConstants.LOG_TAG,
             "RX decoded: version=${packet.version} type=${packet.type.toUByte()} " +
                 "ttl=${packet.ttl.toUByte()} sender=${senderHex.take(8)}",
         )
         if (senderHex == peerId) return
         val authentication = ingressAuthenticator.authenticate(packet, sourceAddress)
         if (!authentication.relayAllowed) {
-            Log.w(
-                LOG_TAG,
+            MeshLog.w(
+                MeshEngineConstants.LOG_TAG,
                 "RX rejected before relay: type=${packet.type.toUByte()} " +
                     "sender=${senderHex.take(8)}",
             )
@@ -2456,8 +2151,8 @@ internal class MeshEngine(
             MeshProtocol.TYPE_FRAGMENT -> {
                 val reassembled = fragmentReassembler.accept(packet)
                 if (reassembled != null) {
-                    Log.i(
-                        LOG_TAG,
+                    MeshLog.i(
+                        MeshEngineConstants.LOG_TAG,
                         "FRAGMENT reassembled: type=${reassembled.type.toUByte()} " +
                             "sender=${senderHex.take(8)} bytes=${reassembled.payload.size}",
                     )
@@ -2484,8 +2179,8 @@ internal class MeshEngine(
         sourceAddress: String,
         announcement: MeshProtocol.Announcement,
     ) {
-        Log.i(
-            LOG_TAG,
+        MeshLog.i(
+            MeshEngineConstants.LOG_TAG,
             "ANNOUNCE accepted from ${senderHex.take(8)} nickname=${announcement.nickname}",
         )
         val now = System.currentTimeMillis()
@@ -2495,8 +2190,8 @@ internal class MeshEngine(
             now,
         )
         if (requiresTransportRekey) {
-            Log.i(
-                LOG_TAG,
+            MeshLog.i(
+                MeshEngineConstants.LOG_TAG,
                 "ANNOUNCE after reachability gap from ${senderHex.take(8)}; resetting Noise epoch",
             )
             noiseSessions.invalidate(senderHex)
@@ -2507,14 +2202,14 @@ internal class MeshEngine(
         // TTL intacto prueba que el anuncio llegó directamente, no por relay.
         val directAnnouncement =
             packet.ttl == MeshProtocol.TTL ||
-                (privateMode && packet.ttl == PRIVATE_ANNOUNCE_TTL)
+                (privateMode && packet.ttl == MeshEngineConstants.PRIVATE_ANNOUNCE_TTL)
         if (directAnnouncement) {
             addressToPeer[sourceAddress] = senderHex
         }
         val previouslySupported = previousPeer?.supportsTransfers == true
         val previouslySupportedEmergencyAck = previousPeer?.supportsEmergencyAck == true
         val previousRole = previousPeer?.role ?: MeshNodeRole.PHONE_RELAY
-        peers[senderHex] = Peer(
+        peers[senderHex] = MeshPeer(
             senderHex,
             announcement.nickname,
             announcement.signingPublicKey,
@@ -2535,7 +2230,7 @@ internal class MeshEngine(
         latestAnnouncementTimestampByPeer.merge(senderHex, packet.timestamp) { current, candidate ->
             maxOf(current, candidate)
         }
-        rememberSyncPacket(packet)
+        syncStore.remember(packet)
         emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
         notifyNotificationObserver()
         val verifiedHearthBit = peers[senderHex]?.hearthbitVerified == true
@@ -2601,7 +2296,7 @@ internal class MeshEngine(
         val peer = peers[senderHex] ?: return
         if (!peer.supportsEmergencyAck || !identity.verify(packet, peer.signingPublicKey)) return
         val now = System.currentTimeMillis()
-        if (kotlin.math.abs(now - packet.timestamp) > EMERGENCY_ACK_WINDOW_MS) return
+        if (kotlin.math.abs(now - packet.timestamp) > MeshEngineConstants.EMERGENCY_ACK_WINDOW_MS) return
         val canonicalHash = MeshProtocol.decodeEmergencyAcknowledgement(packet.payload) ?: return
         emit(
             mapOf(
@@ -2642,11 +2337,11 @@ internal class MeshEngine(
     private fun processPublicMessage(packet: MeshProtocol.Packet, senderHex: String) {
         val peer = peers[senderHex]
         if (peer == null) {
-            Log.w(LOG_TAG, "MESSAGE rejected from ${senderHex.take(8)}: peer not announced")
+            MeshLog.w(MeshEngineConstants.LOG_TAG, "MESSAGE rejected from ${senderHex.take(8)}: peer not announced")
             return
         }
         if (!identity.verify(packet, peer.signingPublicKey)) {
-            Log.w(LOG_TAG, "MESSAGE rejected from ${senderHex.take(8)}: signature invalid")
+            MeshLog.w(MeshEngineConstants.LOG_TAG, "MESSAGE rejected from ${senderHex.take(8)}: signature invalid")
             return
         }
         val emergency = MeshProtocol.isEmergencyPublicPacket(packet)
@@ -2656,8 +2351,8 @@ internal class MeshEngine(
                 emergency = emergency,
             )
         ) {
-            Log.i(
-                LOG_TAG,
+            MeshLog.i(
+                MeshEngineConstants.LOG_TAG,
                 "MESSAGE hidden by private interop policy from ${senderHex.take(8)}",
             )
             return
@@ -2686,7 +2381,7 @@ internal class MeshEngine(
             timestamp = packet.timestamp,
             senderPeerId = senderHex,
         )
-        rememberSyncPacket(packet)
+        syncStore.remember(packet)
         peer.lastSeen = System.currentTimeMillis()
         if (message.channel == "sos") {
             val now = System.currentTimeMillis()
@@ -2760,7 +2455,7 @@ internal class MeshEngine(
         val now = System.currentTimeMillis()
         seenBeaconActions.entries.removeIf { it.value <= now }
         val replayKey = "$senderHex:$requestId:${control.action}"
-        if (seenBeaconActions.putIfAbsent(replayKey, now + BEACON_REPLAY_WINDOW_MS) != null) {
+        if (seenBeaconActions.putIfAbsent(replayKey, now + MeshEngineConstants.BEACON_REPLAY_WINDOW_MS) != null) {
             return
         }
         when (control.action) {
@@ -2775,7 +2470,7 @@ internal class MeshEngine(
                 pendingBeaconRequests.entries.removeIf {
                     it.value.control.expiresAt <= now
                 }
-                if (pendingBeaconRequests.size >= MAX_PENDING_BEACON_REQUESTS) {
+                if (pendingBeaconRequests.size >= MeshEngineConstants.MAX_PENDING_BEACON_REQUESTS) {
                     sendBeaconControl(
                         senderHex,
                         BeaconControlProtocol.revoke(control.nonce),
@@ -2888,11 +2583,11 @@ internal class MeshEngine(
 
     private fun processHandshake(packet: MeshProtocol.Packet, senderHex: String) {
         if (privateMode && peers[senderHex]?.hearthbitVerified != true) {
-            Log.i(LOG_TAG, "Ignoring external Noise handshake from ${senderHex.take(8)}")
+            MeshLog.i(MeshEngineConstants.LOG_TAG, "Ignoring external Noise handshake from ${senderHex.take(8)}")
             return
         }
         if (!peers.containsKey(senderHex)) {
-            Log.i(LOG_TAG, "Ignoring Noise handshake from unannounced peer ${senderHex.take(8)}")
+            MeshLog.i(MeshEngineConstants.LOG_TAG, "Ignoring Noise handshake from unannounced peer ${senderHex.take(8)}")
             return
         }
         if (!NoiseReplayPolicy.isCurrent(
@@ -2900,7 +2595,7 @@ internal class MeshEngine(
                 latestAnnouncementTimestampByPeer[senderHex],
             )
         ) {
-            Log.i(LOG_TAG, "Ignoring stale Noise handshake from ${senderHex.take(8)}")
+            MeshLog.i(MeshEngineConstants.LOG_TAG, "Ignoring stale Noise handshake from ${senderHex.take(8)}")
             return
         }
         val result = runCatching {
@@ -2909,8 +2604,8 @@ internal class MeshEngine(
             if (error is NoiseHandshakeFailure.IdentityMismatch) {
                 emitError(context.getString(R.string.error_identity_rejected))
             } else {
-                Log.w(
-                    LOG_TAG,
+                MeshLog.w(
+                    MeshEngineConstants.LOG_TAG,
                     "Noise handshake state/protocol failure from ${senderHex.take(8)}",
                     error,
                 )
@@ -2921,8 +2616,8 @@ internal class MeshEngine(
             sendNoisePacket(MeshProtocol.TYPE_NOISE_HANDSHAKE, packet.senderId, result.response)
         }
         if (result.establishedNow) {
-            Log.i(LOG_TAG, "Noise session established with ${senderHex.take(8)}")
-            rememberSessionPeer(senderHex)
+            MeshLog.i(MeshEngineConstants.LOG_TAG, "Noise session established with ${senderHex.take(8)}")
+            sessionPeerHistory.remember(senderHex)
             noiseFailureTracker.recordSuccess(senderHex)
             lastHandshakeAttemptByPeer.remove(senderHex)
             emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
@@ -2940,11 +2635,11 @@ internal class MeshEngine(
 
     private fun processEncrypted(packet: MeshProtocol.Packet, senderHex: String) {
         if (privateMode && peers[senderHex]?.hearthbitVerified != true) {
-            Log.i(LOG_TAG, "Ignoring external Noise ciphertext from ${senderHex.take(8)}")
+            MeshLog.i(MeshEngineConstants.LOG_TAG, "Ignoring external Noise ciphertext from ${senderHex.take(8)}")
             return
         }
         if (!peers.containsKey(senderHex)) {
-            Log.i(LOG_TAG, "Ignoring Noise ciphertext from unannounced peer ${senderHex.take(8)}")
+            MeshLog.i(MeshEngineConstants.LOG_TAG, "Ignoring Noise ciphertext from unannounced peer ${senderHex.take(8)}")
             return
         }
         if (!NoiseReplayPolicy.isCurrent(
@@ -2952,7 +2647,7 @@ internal class MeshEngine(
                 latestAnnouncementTimestampByPeer[senderHex],
             )
         ) {
-            Log.i(LOG_TAG, "Ignoring stale Noise ciphertext from ${senderHex.take(8)}")
+            MeshLog.i(MeshEngineConstants.LOG_TAG, "Ignoring stale Noise ciphertext from ${senderHex.take(8)}")
             return
         }
         val hadEstablishedSession = noiseSessions.isEstablished(senderHex)
@@ -2998,7 +2693,7 @@ internal class MeshEngine(
         if (plaintext[0] != MeshProtocol.NOISE_PRIVATE_MESSAGE) return
         val message = MeshProtocol.decodePrivateMessage(plaintext.copyOfRange(1, plaintext.size))
             ?: return
-        Log.i(LOG_TAG, "Private message decrypted from ${senderHex.take(8)}")
+        MeshLog.i(MeshEngineConstants.LOG_TAG, "Private message decrypted from ${senderHex.take(8)}")
         emitMessage(
             message.id,
             peers[senderHex]?.nickname ?: senderHex.take(8),
@@ -3032,14 +2727,14 @@ internal class MeshEngine(
         senderHex: String,
         sourceAddress: String,
     ) {
-        if (packet.ttl != 0.toByte() || !allowSyncResponse(sourceAddress)) return
+        if (packet.ttl != 0.toByte() || !syncStore.allowSyncResponse(sourceAddress)) return
         val peer = peers[senderHex] ?: return
         if (!identity.verify(packet, peer.signingPublicKey)) return
         val request = MeshProtocol.decodeSyncRequest(packet.payload) ?: return
         val remoteBuckets = MeshProtocol.decodeGcs(request)
         var sent = 0
-        syncSnapshot().forEach { candidate ->
-            if (sent >= SYNC_MAX_REPLAY) return@forEach
+        syncStore.snapshot().forEach { candidate ->
+            if (sent >= MeshEngineConstants.SYNC_MAX_REPLAY) return@forEach
             if (!canSendSyncCandidate(candidate, sourceAddress)) return@forEach
             val typeFlag = when (candidate.type) {
                 MeshProtocol.TYPE_ANNOUNCE -> MeshProtocol.SYNC_FLAG_ANNOUNCE
@@ -3063,67 +2758,7 @@ internal class MeshEngine(
             )
             sent++
         }
-        if (sent > 0) Log.i(LOG_TAG, "REQUEST_SYNC replayed $sent packet(s)")
-    }
-
-    private fun allowSyncResponse(sourceAddress: String): Boolean {
-        val now = System.currentTimeMillis()
-        val timestamps = syncResponseTimes.computeIfAbsent(sourceAddress) { ArrayDeque() }
-        synchronized(timestamps) {
-            while (timestamps.isNotEmpty() && now - timestamps.first() > SYNC_RATE_WINDOW_MS) {
-                timestamps.removeFirst()
-            }
-            if (timestamps.size >= SYNC_RATE_MAX_RESPONSES) return false
-            timestamps.addLast(now)
-            return true
-        }
-    }
-
-    private fun rememberSyncPacket(packet: MeshProtocol.Packet) {
-        if (packet.signature == null ||
-            packet.type !in setOf(MeshProtocol.TYPE_ANNOUNCE, MeshProtocol.TYPE_MESSAGE) ||
-            packet.recipientId?.contentEquals(MeshProtocol.broadcastRecipient) == false
-        ) {
-            return
-        }
-        val now = System.currentTimeMillis()
-        if (!isSyncFresh(packet, now) || packet.timestamp > now + SYNC_FUTURE_SKEW_MS) return
-        synchronized(syncPackets) {
-            if (packet.type == MeshProtocol.TYPE_ANNOUNCE) {
-                val sender = MeshProtocol.hex(packet.senderId)
-                if (syncPackets.values.any {
-                        it.type == MeshProtocol.TYPE_ANNOUNCE &&
-                            MeshProtocol.hex(it.senderId) == sender &&
-                            it.timestamp >= packet.timestamp
-                    }
-                ) {
-                    return
-                }
-                val superseded = syncPackets.filterValues {
-                    it.type == MeshProtocol.TYPE_ANNOUNCE &&
-                        MeshProtocol.hex(it.senderId) == sender &&
-                        it.timestamp <= packet.timestamp
-                }.keys
-                superseded.forEach(syncPackets::remove)
-            }
-            syncPackets[MeshProtocol.hex(MeshProtocol.packetId(packet))] = packet
-        }
-    }
-
-    private fun syncSnapshot(now: Long = System.currentTimeMillis()): List<MeshProtocol.Packet> =
-        synchronized(syncPackets) {
-            val expired = syncPackets.filterValues { !isSyncFresh(it, now) }.keys
-            expired.forEach(syncPackets::remove)
-            syncPackets.values.sortedByDescending { it.timestamp }
-        }
-
-    private fun isSyncFresh(packet: MeshProtocol.Packet, now: Long): Boolean {
-        val window = if (packet.type == MeshProtocol.TYPE_ANNOUNCE) {
-            SYNC_ANNOUNCE_WINDOW_MS
-        } else {
-            SYNC_MESSAGE_WINDOW_MS
-        }
-        return now < window || packet.timestamp >= now - window
+        if (sent > 0) MeshLog.i(MeshEngineConstants.LOG_TAG, "REQUEST_SYNC replayed $sent packet(s)")
     }
 
     @SuppressLint("MissingPermission")
@@ -3136,7 +2771,7 @@ internal class MeshEngine(
     @SuppressLint("MissingPermission")
     private fun startGattServer() {
         val characteristic = BluetoothGattCharacteristic(
-            CHARACTERISTIC_UUID,
+            MeshEngineConstants.CHARACTERISTIC_UUID,
             BluetoothGattCharacteristic.PROPERTY_READ or
                 BluetoothGattCharacteristic.PROPERTY_WRITE or
                 BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE or
@@ -3146,13 +2781,13 @@ internal class MeshEngine(
         )
         characteristic.addDescriptor(
             BluetoothGattDescriptor(
-                CLIENT_CONFIGURATION_UUID,
+                MeshEngineConstants.CLIENT_CONFIGURATION_UUID,
                 BluetoothGattDescriptor.PERMISSION_READ or
                     BluetoothGattDescriptor.PERMISSION_WRITE,
             ),
         )
         val service = BluetoothGattService(
-            SERVICE_UUID,
+            MeshEngineConstants.SERVICE_UUID,
             BluetoothGattService.SERVICE_TYPE_PRIMARY,
         )
         service.addCharacteristic(characteristic)
@@ -3182,7 +2817,7 @@ internal class MeshEngine(
         // respuesta. En modo privado es un HMAC rotatorio, no el peerId.
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
-            .addServiceUuid(ParcelUuid(SERVICE_UUID))
+            .addServiceUuid(ParcelUuid(MeshEngineConstants.SERVICE_UUID))
             .build()
         val serviceData = if (privateMode && !bitchatInteropEnabled) {
             RotatingAdvertiseToken.serviceData(
@@ -3194,7 +2829,7 @@ internal class MeshEngine(
         }
         val scanResponse = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
-            .addServiceData(ParcelUuid(SERVICE_UUID), serviceData)
+            .addServiceData(ParcelUuid(MeshEngineConstants.SERVICE_UUID), serviceData)
             .build()
         val generation = ++advertiseGeneration
         val callback = object : AdvertiseCallback() {
@@ -3282,11 +2917,11 @@ internal class MeshEngine(
             }.also { mainHandler.postDelayed(it, delay) }
             return
         }
-        val meshFilter = ScanFilter.Builder().setServiceUuid(ParcelUuid(SERVICE_UUID)).build()
+        val meshFilter = ScanFilter.Builder().setServiceUuid(ParcelUuid(MeshEngineConstants.SERVICE_UUID)).build()
         val overflowFilter = ScanFilter.Builder()
             .setManufacturerData(
                 OverflowAreaMatcher.APPLE_MANUFACTURER_ID,
-                byteArrayOf(IOS_OVERFLOW_TYPE),
+                byteArrayOf(MeshEngineConstants.IOS_OVERFLOW_TYPE),
                 byteArrayOf(0xFF.toByte()),
             )
             .build()
@@ -3316,7 +2951,7 @@ internal class MeshEngine(
             meshScanActiveSince = now
             scanStartCount += 1
         }.onFailure {
-            Log.w(LOG_TAG, "Unable to start mesh scan", it)
+            MeshLog.w(MeshEngineConstants.LOG_TAG, "Unable to start mesh scan", it)
             scheduleScanRetry()
         }
     }
@@ -3364,7 +2999,7 @@ internal class MeshEngine(
             scanner?.startScan(emptyList(), settings, genericPresenceScanCallback)
             scanner != null
         }.onFailure {
-            Log.w(LOG_TAG, "Unable to start generic BLE presence scan", it)
+            MeshLog.w(MeshEngineConstants.LOG_TAG, "Unable to start generic BLE presence scan", it)
         }.getOrDefault(false)
         if (genericPresenceScanRunning) {
             genericScanActiveSince = System.currentTimeMillis()
@@ -3507,7 +3142,7 @@ internal class MeshEngine(
             }
             stopMeshScan()
             startScanning()
-        }.also { mainHandler.postDelayed(it, RECOVERY_SCAN_BURST_MS) }
+        }.also { mainHandler.postDelayed(it, MeshEngineConstants.RECOVERY_SCAN_BURST_MS) }
     }
 
     private fun cancelRecoveryScanBurst() {
@@ -3526,7 +3161,7 @@ internal class MeshEngine(
                 }
             }
             scheduleHandshakeCleanup()
-        }.also { mainHandler.postDelayed(it, HANDSHAKE_CLEANUP_INTERVAL_MS) }
+        }.also { mainHandler.postDelayed(it, MeshEngineConstants.HANDSHAKE_CLEANUP_INTERVAL_MS) }
     }
 
     private fun hasActiveBleLink(): Boolean =
@@ -3621,7 +3256,7 @@ internal class MeshEngine(
     @SuppressLint("MissingPermission")
     private fun forceRestartContinuousScans() {
         if (!shouldScanContinuously()) return
-        Log.i(LOG_TAG, "Re-arming continuous BLE scans")
+        MeshLog.i(MeshEngineConstants.LOG_TAG, "Re-arming continuous BLE scans")
         stopBleScans()
         scanRetryRunnable?.let(mainHandler::removeCallbacks)
         scanRetryRunnable = Runnable {
@@ -3629,13 +3264,13 @@ internal class MeshEngine(
             if (!shouldScanContinuously()) return@Runnable
             startScanning(radarPeerId != null)
             startBitchatOverflowScanning()
-        }.also { mainHandler.postDelayed(it, SCAN_REARM_DELAY_MS) }
+        }.also { mainHandler.postDelayed(it, MeshEngineConstants.SCAN_REARM_DELAY_MS) }
     }
 
     private fun scheduleScanRetry() {
         meshScanRunning = false
         if (!running || powerProfile.scanMode == null || scanRetryRunnable != null) return
-        scanRetryAttempt = (scanRetryAttempt + 1).coerceAtMost(MAX_SCAN_RETRY_ATTEMPTS)
+        scanRetryAttempt = (scanRetryAttempt + 1).coerceAtMost(MeshEngineConstants.MAX_SCAN_RETRY_ATTEMPTS)
         val delay = MeshScanHealthPolicy.retryDelayMs(
             attempt = scanRetryAttempt,
             now = System.currentTimeMillis(),
@@ -3659,7 +3294,7 @@ internal class MeshEngine(
                 runCatching { adapter.bluetoothLeAdvertiser?.stopAdvertising(callback) }
             }
             advertiseCallback = null
-            if (advertiseAttempt < MAX_ADVERTISE_RETRIES) {
+            if (advertiseAttempt < MeshEngineConstants.MAX_ADVERTISE_RETRIES) {
                 advertiseAttempt += 1
                 startAdvertising()
             } else {
@@ -3668,7 +3303,7 @@ internal class MeshEngine(
                 emitError(context.getString(R.string.error_advertise_timeout))
                 emitStatus("degraded")
             }
-        }.also { mainHandler.postDelayed(it, ADVERTISE_TIMEOUT_MS) }
+        }.also { mainHandler.postDelayed(it, MeshEngineConstants.ADVERTISE_TIMEOUT_MS) }
     }
 
     private fun cancelAdvertiseWatchdog() {
@@ -3687,12 +3322,12 @@ internal class MeshEngine(
                 if (advertising) emitStatus("active") else notifyNotificationObserver()
             }
             val record = result.scanRecord
-            if (record?.getServiceData(ParcelUuid(SERVICE_UUID)) != null) {
+            if (record?.getServiceData(ParcelUuid(MeshEngineConstants.SERVICE_UUID)) != null) {
                 runCatching { handleMeshScanResult(result) }
-                    .onFailure { Log.w(LOG_TAG, "Ignoring malformed mesh scan result", it) }
+                    .onFailure { MeshLog.w(MeshEngineConstants.LOG_TAG, "Ignoring malformed mesh scan result", it) }
             }
             runCatching { handleIosOverflowScanResult(result) }
-                .onFailure { Log.w(LOG_TAG, "Ignoring malformed iOS overflow result", it) }
+                .onFailure { MeshLog.w(MeshEngineConstants.LOG_TAG, "Ignoring malformed iOS overflow result", it) }
         }
 
         override fun onScanFailed(errorCode: Int) {
@@ -3706,11 +3341,11 @@ internal class MeshEngine(
     private val bitchatOverflowScanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             runCatching { handleIosOverflowScanResult(result) }
-                .onFailure { Log.w(LOG_TAG, "Ignoring malformed iOS overflow result", it) }
+                .onFailure { MeshLog.w(MeshEngineConstants.LOG_TAG, "Ignoring malformed iOS overflow result", it) }
         }
 
         override fun onScanFailed(errorCode: Int) {
-            Log.w(LOG_TAG, "BitChat iOS overflow scan failed: $errorCode")
+            MeshLog.w(MeshEngineConstants.LOG_TAG, "BitChat iOS overflow scan failed: $errorCode")
             scheduleScanRetry()
         }
     }
@@ -3719,12 +3354,12 @@ internal class MeshEngine(
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             if (!genericPresenceScanEnabled || !running) return
             runCatching { handleGenericPresenceScanResult(result) }
-                .onFailure { Log.w(LOG_TAG, "Ignoring malformed generic BLE result", it) }
+                .onFailure { MeshLog.w(MeshEngineConstants.LOG_TAG, "Ignoring malformed generic BLE result", it) }
         }
 
         override fun onScanFailed(errorCode: Int) {
             if (!genericPresenceScanEnabled || !running) return
-            Log.w(LOG_TAG, "Generic BLE presence scan failed: $errorCode")
+            MeshLog.w(MeshEngineConstants.LOG_TAG, "Generic BLE presence scan failed: $errorCode")
             genericPresenceScanStopRunnable?.let(mainHandler::removeCallbacks)
             genericPresenceScanStopRunnable = null
             pauseGenericPresenceScanning()
@@ -3734,7 +3369,7 @@ internal class MeshEngine(
     @SuppressLint("MissingPermission")
     private fun handleMeshScanResult(result: ScanResult) {
         val serviceData = result.scanRecord
-            ?.getServiceData(ParcelUuid(SERVICE_UUID))
+            ?.getServiceData(ParcelUuid(MeshEngineConstants.SERVICE_UUID))
         val privateToken = RotatingAdvertiseToken.isPrivateToken(serviceData)
         val advertisedPeer = serviceData
             ?.takeUnless { privateToken }
@@ -3802,7 +3437,7 @@ internal class MeshEngine(
             rescueActive = discoveryUrgent && radarPeerId == null,
         )
         if (!OverflowAreaMatcher.hasAnyService(mask) ||
-            result.rssi < MIN_OVERFLOW_CANDIDATE_RSSI ||
+            result.rssi < MeshEngineConstants.MIN_OVERFLOW_CANDIDATE_RSSI ||
             !OverflowDiscoveryPolicy.shouldConsiderCandidate(
                 hasDisconnectedKnownPeer = hasDisconnectedKnownPeer(),
                 radarActive = radarPeerId != null,
@@ -3827,8 +3462,8 @@ internal class MeshEngine(
         knownDevices[address] = result.device
         knownDeviceLastSeenAt[address] = now
         overflowMaskByAddress[address] = mask.copyOf()
-        Log.i(
-            LOG_TAG,
+        MeshLog.i(
+            MeshEngineConstants.LOG_TAG,
             "iOS overflow candidate ${address.takeLast(5)} mask=${OverflowAreaMatcher.toHex(mask)}",
         )
         val connected = connectToDevice(
@@ -3936,7 +3571,7 @@ internal class MeshEngine(
                 BluetoothDevice.TRANSPORT_LE,
             )
         }.onFailure {
-            Log.w(LOG_TAG, "Unable to connect to ${address.takeLast(5)}", it)
+            MeshLog.w(MeshEngineConstants.LOG_TAG, "Unable to connect to ${address.takeLast(5)}", it)
         }.getOrNull() ?: return false
         val existing = clientGatts.putIfAbsent(address, gatt)
         if (existing != null) {
@@ -3957,8 +3592,8 @@ internal class MeshEngine(
         if (learnedIosOverflowBit != null) return
         val learnedBit = OverflowAreaMatcher.singleSetBit(mask) ?: return
         learnedIosOverflowBit = learnedBit
-        relationshipPreferences.edit().putInt(KEY_IOS_OVERFLOW_BIT, learnedBit).apply()
-        Log.i(LOG_TAG, "Learned iOS overflow service bit $learnedBit")
+        relationshipPreferences.edit().putInt(MeshEngineConstants.KEY_IOS_OVERFLOW_BIT, learnedBit).apply()
+        MeshLog.i(MeshEngineConstants.LOG_TAG, "Learned iOS overflow service bit $learnedBit")
     }
 
     @SuppressLint("MissingPermission")
@@ -3996,7 +3631,7 @@ internal class MeshEngine(
         reconnectPeerByAddress[address] = disconnectedPeer
         if (addressToPeer.values.none { it == disconnectedPeer }) {
             if (noiseSessions.isEstablished(disconnectedPeer)) {
-                rememberSessionPeer(disconnectedPeer)
+                sessionPeerHistory.remember(disconnectedPeer)
             }
             noiseSessions.invalidate(disconnectedPeer)
             noiseFailureTracker.clear(disconnectedPeer)
@@ -4031,7 +3666,7 @@ internal class MeshEngine(
         val now = System.currentTimeMillis()
         if (immediate) clearAutoReconnectBackoff(address)
         val expiry = autoReconnectExpiryByAddress.compute(address) { _, existing ->
-            existing?.takeIf { it > now } ?: now + AUTO_RECONNECT_WINDOW_MS
+            existing?.takeIf { it > now } ?: now + MeshEngineConstants.AUTO_RECONNECT_WINDOW_MS
         } ?: return
         if (expiry <= now) {
             clearAutoReconnectBackoff(address)
@@ -4039,7 +3674,7 @@ internal class MeshEngine(
         }
         if (
             clientGatts.containsKey(address) ||
-            autoReconnectAddresses.size >= MAX_AUTO_RECONNECTS ||
+            autoReconnectAddresses.size >= MeshEngineConstants.MAX_AUTO_RECONNECTS ||
             !autoReconnectScheduledAddresses.add(address)
         ) {
             return
@@ -4097,8 +3732,8 @@ internal class MeshEngine(
         autoReconnectFailuresByAddress[address] = 0
         autoReconnectCooldownUntil[address] =
             System.currentTimeMillis() + ReconnectBackoffPolicy.COOLDOWN_MS
-        Log.w(
-            LOG_TAG,
+        MeshLog.w(
+            MeshEngineConstants.LOG_TAG,
             "GATT reconnect ${address.takeLast(5)} cooling down after $failures failures",
         )
     }
@@ -4150,12 +3785,7 @@ internal class MeshEngine(
             tentativeRadarReads.entries.removeIf { it.value == peerId }
             addressToPeer.entries.removeIf { it.value == peerId }
             reconnectPeerByAddress.entries.removeIf { it.value == peerId }
-            synchronized(syncPackets) {
-                syncPackets.entries.removeIf { (_, packet) ->
-                    packet.type == MeshProtocol.TYPE_ANNOUNCE &&
-                        MeshProtocol.hex(packet.senderId) == peerId
-                }
-            }
+            syncStore.removeAnnouncementsForPeer(peerId)
         }
 
         val protectedDeviceAddresses = buildSet {
@@ -4201,7 +3831,7 @@ internal class MeshEngine(
             serverMaximumGattValueSizes.remove(address)
             clearServerDeliveryState(address)
             lastSyncRequestByAddress.remove(address)
-            syncResponseTimes.remove(address)
+            syncStore.removeRateLimitForAddress(address)
             tentativeRadarReads.remove(address)
         }
 
@@ -4229,7 +3859,7 @@ internal class MeshEngine(
                 ),
             )
         }.also {
-            mainHandler.postDelayed(it, GENERIC_PRESENCE_EMIT_INTERVAL_MS)
+            mainHandler.postDelayed(it, MeshEngineConstants.GENERIC_PRESENCE_EMIT_INTERVAL_MS)
         }
     }
 
@@ -4245,7 +3875,7 @@ internal class MeshEngine(
                 knownDeviceLastSeenAt[gatt.device.address] = System.currentTimeMillis()
                 clientMaximumGattValueSizes.putIfAbsent(
                     gatt.device.address,
-                    DEFAULT_GATT_VALUE_SIZE,
+                    MeshEngineConstants.DEFAULT_GATT_VALUE_SIZE,
                 )
                 if (!gatt.requestMtu(MeshPacketFragmenter.MAX_ATT_MTU)) gatt.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
@@ -4263,8 +3893,8 @@ internal class MeshEngine(
                 val wasAutoReconnect = autoReconnectAddresses.remove(address)
                 recordAutoReconnectFailure(address, wasAutoReconnect)
                 if (status != BluetoothGatt.GATT_SUCCESS) {
-                    Log.w(
-                        LOG_TAG,
+                    MeshLog.w(
+                        MeshEngineConstants.LOG_TAG,
                         "GATT ${address.takeLast(5)} disconnected status=$status",
                     )
                 }
@@ -4272,7 +3902,7 @@ internal class MeshEngine(
                 clientMaximumGattValueSizes.remove(address)
                 clientReady.remove(address)
                 lastSyncRequestByAddress.remove(address)
-                syncResponseTimes.remove(address)
+                syncStore.removeRateLimitForAddress(address)
                 clearClientDeliveryState(address, gatt)
                 handleDirectLinkLost(address)
                 rescheduleKeepAlive()
@@ -4297,8 +3927,8 @@ internal class MeshEngine(
                 rejectClientConnection(gatt)
                 return
             }
-            val characteristic = gatt.getService(SERVICE_UUID)
-                ?.getCharacteristic(CHARACTERISTIC_UUID)
+            val characteristic = gatt.getService(MeshEngineConstants.SERVICE_UUID)
+                ?.getCharacteristic(MeshEngineConstants.CHARACTERISTIC_UUID)
             if (characteristic == null) {
                 rejectClientConnection(gatt)
                 return
@@ -4306,7 +3936,7 @@ internal class MeshEngine(
             acceptOverflowCandidate(gatt.device.address)
             clientCharacteristics[gatt.device.address] = characteristic
             gatt.setCharacteristicNotification(characteristic, true)
-            val descriptor = characteristic.getDescriptor(CLIENT_CONFIGURATION_UUID)
+            val descriptor = characteristic.getDescriptor(MeshEngineConstants.CLIENT_CONFIGURATION_UUID)
             if (descriptor != null) {
                 val descriptorStarted = if (Build.VERSION.SDK_INT >= 33) {
                     gatt.writeDescriptor(
@@ -4335,12 +3965,12 @@ internal class MeshEngine(
             status: Int,
         ) {
             if (clientGatts[gatt.device.address] !== gatt) return
-            if (descriptor.uuid == CLIENT_CONFIGURATION_UUID) {
+            if (descriptor.uuid == MeshEngineConstants.CLIENT_CONFIGURATION_UUID) {
                 val characteristic = clientCharacteristics[gatt.device.address] ?: return
                 markClientReady(gatt.device.address, gatt, characteristic)
                 if (status != BluetoothGatt.GATT_SUCCESS) {
-                    Log.w(
-                        LOG_TAG,
+                    MeshLog.w(
+                        MeshEngineConstants.LOG_TAG,
                         "CCCD write failed for ${gatt.device.address.takeLast(5)}: $status",
                     )
                 }
@@ -4354,7 +3984,7 @@ internal class MeshEngine(
             status: Int,
         ) {
             if (clientGatts[gatt.device.address] !== gatt) return
-            if (characteristic.uuid == CHARACTERISTIC_UUID) {
+            if (characteristic.uuid == MeshEngineConstants.CHARACTERISTIC_UUID) {
                 handleClientWriteResult(
                     gatt.device.address,
                     gatt,
@@ -4389,8 +4019,8 @@ internal class MeshEngine(
             if (clientGatts[address] !== gatt) return
             val tentativeTarget = tentativeRadarReads.remove(address)
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                Log.w(
-                    LOG_TAG,
+                MeshLog.w(
+                    MeshEngineConstants.LOG_TAG,
                     "Radar: RSSI read failed on ${address.takeLast(5)} status=$status",
                 )
                 return
@@ -4413,13 +4043,13 @@ internal class MeshEngine(
                 serverConnectedAddresses.add(device.address)
                 knownDevices[device.address] = device
                 knownDeviceLastSeenAt[device.address] = System.currentTimeMillis()
-                serverMaximumGattValueSizes.putIfAbsent(device.address, DEFAULT_GATT_VALUE_SIZE)
+                serverMaximumGattValueSizes.putIfAbsent(device.address, MeshEngineConstants.DEFAULT_GATT_VALUE_SIZE)
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 serverConnectedAddresses.remove(device.address)
                 serverSubscribers.remove(device)
                 serverMaximumGattValueSizes.remove(device.address)
                 lastSyncRequestByAddress.remove(device.address)
-                syncResponseTimes.remove(device.address)
+                syncStore.removeRateLimitForAddress(device.address)
                 clearServerDeliveryState(device.address)
                 handleDirectLinkLost(device.address)
                 rescheduleKeepAlive()
@@ -4441,7 +4071,7 @@ internal class MeshEngine(
             offset: Int,
             value: ByteArray,
         ) {
-            if (characteristic.uuid == CHARACTERISTIC_UUID && offset == 0) {
+            if (characteristic.uuid == MeshEngineConstants.CHARACTERISTIC_UUID && offset == 0) {
                 receive(value, device.address)
             }
             if (responseNeeded) {
@@ -4459,12 +4089,12 @@ internal class MeshEngine(
             offset: Int,
             value: ByteArray,
         ) {
-            if (descriptor.uuid == CLIENT_CONFIGURATION_UUID) {
+            if (descriptor.uuid == MeshEngineConstants.CLIENT_CONFIGURATION_UUID) {
                 if (BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE.contentEquals(value)) {
                     serverSubscribers.add(device)
                     serverMaximumGattValueSizes.putIfAbsent(
                         device.address,
-                        DEFAULT_GATT_VALUE_SIZE,
+                        MeshEngineConstants.DEFAULT_GATT_VALUE_SIZE,
                     )
                 } else {
                     serverSubscribers.remove(device)
@@ -4476,7 +4106,7 @@ internal class MeshEngine(
             if (responseNeeded) {
                 gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
             }
-            if (descriptor.uuid == CLIENT_CONFIGURATION_UUID) {
+            if (descriptor.uuid == MeshEngineConstants.CLIENT_CONFIGURATION_UUID) {
                 mainHandler.post {
                     sendHearthBitLinkProof(device.address)
                     sendAnnouncement()
@@ -4488,8 +4118,8 @@ internal class MeshEngine(
             val server = gattServer ?: return
             val characteristic = serverCharacteristic ?: return
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                Log.w(
-                    LOG_TAG,
+                MeshLog.w(
+                    MeshEngineConstants.LOG_TAG,
                     "Server notification failed for ${device.address.takeLast(5)}: $status",
                 )
             }
@@ -4576,7 +4206,7 @@ internal class MeshEngine(
     }
 
     private fun isMeshAdvertisement(record: ScanRecord): Boolean {
-        val service = ParcelUuid(SERVICE_UUID)
+        val service = ParcelUuid(MeshEngineConstants.SERVICE_UUID)
         return record.serviceUuids?.contains(service) == true ||
             record.serviceData.containsKey(service)
     }
@@ -4630,65 +4260,5 @@ internal class MeshEngine(
         }
 
         return output.toByteArray()
-    }
-
-    private companion object {
-        /** Techo del plano de control BLE; los blobs van por otros transportes. */
-        const val MAX_TRANSFER_FRAME = 2_048
-
-        /** Cadencia de lectura RSSI sobre GATT conectado en modo radar. */
-        const val RADAR_READ_INTERVAL_MS = 500L
-        const val BEACON_REPLAY_WINDOW_MS = 10 * 60_000L
-        const val EMERGENCY_ACK_WINDOW_MS = 48 * 60 * 60 * 1_000L
-        const val MAX_PENDING_BEACON_REQUESTS = 1
-
-        const val ADVERTISE_TIMEOUT_MS = 10_000L
-        const val MAX_ADVERTISE_RETRIES = 1
-        const val MAX_PENDING_GATT_WRITES = 256
-        const val MAX_BLE_CONNECTIONS = 8
-        const val BLE_LINK_COST = 10
-        const val LAN_LINK_COST = 2
-        const val DEFAULT_GATT_VALUE_SIZE =
-            MeshPacketFragmenter.DEFAULT_ATT_MTU - MeshPacketFragmenter.ATT_PROTOCOL_OVERHEAD
-        const val SYNC_REQUEST_COOLDOWN_MS = 60_000L
-        const val SYNC_STORE_CAPACITY = 80
-        const val SYNC_MAX_REPLAY = 40
-        const val SYNC_RATE_MAX_RESPONSES = 8
-        const val SYNC_RATE_WINDOW_MS = 30_000L
-        const val SYNC_ANNOUNCE_WINDOW_MS = 15 * 60 * 1_000L
-        const val SYNC_MESSAGE_WINDOW_MS = 6 * 60 * 60 * 1_000L
-        const val SYNC_FUTURE_SKEW_MS = 15 * 60 * 1_000L
-        const val ROLE_TRANSITION_DELAY_MS = 750L
-        const val GENERIC_PRESENCE_EMIT_INTERVAL_MS = 1_000L
-        const val HANDSHAKE_RETRY_THROTTLE_MS = 5_000L
-        const val HANDSHAKE_CLEANUP_INTERVAL_MS = 10_000L
-        const val RECOVERY_SCAN_BURST_MS = 15_000L
-        const val SCAN_REARM_DELAY_MS = 750L
-        const val MAX_SCAN_RETRY_ATTEMPTS = 5
-        const val AUTO_RECONNECT_WINDOW_MS = 12 * 60_000L
-        const val MAX_AUTO_RECONNECTS = 3
-        const val MIN_OVERFLOW_CANDIDATE_RSSI = -90
-        const val IOS_OVERFLOW_TYPE: Byte = 0x01
-        const val MAX_REMEMBERED_SESSION_PEERS = 256
-        const val PRIVATE_ANNOUNCE_TTL: Byte = 1
-        const val RELATIONSHIP_PREFERENCES = "hearthbit_mesh_relationships"
-        const val RELATIONSHIP_SECURE_STORE = "hearthbit_mesh_relationships_secure"
-        const val KEY_SESSION_PEERS = "session_peers"
-        const val KEY_IOS_OVERFLOW_BIT = "ios_overflow_service_bit"
-
-        const val LOG_TAG = "HearthBitMesh"
-        val IDENTITY_PACKET_TYPES = setOf(
-            MeshProtocol.TYPE_ANNOUNCE,
-            MeshProtocol.TYPE_HBT_CAPABILITY,
-            MeshProtocol.TYPE_EMERGENCY_CAPABILITY,
-            MeshProtocol.TYPE_NODE_CAPABILITY,
-        )
-
-        val SERVICE_UUID: UUID =
-            UUID.fromString("F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C")
-        val CHARACTERISTIC_UUID: UUID =
-            UUID.fromString("A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D")
-        val CLIENT_CONFIGURATION_UUID: UUID =
-            UUID.fromString("00002902-0000-1000-8000-00805F9B34FB")
     }
 }
