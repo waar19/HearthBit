@@ -33,7 +33,8 @@ enum IOSPowerProfile: String {
     switch self {
     case .critical: return 3
     case .survival: return 0
-    case .performance, .balanced, .powerSaver: return .max
+    case .performance, .balanced, .powerSaver:
+      return IOSBLENeighborSelectionPolicy.maximumNeighbors
     }
   }
 
@@ -53,6 +54,74 @@ enum IOSPowerProfile: String {
     if charging { return .balanced }
     if battery <= 40 { return .powerSaver }
     return .balanced
+  }
+}
+
+struct IOSBLENeighborCandidate: Equatable {
+  let identifier: UUID
+  let rssi: Int
+  let knownPeer: Bool
+  let preferred: Bool
+  let protected: Bool
+}
+
+enum IOSBLENeighborSelectionDecision: Equatable {
+  case accept
+  case reject
+  case replace(UUID)
+}
+
+enum IOSBLENeighborSelectionPolicy {
+  static let maximumNeighbors = 8
+  static let maximumSubscribedCentrals = 8
+  static let replacementRSSIMargin = 12
+
+  static func decision(
+    candidate: IOSBLENeighborCandidate,
+    current: [IOSBLENeighborCandidate],
+    maximum: Int = maximumNeighbors
+  ) -> IOSBLENeighborSelectionDecision {
+    guard maximum > 0 else { return .reject }
+    guard !current.contains(where: { $0.identifier == candidate.identifier }) else {
+      return .reject
+    }
+    guard current.count >= maximum else { return .accept }
+    guard
+      let worst = current
+        .filter { !$0.protected && !$0.preferred }
+        .min(by: isWorse)
+    else { return .reject }
+    guard isClearlyBetter(candidate, than: worst) else { return .reject }
+    return .replace(worst.identifier)
+  }
+
+  private static func isWorse(
+    _ lhs: IOSBLENeighborCandidate,
+    _ rhs: IOSBLENeighborCandidate
+  ) -> Bool {
+    let lhsPriority = priority(lhs)
+    let rhsPriority = priority(rhs)
+    if lhsPriority != rhsPriority { return lhsPriority < rhsPriority }
+    if lhs.rssi != rhs.rssi { return lhs.rssi < rhs.rssi }
+    return lhs.identifier.uuidString < rhs.identifier.uuidString
+  }
+
+  private static func isClearlyBetter(
+    _ candidate: IOSBLENeighborCandidate,
+    than current: IOSBLENeighborCandidate
+  ) -> Bool {
+    let candidatePriority = priority(candidate)
+    let currentPriority = priority(current)
+    if candidatePriority != currentPriority {
+      return candidatePriority > currentPriority
+    }
+    let threshold = current.rssi.addingReportingOverflow(replacementRSSIMargin)
+    return !threshold.overflow && candidate.rssi >= threshold.partialValue
+  }
+
+  private static func priority(_ candidate: IOSBLENeighborCandidate) -> Int {
+    if candidate.preferred { return 2 }
+    return candidate.knownPeer ? 1 : 0
   }
 }
 

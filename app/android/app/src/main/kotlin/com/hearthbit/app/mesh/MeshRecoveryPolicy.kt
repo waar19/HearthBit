@@ -47,16 +47,12 @@ internal class NoiseFailureRecoveryTracker(
 
 internal object ConnectionPriorityPolicy {
     /**
-     * En perfiles limitados reserva el último slot saliente para una relación
-     * conocida. Nunca excede el máximo y no afecta conexiones GATT entrantes.
+     * La selección de vecinos ya ordena y reemplaza por relación/RSSI. Esta
+     * comprobación final evita exceder el máximo ante callbacks concurrentes.
      */
     fun canOpenClientConnection(
         maximumConnections: Int,
         activeConnections: Int,
-        knownPeer: Boolean,
-    ): Boolean {
-        if (maximumConnections <= 0 || activeConnections >= maximumConnections) return false
-        if (knownPeer || maximumConnections == Int.MAX_VALUE) return true
-        return activeConnections < maximumConnections - 1
-    }
+        @Suppress("UNUSED_PARAMETER") knownPeer: Boolean,
+    ): Boolean = maximumConnections > 0 && activeConnections < maximumConnections
 }

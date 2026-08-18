@@ -88,6 +88,7 @@ internal class MeshEngine(
     private val clientGatts = ConcurrentHashMap<String, BluetoothGatt>()
     private val knownDevices = ConcurrentHashMap<String, BluetoothDevice>()
     private val knownDeviceLastSeenAt = ConcurrentHashMap<String, Long>()
+    private val latestDiscoveryRssi = ConcurrentHashMap<String, Int>()
     private val reconnectPeerByAddress = ConcurrentHashMap<String, String>()
     private val autoReconnectExpiryByAddress = ConcurrentHashMap<String, Long>()
     private val autoReconnectFailuresByAddress = ConcurrentHashMap<String, Int>()
@@ -107,6 +108,7 @@ internal class MeshEngine(
     private val clientReady = ConcurrentHashMap.newKeySet<String>()
     private val serverConnectedAddresses = ConcurrentHashMap.newKeySet<String>()
     private val serverSubscribers = ConcurrentHashMap.newKeySet<BluetoothDevice>()
+    private val serverConnectionLimitLock = Any()
     private val serverMaximumGattValueSizes = ConcurrentHashMap<String, Int>()
     private val storeForward = StoreForwardCache(context)
     private val emergencyFingerprints = EmergencyFingerprintCache(context)
@@ -263,6 +265,7 @@ internal class MeshEngine(
     private var handshakeCleanupRunnable: Runnable? = null
     private var scanWatchdogRunnable: Runnable? = null
     private var scanRetryRunnable: Runnable? = null
+    private var neighborSelectionRunnable: Runnable? = null
     private var keepAliveRunnable: Runnable? = null
     private var emergencyRebroadcastRunnable: Runnable? = null
     private var meshScanRunning = false
@@ -435,6 +438,8 @@ internal class MeshEngine(
         if (gattServer == null) startGattServer()
         scanRetryRunnable?.let(mainHandler::removeCallbacks)
         scanRetryRunnable = null
+        neighborSelectionRunnable?.let(mainHandler::removeCallbacks)
+        neighborSelectionRunnable = null
         cancelRecoveryScanBurst()
         cancelAdaptiveScanning()
         stopBleScans()
@@ -637,6 +642,8 @@ internal class MeshEngine(
         scanWatchdogRunnable = null
         scanRetryRunnable?.let(mainHandler::removeCallbacks)
         scanRetryRunnable = null
+        neighborSelectionRunnable?.let(mainHandler::removeCallbacks)
+        neighborSelectionRunnable = null
         keepAliveRunnable?.let(mainHandler::removeCallbacks)
         keepAliveRunnable = null
         emergencyRebroadcastRunnable?.let(mainHandler::removeCallbacks)
@@ -648,6 +655,7 @@ internal class MeshEngine(
         clientGatts.clear()
         knownDevices.clear()
         knownDeviceLastSeenAt.clear()
+        latestDiscoveryRssi.clear()
         reconnectPeerByAddress.clear()
         autoReconnectExpiryByAddress.clear()
         autoReconnectFailuresByAddress.clear()
@@ -803,6 +811,8 @@ internal class MeshEngine(
         if (!running || localRole != MeshNodeRole.PHONE_BEACON) return
         stopBleScans()
         cancelRecoveryScanBurst()
+        neighborSelectionRunnable?.let(mainHandler::removeCallbacks)
+        neighborSelectionRunnable = null
         clientGatts.values.forEach { runCatching { it.close() } }
         clientGatts.clear()
         reconnectPeerByAddress.clear()
@@ -816,6 +826,7 @@ internal class MeshEngine(
         clientCharacteristics.clear()
         clientMaximumGattValueSizes.clear()
         clientReady.clear()
+        latestDiscoveryRssi.clear()
         gattDelivery.clearAllClientDeliveryState()
         serverConnectedAddresses.clear()
         serverSubscribers.clear()
@@ -3526,6 +3537,7 @@ internal class MeshEngine(
         }
         knownDevices[address] = result.device
         knownDeviceLastSeenAt[address] = System.currentTimeMillis()
+        latestDiscoveryRssi[address] = result.rssi
         val advertisedPeerId = advertisedPeer?.let(MeshProtocol::hex)
         if (advertisedPeer != null) {
             addressToPeer[address] = checkNotNull(advertisedPeerId)
@@ -3535,10 +3547,7 @@ internal class MeshEngine(
             emitRssi(radarTarget, result.rssi)
         }
         if (clientGatts.containsKey(address)) return
-        val knownPeer = advertisedPeerId?.let { peerId ->
-            peers.containsKey(peerId) || isKnownRelationship(peerId)
-        } == true
-        connectToDevice(result.device, autoConnect = false, knownPeer = knownPeer)
+        scheduleNeighborSelection()
     }
 
     @SuppressLint("MissingPermission")
@@ -3684,6 +3693,90 @@ internal class MeshEngine(
         val activeAddresses = clientReady.toSet() + serverSubscribers.map { it.address }
         val activePeerIds = activeAddresses.mapNotNull(addressToPeer::get).toSet()
         return knownPeerIds.any { it !in activePeerIds }
+    }
+
+    private fun scheduleNeighborSelection(
+        delayMs: Long = BleNeighborSelectionPolicy.SELECTION_WINDOW_MS,
+    ) {
+        if (!running || neighborSelectionRunnable != null) return
+        neighborSelectionRunnable = Runnable {
+            neighborSelectionRunnable = null
+            selectAndConnectBleNeighbor()
+        }.also { mainHandler.postDelayed(it, delayMs) }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun selectAndConnectBleNeighbor() {
+        if (!running || localRole == MeshNodeRole.PHONE_BEACON) return
+        val active = clientGatts.keys.map { address ->
+            val peerId = peerIdForAddress(address)
+            val hasRssi = latestDiscoveryRssi.containsKey(address)
+            BleNeighborCandidate(
+                address = address,
+                rssi = latestDiscoveryRssi[address] ?: Int.MIN_VALUE,
+                knownRelationship = peerId?.let(::isKnownRelationship) == true,
+                protected = !hasRssi || hasProtectedClientWork(address, peerId),
+            )
+        }
+        val discovered = latestDiscoveryRssi.mapNotNull { (address, rssi) ->
+            if (!knownDevices.containsKey(address)) return@mapNotNull null
+            val peerId = peerIdForAddress(address)
+            BleNeighborCandidate(
+                address = address,
+                rssi = rssi,
+                knownRelationship = peerId?.let(::isKnownRelationship) == true,
+            )
+        }
+        val selection = BleNeighborSelectionPolicy.select(
+            maximumConnections = powerProfile.maximumClientConnections,
+            active = active,
+            discovered = discovered,
+        ) ?: return
+        val replacement = selection.replaceAddress
+        if (replacement != null) {
+            disconnectClientForNeighborReplacement(replacement)
+            scheduleNeighborSelection(BleNeighborSelectionPolicy.REPLACEMENT_DELAY_MS)
+            return
+        }
+        val device = knownDevices[selection.connectAddress] ?: return
+        val peerId = peerIdForAddress(selection.connectAddress)
+        val connected = connectToDevice(
+            device = device,
+            autoConnect = false,
+            knownPeer = peerId?.let { peers.containsKey(it) || isKnownRelationship(it) } == true,
+        )
+        if (!connected) latestDiscoveryRssi.remove(selection.connectAddress)
+    }
+
+    private fun peerIdForAddress(address: String): String? =
+        addressToPeer[address] ?: reconnectPeerByAddress[address]
+
+    private fun hasProtectedClientWork(address: String, peerId: String?): Boolean =
+        gattDelivery.hasPendingClientWrites(address) ||
+            peerId?.let { id ->
+                isKnownRelationship(id) ||
+                    noiseSessions.isEstablished(id) ||
+                    hasPendingRelationship(id) ||
+                    radarPeerId == id ||
+                    activeBeaconRequest?.peerId == id ||
+                    outgoingBeaconRequests.values.any { it.peerId == id } ||
+                    pendingBeaconRequests.values.any { it.peerId == id }
+            } == true
+
+    @SuppressLint("MissingPermission")
+    private fun disconnectClientForNeighborReplacement(address: String) {
+        val gatt = clientGatts[address] ?: return
+        MeshLog.i(
+            MeshEngineConstants.LOG_TAG,
+            "Replacing weaker BLE neighbor ${address.takeLast(5)}",
+        )
+        rejectClientConnection(gatt)
+        autoReconnectExpiryByAddress.remove(address)
+        autoReconnectFailuresByAddress.remove(address)
+        autoReconnectCooldownUntil.remove(address)
+        autoReconnectAddresses.remove(address)
+        autoReconnectScheduledAddresses.remove(address)
+        reconnectPeerByAddress.remove(address)
     }
 
     @SuppressLint("MissingPermission")
@@ -3946,6 +4039,7 @@ internal class MeshEngine(
         evictedAddresses.forEach { address ->
             knownDevices.remove(address)
             knownDeviceLastSeenAt.remove(address)
+            latestDiscoveryRssi.remove(address)
             addressToPeer.remove(address)
             reconnectPeerByAddress.remove(address)
             autoReconnectExpiryByAddress.remove(address)
@@ -4167,18 +4261,83 @@ internal class MeshEngine(
         }
     }
 
+    private fun serverConnectionCandidate(address: String): ServerConnectionCandidate {
+        val peerId = peerIdForAddress(address)
+        return ServerConnectionCandidate(
+            address = address,
+            knownRelationship = peerId?.let(::isKnownRelationship) == true,
+            protected = gattDelivery.hasPendingServerNotifications(address) ||
+                peerId?.let { id ->
+                    noiseSessions.isEstablished(id) ||
+                        hasPendingRelationship(id) ||
+                        radarPeerId == id ||
+                        activeBeaconRequest?.peerId == id
+                } == true,
+        )
+    }
+
+    private fun serverAdmission(
+        activeAddresses: Collection<String>,
+        incomingAddress: String,
+    ): ServerConnectionAdmission = ServerConnectionLimitPolicy.admit(
+        maximumConnections = MeshEngineConstants.MAX_BLE_CONNECTIONS,
+        active = activeAddresses.map(::serverConnectionCandidate),
+        incoming = serverConnectionCandidate(incomingAddress),
+    )
+
+    @SuppressLint("MissingPermission")
+    private fun disconnectServerLink(address: String) {
+        val device = serverSubscribers.firstOrNull { it.address == address }
+            ?: knownDevices[address]
+            ?: return
+        synchronized(serverConnectionLimitLock) {
+            serverConnectedAddresses.remove(address)
+            serverSubscribers.removeIf { it.address == address }
+        }
+        serverMaximumGattValueSizes.remove(address)
+        clearServerDeliveryState(address)
+        runCatching { gattServer?.cancelConnection(device) }
+            .onFailure {
+                MeshLog.w(
+                    MeshEngineConstants.LOG_TAG,
+                    "Unable to disconnect excess GATT server link ${address.takeLast(5)}",
+                    it,
+                )
+            }
+    }
+
     private val serverCallback = object : BluetoothGattServerCallback() {
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
+                val accepted = synchronized(serverConnectionLimitLock) {
+                    val admission = serverAdmission(serverConnectedAddresses, device.address)
+                    if (admission.accepted) {
+                        admission.replaceAddress?.let(::disconnectServerLink)
+                        serverConnectedAddresses.add(device.address)
+                    }
+                    admission.accepted
+                }
+                if (!accepted) {
+                    MeshLog.w(
+                        MeshEngineConstants.LOG_TAG,
+                        "Rejecting excess GATT server link ${device.address.takeLast(5)}",
+                    )
+                    runCatching { gattServer?.cancelConnection(device) }
+                    return
+                }
                 clearServerDeliveryState(device.address)
-                serverConnectedAddresses.add(device.address)
                 knownDevices[device.address] = device
                 knownDeviceLastSeenAt[device.address] = System.currentTimeMillis()
-                serverMaximumGattValueSizes.putIfAbsent(device.address, MeshEngineConstants.DEFAULT_GATT_VALUE_SIZE)
+                serverMaximumGattValueSizes.putIfAbsent(
+                    device.address,
+                    MeshEngineConstants.DEFAULT_GATT_VALUE_SIZE,
+                )
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                serverConnectedAddresses.remove(device.address)
-                serverSubscribers.remove(device)
+                synchronized(serverConnectionLimitLock) {
+                    serverConnectedAddresses.remove(device.address)
+                    serverSubscribers.remove(device)
+                }
                 serverMaximumGattValueSizes.remove(device.address)
                 lastSyncRequestByAddress.remove(device.address)
                 syncStore.removeRateLimitForAddress(device.address)
@@ -4221,24 +4380,45 @@ internal class MeshEngine(
             offset: Int,
             value: ByteArray,
         ) {
+            var responseStatus = BluetoothGatt.GATT_SUCCESS
+            var subscriptionAccepted = true
             if (descriptor.uuid == MeshEngineConstants.CLIENT_CONFIGURATION_UUID) {
                 if (BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE.contentEquals(value)) {
-                    serverSubscribers.add(device)
-                    serverMaximumGattValueSizes.putIfAbsent(
-                        device.address,
-                        MeshEngineConstants.DEFAULT_GATT_VALUE_SIZE,
-                    )
+                    subscriptionAccepted = synchronized(serverConnectionLimitLock) {
+                        val admission = serverAdmission(
+                            activeAddresses = serverSubscribers.map { it.address },
+                            incomingAddress = device.address,
+                        )
+                        if (admission.accepted) {
+                            admission.replaceAddress?.let(::disconnectServerLink)
+                            serverSubscribers.add(device)
+                        }
+                        admission.accepted
+                    }
+                    if (subscriptionAccepted) {
+                        serverMaximumGattValueSizes.putIfAbsent(
+                            device.address,
+                            MeshEngineConstants.DEFAULT_GATT_VALUE_SIZE,
+                        )
+                    } else {
+                        responseStatus = BluetoothGatt.GATT_FAILURE
+                        runCatching { gattServer?.cancelConnection(device) }
+                    }
                 } else {
-                    serverSubscribers.remove(device)
+                    synchronized(serverConnectionLimitLock) {
+                        serverSubscribers.remove(device)
+                    }
                     clearServerDeliveryState(device.address)
                 }
                 notifyNotificationObserver()
                 rescheduleKeepAlive()
             }
             if (responseNeeded) {
-                gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
+                gattServer?.sendResponse(device, requestId, responseStatus, 0, null)
             }
-            if (descriptor.uuid == MeshEngineConstants.CLIENT_CONFIGURATION_UUID) {
+            if (descriptor.uuid == MeshEngineConstants.CLIENT_CONFIGURATION_UUID &&
+                subscriptionAccepted
+            ) {
                 mainHandler.post {
                     sendHearthBitLinkProof(device.address)
                     sendAnnouncement()

@@ -460,6 +460,150 @@ class RunnerTests: XCTestCase {
     )
   }
 
+  func testBLEConnectionAndSubscriptionMaximumsAreEight() {
+    XCTAssertEqual(IOSPowerProfile.performance.maximumOutgoingConnections, 8)
+    XCTAssertEqual(IOSPowerProfile.balanced.maximumOutgoingConnections, 8)
+    XCTAssertEqual(IOSPowerProfile.powerSaver.maximumOutgoingConnections, 8)
+    XCTAssertEqual(IOSPowerProfile.critical.maximumOutgoingConnections, 3)
+    XCTAssertEqual(IOSPowerProfile.survival.maximumOutgoingConnections, 0)
+    XCTAssertEqual(IOSBLENeighborSelectionPolicy.maximumNeighbors, 8)
+    XCTAssertEqual(IOSBLENeighborSelectionPolicy.maximumSubscribedCentrals, 8)
+  }
+
+  func testBLENeighborPolicyPrioritizesKnownPeersBeforeRSSI() {
+    let current = (0..<8).map {
+      IOSBLENeighborCandidate(
+        identifier: UUID(),
+        rssi: -80 + $0,
+        knownPeer: false,
+        preferred: false,
+        protected: false
+      )
+    }
+    let knownCandidate = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -100,
+      knownPeer: true,
+      preferred: false,
+      protected: false
+    )
+
+    XCTAssertEqual(
+      IOSBLENeighborSelectionPolicy.decision(
+        candidate: knownCandidate,
+        current: current
+      ),
+      .replace(current[0].identifier)
+    )
+  }
+
+  func testBLENeighborPolicyUsesRSSIHysteresisWithinSamePriority() {
+    let current = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -80,
+      knownPeer: false,
+      preferred: false,
+      protected: false
+    )
+    let almostBetter = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -69,
+      knownPeer: false,
+      preferred: false,
+      protected: false
+    )
+    let clearlyBetter = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -68,
+      knownPeer: false,
+      preferred: false,
+      protected: false
+    )
+
+    XCTAssertEqual(
+      IOSBLENeighborSelectionPolicy.decision(
+        candidate: almostBetter,
+        current: [current],
+        maximum: 1
+      ),
+      .reject
+    )
+    XCTAssertEqual(
+      IOSBLENeighborSelectionPolicy.decision(
+        candidate: clearlyBetter,
+        current: [current],
+        maximum: 1
+      ),
+      .replace(current.identifier)
+    )
+  }
+
+  func testBLENeighborPolicyNeverEvictsProtectedOrPreferredNeighbor() {
+    let preferred = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -110,
+      knownPeer: true,
+      preferred: true,
+      protected: false
+    )
+    let session = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -105,
+      knownPeer: true,
+      preferred: false,
+      protected: true
+    )
+    let unknown = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -20,
+      knownPeer: false,
+      preferred: false,
+      protected: false
+    )
+
+    XCTAssertEqual(
+      IOSBLENeighborSelectionPolicy.decision(
+        candidate: unknown,
+        current: [preferred, session],
+        maximum: 2
+      ),
+      .reject
+    )
+  }
+
+  func testBLENeighborPolicyReplacesOnlyWorstUnprotectedNeighbor() {
+    let protected = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -120,
+      knownPeer: true,
+      preferred: false,
+      protected: true
+    )
+    let weak = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -90,
+      knownPeer: false,
+      preferred: false,
+      protected: false
+    )
+    let stronger = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -60,
+      knownPeer: false,
+      preferred: false,
+      protected: false
+    )
+
+    XCTAssertEqual(
+      IOSBLENeighborSelectionPolicy.decision(
+        candidate: stronger,
+        current: [protected, weak],
+        maximum: 2
+      ),
+      .replace(weak.identifier)
+    )
+  }
+
   func testAnnouncementClockPolicyAppliesStandardWindowBothDirections() {
     let now: UInt64 = 100_000_000
     let window = IOSAnnouncementClockPolicy.standardWindowMilliseconds

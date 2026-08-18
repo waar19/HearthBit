@@ -23,6 +23,11 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let type: CBCharacteristicWriteType
   }
 
+  private struct PendingNeighborReplacement {
+    let victimID: UUID
+    let candidate: CBPeripheral
+  }
+
   private static let serviceUUID = CBUUID(string: "F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C")
   private static let characteristicUUID = CBUUID(string: "A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D")
   private static let maximumPendingBLEFrames = 256
@@ -57,6 +62,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var knownMeshPeripherals: [UUID: CBPeripheral] = [:]
   private var preferredPeripheralIDs: Set<UUID> = []
   private var establishedPeripheralIDs: Set<UUID> = []
+  private var peripheralRSSI: [UUID: Int] = [:]
+  private var intentionalDisconnectPeripheralIDs: Set<UUID> = []
+  private var pendingNeighborReplacement: PendingNeighborReplacement?
   private var reconnectAttempts: [UUID: Int] = [:]
   private var reconnectTokens: [UUID: UUID] = [:]
   private var reconnectExhaustedUntil: [UUID: Date] = [:]
@@ -89,6 +97,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var centralWriteQueues: [UUID: IOSBLEPriorityQueue<PendingCentralWrite>] = [:]
   private var centralWritesInFlight: Set<UUID> = []
   private var peripheralNotifyQueues: [UUID: IOSBLEPriorityQueue<Data>] = [:]
+  // CoreBluetooth administra `subscribedCentrals` y no permite rechazar desde
+  // didSubscribeTo; este conjunto delimita las centrales que el servidor acepta.
+  private var acceptedSubscribedCentralIDs: Set<UUID> = []
   private let packetFragmenter = IOSMeshPacketFragmenter()
   private let fragmentReassembler = IOSMeshFragmentReassembler()
   private let genericPresenceTracker = IOSGenericBLEPresenceTracker.secure()
@@ -465,7 +476,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         if running {
           if privateMode {
             let linkIDs = Set(remoteCharacteristics.keys).union(
-              localCharacteristic?.subscribedCentrals?.map(\.identifier) ?? []
+              acceptedSubscribedCentralIDs
             )
             linkIDs.forEach { sendHearthBitLinkProof(to: $0) }
           } else {
@@ -1167,12 +1178,16 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     knownMeshPeripherals.removeAll()
     preferredPeripheralIDs.removeAll()
     establishedPeripheralIDs.removeAll()
+    peripheralRSSI.removeAll()
+    intentionalDisconnectPeripheralIDs.removeAll()
+    pendingNeighborReplacement = nil
     reconnectAttempts.removeAll()
     reconnectTokens.removeAll()
     reconnectExhaustedUntil.removeAll()
     centralWriteQueues.removeAll()
     centralWritesInFlight.removeAll()
     peripheralNotifyQueues.removeAll()
+    acceptedSubscribedCentralIDs.removeAll()
     peripheralPeers.removeAll()
     hearthbitProvenLinks.removeAll()
     peripheralManager?.stopAdvertising()
@@ -1275,12 +1290,16 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     knownMeshPeripherals.removeAll()
     preferredPeripheralIDs.removeAll()
     establishedPeripheralIDs.removeAll()
+    peripheralRSSI.removeAll()
+    intentionalDisconnectPeripheralIDs.removeAll()
+    pendingNeighborReplacement = nil
     reconnectAttempts.removeAll()
     reconnectTokens.removeAll()
     reconnectExhaustedUntil.removeAll()
     centralWriteQueues.removeAll()
     centralWritesInFlight.removeAll()
     peripheralNotifyQueues.removeAll()
+    acceptedSubscribedCentralIDs.removeAll()
     peripheralPeers.removeAll()
     hearthbitProvenLinks.removeAll()
     sessions.removeAll()
@@ -1333,6 +1352,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     peripheralManager.removeAllServices()
     localCharacteristic = nil
     peripheralNotifyQueues.removeAll()
+    acceptedSubscribedCentralIDs.removeAll()
 
     if localRole == .phoneBeacon {
       // CoreBluetooth no ofrece un flag para advertising no conectable. Sin
@@ -2463,7 +2483,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     }
     if let characteristic = localCharacteristic, let manager = peripheralManager {
       for central in characteristic.subscribedCentrals ?? []
-      where central.identifier != excluding &&
+      where acceptedSubscribedCentralIDs.contains(central.identifier) &&
+        central.identifier != excluding &&
         (!restrictIdentity || IOSMeshInteropPolicy.canSendIdentityToLink(
           privateMode: privateMode,
           hearthbitProven: hearthbitProvenLinks.contains(central.identifier),
@@ -2540,7 +2561,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     }
     if isOpenEmergencyLanPacket(packet) {
       let bleSent =
-        !(localCharacteristic?.subscribedCentrals?.isEmpty ?? true) ||
+        !acceptedSubscribedCentralIDs.isEmpty ||
         !remoteCharacteristics.isEmpty
       let lanSent =
         !suppressLanBridge &&
@@ -2615,6 +2636,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       if
         let characteristic = localCharacteristic,
         let manager = peripheralManager,
+        acceptedSubscribedCentralIDs.contains(identifier),
         let central = characteristic.subscribedCentrals?.first(where: {
           $0.identifier == identifier
         })
@@ -2658,6 +2680,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     if
       let characteristic = localCharacteristic,
       let manager = peripheralManager,
+      acceptedSubscribedCentralIDs.contains(identifier),
       let central = characteristic.subscribedCentrals?.first(where: {
         $0.identifier == identifier
       })
@@ -2681,6 +2704,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       localRole.allowsDataPlane,
       let manager = peripheralManager,
       let characteristic = localCharacteristic,
+      acceptedSubscribedCentralIDs.contains(central.identifier),
       characteristic.subscribedCentrals?.contains(where: {
         $0.identifier == central.identifier
       }) == true
@@ -2809,6 +2833,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   ) {
     guard !frames.isEmpty else { return }
     let identifier = central.identifier
+    guard acceptedSubscribedCentralIDs.contains(identifier) else { return }
     var queue = peripheralNotifyQueues[identifier] ?? IOSBLEPriorityQueue(
       normalCapacity: Self.maximumPendingBLEFrames,
       emergencyReserve: Self.emergencyBLEFrameReserve
@@ -2836,6 +2861,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     characteristic: CBMutableCharacteristic
   ) {
     guard
+      acceptedSubscribedCentralIDs.contains(identifier),
       let central = characteristic.subscribedCentrals?.first(where: {
         $0.identifier == identifier
       })
@@ -2880,7 +2906,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func receive(_ data: Data, source: UUID?) {
     if data == IOSMeshInteropPolicy.linkProof, let source {
       if hearthbitProvenLinks.insert(source).inserted {
-        if let central = localCharacteristic?.subscribedCentrals?.first(where: {
+        if acceptedSubscribedCentralIDs.contains(source),
+           let central = localCharacteristic?.subscribedCentrals?.first(where: {
           $0.identifier == source
         }) {
           sendSubscriptionAnnouncement(to: central, bypassCooldown: true)
@@ -4027,7 +4054,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func diagnosticSnapshot() -> [String: Any] {
     let scanning = central?.isScanning ?? false
     let advertising = peripheralManager?.isAdvertising ?? false
-    let subscribedCount = localCharacteristic?.subscribedCentrals?.count ?? 0
+    let subscribedCount = acceptedSubscribedCentralIDs.count
     let bleLinkCount = connectedPeripherals.count + subscribedCount
     var transports: [String] = []
     if scanning || advertising || bleLinkCount > 0 {
@@ -4120,6 +4147,78 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func rememberMeshPeripheral(_ peripheral: CBPeripheral) {
     knownMeshPeripherals[peripheral.identifier] = peripheral
     peripheral.delegate = self
+  }
+
+  private func neighborCandidate(
+    for peripheral: CBPeripheral,
+    rssi: Int? = nil
+  ) -> IOSBLENeighborCandidate {
+    let identifier = peripheral.identifier
+    let peerID = peripheralPeers[identifier]
+    let hasKnownPeer = preferredPeripheralIDs.contains(identifier) ||
+      (peerID.map {
+        peers[$0] != nil ||
+          peerIdentityPins.pin(for: $0) != nil ||
+          securePeerIDs.contains($0)
+      } ?? false)
+    let hasPreferredRelationship = peerID.map {
+      privateChatPeerIDs.contains($0) ||
+        !(pendingPrivate[$0] ?? []).isEmpty ||
+        !(pendingFrames[$0] ?? []).isEmpty ||
+        !(pendingCourier[$0] ?? []).isEmpty ||
+        radarPeerID == $0
+    } ?? false
+    let hasProtectedSession = peerID.map {
+      sessions[$0]?.established == true || sessions[$0]?.handshaking == true
+    } ?? false
+    return IOSBLENeighborCandidate(
+      identifier: identifier,
+      rssi: rssi ?? peripheralRSSI[identifier] ?? -127,
+      knownPeer: hasKnownPeer,
+      preferred: hasPreferredRelationship,
+      protected: hasProtectedSession || hasPreferredRelationship
+    )
+  }
+
+  private func considerDiscoveredPeripheral(
+    _ peripheral: CBPeripheral,
+    rssi: Int,
+    using central: CBCentralManager
+  ) {
+    let candidate = neighborCandidate(for: peripheral, rssi: rssi)
+    let current = connectedPeripherals.values.map { neighborCandidate(for: $0) }
+    switch IOSBLENeighborSelectionPolicy.decision(
+      candidate: candidate,
+      current: current,
+      maximum: powerProfile.maximumOutgoingConnections
+    ) {
+    case .accept:
+      connectKnownPeripheral(peripheral, using: central)
+    case .reject:
+      return
+    case .replace(let victimID):
+      guard
+        pendingNeighborReplacement == nil,
+        let victim = connectedPeripherals[victimID]
+      else { return }
+      pendingNeighborReplacement = PendingNeighborReplacement(
+        victimID: victimID,
+        candidate: peripheral
+      )
+      intentionalDisconnectPeripheralIDs.insert(victimID)
+      reconnectTokens.removeValue(forKey: victimID)
+      central.cancelPeripheralConnection(victim)
+    }
+  }
+
+  private func takeReplacementCandidate(for victimID: UUID) -> CBPeripheral? {
+    guard
+      intentionalDisconnectPeripheralIDs.remove(victimID) != nil,
+      pendingNeighborReplacement?.victimID == victimID
+    else { return nil }
+    let candidate = pendingNeighborReplacement?.candidate
+    pendingNeighborReplacement = nil
+    return candidate
   }
 
   private func connectKnownPeripheral(_ peripheral: CBPeripheral, using central: CBCentralManager) {
@@ -4235,9 +4334,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func handleDirectLinkLost(source: UUID) {
     let hasCentralLink = remoteCharacteristics[source] != nil &&
       connectedPeripherals[source]?.state == .connected
-    let hasPeripheralLink = localCharacteristic?.subscribedCentrals?.contains {
-      $0.identifier == source
-    } ?? false
+    let hasPeripheralLink = acceptedSubscribedCentralIDs.contains(source)
     guard !hasCentralLink, !hasPeripheralLink else { return }
     hearthbitProvenLinks.remove(source)
     guard let disconnectedPeer = peripheralPeers.removeValue(forKey: source) else { return }
@@ -4366,6 +4463,9 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
       return
     }
     rememberMeshPeripheral(peripheral)
+    if RSSI.intValue != 127 {
+      peripheralRSSI[peripheral.identifier] = RSSI.intValue
+    }
     if let serviceData = advertisementData[CBAdvertisementDataServiceDataKey] as? [CBUUID: Data],
        let advertisedPeer = serviceData[Self.serviceUUID],
        advertisedPeer.count >= 8 {
@@ -4387,7 +4487,11 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
       emitRssi(peerID: target, rssi: RSSI.intValue)
     }
     guard connectedPeripherals[peripheral.identifier] == nil else { return }
-    connectKnownPeripheral(peripheral, using: central)
+    considerDiscoveredPeripheral(
+      peripheral,
+      rssi: RSSI.intValue == 127 ? -127 : RSSI.intValue,
+      using: central
+    )
   }
 
   func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
@@ -4422,6 +4526,11 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
     let identifier = peripheral.identifier
     establishedPeripheralIDs.remove(identifier)
     clearCentralTransportState(identifier)
+    if let replacement = takeReplacementCandidate(for: identifier) {
+      guard running, localRole.allowsDataPlane else { return }
+      connectKnownPeripheral(replacement, using: central)
+      return
+    }
     guard running, localRole.allowsDataPlane else { return }
     scheduleReconnect(peripheral)
   }
@@ -4439,6 +4548,11 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
     let wasEstablished = establishedPeripheralIDs.remove(identifier) != nil
     clearCentralTransportState(identifier)
     handleDirectLinkLost(source: identifier)
+    if let replacement = takeReplacementCandidate(for: identifier) {
+      guard running, localRole.allowsDataPlane else { return }
+      connectKnownPeripheral(replacement, using: central)
+      return
+    }
     guard running, localRole.allowsDataPlane else { return }
     if wasEstablished { triggerLinkLossScanBurst() }
     scheduleReconnect(peripheral)
@@ -4471,6 +4585,13 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
       let identifier = peripheral.identifier
       rememberMeshPeripheral(peripheral)
       preferredPeripheralIDs.insert(identifier)
+      guard
+        powerProfile.maximumOutgoingConnections > 0,
+        connectedPeripherals.count < powerProfile.maximumOutgoingConnections
+      else {
+        central.cancelPeripheralConnection(peripheral)
+        continue
+      }
       switch peripheral.state {
       case .connected:
         connectedPeripherals[identifier] = peripheral
@@ -4598,9 +4719,10 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
   func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
     guard
       error == nil,
-      let peerID = peripheralPeers[peripheral.identifier],
       RSSI.intValue != 127
     else { return }
+    peripheralRSSI[peripheral.identifier] = RSSI.intValue
+    guard let peerID = peripheralPeers[peripheral.identifier] else { return }
     if radarPeerID == peerID {
       emitRssi(peerID: peerID, rssi: RSSI.intValue)
     }
@@ -4638,8 +4760,14 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
       peripheral.startAdvertising([
         CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID]
       ])
-      localCharacteristic?.subscribedCentrals?.forEach {
-        sendSubscriptionAnnouncement(to: $0)
+      acceptedSubscribedCentralIDs.removeAll()
+      for central in localCharacteristic?.subscribedCentrals ?? [] {
+        guard
+          acceptedSubscribedCentralIDs.count <
+            IOSBLENeighborSelectionPolicy.maximumSubscribedCentrals
+        else { continue }
+        acceptedSubscribedCentralIDs.insert(central.identifier)
+        sendSubscriptionAnnouncement(to: central)
       }
     } else {
       restoredPeripheralService = false
@@ -4685,8 +4813,14 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
       return
     }
     for request in requests {
-      if request.characteristic.uuid == Self.characteristicUUID, let value = request.value {
-        receive(value, source: request.central.identifier)
+      if request.characteristic.uuid == Self.characteristicUUID {
+        guard acceptedSubscribedCentralIDs.contains(request.central.identifier) else {
+          peripheral.respond(to: request, withResult: .insufficientResources)
+          continue
+        }
+        if let value = request.value {
+          receive(value, source: request.central.identifier)
+        }
       }
       peripheral.respond(to: request, withResult: .success)
     }
@@ -4717,8 +4851,24 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
       activePeripheralManager === peripheral
     else { return }
     guard characteristic.uuid == Self.characteristicUUID else { return }
-    peripheralNotifyQueues.removeValue(forKey: central.identifier)
-    if let peerID = peripheralPeers[central.identifier] {
+    let identifier = central.identifier
+    guard
+      acceptedSubscribedCentralIDs.contains(identifier) ||
+        acceptedSubscribedCentralIDs.count <
+          IOSBLENeighborSelectionPolicy.maximumSubscribedCentrals
+    else {
+      peripheralNotifyQueues.removeValue(forKey: identifier)
+      emitBLETransportFailure(
+        code: "peripheral_subscription_limit",
+        identifier: identifier,
+        emergency: false,
+        frames: 0
+      )
+      return
+    }
+    acceptedSubscribedCentralIDs.insert(identifier)
+    peripheralNotifyQueues.removeValue(forKey: identifier)
+    if let peerID = peripheralPeers[identifier] {
       invalidateNoiseState(peerID: peerID)
     }
     sendSubscriptionAnnouncement(to: central)
@@ -4734,6 +4884,7 @@ extension HearthBitMeshPlugin: CBPeripheralManagerDelegate {
       activePeripheralManager === peripheral
     else { return }
     let identifier = central.identifier
+    acceptedSubscribedCentralIDs.remove(identifier)
     let hasCentralLink = remoteCharacteristics[identifier] != nil &&
       connectedPeripherals[identifier]?.state == .connected
     peripheralNotifyQueues.removeValue(forKey: identifier)

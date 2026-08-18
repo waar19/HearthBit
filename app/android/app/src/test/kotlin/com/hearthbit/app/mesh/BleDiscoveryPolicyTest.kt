@@ -70,4 +70,133 @@ class BleDiscoveryPolicyTest {
         assertEquals(2, urgent.maximumCandidates)
         assertEquals(60_000L, urgent.cooldownMs)
     }
+
+    @Test
+    fun `neighbor selection prioritizes known relationship before rssi`() {
+        val selection = BleNeighborSelectionPolicy.select(
+            maximumConnections = 8,
+            active = emptyList(),
+            discovered = listOf(
+                neighbor("unknown", rssi = -35),
+                neighbor("known", rssi = -70, known = true),
+            ),
+        )
+
+        assertEquals("known", selection?.connectAddress)
+        assertEquals(null, selection?.replaceAddress)
+    }
+
+    @Test
+    fun `neighbor replacement requires rssi hysteresis`() {
+        val active = listOf(neighbor("weak", rssi = -70))
+
+        assertEquals(
+            null,
+            BleNeighborSelectionPolicy.select(
+                maximumConnections = 1,
+                active = active,
+                discovered = listOf(neighbor("candidate", rssi = -63)),
+            ),
+        )
+        assertEquals(
+            BleNeighborSelection("candidate", "weak"),
+            BleNeighborSelectionPolicy.select(
+                maximumConnections = 1,
+                active = active,
+                discovered = listOf(neighbor("candidate", rssi = -62)),
+            ),
+        )
+    }
+
+    @Test
+    fun `known relationship replaces unknown before comparing rssi`() {
+        assertEquals(
+            BleNeighborSelection("known", "unknown"),
+            BleNeighborSelectionPolicy.select(
+                maximumConnections = 1,
+                active = listOf(neighbor("unknown", rssi = -35)),
+                discovered = listOf(neighbor("known", rssi = -90, known = true)),
+            ),
+        )
+    }
+
+    @Test
+    fun `unknown neighbor cannot replace known or protected link`() {
+        assertEquals(
+            null,
+            BleNeighborSelectionPolicy.select(
+                maximumConnections = 1,
+                active = listOf(neighbor("known", rssi = -90, known = true)),
+                discovered = listOf(neighbor("unknown", rssi = -30)),
+            ),
+        )
+        assertEquals(
+            null,
+            BleNeighborSelectionPolicy.select(
+                maximumConnections = 1,
+                active = listOf(neighbor("transfer", rssi = -90, protected = true)),
+                discovered = listOf(neighbor("candidate", rssi = -30, known = true)),
+            ),
+        )
+    }
+
+    @Test
+    fun `server limit rejects excess unknown and admits known deterministically`() {
+        val active = listOf(
+            serverCandidate("BB", known = false),
+            serverCandidate("AA", known = false),
+            serverCandidate("known", known = true),
+        )
+
+        assertEquals(
+            ServerConnectionAdmission(accepted = false),
+            ServerConnectionLimitPolicy.admit(
+                maximumConnections = 3,
+                active = active,
+                incoming = serverCandidate("new-unknown", known = false),
+            ),
+        )
+        assertEquals(
+            ServerConnectionAdmission(accepted = true, replaceAddress = "AA"),
+            ServerConnectionLimitPolicy.admit(
+                maximumConnections = 3,
+                active = active,
+                incoming = serverCandidate("new-known", known = true),
+            ),
+        )
+    }
+
+    @Test
+    fun `server limit does not evict protected unknown link`() {
+        val admission = ServerConnectionLimitPolicy.admit(
+            maximumConnections = 1,
+            active = listOf(serverCandidate("busy", known = false, protected = true)),
+            incoming = serverCandidate("known", known = true),
+        )
+
+        assertFalse(admission.accepted)
+        assertEquals(null, admission.replaceAddress)
+    }
+
+    private fun neighbor(
+        address: String,
+        rssi: Int,
+        known: Boolean = false,
+        protected: Boolean = false,
+    ) = BleNeighborCandidate(
+        address = address,
+        rssi = rssi,
+        knownRelationship = known,
+        protected = protected,
+    )
+
+    private fun serverCandidate(
+        address: String,
+        known: Boolean,
+        protected: Boolean = false,
+    ) = ServerConnectionCandidate(
+        address = address,
+        knownRelationship = known,
+        protected = protected,
+    )
 }
