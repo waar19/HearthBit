@@ -14,7 +14,7 @@
 # Proveedores criptográficos y el motor Noise se seleccionan por nombre.
 -keep class org.bouncycastle.jce.provider.BouncyCastleProvider { *; }
 -keep class org.bouncycastle.crypto.** { *; }
--keep class com.bitchat.android.noise.southernstorm.** { *; }
+-keep class com.hearthbit.noise.southernstorm.** { *; }
 
 # Tink lee una sola vez los keysets legados durante la migración conservadora.
 -keep class com.google.crypto.tink.** { *; }

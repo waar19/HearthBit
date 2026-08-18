@@ -1,6 +1,6 @@
 package com.hearthbit.app.mesh
 
-import com.bitchat.android.noise.southernstorm.protocol.Noise
+import com.hearthbit.noise.southernstorm.protocol.Noise
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
