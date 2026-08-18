@@ -7,14 +7,12 @@ import 'dart:ui';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../models/pending_sealed_import.dart';
 import '../models/transfer_models.dart';
 import '../services/at_rest_file_cipher.dart';
-import '../services/backup_protection.dart';
 import '../services/diagnostics_log.dart';
 import '../services/lan_transport.dart';
 import '../services/mesh_platform_service.dart';
@@ -26,6 +24,8 @@ import '../services/transfer_crypto.dart';
 import '../services/transfer_platform_service.dart';
 import '../services/transfer_protocol.dart';
 import '../services/transfer_repository.dart';
+import '../services/transfer_retention.dart';
+import '../services/transfer_storage.dart';
 import '../utils/hex_encoding.dart';
 import '../utils/mime_guess.dart';
 
@@ -42,11 +42,13 @@ class TransferController extends ChangeNotifier {
     AtRestFileCipher? fileCipher,
     HbtShareService? shareService,
     TransportDiagnostics? transportDiagnostics,
+    TransferRetentionService? retentionService,
     this.offerLifetime = defaultOfferLifetime,
   }) : _platform = platform ?? TransferPlatformService(),
        _repository = repository ?? TransferRepository(),
        _fileCipher = fileCipher ?? AtRestFileCipher(),
        _shareService = shareService ?? HbtShareService(),
+       _retention = retentionService,
        _transportDiagnostics =
            transportDiagnostics ?? TransportDiagnostics.instance;
 
@@ -87,6 +89,7 @@ class TransferController extends ChangeNotifier {
   final AtRestFileCipher _fileCipher;
   final HbtShareService _shareService;
   final TransportDiagnostics _transportDiagnostics;
+  TransferRetentionService? _retention;
   final Duration offerLifetime;
 
   final List<TransferRecord> _transfers = [];
@@ -99,6 +102,9 @@ class TransferController extends ChangeNotifier {
   bool wifiAwareSupported = false;
   bool wifiDirectSupported = false;
   bool multipeerSupported = false;
+  bool _retentionRunning = false;
+  bool _retentionRequested = false;
+  Future<void>? _retentionTask;
   DateTime _priorityUntil = DateTime.fromMillisecondsSinceEpoch(0);
   String? lastError;
   PendingSealedImport? pendingSealedImport;
@@ -203,6 +209,7 @@ class TransferController extends ChangeNotifier {
       await _requestResume(record);
     }
     notifyListeners();
+    _scheduleRetentionPurge();
   }
 
   // ---------------------------------------------------------------------
@@ -436,6 +443,7 @@ class TransferController extends ChangeNotifier {
     if (record.isActive) await cancel(transferId);
     _transfers.removeWhere((item) => item.id == transferId);
     await _repository.delete(transferId);
+    await _deleteManagedFile(record.filePath);
     notifyListeners();
   }
 
@@ -450,7 +458,20 @@ class TransferController extends ChangeNotifier {
     required String filePath,
     String peerId = '',
   }) async {
-    final protected = await _fileCipher.encrypt(File(filePath));
+    final source = File(filePath);
+    final managed = await TransferRetentionService.isManagedPath(
+      source.path,
+      roots: await TransferStorage.managedDirectories(),
+    );
+    final encryptable = managed
+        ? source
+        : await source.copy(
+            p.join(
+              (await _transfersDirectory()).path,
+              '$transferIdHex-${sanitizeFileName(fileName)}',
+            ),
+          );
+    final protected = await _fileCipher.encrypt(encryptable);
     final record = TransferRecord(
       id: transferIdHex,
       peerId: peerId,
@@ -473,6 +494,7 @@ class TransferController extends ChangeNotifier {
     await _repository.save(record);
     _transportDiagnostics.recordSuccess(DiagnosticTransport.qr);
     notifyListeners();
+    _scheduleRetentionPurge();
   }
 
   Future<void> shareExternalPackage(String transferId, {Rect? origin}) async {
@@ -512,7 +534,7 @@ class TransferController extends ChangeNotifier {
       recipientPublicKey: recipient.noisePublicKey,
       packageId: packageId,
     );
-    final temporary = await getTemporaryDirectory();
+    final temporary = await TransferStorage.exportDirectory();
     final package = File(
       p.join(temporary.path, 'sealed-${bytesToHex(packageId)}.hbt'),
     );
@@ -558,8 +580,9 @@ class TransferController extends ChangeNotifier {
       await _repository.save(record);
       _transportDiagnostics.recordSuccess(DiagnosticTransport.external);
       notifyListeners();
+      _scheduleRetentionPurge();
     } finally {
-      if (await package.exists()) await package.delete();
+      await _deleteManagedFile(package.path);
     }
   }
 
@@ -599,9 +622,8 @@ class TransferController extends ChangeNotifier {
       lastError = '${currentL10n.terrTransport}: $error';
       notifyListeners();
     } finally {
-      if (await package.exists()) {
-        await package.delete();
-      }
+      await _deleteManagedFile(package.path);
+      _scheduleRetentionPurge();
     }
   }
 
@@ -629,8 +651,7 @@ class TransferController extends ChangeNotifier {
       metadata: metadata,
     );
     if (previous != null) {
-      final old = File(previous.packagePath);
-      if (await old.exists()) await old.delete();
+      await _deleteManagedFile(previous.packagePath);
     }
     notifyListeners();
   }
@@ -686,11 +707,12 @@ class TransferController extends ChangeNotifier {
       _transfers.insert(0, record);
       _trimTransfersInMemory();
       await _repository.save(record);
+      _scheduleRetentionPurge();
     } catch (error) {
-      if (partial != null && await partial.exists()) await partial.delete();
+      if (partial != null) await _deleteManagedFile(partial.path);
       lastError = '${currentL10n.terrTransport}: $error';
     } finally {
-      if (await package.exists()) await package.delete();
+      await _deleteManagedFile(package.path);
       notifyListeners();
     }
   }
@@ -699,8 +721,7 @@ class TransferController extends ChangeNotifier {
     final pending = pendingSealedImport;
     pendingSealedImport = null;
     if (pending != null) {
-      final package = File(pending.packagePath);
-      if (await package.exists()) await package.delete();
+      await _deleteManagedFile(pending.packagePath);
     }
     notifyListeners();
   }
@@ -712,11 +733,14 @@ class TransferController extends ChangeNotifier {
         await cancel(record.id);
       }
     }
+    _retentionRequested = false;
+    await waitForRetention();
     _transfers.clear();
     await _repository.destroy();
-    final directory = await _transfersDirectory();
-    if (await directory.exists()) {
-      await directory.delete(recursive: true);
+    for (final directory in await TransferStorage.managedDirectories()) {
+      if (await directory.exists()) {
+        await directory.delete(recursive: true);
+      }
     }
     notifyListeners();
   }
@@ -1373,8 +1397,8 @@ class TransferController extends ChangeNotifier {
     try {
       final container = await _encryptContainer(record, session);
       session.containerPath = container.path;
-      final temporary = await getTemporaryDirectory();
-      final package = File(p.join(temporary.path, 'hbt-${record.id}.hbt'));
+      final export = await TransferStorage.exportDirectory();
+      final package = File(p.join(export.path, 'hbt-${record.id}.hbt'));
       await HbtPackageProtocol.writeExchange(
         container: container,
         transferId: hexToBytes(record.id),
@@ -1630,7 +1654,7 @@ class TransferController extends ChangeNotifier {
     final partial = File(record.filePath!);
     final digest = await TransferCrypto.hashFile(partial);
     if (digest != record.sha256Hex) {
-      await partial.delete();
+      await _deleteManagedFile(partial.path);
       _fail(record, currentL10n.terrShaMismatch);
       return;
     }
@@ -1787,7 +1811,7 @@ class TransferController extends ChangeNotifier {
       session.bitmap!.count * record.chunkSize,
       record.fileSize,
     );
-    await container.delete();
+    await _deleteManagedFile(container.path);
   }
 
   Future<void> _throttle() async {
@@ -1880,12 +1904,10 @@ class TransferController extends ChangeNotifier {
     await session?.lanSender?.close();
     await session?.ackController.close();
     if (session?.containerPath != null) {
-      final container = File(session!.containerPath!);
-      if (await container.exists()) await container.delete();
+      await _deleteManagedFile(session!.containerPath);
     }
     if (session?.externalPackagePath != null) {
-      final package = File(session!.externalPackagePath!);
-      if (await package.exists()) await package.delete();
+      await _deleteManagedFile(session!.externalPackagePath);
     }
     await _platform.nearbyStop(record.id);
     await _platform.wifiAwareStop(record.id);
@@ -1899,6 +1921,7 @@ class TransferController extends ChangeNotifier {
       clearBitmap: true,
     );
     notifyListeners();
+    _scheduleRetentionPurge();
   }
 
   Future<void> _protectCompletedFile(TransferRecord record) async {
@@ -1910,24 +1933,25 @@ class TransferController extends ChangeNotifier {
         AtRestFileCipher.isEncryptedPath(source.path)) {
       return;
     }
-    var shouldProtect = record.direction == TransferDirection.incoming;
-    if (!shouldProtect) {
-      final temporary = await getTemporaryDirectory();
-      final name = p.basename(source.path);
-      shouldProtect =
-          p.isWithin(temporary.path, source.path) &&
-          (name.startsWith('hearthbit_voice_') || name.startsWith('hb_'));
-    }
+    final cache = await TransferStorage.cacheDirectory();
+    final transfers = await _transfersDirectory();
+    final name = p.basename(source.path);
+    final shouldProtect =
+        await TransferRetentionService.isManagedPath(
+          source.path,
+          roots: [transfers],
+        ) ||
+        (await TransferRetentionService.isManagedPath(
+              source.path,
+              roots: [cache],
+            ) &&
+            (name.startsWith('hearthbit_voice_') || name.startsWith('hb_')));
     if (!shouldProtect) return;
     record.filePath = (await _fileCipher.encrypt(source)).path;
   }
 
   Future<Directory> _transfersDirectory() async {
-    final documents = await getApplicationDocumentsDirectory();
-    final directory = Directory(p.join(documents.path, 'hearthbit_transfers'));
-    await directory.create(recursive: true);
-    await BackupProtection.exclude(directory.path);
-    return directory;
+    return TransferStorage.transfersDirectory();
   }
 
   Future<String> _incomingPath(
@@ -1941,6 +1965,59 @@ class TransferController extends ChangeNotifier {
         ? '${record.id}$suffix.part'
         : '${record.id}_${record.fileName}';
     return p.join(directory.path, name);
+  }
+
+  void _scheduleRetentionPurge() {
+    _retentionRequested = true;
+    if (_retentionRunning) return;
+    _retentionTask = _runRetentionPurge();
+    unawaited(_retentionTask);
+  }
+
+  @visibleForTesting
+  Future<void> waitForRetention() async {
+    while (true) {
+      final task = _retentionTask;
+      if (task == null) return;
+      await task;
+    }
+  }
+
+  Future<void> _runRetentionPurge() async {
+    _retentionRunning = true;
+    try {
+      while (_retentionRequested) {
+        _retentionRequested = false;
+        final retention = _retention ??= TransferRetentionService(
+          repository: _repository,
+          managedDirectories: TransferStorage.managedDirectories,
+        );
+        final plan = await retention.purge();
+        final before = _transfers.length;
+        _transfers.removeWhere(
+          (record) => plan.recordIds.contains(record.id) && !record.isActive,
+        );
+        if (_transfers.length != before) notifyListeners();
+      }
+    } catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'transfer.retention.failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    } finally {
+      _retentionRunning = false;
+      _retentionTask = null;
+      if (_retentionRequested) _scheduleRetentionPurge();
+    }
+  }
+
+  Future<void> _deleteManagedFile(String? path) async {
+    if (path == null) return;
+    await TransferRetentionService.deleteManagedFile(
+      path,
+      roots: await TransferStorage.managedDirectories(),
+    );
   }
 
   void _trimTransfersInMemory() {

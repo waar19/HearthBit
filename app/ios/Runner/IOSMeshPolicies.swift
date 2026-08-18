@@ -193,6 +193,142 @@ enum IOSPeerReachabilityPolicy {
   }
 }
 
+enum IOSMeshRetentionPolicy {
+  static let maximumRemembered = 256
+
+  static func evictions<Key: Hashable>(
+    lastSeen: [Key: Date],
+    protected: Set<Key>,
+    maximum: Int = maximumRemembered,
+    stableKey: (Key) -> String
+  ) -> [Key] {
+    precondition(maximum > 0)
+    let overflow = max(0, lastSeen.count - maximum)
+    guard overflow > 0 else { return [] }
+    return lastSeen
+      .filter { !protected.contains($0.key) }
+      .sorted {
+        if $0.value != $1.value { return $0.value < $1.value }
+        return stableKey($0.key) < stableKey($1.key)
+      }
+      .prefix(overflow)
+      .map(\.key)
+  }
+}
+
+struct IOSBoundedPeerPendingQueue<Element> {
+  struct Limits: Equatable {
+    let maximumPeers: Int
+    let maximumPerPeer: Int
+    let maximumGlobal: Int
+
+    static var standard: Limits {
+      Limits(maximumPeers: 256, maximumPerPeer: 64, maximumGlobal: 1024)
+    }
+  }
+
+  private struct Entry {
+    let sequence: UInt64
+    let value: Element
+  }
+
+  private let limits: Limits
+  private var entries: [String: [Entry]] = [:]
+  private var nextSequence: UInt64 = 0
+
+  init(limits: Limits = .standard) {
+    precondition(limits.maximumPeers > 0)
+    precondition(limits.maximumPerPeer > 0)
+    precondition(limits.maximumGlobal > 0)
+    self.limits = limits
+  }
+
+  var count: Int {
+    entries.values.reduce(0) { $0 + $1.count }
+  }
+
+  var peerCount: Int { entries.count }
+  var peerIDs: Set<String> { Set(entries.keys) }
+
+  func contains(peerID: String) -> Bool {
+    entries[peerID]?.isEmpty == false
+  }
+
+  func values(for peerID: String) -> [Element] {
+    entries[peerID]?.map(\.value) ?? []
+  }
+
+  @discardableResult
+  mutating func enqueue(
+    _ value: Element,
+    for peerID: String,
+    protectedPeerIDs: Set<String> = []
+  ) -> Bool {
+    if entries[peerID] == nil && entries.count >= limits.maximumPeers {
+      let existingUnprotected = entries.keys.filter {
+        !protectedPeerIDs.contains($0)
+      }
+      if existingUnprotected.isEmpty && !protectedPeerIDs.contains(peerID) {
+        return false
+      }
+      let candidates = existingUnprotected.isEmpty
+        ? Array(entries.keys)
+        : existingUnprotected
+      guard let victim = oldestPeer(in: candidates) else { return false }
+      entries.removeValue(forKey: victim)
+    }
+
+    let entry = Entry(sequence: nextSequence, value: value)
+    nextSequence &+= 1
+    entries[peerID, default: []].append(entry)
+    if entries[peerID]!.count > limits.maximumPerPeer {
+      entries[peerID]!.removeFirst(entries[peerID]!.count - limits.maximumPerPeer)
+    }
+    trimGlobal(protectedPeerIDs: protectedPeerIDs)
+    return entries[peerID]?.contains(where: { $0.sequence == entry.sequence }) == true
+  }
+
+  mutating func removeValues(for peerID: String) -> [Element] {
+    entries.removeValue(forKey: peerID)?.map(\.value) ?? []
+  }
+
+  mutating func removeAll() {
+    entries.removeAll(keepingCapacity: false)
+    nextSequence = 0
+  }
+
+  private func oldestPeer(in peerIDs: [String]) -> String? {
+    peerIDs.min {
+      let lhs = entries[$0]?.first?.sequence ?? UInt64.max
+      let rhs = entries[$1]?.first?.sequence ?? UInt64.max
+      if lhs != rhs { return lhs < rhs }
+      return $0 < $1
+    }
+  }
+
+  private mutating func trimGlobal(protectedPeerIDs: Set<String>) {
+    while count > limits.maximumGlobal {
+      let unprotected = entries.keys.filter {
+        !protectedPeerIDs.contains($0)
+      }
+      let candidates = unprotected.isEmpty ? Array(entries.keys) : unprotected
+      guard
+        let peerID = candidates.min(by: {
+          let lhs = entries[$0]?.first?.sequence ?? UInt64.max
+          let rhs = entries[$1]?.first?.sequence ?? UInt64.max
+          if lhs != rhs { return lhs < rhs }
+          return $0 < $1
+        }),
+        entries[peerID]?.isEmpty == false
+      else { return }
+      entries[peerID]!.removeFirst()
+      if entries[peerID]!.isEmpty {
+        entries.removeValue(forKey: peerID)
+      }
+    }
+  }
+}
+
 enum IOSBLEFramePriority {
   case normal
   case emergency

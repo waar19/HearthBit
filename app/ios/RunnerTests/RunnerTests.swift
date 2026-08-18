@@ -1184,6 +1184,56 @@ class RunnerTests: XCTestCase {
     )
   }
 
+  func testMeshRetentionEvictsOldestUnprotectedEntries() {
+    let base = Date(timeIntervalSince1970: 1_000)
+    let evictions = IOSMeshRetentionPolicy.evictions(
+      lastSeen: [
+        "protected": base,
+        "oldest": base.addingTimeInterval(1),
+        "newest": base.addingTimeInterval(2),
+      ],
+      protected: ["protected"],
+      maximum: 2,
+      stableKey: { $0 }
+    )
+
+    XCTAssertEqual(evictions, ["oldest"])
+  }
+
+  func testBoundedPendingQueueAppliesPeerAndPerPeerLimits() {
+    var queue = IOSBoundedPeerPendingQueue<Int>(
+      limits: .init(maximumPeers: 2, maximumPerPeer: 2, maximumGlobal: 4)
+    )
+    XCTAssertTrue(queue.enqueue(1, for: "a"))
+    XCTAssertTrue(queue.enqueue(2, for: "a"))
+    XCTAssertTrue(queue.enqueue(3, for: "a"))
+    XCTAssertEqual(queue.values(for: "a"), [2, 3])
+
+    XCTAssertTrue(queue.enqueue(4, for: "b"))
+    XCTAssertTrue(queue.enqueue(5, for: "c", protectedPeerIDs: ["a"]))
+    XCTAssertFalse(queue.contains(peerID: "b"))
+    XCTAssertTrue(queue.contains(peerID: "a"))
+    XCTAssertTrue(queue.contains(peerID: "c"))
+    XCTAssertEqual(queue.peerCount, 2)
+  }
+
+  func testBoundedPendingQueueKeepsGlobalLimitDeterministically() {
+    var queue = IOSBoundedPeerPendingQueue<Int>(
+      limits: .init(maximumPeers: 3, maximumPerPeer: 3, maximumGlobal: 3)
+    )
+    XCTAssertTrue(queue.enqueue(1, for: "protected"))
+    XCTAssertTrue(queue.enqueue(2, for: "old"))
+    XCTAssertTrue(queue.enqueue(3, for: "new"))
+    XCTAssertTrue(
+      queue.enqueue(4, for: "new", protectedPeerIDs: ["protected"])
+    )
+
+    XCTAssertEqual(queue.count, 3)
+    XCTAssertEqual(queue.values(for: "protected"), [1])
+    XCTAssertFalse(queue.contains(peerID: "old"))
+    XCTAssertEqual(queue.values(for: "new"), [3, 4])
+  }
+
   func testBeaconControlRelaysExactlyOnceOnlyToAnotherDirectedRecipient() {
     XCTAssertTrue(
       IOSMeshRelayPolicy.shouldRelay(

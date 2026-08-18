@@ -81,10 +81,9 @@ internal class MeshEngine(
         },
     )
     private val peers = ConcurrentHashMap<String, MeshPeer>()
-    private val pendingPrivate = ConcurrentHashMap<String, MutableList<PendingPrivateMessage>>()
-    private val pendingFrames = ConcurrentHashMap<String, MutableList<ByteArray>>()
-    private val pendingCourier =
-        ConcurrentHashMap<String, MutableList<MeshProtocol.Packet>>()
+    private val pendingPrivate = BoundedPeerPendingQueue<PendingPrivateMessage>()
+    private val pendingFrames = BoundedPeerPendingQueue<ByteArray>()
+    private val pendingCourier = BoundedPeerPendingQueue<MeshProtocol.Packet>()
     private val clientGatts = ConcurrentHashMap<String, BluetoothGatt>()
     private val knownDevices = ConcurrentHashMap<String, BluetoothDevice>()
     private val knownDeviceLastSeenAt = ConcurrentHashMap<String, Long>()
@@ -704,6 +703,8 @@ internal class MeshEngine(
         fragmentReassembler.clear()
         lastSyncRequestByAddress.clear()
         syncStore.clear()
+        pendingPrivate.clear()
+        pendingFrames.clear()
         pendingCourier.clear()
         remoteRadarConsents.clear()
         tentativeRadarReads.clear()
@@ -1154,9 +1155,11 @@ internal class MeshEngine(
         if (noiseSessions.isEstablished(peerIdHex)) {
             sendEncryptedFrame(peerIdHex, frame)
         } else {
-            pendingFrames.computeIfAbsent(peerIdHex) {
-                Collections.synchronizedList(mutableListOf())
-            }.add(frame)
+            pendingFrames.offer(
+                peerIdHex,
+                frame.copyOf(),
+                protectedPendingPeerIds(),
+            )
             initiateHandshake(peerIdHex)
         }
     }
@@ -1241,9 +1244,11 @@ internal class MeshEngine(
         val typedPayload = byteArrayOf(MeshProtocol.NOISE_TRANSFER_FRAME) + frame
         val encrypted = runCatching { noiseSessions.encrypt(peerIdHex, typedPayload) }.getOrElse {
             if (it is NoiseHandshakeFailure.SessionExpired) {
-                pendingFrames.computeIfAbsent(peerIdHex) {
-                    Collections.synchronizedList(mutableListOf())
-                }.add(frame.copyOf())
+                pendingFrames.offer(
+                    peerIdHex,
+                    frame.copyOf(),
+                    protectedPendingPeerIds(),
+                )
                 recoverNoiseSession(peerIdHex)
                 return
             }
@@ -1806,19 +1811,31 @@ internal class MeshEngine(
     }
 
     private fun hasPendingRelationship(peerIdHex: String): Boolean =
-        pendingPrivate[peerIdHex]?.isNotEmpty() == true ||
-            pendingFrames[peerIdHex]?.isNotEmpty() == true ||
-            pendingCourier[peerIdHex]?.isNotEmpty() == true
+        pendingPrivate.hasPending(peerIdHex) ||
+            pendingFrames.hasPending(peerIdHex) ||
+            pendingCourier.hasPending(peerIdHex)
 
     private fun isKnownRelationship(peerIdHex: String): Boolean =
         peersWithSessionHistory.contains(peerIdHex) ||
             hasPendingRelationship(peerIdHex)
 
+    private fun protectedPendingPeerIds(): Set<String> = buildSet {
+        addAll(peersWithSessionHistory)
+        noiseSessions.snapshot()
+            .asSequence()
+            .filter(NoiseSessionInfo::established)
+            .mapTo(this, NoiseSessionInfo::peerId)
+        radarPeerId?.let(::add)
+        activeBeaconRequest?.peerId?.let(::add)
+        pendingBeaconRequests.values.mapTo(this) { it.peerId }
+        outgoingBeaconRequests.values.mapTo(this) { it.peerId }
+    }
+
     private fun protectedTrustPeerIds(): Set<String> = buildSet {
         addAll(peersWithSessionHistory)
-        pendingPrivate.filterValues { it.isNotEmpty() }.keys.mapTo(this) { it }
-        pendingFrames.filterValues { it.isNotEmpty() }.keys.mapTo(this) { it }
-        pendingCourier.filterValues { it.isNotEmpty() }.keys.mapTo(this) { it }
+        addAll(pendingPrivate.peerIds())
+        addAll(pendingFrames.peerIds())
+        addAll(pendingCourier.peerIds())
         noiseSessions.snapshot()
             .asSequence()
             .filter(NoiseSessionInfo::established)
@@ -1830,9 +1847,11 @@ internal class MeshEngine(
         val typedPayload = byteArrayOf(MeshProtocol.NOISE_PRIVATE_MESSAGE) + privateData
         val encrypted = runCatching { noiseSessions.encrypt(peerIdHex, typedPayload) }.getOrElse {
             if (it is NoiseHandshakeFailure.SessionExpired) {
-                pendingPrivate.computeIfAbsent(peerIdHex) {
-                    Collections.synchronizedList(mutableListOf())
-                }.add(PendingPrivateMessage(id, content))
+                pendingPrivate.offer(
+                    peerIdHex,
+                    PendingPrivateMessage(id, content),
+                    protectedPendingPeerIds(),
+                )
                 recoverNoiseSession(peerIdHex)
                 return
             }
@@ -1872,9 +1891,11 @@ internal class MeshEngine(
                 if (noiseSessions.isEstablished(anchor.id)) {
                     sendCourierDeposit(anchor.id, innerPacket)
                 } else {
-                    pendingCourier.computeIfAbsent(anchor.id) {
-                        Collections.synchronizedList(mutableListOf())
-                    }.add(innerPacket)
+                    pendingCourier.offer(
+                        anchor.id,
+                        innerPacket,
+                        protectedPendingPeerIds(),
+                    )
                     initiateHandshake(anchor.id)
                 }
             }
@@ -2818,13 +2839,13 @@ internal class MeshEngine(
             noiseFailureTracker.recordSuccess(senderHex)
             lastHandshakeAttemptByPeer.remove(senderHex)
             emit(mapOf("type" to "peers", "peers" to peersSnapshot()))
-            pendingPrivate.remove(senderHex)?.forEach {
+            pendingPrivate.drain(senderHex).forEach {
                 sendEncryptedPrivate(senderHex, it.id, it.content)
             }
-            pendingFrames.remove(senderHex)?.forEach {
+            pendingFrames.drain(senderHex).forEach {
                 sendEncryptedFrame(senderHex, it)
             }
-            pendingCourier.remove(senderHex)?.forEach {
+            pendingCourier.drain(senderHex).forEach {
                 sendCourierDeposit(senderHex, it)
             }
         }
@@ -4035,9 +4056,9 @@ internal class MeshEngine(
                 addressToPeer[address] ?: reconnectPeerByAddress[address]
             }
             noiseSessions.snapshot().mapTo(this, NoiseSessionInfo::peerId)
-            addAll(pendingPrivate.filterValues { it.isNotEmpty() }.keys)
-            addAll(pendingFrames.filterValues { it.isNotEmpty() }.keys)
-            addAll(pendingCourier.filterValues { it.isNotEmpty() }.keys)
+            addAll(pendingPrivate.peerIds())
+            addAll(pendingFrames.peerIds())
+            addAll(pendingCourier.peerIds())
             pendingBeaconRequests.values.mapTo(this) { it.peerId }
             outgoingBeaconRequests.values.mapTo(this) { it.peerId }
             activeBeaconRequest?.let { add(it.peerId) }

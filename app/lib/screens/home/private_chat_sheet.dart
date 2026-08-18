@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../../controllers/mesh_controller.dart';
@@ -12,6 +11,7 @@ import '../../controllers/transfer_controller.dart';
 import '../../l10n/l10n.dart';
 import '../../models/mesh_models.dart';
 import '../../models/voice_note.dart';
+import '../../services/transfer_storage.dart';
 import '../../services/voice_note_audio_controller.dart';
 import '../../utils/message_timeline.dart';
 import '../../utils/scroll_to_bottom.dart';
@@ -135,7 +135,7 @@ class _PrivateChatSheetState extends State<PrivateChatSheet> {
       return;
     }
     await _voiceAudio.stop();
-    final directory = await getTemporaryDirectory();
+    final directory = await TransferStorage.cacheDirectory();
     final path = p.join(
       directory.path,
       'hearthbit_voice_${DateTime.now().millisecondsSinceEpoch}.m4a',

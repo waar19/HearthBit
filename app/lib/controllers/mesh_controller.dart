@@ -22,6 +22,7 @@ import '../utils/emergency_backoff.dart';
 import '../utils/emergency_coordinates.dart' as emergency_coordinates;
 import '../utils/emergency_qr_fallback.dart';
 import '../utils/id_generator.dart';
+import '../utils/known_peer_retention.dart';
 
 export '../models/pending_beacon_request.dart';
 export '../models/private_message_result.dart';
@@ -57,6 +58,7 @@ class MeshController extends ChangeNotifier {
   static const int radarLocationDistanceMeters = 15;
   static const Duration peerReachabilityWindow = Duration(minutes: 4);
   static const int maximumMessagesInMemory = 500;
+  static const int maximumKnownPeers = 1000;
   static const Duration topologyNotificationInterval = Duration(seconds: 1);
   static const Duration emergencySosLifetime = Duration(hours: 24);
   static const Duration emergencyCheckInLifetime = Duration(hours: 12);
@@ -266,6 +268,9 @@ class MeshController extends ChangeNotifier {
     _privateMessageOutbox
       ..clear()
       ..addAll(await _repository.listPendingPrivateMessages());
+    if (_pruneKnownPeers()) {
+      await _repository.saveKnownPeers(_knownPeers.values);
+    }
     await _repository.expireEmergencyDeliveries(DateTime.now());
     _emergencyDeliveries
       ..clear()
@@ -1971,8 +1976,9 @@ class MeshController extends ChangeNotifier {
     for (final peer in _peers) {
       _knownPeers[peer.id] = peer;
     }
-    if (_peers.isNotEmpty) {
-      unawaited(_repository.saveKnownPeers(_peers));
+    final knownPeersChanged = _pruneKnownPeers();
+    if (_peers.isNotEmpty || knownPeersChanged) {
+      unawaited(_repository.saveKnownPeers(_knownPeers.values));
     }
     final hasNewlyEligiblePeer = _peers.any(
       (peer) =>
@@ -2029,6 +2035,33 @@ class MeshController extends ChangeNotifier {
             .map(GenericBlePresence.tryParse)
             .whereType<GenericBlePresence>(),
       );
+  }
+
+  bool _pruneKnownPeers() {
+    final now = DateTime.now();
+    final retained = retainKnownPeers(
+      peers: _knownPeers.values,
+      activePeerIds: {
+        for (final peer in _peers)
+          if (_isPeerOnline(peer, now)) peer.id,
+      },
+      messagePeerIds: {
+        for (final message in _messages)
+          if (message.senderPeerId.isNotEmpty) message.senderPeerId,
+      },
+      pendingPeerIds: {
+        for (final pending in _privateMessageOutbox) pending.recipientPeerId,
+      },
+      maximumPeers: maximumKnownPeers,
+    );
+    if (retained.length == _knownPeers.length &&
+        retained.every((peer) => identical(_knownPeers[peer.id], peer))) {
+      return false;
+    }
+    _knownPeers
+      ..clear()
+      ..addEntries(retained.map((peer) => MapEntry(peer.id, peer)));
+    return true;
   }
 
   String _conversationNickname(String peerId) {

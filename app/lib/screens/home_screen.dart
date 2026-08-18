@@ -300,11 +300,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge([
-        widget.controller,
-        widget.transfers,
-        widget.gateway,
-      ]),
+      animation: Listenable.merge([widget.controller, widget.gateway]),
       builder: (context, _) {
         final controller = widget.controller;
         return Scaffold(
@@ -449,10 +445,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         onSendSealed: _sendSealedFileTo,
                         onSendApk: _sendApkTo,
                       ),
-                      TransfersTab(
-                        transfers: widget.transfers,
-                        onSendOptical: _startOpticalSend,
-                        onReceiveOptical: _startOpticalReceive,
+                      AnimatedBuilder(
+                        animation: widget.transfers,
+                        builder: (context, _) => TransfersTab(
+                          transfers: widget.transfers,
+                          onSendOptical: _startOpticalSend,
+                          onReceiveOptical: _startOpticalReceive,
+                        ),
                       ),
                     ],
                   ),
@@ -484,10 +483,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 label: context.l10n.tabNearby,
               ),
               NavigationDestination(
-                icon: Badge(
-                  isLabelVisible: _pendingOffers > 0,
-                  label: Text('$_pendingOffers'),
-                  child: const Icon(Icons.folder_shared_outlined),
+                icon: AnimatedBuilder(
+                  animation: widget.transfers,
+                  builder: (context, _) {
+                    final pendingOffers = _pendingOffers;
+                    return Badge(
+                      isLabelVisible: pendingOffers > 0,
+                      label: Text('$pendingOffers'),
+                      child: const Icon(Icons.folder_shared_outlined),
+                    );
+                  },
                 ),
                 selectedIcon: const Icon(Icons.folder_shared),
                 label: context.l10n.tabFiles,

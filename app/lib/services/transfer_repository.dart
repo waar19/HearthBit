@@ -84,6 +84,14 @@ class TransferRepository {
     return rows.map(TransferRecord.fromDatabase).toList(growable: false);
   }
 
+  Future<List<TransferRecord>> loadAllForRetention() async {
+    final rows = await (await _db).query(
+      'transfers',
+      orderBy: 'updated_at DESC',
+    );
+    return rows.map(TransferRecord.fromDatabase).toList(growable: false);
+  }
+
   Future<Uint8List?> loadBitmap(String id) async {
     final rows = await (await _db).query(
       'transfers',
@@ -149,6 +157,17 @@ class TransferRepository {
 
   Future<void> delete(String id) async {
     await (await _db).delete('transfers', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> deleteMany(Iterable<String> ids) async {
+    final values = ids.toList(growable: false);
+    if (values.isEmpty) return;
+    final database = await _db;
+    await database.transaction((transaction) async {
+      for (final id in values) {
+        await transaction.delete('transfers', where: 'id = ?', whereArgs: [id]);
+      }
+    });
   }
 
   Future<void> clear() async {

@@ -6,9 +6,9 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import 'secure_storage_config.dart';
+import 'transfer_storage.dart';
 
 class AtRestFileCipher {
   AtRestFileCipher({
@@ -17,7 +17,8 @@ class AtRestFileCipher {
     Future<Directory> Function()? temporaryDirectory,
   }) : _storage = storage ?? hearthBitSecureStorage,
        _providedTestingKey = testingKey,
-       _temporaryDirectory = temporaryDirectory ?? getTemporaryDirectory;
+       _temporaryDirectory =
+           temporaryDirectory ?? TransferStorage.cacheDirectory;
 
   static const _keyName = 'hearthbit.files.at_rest.v1';
   static const _magic = 'HBRST001';
