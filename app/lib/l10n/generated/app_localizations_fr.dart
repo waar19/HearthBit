@@ -39,6 +39,18 @@ class AppLocalizationsFr extends AppLocalizations {
   String get statusStopped => 'Maillage arrêté';
 
   @override
+  String get statusMeshPermissionsRevoked =>
+      'Maillage suspendu : l’autorisation Bluetooth ou appareils à proximité a été retirée.';
+
+  @override
+  String get statusMeshBatteryRestricted =>
+      'Les restrictions de batterie peuvent suspendre le maillage en arrière-plan.';
+
+  @override
+  String get statusMeshSuspended =>
+      'Maillage suspendu : les messages restent en attente jusqu’à ce qu’une voie soit disponible.';
+
+  @override
   String get actionStop => 'ARRÊTER';
 
   @override
@@ -239,6 +251,13 @@ class AppLocalizationsFr extends AppLocalizations {
   String get sosQrRelayed => 'SOS validé et ajouté au réseau maillé';
 
   @override
+  String get sosSentToMesh => 'SOS envoyé au réseau maillé.';
+
+  @override
+  String get sosQueuedWithoutRoute =>
+      'SOS mis en attente, mais ce téléphone ne dispose actuellement d’aucune voie de sortie.';
+
+  @override
   String get emergencySmsOpen => 'Prévenir un contact de confiance par SMS';
 
   @override
@@ -288,6 +307,65 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get sosNoneReceived => 'Aucune alerte SOS reçue.';
+
+  @override
+  String get sosTriageTitle => 'Détails rapides de secours';
+
+  @override
+  String get sosTriageOptional =>
+      'Facultatif. Choisissez un besoin ou envoyez le SOS immédiatement.';
+
+  @override
+  String get sosTriageNone => 'Aucun détail structuré';
+
+  @override
+  String get sosTriageMedical => 'Médical';
+
+  @override
+  String get sosTriageWater => 'Eau';
+
+  @override
+  String get sosTriageExtraction => 'Extraction';
+
+  @override
+  String get sosTriageShelter => 'Abri';
+
+  @override
+  String get sosTriageOther => 'Autre';
+
+  @override
+  String get sosTriageDetails => 'Ajouter des détails';
+
+  @override
+  String get sosTriagePeople => 'Personnes';
+
+  @override
+  String get sosTriageInjuries => 'Blessés';
+
+  @override
+  String get sosTriageTrapped => 'Coincé';
+
+  @override
+  String get sosTriageUnknown => 'Inconnu';
+
+  @override
+  String get sosTriageNo => 'Non';
+
+  @override
+  String get sosTriageYes => 'Oui';
+
+  @override
+  String get sosTriageSave => 'ENREGISTRER';
+
+  @override
+  String sosTriageSummary(
+    String people,
+    String injured,
+    String trapped,
+    String need,
+  ) {
+    return 'Personnes : $people · Blessés : $injured · Coincé : $trapped · Besoin : $need';
+  }
 
   @override
   String get checkInPrivateBody =>
@@ -773,6 +851,10 @@ class AppLocalizationsFr extends AppLocalizations {
       'Impossible d\'exporter le rapport de diagnostic';
 
   @override
+  String get diagnosticsExportRefreshError =>
+      'Impossible d\'actualiser le diagnostic. Aucune donnée n\'a été exportée.';
+
+  @override
   String get diagnosticsTitle => 'Diagnostic';
 
   @override
@@ -819,6 +901,42 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get diagnosticsStoreForward => 'File de stockage et retransmission';
+
+  @override
+  String get diagnosticsOperationalCountersSection => 'Compteurs opérationnels';
+
+  @override
+  String get diagnosticsOpenEmergencyLimitedKnown =>
+      'Trames d\'urgence connues limitées par débit';
+
+  @override
+  String get diagnosticsOpenEmergencyLimitedUnknown =>
+      'Trames d\'urgence inconnues limitées par débit';
+
+  @override
+  String get diagnosticsRelaySuppressed => 'Relais supprimés par amortissement';
+
+  @override
+  String get diagnosticsRelayScheduled => 'Relais planifiés';
+
+  @override
+  String get diagnosticsRelayExpired => 'Temporisateurs de relais terminés';
+
+  @override
+  String get diagnosticsTrustEvictions => 'Épingles de confiance évincées';
+
+  @override
+  String get diagnosticsTrustConflicts => 'Conflits de confiance';
+
+  @override
+  String get diagnosticsOperationalCountersLifetime => 'Période des compteurs';
+
+  @override
+  String get diagnosticsLifetimeProcess =>
+      'Depuis le démarrage de ce processus';
+
+  @override
+  String get diagnosticsLifetimeUnknown => 'Période non signalée';
 
   @override
   String get diagnosticsTransportsSection => 'Transports actifs';
@@ -1301,6 +1419,17 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get onboardingAllowLocation => 'AUTORISER LA POSITION D’URGENCE';
+
+  @override
+  String get onboardingAllowMicrophone => 'AUTORISER LE MICRO POUR LE SECOURS';
+
+  @override
+  String get onboardingMicrophoneReady =>
+      'Les notes vocales et les outils acoustiques de secours sont prêts.';
+
+  @override
+  String get onboardingMicrophoneRequired =>
+      'Nécessaire pour les notes vocales et les outils acoustiques de secours.';
 
   @override
   String get onboardingFinish => 'TERMINER';
@@ -1906,10 +2035,31 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get locationExportConfirmBody =>
-      'Le CSV peut contenir des positions précises et des détails d’urgence. Partagez-le uniquement avec des secouristes de confiance et protégez le fichier.';
+      'L’export peut contenir des positions précises, des identités et des détails d’urgence. Partagez-le uniquement avec des secouristes de confiance et protégez le fichier.';
 
   @override
   String get locationExportConfirmAction => 'EXPORTER LES POSITIONS';
+
+  @override
+  String get mapExport => 'Exporter les données opérationnelles';
+
+  @override
+  String get mapExportFormatTitle => 'Choisir le format d’export';
+
+  @override
+  String get mapExportCsv => 'CSV · dossiers de secours actifs';
+
+  @override
+  String get mapExportGeoJson =>
+      'GeoJSON · dossiers actifs et zones parcourues';
+
+  @override
+  String get mapExportSubject => 'Opérations de secours HearthBit';
+
+  @override
+  String mapExportError(String error) {
+    return 'Impossible d’exporter les opérations de secours : $error';
+  }
 
   @override
   String get lanGatewayConnected => 'Relais LAN connecté';
@@ -1992,4 +2142,371 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get emergencyContactsRetry => 'RÉESSAYER';
+
+  @override
+  String get rescueRosterTitle => 'Liste de l’équipe de secours';
+
+  @override
+  String get rescueRosterSecurityBody =>
+      'Le chef signe la liste. Une personne n’est affichée comme secouriste vérifié que si son identifiant et sa clé de signature Ed25519 correspondent.';
+
+  @override
+  String get rescueRosterEmpty =>
+      'Aucune liste d’équipe de secours n’est active sur ce téléphone.';
+
+  @override
+  String get rescueRosterCreate => 'CRÉER LA LISTE';
+
+  @override
+  String get rescueRosterTeamName => 'Nom de l’équipe';
+
+  @override
+  String get rescueRosterCallsign => 'Indicatif du chef';
+
+  @override
+  String rescueRosterUtf8TooLarge(int maximum) {
+    return 'Utilisez au maximum $maximum octets UTF-8.';
+  }
+
+  @override
+  String get rescueRosterAddMember => 'AJOUTER UN MEMBRE PROCHE';
+
+  @override
+  String get rescueRosterNoEligiblePeers =>
+      'Aucune identité HearthBit proche avec une clé de signature n’est disponible.';
+
+  @override
+  String get rescueRosterNearbyIdentity => 'Identité proche';
+
+  @override
+  String get rescueRosterMemberCallsign => 'Indicatif du membre';
+
+  @override
+  String get rescueRosterMemberRole => 'Rôle de secours';
+
+  @override
+  String get rescueRosterRemoveMemberTitle => 'Retirer ce membre de la liste ?';
+
+  @override
+  String rescueRosterRemoveMemberBody(String callsign) {
+    return '$callsign ne sera plus un secouriste vérifié dans cette liste.';
+  }
+
+  @override
+  String rescueRosterMemberCount(int count) {
+    return '$count membres vérifiés';
+  }
+
+  @override
+  String get rescueRosterImportTitle => 'Importer une liste signée';
+
+  @override
+  String get rescueRosterImportText => 'Coller le texte QR';
+
+  @override
+  String get rescueRosterPasteHint => 'HBRT1:…';
+
+  @override
+  String get rescueRosterImport => 'IMPORTER';
+
+  @override
+  String get rescueRosterImportFile => 'Ouvrir le fichier de liste';
+
+  @override
+  String get rescueRosterScanQr => 'Scanner le QR de la liste';
+
+  @override
+  String get rescueRosterScanHint =>
+      'Pointez la caméra vers le QR HBRT1 signé de la liste de secours.';
+
+  @override
+  String get rescueRosterImported =>
+      'La liste signée a été vérifiée et activée.';
+
+  @override
+  String get rescueRosterExported => 'Le fichier de liste a été enregistré.';
+
+  @override
+  String get rescueRosterExportQr => 'Afficher le QR et le texte';
+
+  @override
+  String get rescueRosterQrTooLarge =>
+      'Cette liste est trop grande pour un seul QR. Exportez-la comme fichier ou copiez le texte signé.';
+
+  @override
+  String get rescueRosterExportFile => 'Enregistrer le fichier';
+
+  @override
+  String get rescueRosterRemoveTitle =>
+      'Supprimer la liste de secours active ?';
+
+  @override
+  String get rescueRosterRemoveBody =>
+      'Les membres ne seront plus affichés comme secouristes vérifiés et leurs clés natives protégées seront retirées.';
+
+  @override
+  String rescueRosterError(String error) {
+    return 'Impossible de traiter la liste de secours : $error';
+  }
+
+  @override
+  String get rescueRosterRoleLeader => 'Chef d’équipe';
+
+  @override
+  String get rescueRosterRoleResponder => 'Secouriste';
+
+  @override
+  String get rescueRosterRoleMedic => 'Médecin';
+
+  @override
+  String get rescueRosterRoleSearch => 'Recherche';
+
+  @override
+  String get rescueRosterRoleLogistics => 'Logistique';
+
+  @override
+  String get rescueRosterRoleCommunications => 'Communications';
+
+  @override
+  String get rescueRosterRoleAuthority => 'Autorité';
+
+  @override
+  String get authorityTitle => 'Annonces des autorités';
+
+  @override
+  String get authorityTrustBody =>
+      'Seuls les membres ayant le rôle Autorité dans l’équipe signée active peuvent émettre ces annonces authentifiées. Le chef d’équipe n’est pas autorisé automatiquement.';
+
+  @override
+  String get authorityCreate => 'Créer une annonce';
+
+  @override
+  String get authorityPriority => 'Priorité';
+
+  @override
+  String get authorityPriorityInfo => 'INFORMATION';
+
+  @override
+  String get authorityPriorityWarning => 'AVERTISSEMENT';
+
+  @override
+  String get authorityPriorityEvacuate => 'ÉVACUER';
+
+  @override
+  String get authorityBody => 'Instruction officielle';
+
+  @override
+  String authorityBodyBytes(int current, int maximum) {
+    return '$current/$maximum octets UTF-8';
+  }
+
+  @override
+  String authorityBodyTooLarge(int maximum) {
+    return 'L’instruction ne doit pas dépasser $maximum octets UTF-8.';
+  }
+
+  @override
+  String get authorityDuration => 'Valide pendant';
+
+  @override
+  String authorityDurationMinutes(int minutes) {
+    return '$minutes minutes';
+  }
+
+  @override
+  String authorityDurationHours(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours heures',
+      one: '1 heure',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get authoritySend => 'ÉMETTRE L’ANNONCE';
+
+  @override
+  String get authoritySent => 'L’annonce signée de l’autorité a été envoyée.';
+
+  @override
+  String authoritySendError(String error) {
+    return 'Impossible d’envoyer l’annonce de l’autorité : $error';
+  }
+
+  @override
+  String get authorityHistory => 'Historique des annonces';
+
+  @override
+  String get authorityHistoryEmpty =>
+      'Aucune annonce authentifiée des autorités n’a été reçue.';
+
+  @override
+  String get authorityActive => 'Active';
+
+  @override
+  String get authorityExpired => 'Expirée';
+
+  @override
+  String authorityExpires(String date) {
+    return 'Expire le $date';
+  }
+
+  @override
+  String get authorityBannerSemantics =>
+      'Annonce authentifiée active des autorités';
+
+  @override
+  String get verifiedRescuerBadge => 'SECOURISTE VÉRIFIÉ';
+
+  @override
+  String get rescueRosterFileType => 'Liste de secours HearthBit';
+
+  @override
+  String get rescueOperationsTitle => 'Opérations de secours';
+
+  @override
+  String get rescueOperationsEmpty => 'Aucun cas SOS n’a été reçu.';
+
+  @override
+  String rescueOperationsError(String error) {
+    return 'Impossible de mettre à jour les opérations : $error';
+  }
+
+  @override
+  String get rescueOperationsAssignMe => 'M’ASSIGNER';
+
+  @override
+  String get rescueOperationsEnRoute => 'EN ROUTE';
+
+  @override
+  String get rescueOperationsAttended => 'PRIS EN CHARGE';
+
+  @override
+  String get rescueOperationsClose => 'CLÔTURER';
+
+  @override
+  String get rescueOperationsNoActions => 'Aucune action autorisée';
+
+  @override
+  String rescueOperationsAssignee(String callsign) {
+    return 'Assigné à $callsign';
+  }
+
+  @override
+  String rescueOperationsReceivedAt(String date) {
+    return 'Reçu $date';
+  }
+
+  @override
+  String rescueOperationsTriage(String need, String people) {
+    return 'Priorité : $need · personnes : $people';
+  }
+
+  @override
+  String get rescueCaseStateNew => 'Nouveau';
+
+  @override
+  String get rescueCaseStateAssigned => 'Assigné';
+
+  @override
+  String get rescueCaseStateEnRoute => 'En route';
+
+  @override
+  String get rescueCaseStateAttended => 'Pris en charge';
+
+  @override
+  String get rescueCaseStateClosed => 'Clôturé';
+
+  @override
+  String get rescueTriageMedical => 'Médical';
+
+  @override
+  String get rescueTriageWater => 'Eau';
+
+  @override
+  String get rescueTriageExtraction => 'Extraction';
+
+  @override
+  String get rescueTriageShelter => 'Abri';
+
+  @override
+  String get rescueTriageOther => 'Autre';
+
+  @override
+  String get mapFilterActive => 'Actifs';
+
+  @override
+  String get mapFilterUnassigned => 'Non assignés';
+
+  @override
+  String get mapFilterAssigned => 'Assignés';
+
+  @override
+  String get mapFilterClosed => 'Clôturés';
+
+  @override
+  String mapOperationalCases(int count) {
+    return '$count cas opérationnels';
+  }
+
+  @override
+  String get mapCasesEmpty => 'Aucun cas ne correspond à ce filtre.';
+
+  @override
+  String mapClusterTooltip(int count, String priority) {
+    return '$count cas SOS · priorité maximale : $priority';
+  }
+
+  @override
+  String get mapPriorityLow => 'Priorité faible';
+
+  @override
+  String get mapPriorityMedium => 'Priorité moyenne';
+
+  @override
+  String get mapPriorityHigh => 'Priorité élevée';
+
+  @override
+  String get mapPriorityCritical => 'Priorité critique';
+
+  @override
+  String get mapCaseNoCoordinates => 'Ce cas n’a pas de coordonnées';
+
+  @override
+  String get mapZoneConsent =>
+      'Enregistrez un itinéraire balayé uniquement tant que ce contrôle reste visiblement actif.';
+
+  @override
+  String get mapZoneStart => 'ENREGISTRER LE PARCOURS';
+
+  @override
+  String mapZoneRecording(int count, int maximum) {
+    return 'Enregistrement de la zone balayée · $count/$maximum points';
+  }
+
+  @override
+  String get mapZoneVisibleOnly =>
+      'L’enregistrement de la position s’arrête à l’annulation, à la publication ou en quittant cette carte.';
+
+  @override
+  String get mapZoneFinish => 'Terminer et partager le parcours';
+
+  @override
+  String get mapZonePublished =>
+      'Parcours balayé partagé avec l’équipe vérifiée.';
+
+  @override
+  String get mapZoneLocationRequired =>
+      'L’autorisation et les services de localisation sont requis pour enregistrer un parcours.';
+
+  @override
+  String get mapZoneRosterChanged =>
+      'L’enregistrement a été annulé car l’équipe active ou votre adhésion a changé.';
+
+  @override
+  String mapZoneError(String error) {
+    return 'Impossible d’enregistrer ou de partager le parcours balayé : $error';
+  }
 }

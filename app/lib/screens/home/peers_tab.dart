@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/lan_gateway_controller.dart';
 import '../../controllers/mesh_controller.dart';
+import '../../controllers/rescue_roster_controller.dart';
 import '../../l10n/l10n.dart';
 import '../../models/mesh_models.dart';
 import '../../utils/avatar_utils.dart';
@@ -15,6 +16,7 @@ import 'peer_capability_badges.dart';
 class PeersTab extends StatelessWidget {
   const PeersTab({
     required this.controller,
+    this.rescueRoster,
     required this.lanGateway,
     required this.onShareInvite,
     required this.onOpenPrivateChat,
@@ -27,6 +29,7 @@ class PeersTab extends StatelessWidget {
   });
 
   final MeshController controller;
+  final RescueRosterController? rescueRoster;
   final LanGatewayController? lanGateway;
   final void Function(BuildContext anchorContext) onShareInvite;
   final void Function(MeshPeer peer) onOpenPrivateChat;
@@ -75,154 +78,200 @@ class PeersTab extends StatelessWidget {
         ],
       );
     }
-    return ListView(
+    final itemCount =
+        2 +
+        (conversations.isEmpty ? 0 : conversations.length + 1) +
+        (newNearbyPeers.isEmpty ? 0 : newNearbyPeers.length + 1) +
+        (genericPresences.isEmpty ? 0 : 2);
+    return ListView.builder(
       padding: const EdgeInsets.all(12),
-      children: [
-        MeshHealthCard(controller: controller, lanGateway: lanGateway),
-        const SizedBox(height: 8),
-        if (conversations.isNotEmpty) ...[
-          ListSectionTitle(title: context.l10n.recentChatsTitle),
-          ...conversations.map((conversation) {
-            final peer = conversation.peer;
-            final message = conversation.lastMessage;
-            final chatAvailable = controller.canChatWithPeer(peer);
-            return Card(
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: chatAvailable ? () => onOpenPrivateChat(peer) : null,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Column(
-                    children: [
-                      ListTile(
-                        leading: CircleAvatar(
-                          child: Text(avatarLetter(peer.nickname)),
-                        ),
-                        title: Text(peer.nickname),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              message.content,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            PeerCapabilityBadges(peer: peer),
-                          ],
-                        ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              formatConversationTime(
-                                context,
-                                message.timestamp,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              conversation.isOnline
-                                  ? context.l10n.peerOnline
-                                  : context.l10n.peerOffline,
-                              style: Theme.of(context).textTheme.labelSmall
-                                  ?.copyWith(
-                                    color: conversation.isOnline
-                                        ? Theme.of(context).colorScheme.primary
-                                        : null,
-                                  ),
-                            ),
-                          ],
-                        ),
+      itemCount: itemCount,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return MeshHealthCard(controller: controller, lanGateway: lanGateway);
+        }
+        if (index == 1) return const SizedBox(height: 8);
+        var offset = 2;
+        if (conversations.isNotEmpty) {
+          if (index == offset) {
+            return ListSectionTitle(title: context.l10n.recentChatsTitle);
+          }
+          offset += 1;
+          if (index < offset + conversations.length) {
+            return _conversationCard(context, conversations[index - offset]);
+          }
+          offset += conversations.length;
+        }
+        if (newNearbyPeers.isNotEmpty) {
+          if (index == offset) {
+            return ListSectionTitle(title: context.l10n.nearbyPeopleTitle);
+          }
+          offset += 1;
+          if (index < offset + newNearbyPeers.length) {
+            return _nearbyPeerCard(context, newNearbyPeers[index - offset]);
+          }
+          offset += newNearbyPeers.length;
+        }
+        if (index == offset) {
+          return ListSectionTitle(
+            title: context.l10n.genericPresenceSectionTitle,
+          );
+        }
+        return _genericPresencesCard(context, genericPresences);
+      },
+    );
+  }
+
+  Widget _conversationCard(
+    BuildContext context,
+    MeshConversation conversation,
+  ) {
+    final peer = conversation.peer;
+    final message = conversation.lastMessage;
+    final chatAvailable = controller.canChatWithPeer(peer);
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: chatAvailable ? () => onOpenPrivateChat(peer) : null,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Column(
+            children: [
+              ListTile(
+                leading: CircleAvatar(child: Text(avatarLetter(peer.nickname))),
+                title: Text(peer.nickname),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      message.content,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    PeerCapabilityBadges(peer: peer),
+                    _verifiedRescuerBadge(context, peer),
+                  ],
+                ),
+                trailing: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(formatConversationTime(context, message.timestamp)),
+                    const SizedBox(height: 4),
+                    Text(
+                      conversation.isOnline
+                          ? context.l10n.peerOnline
+                          : context.l10n.peerOffline,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: conversation.isOnline
+                            ? Theme.of(context).colorScheme.primary
+                            : null,
                       ),
-                      if (chatAvailable)
-                        PeerActionBar(
-                          peer: peer,
-                          online: conversation.isOnline,
-                          onOpenRadar: () => onOpenRadar(peer),
-                          onUnavailableAction: onUnavailableAction,
-                          onSendFile: () => onSendFile(peer),
-                          onSendSealed: () => onSendSealed(peer),
-                          onSendApk: () => onSendApk(peer),
-                        ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-            );
-          }),
-        ],
-        if (newNearbyPeers.isNotEmpty) ...[
-          ListSectionTitle(title: context.l10n.nearbyPeopleTitle),
-          ...newNearbyPeers.map((peer) {
-            final chatAvailable = controller.canChatWithPeer(peer);
-            return Card(
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: CircleAvatar(
-                      child: Text(avatarLetter(peer.nickname)),
-                    ),
-                    title: Text(peer.nickname),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${peer.id.substring(0, 8)} · '
-                          '${chatAvailable ? (peer.secure ? context.l10n.peerSecure : context.l10n.peerTapToEncrypt) : context.l10n.externalPresenceNoChat}',
-                        ),
-                        PeerCapabilityBadges(peer: peer),
-                      ],
-                    ),
-                    onTap: chatAvailable ? () => onOpenPrivateChat(peer) : null,
-                  ),
-                  if (chatAvailable)
-                    PeerActionBar(
-                      peer: peer,
-                      online: true,
-                      onOpenRadar: () => onOpenRadar(peer),
-                      onUnavailableAction: onUnavailableAction,
-                      onSendFile: () => onSendFile(peer),
-                      onSendSealed: () => onSendSealed(peer),
-                      onSendApk: () => onSendApk(peer),
-                    ),
-                ],
-              ),
-            );
-          }),
-        ],
-        if (genericPresences.isNotEmpty) ...[
-          ListSectionTitle(title: context.l10n.genericPresenceSectionTitle),
-          Card(
-            child: ExpansionTile(
-              leading: const CircleAvatar(child: Icon(Icons.sensors)),
-              title: Text(
-                context.l10n.genericPresenceSummary(
-                  genericPresences.length,
-                  genericPresences
-                      .map((presence) => presence.rssi)
-                      .reduce(
-                        (first, second) => first > second ? first : second,
-                      ),
+              if (chatAvailable)
+                PeerActionBar(
+                  peer: peer,
+                  online: conversation.isOnline,
+                  onOpenRadar: () => onOpenRadar(peer),
+                  onUnavailableAction: onUnavailableAction,
+                  onSendFile: () => onSendFile(peer),
+                  onSendSealed: () => onSendSealed(peer),
+                  onSendApk: () => onSendApk(peer),
                 ),
-              ),
-              subtitle: Text(context.l10n.genericPresenceExpand),
-              children: genericPresences
-                  .map(
-                    (presence) => ListTile(
-                      leading: const Icon(Icons.bluetooth),
-                      title: Text(context.l10n.genericPresenceNoChat),
-                      subtitle: Text(
-                        context.l10n.genericPresenceSignal(presence.rssi),
-                      ),
-                      enabled: false,
-                    ),
-                  )
-                  .toList(growable: false),
-            ),
+            ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _nearbyPeerCard(BuildContext context, MeshPeer peer) {
+    final chatAvailable = controller.canChatWithPeer(peer);
+    return Card(
+      child: Column(
+        children: [
+          ListTile(
+            leading: CircleAvatar(child: Text(avatarLetter(peer.nickname))),
+            title: Text(peer.nickname),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${peer.id.substring(0, 8)} · '
+                  '${chatAvailable ? (peer.secure ? context.l10n.peerSecure : context.l10n.peerTapToEncrypt) : context.l10n.externalPresenceNoChat}',
+                ),
+                PeerCapabilityBadges(peer: peer),
+                _verifiedRescuerBadge(context, peer),
+              ],
+            ),
+            onTap: chatAvailable ? () => onOpenPrivateChat(peer) : null,
+          ),
+          if (chatAvailable)
+            PeerActionBar(
+              peer: peer,
+              online: true,
+              onOpenRadar: () => onOpenRadar(peer),
+              onUnavailableAction: onUnavailableAction,
+              onSendFile: () => onSendFile(peer),
+              onSendSealed: () => onSendSealed(peer),
+              onSendApk: () => onSendApk(peer),
+            ),
         ],
-      ],
+      ),
+    );
+  }
+
+  Widget _genericPresencesCard(
+    BuildContext context,
+    List<GenericBlePresence> genericPresences,
+  ) {
+    return Card(
+      child: ExpansionTile(
+        leading: const CircleAvatar(child: Icon(Icons.sensors)),
+        title: Text(
+          context.l10n.genericPresenceSummary(
+            genericPresences.length,
+            genericPresences
+                .map((presence) => presence.rssi)
+                .reduce((first, second) => first > second ? first : second),
+          ),
+        ),
+        subtitle: Text(context.l10n.genericPresenceExpand),
+        children: genericPresences
+            .map(
+              (presence) => ListTile(
+                leading: const Icon(Icons.bluetooth),
+                title: Text(context.l10n.genericPresenceNoChat),
+                subtitle: Text(
+                  context.l10n.genericPresenceSignal(presence.rssi),
+                ),
+                enabled: false,
+              ),
+            )
+            .toList(growable: false),
+      ),
+    );
+  }
+
+  Widget _verifiedRescuerBadge(BuildContext context, MeshPeer peer) {
+    final member = rescueRoster?.verifiedMember(
+      peerId: peer.id,
+      signingPublicKey: peer.signingPublicKey,
+    );
+    if (member == null) return const SizedBox.shrink();
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: Tooltip(
+        message: member.callsign,
+        child: Chip(
+          avatar: const Icon(Icons.verified, size: 16),
+          label: Text(context.l10n.verifiedRescuerBadge),
+          visualDensity: VisualDensity.compact,
+        ),
+      ),
     );
   }
 }

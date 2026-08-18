@@ -58,6 +58,30 @@ void main() {
     expect(transport.timestamp, 1234);
   });
 
+  test('expone el hash canónico nativo únicamente como identificador', () {
+    final event = MeshNativeEvent.parse({
+      'type': 'message',
+      'message': {
+        'id': 'message-1',
+        'sender': 'Ana',
+        'content': 'SOS|Ayuda||',
+        'senderPeerId': '0011223344556677',
+        'private': false,
+        'mine': false,
+        'timestamp': 1700000000000,
+        'channel': 'sos',
+        'canonicalHash':
+            'ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789',
+      },
+    });
+
+    expect(event, isA<MeshMessageEvent>());
+    expect(
+      (event as MeshMessageEvent).message?.canonicalHash,
+      'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+    );
+  });
+
   test('parsea diagnóstico tipado de rotación de identidad', () {
     final event = MeshNativeEvent.parse({
       'type': 'keyRotation',

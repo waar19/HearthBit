@@ -74,6 +74,15 @@ internal class KeystoreSecureStore private constructor(
             .putString(newKey, encrypt(newKey, Value.string(value)))
             .commit()
 
+    @Synchronized
+    fun swapString(oldKey: String, newKey: String, value: String): Boolean {
+        val encrypted = encrypt(newKey, Value.string(value))
+        return preferences.edit()
+            .remove(oldKey)
+            .putString(newKey, encrypted)
+            .commit()
+    }
+
     fun clear(): Boolean = preferences.edit().clear().commit()
 
     @Synchronized

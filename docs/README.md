@@ -25,12 +25,15 @@ meaning. When translations disagree, the English license text in
 ## Important technical documents
 
 - [Architecture](architecture.md)
+- [Threat model](threat-model.md)
 - [Protocol](protocol.md)
 - [BitChat core profile](bitchat-core-profile.md)
 - [Extension registry](extension-registry.md)
 - [Transfer protocol](transfer-protocol.md)
 - [Radar and ranging validation](radar-ranging-validation.md)
 - [Field testing](field-test.md)
+- [Anchor density and placement](anchor-density-guide.md)
+- [Rescue-team pilot](rescue-team-pilot.md)
 - [Battery and memory validation](battery-memory-validation.md)
 - [Localization workflow](localization.md)
 - [Security reporting](../SECURITY.md)

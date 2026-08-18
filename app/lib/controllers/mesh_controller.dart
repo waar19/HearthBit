@@ -22,9 +22,18 @@ import '../utils/emergency_backoff.dart';
 import '../utils/emergency_coordinates.dart' as emergency_coordinates;
 import '../utils/emergency_qr_fallback.dart';
 import '../utils/id_generator.dart';
+import '../utils/known_peer_retention.dart';
 
 export '../models/pending_beacon_request.dart';
 export '../models/private_message_result.dart';
+
+enum MeshInterruptionReason {
+  permissionsRevoked,
+  batteryRestricted,
+  unavailable,
+}
+
+enum EmergencyActivationResult { sentToMesh, queuedWithoutRoute, failed }
 
 class MeshController extends ChangeNotifier {
   MeshController({
@@ -57,6 +66,7 @@ class MeshController extends ChangeNotifier {
   static const int radarLocationDistanceMeters = 15;
   static const Duration peerReachabilityWindow = Duration(minutes: 4);
   static const int maximumMessagesInMemory = 500;
+  static const int maximumKnownPeers = 1000;
   static const Duration topologyNotificationInterval = Duration(seconds: 1);
   static const Duration emergencySosLifetime = Duration(hours: 24);
   static const Duration emergencyCheckInLifetime = Duration(hours: 12);
@@ -100,6 +110,7 @@ class MeshController extends ChangeNotifier {
   String platformName = 'unknown';
   bool supportsAcousticSonar = false;
   bool supportsRadioRanging = false;
+  bool nativeRescueStateAvailable = true;
   bool meshAdvertising = false;
   bool meshScanActive = false;
   bool genericScanActive = false;
@@ -108,6 +119,8 @@ class MeshController extends ChangeNotifier {
   int activeBleScans = 0;
   int scanStarts = 0;
   int storeForwardEntries = 0;
+  MeshOperationalCounters operationalCounters = const MeshOperationalCounters();
+  String operationalCountersLifetime = 'unknown';
   Set<String> activeTransports = const {};
   DateTime? radarConsentUntil;
   PendingBeaconRequest? pendingBeaconRequest;
@@ -137,9 +150,11 @@ class MeshController extends ChangeNotifier {
   String _rescueDescription = '';
   SosLocationPrecision _rescueLocationPrecision =
       SosLocationPrecision.approximate;
+  SosTriage? _rescueTriage;
 
   // Estado de energía/ubicación reportado por el sistema.
   bool ignoringBatteryOptimizations = true;
+  bool meshPermissionsGranted = true;
   bool lowPowerMode = false;
   bool backgroundLocationGranted = false;
   int batteryLevel = 100;
@@ -247,6 +262,26 @@ class MeshController extends ChangeNotifier {
       (status == MeshConnectionStatus.active ||
           status == MeshConnectionStatus.degraded);
 
+  bool get meshExpectedActive =>
+      rescueMode || (_preferences?.meshDesiredActive ?? false);
+
+  MeshInterruptionReason? get meshInterruptionReason {
+    if (!meshExpectedActive) return null;
+    if (!meshPermissionsGranted) {
+      return MeshInterruptionReason.permissionsRevoked;
+    }
+    if (!nativeRescueStateAvailable) {
+      return MeshInterruptionReason.unavailable;
+    }
+    if (!ignoringBatteryOptimizations) {
+      return MeshInterruptionReason.batteryRestricted;
+    }
+    if (!canSend && status != MeshConnectionStatus.starting) {
+      return MeshInterruptionReason.unavailable;
+    }
+    return null;
+  }
+
   bool canChatWithPeer(MeshPeer peer) =>
       peer.role.canChat && (_bitchatInteropEnabled || peer.hearthbitVerified);
 
@@ -266,6 +301,9 @@ class MeshController extends ChangeNotifier {
     _privateMessageOutbox
       ..clear()
       ..addAll(await _repository.listPendingPrivateMessages());
+    if (_pruneKnownPeers()) {
+      await _repository.saveKnownPeers(_knownPeers.values);
+    }
     await _repository.expireEmergencyDeliveries(DateTime.now());
     _emergencyDeliveries
       ..clear()
@@ -327,6 +365,8 @@ class MeshController extends ChangeNotifier {
     final power = await _platform.getPowerStatus();
     ignoringBatteryOptimizations =
         power['ignoringBatteryOptimizations'] as bool? ?? true;
+    meshPermissionsGranted =
+        power['meshPermissionsGranted'] as bool? ?? meshPermissionsGranted;
     lowPowerMode = power['lowPowerMode'] as bool? ?? false;
     backgroundLocationGranted = power['backgroundLocation'] as bool? ?? false;
     batteryLevel = (power['batteryLevel'] as num?)?.toInt() ?? batteryLevel;
@@ -339,6 +379,17 @@ class MeshController extends ChangeNotifier {
   Future<void> refreshDiagnostics({bool notify = true}) async {
     final diagnostics = await _platform.getMeshDiagnostics();
     if (diagnostics.isEmpty) return;
+    final diagnosticStatus =
+        diagnostics['status'] as String? ??
+        diagnostics['meshStatus'] as String?;
+    if (diagnosticStatus != null) {
+      final couldSend = canSend;
+      _updateConnectionStatus(diagnosticStatus);
+      if (!couldSend && canSend) {
+        _requestPrivateMessageOutboxDrain();
+        _requestEmergencyOutboxDrain();
+      }
+    }
     platformName = diagnostics['platform'] as String? ?? platformName;
     meshAdvertising = diagnostics['advertising'] as bool? ?? meshAdvertising;
     meshScanActive = diagnostics['meshScanActive'] as bool? ?? meshScanActive;
@@ -362,6 +413,10 @@ class MeshController extends ChangeNotifier {
     storeForwardEntries =
         (diagnostics['storeForwardEntries'] as num?)?.toInt() ??
         storeForwardEntries;
+    _applyOperationalCounters(diagnostics['operationalCounters']);
+    _applyOperationalCountersLifetime(
+      diagnostics['operationalCountersLifetime'],
+    );
     final transports = diagnostics['transports'];
     if (transports is List<Object?>) {
       activeTransports = transports
@@ -415,6 +470,7 @@ class MeshController extends ChangeNotifier {
     String? description,
     Duration? interval,
     SosLocationPrecision? locationPrecision,
+    SosTriage? triage,
   }) async {
     if (!enabled) {
       final wasRescueActive = rescueMode;
@@ -440,6 +496,7 @@ class MeshController extends ChangeNotifier {
     if (locationPrecision != null) {
       _rescueLocationPrecision = locationPrecision;
     }
+    _rescueTriage = triage;
     final now = DateTime.now();
     rescueMode = true;
     _emergencyChannelsUsed.clear();
@@ -477,6 +534,7 @@ class MeshController extends ChangeNotifier {
     await sendSos(
       _rescueDescription,
       locationPrecision: _rescueLocationPrecision,
+      triage: _rescueTriage,
     );
     lastRescuePing = DateTime.now();
     notifyListeners();
@@ -484,6 +542,11 @@ class MeshController extends ChangeNotifier {
 
   Future<void> _restoreNativeRescueMode() async {
     final state = await _platform.getRescueModeState();
+    nativeRescueStateAvailable = state.available;
+    if (!state.available) {
+      DiagnosticsLog.instance.warning('rescue.state.unavailable');
+      return;
+    }
     final expiresAt = state.expiresAt;
     if (!state.active ||
         expiresAt == null ||
@@ -497,6 +560,7 @@ class MeshController extends ChangeNotifier {
   }
 
   void _applyNativeRescueState(NativeRescueState state) {
+    nativeRescueStateAvailable = state.available;
     rescueMode = state.active;
     if (!state.active) return;
     DiagnosticsLog.instance.info(
@@ -538,11 +602,13 @@ class MeshController extends ChangeNotifier {
     notifyListeners();
     try {
       if (!await _platform.requestPermissions()) {
+        meshPermissionsGranted = false;
         status = MeshConnectionStatus.error;
         lastError = currentL10n.errorPermissions;
         notifyListeners();
         return;
       }
+      meshPermissionsGranted = true;
       await _platform.start();
       try {
         await _preferences?.setMeshDesiredActive(true);
@@ -571,9 +637,9 @@ class MeshController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> sendPublic(String content) async {
-    if (content.trim().isEmpty) return;
-    await _run(() => _platform.sendPublic(content.trim()));
+  Future<String?> sendPublic(String content, {String? channel}) async {
+    if (content.trim().isEmpty) return null;
+    return _run(() => _platform.sendPublic(content.trim(), channel: channel));
   }
 
   Future<PrivateMessageSendResult> sendPrivate(
@@ -623,6 +689,7 @@ class MeshController extends ChangeNotifier {
   Future<void> sendSos(
     String description, {
     SosLocationPrecision locationPrecision = SosLocationPrecision.approximate,
+    SosTriage? triage,
   }) async {
     DiagnosticsLog.instance.info('sos.send.started');
     final position = locationPrecision == SosLocationPrecision.none
@@ -644,12 +711,14 @@ class MeshController extends ChangeNotifier {
             ),
             SosLocationPrecision.none => null,
           };
-    final location = coordinates == null
-        ? '||'
-        : '|${coordinates.$1}|${coordinates.$2}';
     final delivery = await _enqueueEmergency(
       kind: EmergencyDeliveryKind.sos,
-      content: 'SOS|$readable$location',
+      content: SosMessageCodec.encode(
+        description: readable,
+        latitude: coordinates?.$1,
+        longitude: coordinates?.$2,
+        triage: triage,
+      ),
       lifetime: emergencySosLifetime,
     );
     await _transmitEmergency(delivery, force: true);
@@ -848,11 +917,13 @@ class MeshController extends ChangeNotifier {
     if (localBeaconActive) await stopLocalBeacon();
   }
 
-  Future<void> activateEmergency({
+  Future<EmergencyActivationResult> activateEmergency({
     String? description,
     SosLocationPrecision locationPrecision = SosLocationPrecision.approximate,
+    SosTriage? triage,
   }) async {
-    if (activatingEmergency || rescueMode) return;
+    if (activatingEmergency) return EmergencyActivationResult.failed;
+    if (rescueMode) return EmergencyActivationResult.sentToMesh;
     if (drillModeEnabled) await deactivateDrill();
     activatingEmergency = true;
     DiagnosticsLog.instance.info('sos.activation.started');
@@ -865,22 +936,33 @@ class MeshController extends ChangeNotifier {
       if (!canSend) {
         await start();
         final deadline = DateTime.now().add(const Duration(seconds: 10));
-        while (!canSend && DateTime.now().isBefore(deadline)) {
+        while (!canSend &&
+            status == MeshConnectionStatus.starting &&
+            DateTime.now().isBefore(deadline)) {
           await Future<void>.delayed(const Duration(milliseconds: 250));
         }
       }
       if (!canSend) {
-        throw StateError(currentL10n.errorEmergencyMeshUnavailable);
+        await sendSos(
+          description ?? currentL10n.sosDefaultMessage,
+          locationPrecision: locationPrecision,
+          triage: triage,
+        );
+        DiagnosticsLog.instance.warning('sos.activation.queued_without_route');
+        return EmergencyActivationResult.queuedWithoutRoute;
       }
       await setRescueMode(
         true,
         description: description ?? currentL10n.sosDefaultMessage,
         locationPrecision: locationPrecision,
+        triage: triage,
       );
       DiagnosticsLog.instance.info('sos.activation.completed');
+      return EmergencyActivationResult.sentToMesh;
     } catch (error) {
       lastError = error.toString();
       DiagnosticsLog.instance.error('sos.activation.failed', error: error);
+      return EmergencyActivationResult.failed;
     } finally {
       activatingEmergency = false;
       notifyListeners();
@@ -1826,20 +1908,7 @@ class MeshController extends ChangeNotifier {
 
   void _applyStatus(Map<Object?, Object?> event) {
     final couldSend = canSend;
-    final previousStatus = status;
-    status = switch (event['status'] as String?) {
-      'active' => MeshConnectionStatus.active,
-      'degraded' => MeshConnectionStatus.degraded,
-      'starting' => MeshConnectionStatus.starting,
-      'error' => MeshConnectionStatus.error,
-      _ => MeshConnectionStatus.stopped,
-    };
-    if (status != previousStatus) {
-      DiagnosticsLog.instance.info(
-        'mesh.status.changed',
-        data: {'from': previousStatus, 'to': status},
-      );
-    }
+    _updateConnectionStatus(event['status'] as String?);
     nickname = event['nickname'] as String? ?? nickname;
     peerId = event['peerId'] as String? ?? peerId;
     signingPublicKey = switch (event['signingPublicKey']) {
@@ -1877,6 +1946,8 @@ class MeshController extends ChangeNotifier {
       storeForwardEntries =
           (metrics['storeForwardEntries'] as num?)?.toInt() ??
           storeForwardEntries;
+      _applyOperationalCounters(metrics['operationalCounters']);
+      _applyOperationalCountersLifetime(metrics['operationalCountersLifetime']);
       DiagnosticsLog.instance.info(
         'mesh.resource.stats',
         data: {
@@ -1905,6 +1976,32 @@ class MeshController extends ChangeNotifier {
       _requestEmergencyOutboxDrain();
     }
     _syncRadarLocationSharing();
+  }
+
+  void _applyOperationalCounters(Object? value) {
+    if (value is! Map<Object?, Object?>) return;
+    operationalCounters = MeshOperationalCounters.fromNative(value);
+  }
+
+  void _applyOperationalCountersLifetime(Object? value) {
+    if (value == 'process') operationalCountersLifetime = 'process';
+  }
+
+  void _updateConnectionStatus(String? wireStatus) {
+    final previousStatus = status;
+    status = switch (wireStatus) {
+      'active' => MeshConnectionStatus.active,
+      'degraded' => MeshConnectionStatus.degraded,
+      'starting' => MeshConnectionStatus.starting,
+      'error' => MeshConnectionStatus.error,
+      _ => MeshConnectionStatus.stopped,
+    };
+    if (status != previousStatus) {
+      DiagnosticsLog.instance.info(
+        'mesh.status.changed',
+        data: {'from': previousStatus, 'to': status},
+      );
+    }
   }
 
   void _applyRadarConsent(Map<Object?, Object?> event) {
@@ -1971,8 +2068,9 @@ class MeshController extends ChangeNotifier {
     for (final peer in _peers) {
       _knownPeers[peer.id] = peer;
     }
-    if (_peers.isNotEmpty) {
-      unawaited(_repository.saveKnownPeers(_peers));
+    final knownPeersChanged = _pruneKnownPeers();
+    if (_peers.isNotEmpty || knownPeersChanged) {
+      unawaited(_repository.saveKnownPeers(_knownPeers.values));
     }
     final hasNewlyEligiblePeer = _peers.any(
       (peer) =>
@@ -2029,6 +2127,33 @@ class MeshController extends ChangeNotifier {
             .map(GenericBlePresence.tryParse)
             .whereType<GenericBlePresence>(),
       );
+  }
+
+  bool _pruneKnownPeers() {
+    final now = DateTime.now();
+    final retained = retainKnownPeers(
+      peers: _knownPeers.values,
+      activePeerIds: {
+        for (final peer in _peers)
+          if (_isPeerOnline(peer, now)) peer.id,
+      },
+      messagePeerIds: {
+        for (final message in _messages)
+          if (message.senderPeerId.isNotEmpty) message.senderPeerId,
+      },
+      pendingPeerIds: {
+        for (final pending in _privateMessageOutbox) pending.recipientPeerId,
+      },
+      maximumPeers: maximumKnownPeers,
+    );
+    if (retained.length == _knownPeers.length &&
+        retained.every((peer) => identical(_knownPeers[peer.id], peer))) {
+      return false;
+    }
+    _knownPeers
+      ..clear()
+      ..addEntries(retained.map((peer) => MapEntry(peer.id, peer)));
+    return true;
   }
 
   String _conversationNickname(String peerId) {

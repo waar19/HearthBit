@@ -22,6 +22,7 @@ import com.google.android.gms.common.GoogleApiAvailability
 import com.hearthbit.app.mesh.AdaptivePowerPolicy
 import com.hearthbit.app.mesh.MeshForegroundService
 import com.hearthbit.app.mesh.MeshRuntime
+import com.hearthbit.app.mesh.RescueRosterPin
 import com.hearthbit.app.mesh.RescueModeStore
 import com.hearthbit.app.transfer.NearbyTransport
 import com.hearthbit.app.transfer.WifiAwareTransport
@@ -341,6 +342,30 @@ class MainActivity : FlutterActivity() {
                         requireNotNull(call.argument<ByteArray>("data")),
                     )
                 }
+                "verifySignatureWithPublicKey" -> runMethod(result) {
+                    MeshRuntime.engine(this).verifySignatureWithPublicKey(
+                        signingPublicKey =
+                            requireNotNull(call.argument<ByteArray>("signingPublicKey")),
+                        data = requireNotNull(call.argument<ByteArray>("data")),
+                        signature = requireNotNull(call.argument<ByteArray>("signature")),
+                    )
+                }
+                "importRescueRosterPins" -> runMethod(result) {
+                    val rawPins = requireNotNull(call.argument<List<*>>("pins"))
+                    require(rawPins.size <= 512) { "rescue_roster_too_large" }
+                    val pins = rawPins.map { raw ->
+                        val pin = raw as? Map<*, *>
+                            ?: throw IllegalArgumentException("invalid_rescue_pin")
+                        RescueRosterPin(
+                            peerId = pin["peerId"] as? String
+                                ?: throw IllegalArgumentException("invalid_rescue_peer_id"),
+                            signingPublicKey = pin["signingPublicKey"] as? ByteArray
+                                ?: throw IllegalArgumentException("invalid_rescue_signing_key"),
+                        )
+                    }
+                    MeshRuntime.engine(this).importRescueRosterPins(pins)
+                    null
+                }
                 "rotateLocalIdentity" -> runMethod(result) {
                     MeshRuntime.engine(this).rotateLocalIdentity()
                 }
@@ -447,6 +472,7 @@ class MainActivity : FlutterActivity() {
                         mapOf(
                             "ignoringBatteryOptimizations" to
                                 (power?.isIgnoringBatteryOptimizations(packageName) == true),
+                            "meshPermissionsGranted" to meshPermissionsGranted(),
                             "lowPowerMode" to (power?.isPowerSaveMode == true),
                             "backgroundLocation" to backgroundLocationGranted(),
                             "batteryLevel" to batteryLevel,
@@ -855,7 +881,19 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun requestMeshPermissions(result: MethodChannel.Result) {
-        val permissions = buildList {
+        val permissions = requiredMeshPermissions().filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (permissions.isEmpty()) {
+            result.success(true)
+            return
+        }
+        permissionResult = result
+        requestPermissions(permissions.toTypedArray(), PERMISSION_REQUEST)
+    }
+
+    private fun requiredMeshPermissions(): List<String> =
+        buildList {
             if (Build.VERSION.SDK_INT >= 31) {
                 add(Manifest.permission.BLUETOOTH_SCAN)
                 add(Manifest.permission.BLUETOOTH_CONNECT)
@@ -874,16 +912,12 @@ class MainActivity : FlutterActivity() {
             if (Build.VERSION.SDK_INT >= 36) {
                 add(Manifest.permission.RANGING)
             }
-        }.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
-        if (permissions.isEmpty()) {
-            result.success(true)
-            return
+
+    private fun meshPermissionsGranted(): Boolean =
+        requiredMeshPermissions().all {
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
         }
-        permissionResult = result
-        requestPermissions(permissions.toTypedArray(), PERMISSION_REQUEST)
-    }
 
     private fun runMethod(result: MethodChannel.Result, block: () -> Any?) {
         runCatching(block)

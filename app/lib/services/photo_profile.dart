@@ -3,7 +3,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+
+import 'transfer_storage.dart';
 
 /// Perfil de emergencia para fotos: reduce resolución y peso antes de
 /// transferirlas, ahorrando tiempo de radio y batería en la malla.
@@ -26,7 +27,7 @@ class PhotoEmergencyProfile {
   /// Comprime la foto en un isolate y devuelve la ruta del JPEG resultante,
   /// o null si el archivo no pudo decodificarse como imagen.
   static Future<String?> compress(String sourcePath) async {
-    final directory = await getTemporaryDirectory();
+    final directory = await TransferStorage.cacheDirectory();
     final targetPath = p.join(
       directory.path,
       'hb_${DateTime.now().millisecondsSinceEpoch}_'

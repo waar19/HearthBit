@@ -115,7 +115,20 @@ class AdaptivePowerPolicyTest {
 
     @Test
     fun `critical profile limits links and uses a longer pause`() {
+        assertEquals(
+            MeshEngineConstants.MAX_BLE_CONNECTIONS,
+            PowerProfile.PERFORMANCE.maximumClientConnections,
+        )
+        assertEquals(
+            MeshEngineConstants.MAX_BLE_CONNECTIONS,
+            PowerProfile.BALANCED.maximumClientConnections,
+        )
+        assertEquals(
+            MeshEngineConstants.MAX_BLE_CONNECTIONS,
+            PowerProfile.POWER_SAVER.maximumClientConnections,
+        )
         assertEquals(3, PowerProfile.CRITICAL.maximumClientConnections)
+        assertEquals(0, PowerProfile.SURVIVAL.maximumClientConnections)
         assertEquals(5_000L, PowerProfile.CRITICAL.scanBurstMs)
         assertEquals(115_000L, PowerProfile.CRITICAL.scanPauseMs)
         assertEquals(null, PowerProfile.SURVIVAL.scanMode)

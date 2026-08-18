@@ -131,6 +131,26 @@ class RunnerTests: XCTestCase {
     )
   }
 
+  func testEmergencyCanonicalHashSurvivesRelayMutation() {
+    let original = IOSMeshPacket(
+      type: IOSMeshProtocol.message,
+      ttl: 7,
+      timestamp: 1_700_000_000_000,
+      senderID: sender,
+      payload: Data("SOS|Ayuda||".utf8),
+      signature: Data(repeating: 7, count: 64)
+    )
+    var relayed = original
+    relayed.ttl = 2
+    relayed.isRSR = true
+
+    XCTAssertEqual(
+      IOSMeshProtocol.emergencyCanonicalHash(original),
+      IOSMeshProtocol.emergencyCanonicalHash(relayed)
+    )
+    XCTAssertTrue(IOSMeshProtocol.isEmergency(original))
+  }
+
   func testFragmentPayloadMatchesBitChatWireFormat() {
     let encoded = IOSMeshProtocol.encodeFragmentPayload(
       IOSMeshProtocol.FragmentPayload(
@@ -457,6 +477,150 @@ class RunnerTests: XCTestCase {
         recoveryActive: true
       ),
       .meshFiltered
+    )
+  }
+
+  func testBLEConnectionAndSubscriptionMaximumsAreEight() {
+    XCTAssertEqual(IOSPowerProfile.performance.maximumOutgoingConnections, 8)
+    XCTAssertEqual(IOSPowerProfile.balanced.maximumOutgoingConnections, 8)
+    XCTAssertEqual(IOSPowerProfile.powerSaver.maximumOutgoingConnections, 8)
+    XCTAssertEqual(IOSPowerProfile.critical.maximumOutgoingConnections, 3)
+    XCTAssertEqual(IOSPowerProfile.survival.maximumOutgoingConnections, 0)
+    XCTAssertEqual(IOSBLENeighborSelectionPolicy.maximumNeighbors, 8)
+    XCTAssertEqual(IOSBLENeighborSelectionPolicy.maximumSubscribedCentrals, 8)
+  }
+
+  func testBLENeighborPolicyPrioritizesKnownPeersBeforeRSSI() {
+    let current = (0..<8).map {
+      IOSBLENeighborCandidate(
+        identifier: UUID(),
+        rssi: -80 + $0,
+        knownPeer: false,
+        preferred: false,
+        protected: false
+      )
+    }
+    let knownCandidate = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -100,
+      knownPeer: true,
+      preferred: false,
+      protected: false
+    )
+
+    XCTAssertEqual(
+      IOSBLENeighborSelectionPolicy.decision(
+        candidate: knownCandidate,
+        current: current
+      ),
+      .replace(current[0].identifier)
+    )
+  }
+
+  func testBLENeighborPolicyUsesRSSIHysteresisWithinSamePriority() {
+    let current = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -80,
+      knownPeer: false,
+      preferred: false,
+      protected: false
+    )
+    let almostBetter = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -69,
+      knownPeer: false,
+      preferred: false,
+      protected: false
+    )
+    let clearlyBetter = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -68,
+      knownPeer: false,
+      preferred: false,
+      protected: false
+    )
+
+    XCTAssertEqual(
+      IOSBLENeighborSelectionPolicy.decision(
+        candidate: almostBetter,
+        current: [current],
+        maximum: 1
+      ),
+      .reject
+    )
+    XCTAssertEqual(
+      IOSBLENeighborSelectionPolicy.decision(
+        candidate: clearlyBetter,
+        current: [current],
+        maximum: 1
+      ),
+      .replace(current.identifier)
+    )
+  }
+
+  func testBLENeighborPolicyNeverEvictsProtectedOrPreferredNeighbor() {
+    let preferred = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -110,
+      knownPeer: true,
+      preferred: true,
+      protected: false
+    )
+    let session = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -105,
+      knownPeer: true,
+      preferred: false,
+      protected: true
+    )
+    let unknown = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -20,
+      knownPeer: false,
+      preferred: false,
+      protected: false
+    )
+
+    XCTAssertEqual(
+      IOSBLENeighborSelectionPolicy.decision(
+        candidate: unknown,
+        current: [preferred, session],
+        maximum: 2
+      ),
+      .reject
+    )
+  }
+
+  func testBLENeighborPolicyReplacesOnlyWorstUnprotectedNeighbor() {
+    let protected = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -120,
+      knownPeer: true,
+      preferred: false,
+      protected: true
+    )
+    let weak = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -90,
+      knownPeer: false,
+      preferred: false,
+      protected: false
+    )
+    let stronger = IOSBLENeighborCandidate(
+      identifier: UUID(),
+      rssi: -60,
+      knownPeer: false,
+      preferred: false,
+      protected: false
+    )
+
+    XCTAssertEqual(
+      IOSBLENeighborSelectionPolicy.decision(
+        candidate: stronger,
+        current: [protected, weak],
+        maximum: 2
+      ),
+      .replace(weak.identifier)
     )
   }
 
@@ -850,6 +1014,33 @@ class RunnerTests: XCTestCase {
     XCTAssertTrue(limiter.allow(source: "source-a", now: 110))
   }
 
+  func testOpenEmergencyRateLimiterHasIndependentGlobalPoolsAndExactLimits() {
+    let limiter = IOSOpenEmergencyRateLimiter()
+
+    for _ in 0..<100 {
+      XCTAssertTrue(limiter.allow(knownRelationship: false, now: 100))
+    }
+    for _ in 100..<IOSOpenEmergencyRateLimiter.defaultUnknownMaximumFrames {
+      XCTAssertTrue(limiter.allow(knownRelationship: false, now: 100))
+    }
+    XCTAssertFalse(limiter.allow(knownRelationship: false, now: 100))
+
+    for _ in 0..<IOSOpenEmergencyRateLimiter.defaultKnownMaximumFrames {
+      XCTAssertTrue(limiter.allow(knownRelationship: true, now: 100))
+    }
+    XCTAssertFalse(limiter.allow(knownRelationship: true, now: 100))
+    XCTAssertEqual(
+      limiter.operationalCounters(),
+      [
+        "openEmergencyRateLimitedKnown": 1,
+        "openEmergencyRateLimitedUnknown": 1,
+      ]
+    )
+
+    XCTAssertTrue(limiter.allow(knownRelationship: false, now: 160))
+    XCTAssertTrue(limiter.allow(knownRelationship: true, now: 160))
+  }
+
   func testEmergencySMSRecipientIsRevalidatedNatively() {
     XCTAssertEqual(
       IOSEmergencySMSPolicy.normalizeRecipient(" (+56) 9-1234-5678 "),
@@ -860,6 +1051,229 @@ class RunnerTests: XCTestCase {
     XCTAssertNil(IOSEmergencySMSPolicy.normalizeRecipient("+56CALLHELP"))
     XCTAssertNil(IOSEmergencySMSPolicy.normalizeRecipient("1234"))
     XCTAssertNil(IOSEmergencySMSPolicy.normalizeRecipient("+1234567890123456"))
+  }
+
+  func testRelayDampingUsesAndroidJitterWindows() {
+    XCTAssertEqual(
+      IOSRelayDampingPolicy.normal,
+      IOSRelayDampingPolicy.Settings(
+        minimumJitterMilliseconds: 180,
+        maximumJitterMilliseconds: 420,
+        suppressionAdditionalCopies: 2
+      )
+    )
+    XCTAssertEqual(
+      IOSRelayDampingPolicy.emergency,
+      IOSRelayDampingPolicy.Settings(
+        minimumJitterMilliseconds: 80,
+        maximumJitterMilliseconds: 160,
+        suppressionAdditionalCopies: 3
+      )
+    )
+
+    let salt = Data((0..<8).map(UInt8.init))
+    for index in 0..<256 {
+      let suffix = String(index, radix: 16)
+      let fingerprint = String(repeating: "0", count: 24 - suffix.count) + suffix
+      let normal = IOSRelayDampingPolicy.jitterMilliseconds(
+        fingerprint: fingerprint,
+        salt: salt,
+        emergency: false
+      )
+      let emergency = IOSRelayDampingPolicy.jitterMilliseconds(
+        fingerprint: fingerprint,
+        salt: salt,
+        emergency: true
+      )
+      XCTAssertTrue((180...420).contains(normal))
+      XCTAssertTrue((80...160).contains(emergency))
+    }
+  }
+
+  func testRelayDampingJitterIsDeterministicForFingerprintAndLocalPeer() {
+    let fingerprint = "d2960f980cd5983d2feadf81"
+    let salt = Data((0..<8).map(UInt8.init))
+
+    XCTAssertEqual(
+      IOSRelayDampingPolicy.jitterMilliseconds(
+        fingerprint: fingerprint,
+        salt: salt,
+        emergency: false
+      ),
+      345
+    )
+    XCTAssertEqual(
+      IOSRelayDampingPolicy.jitterMilliseconds(
+        fingerprint: fingerprint,
+        salt: salt,
+        emergency: true
+      ),
+      106
+    )
+    XCTAssertEqual(
+      IOSRelayDampingPolicy.jitterMilliseconds(
+        fingerprint: fingerprint,
+        salt: Data((1...8).map(UInt8.init)),
+        emergency: false
+      ),
+      273
+    )
+    XCTAssertNotEqual(
+      IOSRelayDampingPolicy.jitterMilliseconds(
+        fingerprint: fingerprint,
+        salt: salt,
+        emergency: false
+      ),
+      IOSRelayDampingPolicy.jitterMilliseconds(
+        fingerprint: "988b3fd49212d7fea7a0494c",
+        salt: salt,
+        emergency: false
+      )
+    )
+  }
+
+  func testRelayDampingSuppressesAtNormalAndEmergencyThresholds() {
+    XCTAssertTrue(
+      IOSRelayDampingPolicy.shouldRelay(additionalCopies: 1, emergency: false)
+    )
+    XCTAssertFalse(
+      IOSRelayDampingPolicy.shouldRelay(additionalCopies: 2, emergency: false)
+    )
+    XCTAssertTrue(
+      IOSRelayDampingPolicy.shouldRelay(additionalCopies: 2, emergency: true)
+    )
+    XCTAssertFalse(
+      IOSRelayDampingPolicy.shouldRelay(additionalCopies: 3, emergency: true)
+    )
+  }
+
+  func testRelayOperationalCountersUseParityNames() {
+    let counters = IOSRelayOperationalCounters()
+    counters.recordScheduled()
+    counters.recordExpiration(suppressed: true)
+
+    XCTAssertEqual(
+      counters.snapshot(),
+      [
+        "relayDampingSuppressed": 1,
+        "relayDampingScheduled": 1,
+        "relayDampingExpired": 1,
+      ]
+    )
+  }
+
+  func testRelayDampingCountsRepeatedSourceOnlyOnce() {
+    let source = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    let sourceKey = IOSRelayDampingPolicy.sourceKey(source)
+    var sourceKeys: Set<String> = [sourceKey]
+
+    for _ in 0..<20 {
+      sourceKeys = IOSRelayDampingPolicy.sourceKeys(
+        afterObserving: sourceKey,
+        in: sourceKeys
+      )
+    }
+
+    XCTAssertEqual(sourceKeys, [sourceKey])
+    XCTAssertEqual(
+      IOSRelayDampingPolicy.additionalCopies(sourceKeys: sourceKeys),
+      0
+    )
+    XCTAssertEqual(
+      IOSRelayDampingPolicy.sourceKey(nil),
+      IOSRelayDampingPolicy.sourceKey(nil)
+    )
+  }
+
+  func testRelayDampingCountsOnlyDistinctSourcesAsAdditionalCopies() {
+    let sources = (1...4).map {
+      UUID(uuidString: "00000000-0000-0000-0000-00000000000\($0)")!
+    }
+    var sourceKeys: Set<String> = [IOSRelayDampingPolicy.sourceKey(sources[0])]
+
+    for source in [sources[1], sources[1], sources[2]] {
+      sourceKeys = IOSRelayDampingPolicy.sourceKeys(
+        afterObserving: IOSRelayDampingPolicy.sourceKey(source),
+        in: sourceKeys
+      )
+    }
+    let twoAdditional = IOSRelayDampingPolicy.additionalCopies(sourceKeys: sourceKeys)
+    XCTAssertEqual(twoAdditional, 2)
+    XCTAssertFalse(
+      IOSRelayDampingPolicy.shouldRelay(
+        additionalCopies: twoAdditional,
+        emergency: false
+      )
+    )
+    XCTAssertTrue(
+      IOSRelayDampingPolicy.shouldRelay(
+        additionalCopies: twoAdditional,
+        emergency: true
+      )
+    )
+
+    sourceKeys = IOSRelayDampingPolicy.sourceKeys(
+      afterObserving: IOSRelayDampingPolicy.sourceKey(sources[3]),
+      in: sourceKeys
+    )
+    XCTAssertFalse(
+      IOSRelayDampingPolicy.shouldRelay(
+        additionalCopies: IOSRelayDampingPolicy.additionalCopies(
+          sourceKeys: sourceKeys
+        ),
+        emergency: true
+      )
+    )
+  }
+
+  func testMeshRetentionEvictsOldestUnprotectedEntries() {
+    let base = Date(timeIntervalSince1970: 1_000)
+    let evictions = IOSMeshRetentionPolicy.evictions(
+      lastSeen: [
+        "protected": base,
+        "oldest": base.addingTimeInterval(1),
+        "newest": base.addingTimeInterval(2),
+      ],
+      protected: ["protected"],
+      maximum: 2,
+      stableKey: { $0 }
+    )
+
+    XCTAssertEqual(evictions, ["oldest"])
+  }
+
+  func testBoundedPendingQueueAppliesPeerAndPerPeerLimits() {
+    var queue = IOSBoundedPeerPendingQueue<Int>(
+      limits: .init(maximumPeers: 2, maximumPerPeer: 2, maximumGlobal: 4)
+    )
+    XCTAssertTrue(queue.enqueue(1, for: "a"))
+    XCTAssertTrue(queue.enqueue(2, for: "a"))
+    XCTAssertTrue(queue.enqueue(3, for: "a"))
+    XCTAssertEqual(queue.values(for: "a"), [2, 3])
+
+    XCTAssertTrue(queue.enqueue(4, for: "b"))
+    XCTAssertTrue(queue.enqueue(5, for: "c", protectedPeerIDs: ["a"]))
+    XCTAssertFalse(queue.contains(peerID: "b"))
+    XCTAssertTrue(queue.contains(peerID: "a"))
+    XCTAssertTrue(queue.contains(peerID: "c"))
+    XCTAssertEqual(queue.peerCount, 2)
+  }
+
+  func testBoundedPendingQueueKeepsGlobalLimitDeterministically() {
+    var queue = IOSBoundedPeerPendingQueue<Int>(
+      limits: .init(maximumPeers: 3, maximumPerPeer: 3, maximumGlobal: 3)
+    )
+    XCTAssertTrue(queue.enqueue(1, for: "protected"))
+    XCTAssertTrue(queue.enqueue(2, for: "old"))
+    XCTAssertTrue(queue.enqueue(3, for: "new"))
+    XCTAssertTrue(
+      queue.enqueue(4, for: "new", protectedPeerIDs: ["protected"])
+    )
+
+    XCTAssertEqual(queue.count, 3)
+    XCTAssertEqual(queue.values(for: "protected"), [1])
+    XCTAssertFalse(queue.contains(peerID: "old"))
+    XCTAssertEqual(queue.values(for: "new"), [3, 4])
   }
 
   func testBeaconControlRelaysExactlyOnceOnlyToAnotherDirectedRecipient() {
@@ -1169,6 +1583,236 @@ class RunnerTests: XCTestCase {
     XCTAssertNotNil(backend.data)
   }
 
+  func testRescueRosterBatchPersistsPrePinsAndProtectsThem() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore(maximumPins: 1)
+    let rescuer = makePeerPinMaterial()
+    try store.importRescueRosterPins([
+      IOSRescueRosterPin(
+        peerID: rescuer.peerID,
+        signingPublicKey: rescuer.signing
+      ),
+    ])
+
+    let restored = backend.makeStore(maximumPins: 1)
+    XCTAssertEqual(
+      restored.rescueSigningKey(for: rescuer.peerID),
+      rescuer.signing
+    )
+    XCTAssertTrue(restored.rescueProtectedPeerIDs.contains(rescuer.peerID))
+    XCTAssertEqual(
+      try restored.validateAndPin(
+        peerID: rescuer.peerID,
+        noisePublicKey: rescuer.noise,
+        signingPublicKey: rescuer.signing
+      ),
+      .firstBinding
+    )
+    let newcomer = makePeerPinMaterial()
+    XCTAssertThrowsError(
+      try restored.validateAndPin(
+        peerID: newcomer.peerID,
+        noisePublicKey: newcomer.noise,
+        signingPublicKey: newcomer.signing
+      )
+    )
+  }
+
+  func testRescueRosterBatchValidatesBeforeReplacing() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore()
+    let original = makePeerPinMaterial()
+    try store.importRescueRosterPins([
+      IOSRescueRosterPin(
+        peerID: original.peerID,
+        signingPublicKey: original.signing
+      ),
+    ])
+    let persisted = backend.data
+    let valid = makePeerPinMaterial()
+
+    XCTAssertThrowsError(
+      try store.importRescueRosterPins([
+        IOSRescueRosterPin(
+          peerID: valid.peerID,
+          signingPublicKey: valid.signing
+        ),
+        IOSRescueRosterPin(
+          peerID: valid.peerID.uppercased(),
+          signingPublicKey: Curve25519.Signing.PrivateKey()
+            .publicKey.rawRepresentation
+        ),
+      ])
+    )
+    XCTAssertEqual(backend.data, persisted)
+    XCTAssertEqual(
+      store.rescueSigningKey(for: original.peerID),
+      original.signing
+    )
+  }
+
+  func testRescueRosterBatchRejectsActiveSigningPinConflictAtomically() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore()
+    let active = makePeerPinMaterial()
+    let originalRosterMember = makePeerPinMaterial()
+    _ = try store.validateAndPin(
+      peerID: active.peerID,
+      noisePublicKey: active.noise,
+      signingPublicKey: active.signing
+    )
+    try store.importRescueRosterPins([
+      IOSRescueRosterPin(
+        peerID: originalRosterMember.peerID,
+        signingPublicKey: originalRosterMember.signing
+      ),
+    ])
+    let persisted = backend.data
+    let counters = store.operationalCounters()
+    let valid = makePeerPinMaterial()
+    let conflictingSigning = Curve25519.Signing.PrivateKey()
+      .publicKey.rawRepresentation
+
+    XCTAssertThrowsError(
+      try store.importRescueRosterPins([
+        IOSRescueRosterPin(
+          peerID: valid.peerID,
+          signingPublicKey: valid.signing
+        ),
+        IOSRescueRosterPin(
+          peerID: active.peerID,
+          signingPublicKey: conflictingSigning
+        ),
+      ])
+    )
+
+    XCTAssertEqual(backend.data, persisted)
+    XCTAssertEqual(store.pin(for: active.peerID)?.signingPublicKey, active.signing)
+    XCTAssertNil(store.rescueSigningKey(for: valid.peerID))
+    XCTAssertEqual(
+      store.rescueSigningKey(for: originalRosterMember.peerID),
+      originalRosterMember.signing
+    )
+    XCTAssertEqual(
+      store.operationalCounters()["trustStoreEvictions"],
+      counters["trustStoreEvictions"]
+    )
+    XCTAssertEqual(
+      store.operationalCounters()["trustConflicts"],
+      (counters["trustConflicts"] ?? 0) + 1
+    )
+  }
+
+  func testPeerPinCapacityEvictsDeterministicUnprotectedBinding() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore(maximumPins: 2)
+    let first = makePeerPinMaterial()
+    let second = makePeerPinMaterial()
+    let incoming = makePeerPinMaterial()
+    for identity in [first, second] {
+      _ = try store.validateAndPin(
+        peerID: identity.peerID,
+        noisePublicKey: identity.noise,
+        signingPublicKey: identity.signing
+      )
+    }
+    let ordered = [first.peerID, second.peerID].sorted()
+    let evictedPeerID = try XCTUnwrap(ordered.first)
+    let protectedPeerID = try XCTUnwrap(ordered.last)
+
+    XCTAssertEqual(
+      try store.validateAndPin(
+        peerID: incoming.peerID,
+        noisePublicKey: incoming.noise,
+        signingPublicKey: incoming.signing,
+        protectedPeerIDs: [protectedPeerID]
+      ),
+      .firstBinding
+    )
+    XCTAssertNil(store.pin(for: evictedPeerID))
+    XCTAssertNotNil(store.pin(for: protectedPeerID))
+    XCTAssertNotNil(store.pin(for: incoming.peerID))
+    XCTAssertEqual(store.operationalCounters()["trustStoreEvictions"], 1)
+    XCTAssertEqual(store.operationalCounters()["trustConflicts"], 0)
+  }
+
+  func testPeerPinEvictionRollsBackAndFailsClosedWhenPersistenceFails() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore(maximumPins: 2)
+    let first = makePeerPinMaterial()
+    let second = makePeerPinMaterial()
+    let incoming = makePeerPinMaterial()
+    for identity in [first, second] {
+      _ = try store.validateAndPin(
+        peerID: identity.peerID,
+        noisePublicKey: identity.noise,
+        signingPublicKey: identity.signing
+      )
+    }
+    let persistedBeforeFailure = backend.data
+    backend.failUpsert = true
+
+    XCTAssertThrowsError(
+      try store.validateAndPin(
+        peerID: incoming.peerID,
+        noisePublicKey: incoming.noise,
+        signingPublicKey: incoming.signing
+      )
+    )
+    XCTAssertEqual(backend.data, persistedBeforeFailure)
+    XCTAssertNotNil(store.pin(for: first.peerID))
+    XCTAssertNotNil(store.pin(for: second.peerID))
+    XCTAssertNil(store.pin(for: incoming.peerID))
+    XCTAssertNotNil(store.failure)
+    XCTAssertThrowsError(
+      try store.validateAndPin(
+        peerID: incoming.peerID,
+        noisePublicKey: incoming.noise,
+        signingPublicKey: incoming.signing
+      )
+    )
+  }
+
+  func testPeerPinCapacityPreservesRotationTombstoneAndProtectedSuccessor() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore(maximumPins: 2)
+    let old = makePeerPinMaterial()
+    _ = try store.validateAndPin(
+      peerID: old.peerID,
+      noisePublicKey: old.noise,
+      signingPublicKey: old.signing
+    )
+    let newNoise = Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation
+    let newSigning = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+    let newPeerID = IOSMeshProtocol.peerID(newNoise).hex
+    _ = try store.rotate(
+      oldPeerID: old.peerID,
+      noisePublicKey: newNoise,
+      signingPublicKey: newSigning,
+      sequence: 1
+    )
+    let incoming = makePeerPinMaterial()
+
+    XCTAssertThrowsError(
+      try store.validateAndPin(
+        peerID: incoming.peerID,
+        noisePublicKey: incoming.noise,
+        signingPublicKey: incoming.signing,
+        protectedPeerIDs: [newPeerID]
+      )
+    )
+    XCTAssertNotNil(store.pin(for: newPeerID))
+    XCTAssertEqual(
+      try store.validateAndPin(
+        peerID: old.peerID,
+        noisePublicKey: old.noise,
+        signingPublicKey: old.signing
+      ),
+      .conflict(noiseChanged: true, signingChanged: true)
+    )
+    XCTAssertEqual(store.operationalCounters()["trustConflicts"], 1)
+  }
+
   func testPeerPinAcceptsSameBoundKeys() throws {
     let backend = TestSecurePinBackend()
     let store = backend.makeStore()
@@ -1274,6 +1918,79 @@ class RunnerTests: XCTestCase {
     )
   }
 
+  func testPeerPinRotationCollisionIncrementsTrustConflictWithoutChangingPins() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore()
+    let old = makePeerPinMaterial()
+    let existing = makePeerPinMaterial()
+    _ = try store.validateAndPin(
+      peerID: old.peerID,
+      noisePublicKey: old.noise,
+      signingPublicKey: old.signing
+    )
+    _ = try store.validateAndPin(
+      peerID: existing.peerID,
+      noisePublicKey: existing.noise,
+      signingPublicKey: existing.signing
+    )
+
+    XCTAssertNil(
+      try store.rotate(
+        oldPeerID: old.peerID,
+        noisePublicKey: existing.noise,
+        signingPublicKey: Curve25519.Signing.PrivateKey().publicKey.rawRepresentation,
+        sequence: 1
+      )
+    )
+    XCTAssertEqual(store.operationalCounters()["trustConflicts"], 1)
+    XCTAssertEqual(store.pin(for: old.peerID)?.noisePublicKey, old.noise)
+    XCTAssertEqual(
+      store.pin(for: existing.peerID)?.signingPublicKey,
+      existing.signing
+    )
+  }
+
+  func testPeerPinRotationRemovesRetiredRosterPinAndRestoresCleanly() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore()
+    let old = makePeerPinMaterial()
+    _ = try store.validateAndPin(
+      peerID: old.peerID,
+      noisePublicKey: old.noise,
+      signingPublicKey: old.signing
+    )
+    try store.importRescueRosterPins([
+      IOSRescueRosterPin(peerID: old.peerID, signingPublicKey: old.signing),
+    ])
+    let newNoise = Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation
+    let newSigning = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+    let newID = IOSMeshProtocol.peerID(newNoise).hex
+
+    XCTAssertNotNil(
+      try store.rotate(
+        oldPeerID: old.peerID,
+        noisePublicKey: newNoise,
+        signingPublicKey: newSigning,
+        sequence: 1
+      )
+    )
+    XCTAssertNil(store.rescueSigningKey(for: old.peerID))
+    XCTAssertFalse(store.rescueProtectedPeerIDs.contains(old.peerID))
+    XCTAssertNotNil(store.pin(for: newID))
+
+    let restored = backend.makeStore()
+    XCTAssertNil(restored.failure)
+    XCTAssertNil(restored.rescueSigningKey(for: old.peerID))
+    XCTAssertNotNil(restored.pin(for: newID))
+
+    // Un roster Dart aún no actualizado no debe bloquear el arranque ni
+    // reactivar la identidad retirada.
+    try restored.importRescueRosterPins([
+      IOSRescueRosterPin(peerID: old.peerID, signingPublicKey: old.signing),
+    ])
+    XCTAssertNil(restored.rescueSigningKey(for: old.peerID))
+  }
+
   func testPeerPinsRestoreFromSecurePersistence() throws {
     let backend = TestSecurePinBackend()
     let identity = makePeerPinMaterial()
@@ -1323,6 +2040,26 @@ class RunnerTests: XCTestCase {
     XCTAssertNil(backend.data)
     XCTAssertNil(store.pin(for: identity.peerID))
     XCTAssertNil(backend.makeStore().pin(for: identity.peerID))
+  }
+
+  func testEmergencyFingerprintCacheUses2048DefaultAndEvictsOldest() {
+    XCTAssertEqual(IOSEmergencyFingerprintCache.defaultMaximumEntries, 2048)
+    let suiteName = "HearthBit.EmergencyFingerprintTests.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let cache = IOSEmergencyFingerprintCache(
+      defaults: defaults,
+      maximumEntries: 3
+    )
+    let fingerprints = (0..<4).map {
+      String(format: "%064llx", UInt64($0))
+    }
+
+    for (index, fingerprint) in fingerprints.enumerated() {
+      XCTAssertFalse(cache.seenOrRemember(fingerprint, now: UInt64(100 + index)))
+    }
+    XCTAssertTrue(cache.seenOrRemember(fingerprints[1], now: 104))
+    XCTAssertFalse(cache.seenOrRemember(fingerprints[0], now: 105))
   }
 
   func testNoiseSessionRequiresTemporalRekeyAtOneHourWithoutSleeping() throws {
@@ -1900,6 +2637,7 @@ private extension Data {
 
 private final class TestSecurePinBackend {
   var data: Data?
+  var failUpsert = false
   private let suiteName: String
   private let defaults: UserDefaults
 
@@ -1913,7 +2651,7 @@ private final class TestSecurePinBackend {
     defaults.removePersistentDomain(forName: suiteName)
   }
 
-  func makeStore() -> IOSPeerIdentityPinStore {
+  func makeStore(maximumPins: Int = 512) -> IOSPeerIdentityPinStore {
     IOSPeerIdentityPinStore(
       defaults: defaults,
       read: { [weak self] in
@@ -1921,11 +2659,17 @@ private final class TestSecurePinBackend {
         return .value(data)
       },
       upsert: { [weak self] data in
+        if self?.failUpsert == true {
+          throw IOSSecureStorageError.logicalTransactionFailed(
+            "Injected peer pin persistence failure"
+          )
+        }
         self?.data = data
       },
       delete: { [weak self] in
         self?.data = nil
-      }
+      },
+      maximumPins: maximumPins
     )
   }
 }

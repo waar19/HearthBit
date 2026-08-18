@@ -6,9 +6,13 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../controllers/emergency_gateway_controller.dart';
+import '../controllers/authority_announcement_controller.dart';
 import '../controllers/family_controller.dart';
 import '../controllers/lan_gateway_controller.dart';
 import '../controllers/mesh_controller.dart';
+import '../controllers/rescue_case_controller.dart';
+import '../controllers/rescue_roster_controller.dart';
+import '../controllers/swept_zone_controller.dart';
 import '../controllers/transfer_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
@@ -25,6 +29,8 @@ import '../services/secure_database.dart';
 import '../services/transport_diagnostics.dart';
 import '../utils/scroll_to_bottom.dart';
 import '../widgets/nickname_dialog.dart';
+import '../widgets/authority_announcement_banner.dart';
+import 'authority_announcements_screen.dart';
 import 'diagnostics_screen.dart';
 import 'emergency_screen.dart';
 import 'family_screen.dart';
@@ -37,10 +43,15 @@ import 'map_screen.dart';
 import 'optical_receive_screen.dart';
 import 'optical_send_screen.dart';
 import 'radar_screen.dart';
+import 'rescue_operations_screen.dart';
+import 'rescue_roster_screen.dart';
 import 'transfers_tab.dart';
 
 enum _AppMenuAction {
   family,
+  rescueOperations,
+  rescueRoster,
+  authorityAnnouncements,
   diagnostics,
   changeNickname,
   privacy,
@@ -56,6 +67,10 @@ class HomeScreen extends StatefulWidget {
     required this.preferences,
     required this.gateway,
     required this.family,
+    this.rescueRoster,
+    this.authorityAnnouncements,
+    this.rescueCases,
+    this.sweptZones,
     this.lanGateway,
     this.emergencyOpens,
     this.consumeInitialEmergencyOpen,
@@ -67,6 +82,10 @@ class HomeScreen extends StatefulWidget {
   final AppPreferences preferences;
   final EmergencyGatewayController gateway;
   final FamilyController family;
+  final RescueRosterController? rescueRoster;
+  final AuthorityAnnouncementController? authorityAnnouncements;
+  final RescueCaseController? rescueCases;
+  final SweptZoneController? sweptZones;
   final LanGatewayController? lanGateway;
   final Stream<void>? emergencyOpens;
   final Future<bool> Function()? consumeInitialEmergencyOpen;
@@ -147,8 +166,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _appInForeground = state == AppLifecycleState.resumed;
     _syncGenericPresenceScan();
     if (state == AppLifecycleState.resumed) {
-      widget.controller.refreshPowerStatus();
+      unawaited(_refreshMeshHealth());
     }
+  }
+
+  Future<void> _refreshMeshHealth() async {
+    await widget.controller.refreshPowerStatus();
+    await widget.controller.refreshDiagnostics();
   }
 
   int get _pendingOffers => widget.transfers.transfers
@@ -302,8 +326,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return AnimatedBuilder(
       animation: Listenable.merge([
         widget.controller,
-        widget.transfers,
         widget.gateway,
+        if (widget.authorityAnnouncements != null)
+          widget.authorityAnnouncements!,
       ]),
       builder: (context, _) {
         final controller = widget.controller;
@@ -313,11 +338,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             actions: [
               IconButton(
                 tooltip: context.l10n.mapOpen,
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => MapScreen(controller: controller),
-                  ),
-                ),
+                onPressed:
+                    widget.rescueCases == null || widget.sweptZones == null
+                    ? null
+                    : () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => MapScreen(
+                            controller: controller,
+                            rescueCases: widget.rescueCases!,
+                            sweptZones: widget.sweptZones!,
+                          ),
+                        ),
+                      ),
                 icon: const Icon(Icons.map_outlined),
               ),
               IconButton(
@@ -346,6 +378,37 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       title: Text(context.l10n.familyTitle),
                     ),
                   ),
+                  if (widget.rescueCases != null &&
+                      widget.rescueRoster?.activeRoster != null)
+                    PopupMenuItem(
+                      value: _AppMenuAction.rescueOperations,
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(
+                          Icons.assignment_turned_in_outlined,
+                        ),
+                        title: Text(context.l10n.rescueOperationsTitle),
+                      ),
+                    ),
+                  if (widget.rescueRoster != null)
+                    PopupMenuItem(
+                      value: _AppMenuAction.rescueRoster,
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.health_and_safety_outlined),
+                        title: Text(context.l10n.rescueRosterTitle),
+                      ),
+                    ),
+                  if (widget.authorityAnnouncements != null &&
+                      widget.rescueRoster?.activeRoster != null)
+                    PopupMenuItem(
+                      value: _AppMenuAction.authorityAnnouncements,
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.campaign_outlined),
+                        title: Text(context.l10n.authorityTitle),
+                      ),
+                    ),
                   PopupMenuItem(
                     value: _AppMenuAction.diagnostics,
                     child: ListTile(
@@ -405,6 +468,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             child: Column(
               children: [
                 MeshStatusBanner(controller: controller),
+                if (_tab != 0 && widget.authorityAnnouncements != null)
+                  AuthorityAnnouncementBanner(
+                    controller: widget.authorityAnnouncements!,
+                    onTap: _openAuthorityAnnouncements,
+                  ),
                 if (controller.lastError != null)
                   MaterialBanner(
                     content: Text(controller.lastError!),
@@ -425,6 +493,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         preferences: widget.preferences,
                         gateway: widget.gateway,
                         family: widget.family,
+                        authorityAnnouncements: widget.authorityAnnouncements,
+                        rescueCases: widget.rescueCases,
+                        sweptZones: widget.sweptZones,
                       ),
                       PublicChatTab(
                         controller: controller,
@@ -439,6 +510,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
                       PeersTab(
                         controller: controller,
+                        rescueRoster: widget.rescueRoster,
                         lanGateway: widget.lanGateway,
                         onShareInvite: _shareInvite,
                         onOpenPrivateChat: (peer) =>
@@ -449,10 +521,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         onSendSealed: _sendSealedFileTo,
                         onSendApk: _sendApkTo,
                       ),
-                      TransfersTab(
-                        transfers: widget.transfers,
-                        onSendOptical: _startOpticalSend,
-                        onReceiveOptical: _startOpticalReceive,
+                      AnimatedBuilder(
+                        animation: widget.transfers,
+                        builder: (context, _) => TransfersTab(
+                          transfers: widget.transfers,
+                          onSendOptical: _startOpticalSend,
+                          onReceiveOptical: _startOpticalReceive,
+                        ),
                       ),
                     ],
                   ),
@@ -484,10 +559,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 label: context.l10n.tabNearby,
               ),
               NavigationDestination(
-                icon: Badge(
-                  isLabelVisible: _pendingOffers > 0,
-                  label: Text('$_pendingOffers'),
-                  child: const Icon(Icons.folder_shared_outlined),
+                icon: AnimatedBuilder(
+                  animation: widget.transfers,
+                  builder: (context, _) {
+                    final pendingOffers = _pendingOffers;
+                    return Badge(
+                      isLabelVisible: pendingOffers > 0,
+                      label: Text('$pendingOffers'),
+                      child: const Icon(Icons.folder_shared_outlined),
+                    );
+                  },
                 ),
                 selectedIcon: const Icon(Icons.folder_shared),
                 label: context.l10n.tabFiles,
@@ -583,6 +664,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
         );
         return;
+      case _AppMenuAction.rescueOperations:
+        final rescueCases = widget.rescueCases;
+        if (rescueCases == null) return;
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => RescueOperationsScreen(controller: rescueCases),
+          ),
+        );
+        return;
+      case _AppMenuAction.rescueRoster:
+        final rescueRoster = widget.rescueRoster;
+        if (rescueRoster == null) return;
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => RescueRosterScreen(controller: rescueRoster),
+          ),
+        );
+        return;
+      case _AppMenuAction.authorityAnnouncements:
+        await _openAuthorityAnnouncements();
+        return;
       case _AppMenuAction.diagnostics:
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
@@ -606,6 +708,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         await _confirmWipe(controller);
         return;
     }
+  }
+
+  Future<void> _openAuthorityAnnouncements() async {
+    final authority = widget.authorityAnnouncements;
+    if (authority == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AuthorityAnnouncementsScreen(controller: authority),
+      ),
+    );
   }
 
   Future<void> _showPrivacy(MeshController controller) async {
@@ -1030,6 +1142,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       await widget.transfers.wipe();
       await widget.family.panicWipe();
+      await widget.rescueRoster?.clearRoster();
       await widget.gateway.panicWipe();
       await widget.lanGateway?.panicWipe();
       await controller.panicWipe();

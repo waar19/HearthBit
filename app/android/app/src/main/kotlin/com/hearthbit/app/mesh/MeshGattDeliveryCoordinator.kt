@@ -293,6 +293,11 @@ internal class MeshGattDeliveryCoordinator(
         }
     }
 
+    fun hasPendingServerNotifications(address: String): Boolean =
+        synchronized(serverNotificationLock) {
+            serverNotificationQueues[address]?.size?.let { it > 0 } == true
+        }
+
     fun clearAllServerDeliveryState() {
         synchronized(serverNotificationLock) {
             serverNotificationQueues.clear()

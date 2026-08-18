@@ -24,10 +24,16 @@ class DiagnosticsExportService {
   Future<ShareResult> share({
     required RenderBox? anchor,
     required String subject,
+    Map<String, int> operationalCounters = const {},
+    String operationalCountersLifetime = 'unknown',
   }) async {
     _log.info(
       'diagnostics.transport.outcomes',
       data: _transportDiagnostics.exportData(),
+    );
+    includeOperationalCounters(
+      operationalCounters,
+      lifetime: operationalCountersLifetime,
     );
     final file = await _log.createExportFile();
     final origin = anchor == null || !anchor.hasSize
@@ -40,6 +46,21 @@ class DiagnosticsExportService {
         title: subject,
         sharePositionOrigin: origin,
       ),
+    );
+  }
+
+  void includeOperationalCounters(
+    Map<String, int> counters, {
+    String lifetime = 'unknown',
+  }) {
+    _log.info(
+      'diagnostics.operational_counters',
+      data: {
+        ...counters,
+        'operationalCountersLifetime': lifetime == 'process'
+            ? 'process'
+            : 'unknown',
+      },
     );
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -7,6 +8,30 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/mesh_models.dart';
+import '../models/rescue_case_models.dart';
+import '../models/swept_zone_models.dart';
+import 'rescue_case_clusterer.dart';
+
+enum RescueExportFormat {
+  csv(extension: 'csv', mimeType: 'text/csv'),
+  geoJson(extension: 'geojson', mimeType: 'application/geo+json');
+
+  const RescueExportFormat({required this.extension, required this.mimeType});
+
+  final String extension;
+  final String mimeType;
+}
+
+abstract final class RescueExportPolicy {
+  static Iterable<RescueCase> operationalCases(
+    Iterable<RescueCase> cases, {
+    required String teamId,
+  }) => cases.where(
+    (rescueCase) =>
+        rescueCase.teamId == teamId &&
+        rescueCase.state != RescueCaseState.closed,
+  );
+}
 
 enum RescueIncidentKind { sos, checkIn }
 
@@ -22,6 +47,7 @@ class RescueIncident {
     this.latitude,
     this.longitude,
     this.distanceMeters,
+    this.triage,
   });
 
   final String id;
@@ -34,6 +60,7 @@ class RescueIncident {
   final double? latitude;
   final double? longitude;
   final double? distanceMeters;
+  final SosTriage? triage;
 
   RescueIncident copyWithDistance(double? value) => RescueIncident(
     id: id,
@@ -46,6 +73,7 @@ class RescueIncident {
     latitude: latitude,
     longitude: longitude,
     distanceMeters: value,
+    triage: triage,
   );
 }
 
@@ -89,6 +117,7 @@ class RescueIncidentList {
           timestamp: message.timestamp,
           latitude: coordinates.$1,
           longitude: coordinates.$2,
+          triage: message.sosTriage,
         );
       }
       if (incident == null) continue;
@@ -165,6 +194,8 @@ class RescueIncidentList {
 class RescueCsv {
   RescueCsv._();
 
+  static const Set<int> _trustedNumericColumns = {6, 7, 8, 9, 11};
+
   static String build(Iterable<RescueIncident> incidents) {
     final rows = <List<String>>[
       [
@@ -177,6 +208,11 @@ class RescueCsv {
         'latitude',
         'longitude',
         'distance_meters',
+        'people_count',
+        'injury_status',
+        'injured_count',
+        'trapped_status',
+        'primary_need',
       ],
       ...incidents.map(
         (incident) => [
@@ -191,16 +227,195 @@ class RescueCsv {
           incident.latitude?.toStringAsFixed(6) ?? '',
           incident.longitude?.toStringAsFixed(6) ?? '',
           incident.distanceMeters?.round().toString() ?? '',
+          incident.triage?.peopleCount?.toString() ?? '',
+          incident.triage?.injuryStatus.name ?? '',
+          incident.triage?.injuredCount?.toString() ?? '',
+          incident.triage?.trappedStatus.name ?? '',
+          incident.triage?.primaryNeed.name ?? '',
         ],
       ),
     ];
-    return '${rows.map((row) => row.map(_escape).join(',')).join('\r\n')}\r\n';
+    return _encodeCsv(rows, trustedNumericColumns: _trustedNumericColumns);
+  }
+}
+
+abstract final class RescueOperationalCsv {
+  static const Set<int> _trustedNumericColumns = {9, 10};
+
+  static String build(Iterable<RescueCase> cases, {required String teamId}) {
+    final sorted =
+        cases
+            .where((rescueCase) => rescueCase.teamId == teamId)
+            .toList(growable: false)
+          ..sort((first, second) => first.caseHash.compareTo(second.caseHash));
+    final rows = <List<String>>[
+      [
+        'case_hash',
+        'team_id',
+        'state',
+        'priority',
+        'victim',
+        'message',
+        'assignee',
+        'created_at_utc',
+        'updated_at_utc',
+        'latitude',
+        'longitude',
+      ],
+      ...sorted.map(
+        (rescueCase) => [
+          rescueCase.caseHash,
+          rescueCase.teamId,
+          rescueCase.state.name,
+          RescueCaseClusterer.priorityForTriage(rescueCase.triage).name,
+          rescueCase.victim,
+          rescueCase.message,
+          rescueCase.assigneePeerId ?? '',
+          rescueCase.createdAt.toUtc().toIso8601String(),
+          rescueCase.updatedAt.toUtc().toIso8601String(),
+          _validCoordinates(rescueCase.latitude, rescueCase.longitude)
+              ? rescueCase.latitude!.toStringAsFixed(6)
+              : '',
+          _validCoordinates(rescueCase.latitude, rescueCase.longitude)
+              ? rescueCase.longitude!.toStringAsFixed(6)
+              : '',
+        ],
+      ),
+    ];
+    return _encodeCsv(rows, trustedNumericColumns: _trustedNumericColumns);
+  }
+}
+
+abstract final class RescueGeoJson {
+  static const String schema = 'hearthbit-rescue';
+  static const int version = 1;
+
+  static String build({
+    required String teamId,
+    required Iterable<RescueCase> cases,
+    required Iterable<SweptZone> zones,
+  }) {
+    final sortedCases =
+        cases
+            .where((rescueCase) => rescueCase.teamId == teamId)
+            .toList(growable: false)
+          ..sort((first, second) => first.caseHash.compareTo(second.caseHash));
+    final sortedZones =
+        zones.where((zone) => zone.teamId == teamId).toList(growable: false)
+          ..sort((first, second) => first.zoneId.compareTo(second.zoneId));
+    final features = <Map<String, Object?>>[
+      ...sortedCases.map(_caseFeature),
+      ...sortedZones.map(_zoneFeature).whereType<Map<String, Object?>>(),
+    ];
+    return jsonEncode(<String, Object>{
+      'type': 'FeatureCollection',
+      'features': features,
+    });
   }
 
-  static String _escape(String value) {
-    if (!value.contains(RegExp(r'[,"\r\n]'))) return value;
-    return '"${value.replaceAll('"', '""')}"';
+  static Map<String, Object?> _caseFeature(RescueCase rescueCase) {
+    final triage = rescueCase.triage;
+    return <String, Object?>{
+      'type': 'Feature',
+      'id': 'case:${rescueCase.caseHash}',
+      'geometry': _validCoordinates(rescueCase.latitude, rescueCase.longitude)
+          ? <String, Object>{
+              'type': 'Point',
+              'coordinates': <double>[
+                rescueCase.longitude!,
+                rescueCase.latitude!,
+              ],
+            }
+          : null,
+      'properties': <String, Object?>{
+        'schema': schema,
+        'version': version,
+        'featureType': 'rescueCase',
+        'caseHash': rescueCase.caseHash,
+        'teamId': rescueCase.teamId,
+        'state': rescueCase.state.name,
+        'priority': RescueCaseClusterer.priorityForTriage(
+          rescueCase.triage,
+        ).name,
+        'triage': triage == null
+            ? null
+            : <String, Object?>{
+                'peopleCount': triage.peopleCount,
+                'injuryStatus': triage.injuryStatus.name,
+                'injuredCount': triage.injuredCount,
+                'trappedStatus': triage.trappedStatus.name,
+                'primaryNeed': triage.primaryNeed.name,
+              },
+        'victim': rescueCase.victim,
+        'message': rescueCase.message,
+        'assignee': rescueCase.assigneePeerId,
+        'createdAt': rescueCase.createdAt.toUtc().toIso8601String(),
+        'updatedAt': rescueCase.updatedAt.toUtc().toIso8601String(),
+      },
+    };
   }
+
+  static Map<String, Object?>? _zoneFeature(SweptZone zone) {
+    final points = zone.points
+        .where((point) => _validCoordinates(point.latitude, point.longitude))
+        .map((point) => <double>[point.longitude, point.latitude])
+        .toList(growable: false);
+    if (points.length < 2) return null;
+    return <String, Object?>{
+      'type': 'Feature',
+      'id': 'zone:${zone.zoneId}',
+      'geometry': <String, Object>{'type': 'LineString', 'coordinates': points},
+      'properties': <String, Object?>{
+        'schema': schema,
+        'version': version,
+        'featureType': 'sweptZone',
+        'zoneId': zone.zoneId,
+        'teamId': zone.teamId,
+        'actor': zone.actorPeerId,
+        'callsign': zone.callsign,
+        'startedAt': zone.startedAt.toUtc().toIso8601String(),
+        'endedAt': zone.endedAt.toUtc().toIso8601String(),
+      },
+    };
+  }
+}
+
+bool _validCoordinates(double? latitude, double? longitude) =>
+    latitude != null &&
+    longitude != null &&
+    latitude.isFinite &&
+    longitude.isFinite &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    longitude >= -180 &&
+    longitude <= 180;
+
+String _escapeCsv(String value, {required bool trustedNumeric}) {
+  final parsedNumber = trustedNumeric ? num.tryParse(value) : null;
+  final safeNumeric =
+      parsedNumber != null && parsedNumber.isFinite && value.trim() == value;
+  final neutralized = !safeNumeric && RegExp(r'^ *[=+\-@\t\r]').hasMatch(value)
+      ? "'$value"
+      : value;
+  if (!neutralized.contains(RegExp(r'[,"\t\r\n]'))) return neutralized;
+  return '"${neutralized.replaceAll('"', '""')}"';
+}
+
+String _encodeCsv(
+  List<List<String>> rows, {
+  required Set<int> trustedNumericColumns,
+}) {
+  final encodedRows = rows.map(
+    (row) => row.indexed
+        .map(
+          (entry) => _escapeCsv(
+            entry.$2,
+            trustedNumeric: trustedNumericColumns.contains(entry.$1),
+          ),
+        )
+        .join(','),
+  );
+  return '${encodedRows.join('\r\n')}\r\n';
 }
 
 class RescueExportService {
@@ -226,6 +441,47 @@ class RescueExportService {
     return SharePlus.instance.share(
       ShareParams(
         files: [XFile(file.path, mimeType: 'text/csv')],
+        subject: subject,
+        title: subject,
+        sharePositionOrigin: origin,
+      ),
+    );
+  }
+
+  static Future<ShareResult> shareOperational({
+    required RescueExportFormat format,
+    required String teamId,
+    required Iterable<RescueCase> cases,
+    required Iterable<SweptZone> zones,
+    required RenderBox? anchor,
+    required String subject,
+  }) async {
+    final directory = await getTemporaryDirectory();
+    final timestamp = DateTime.now().toUtc().toIso8601String().replaceAll(
+      RegExp('[:.]'),
+      '-',
+    );
+    final file = File(
+      p.join(directory.path, 'hearthbit-rescue-$timestamp.${format.extension}'),
+    );
+    final content = switch (format) {
+      RescueExportFormat.csv => RescueOperationalCsv.build(
+        cases,
+        teamId: teamId,
+      ),
+      RescueExportFormat.geoJson => RescueGeoJson.build(
+        teamId: teamId,
+        cases: cases,
+        zones: zones,
+      ),
+    };
+    await file.writeAsString(content, flush: true);
+    final origin = anchor == null || !anchor.hasSize
+        ? const Rect.fromLTWH(0, 0, 1, 1)
+        : anchor.localToGlobal(Offset.zero) & anchor.size;
+    return SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path, mimeType: format.mimeType)],
         subject: subject,
         title: subject,
         sharePositionOrigin: origin,

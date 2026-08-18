@@ -3,6 +3,13 @@
 La radio BLE no se valida con emuladores. Use teléfonos físicos y desactive
 Wi-Fi y datos móviles durante la prueba.
 
+Para un operativo completo con roster, triage, casos, clusters, zonas,
+anuncios de autoridad y GeoJSON, siga también el
+[piloto P0 para equipo de rescate](rescue-team-pilot.md). Su preflight crea
+manifiesto y reporte en estado `PENDING`/`BLOCKED`; la validación automática
+solo puede elevar el paquete a `READY_FOR_REVIEW` y nunca declara `PASS` ni
+evidencia RF.
+
 ## Gates P0 de publicación
 
 Estos casos bloquean la declaración «lista para emergencias reales». Su estado
@@ -550,6 +557,11 @@ cambia TTL. La firma sigue válida porque su forma canónica usa TTL cero.
 inválida, TTL incorrecto, duplicado o más de un forward. Los logs actuales de
 Android y Linux no muestran la lista de ruta: sin captura/decodificación de los
 bytes en ambos lados este caso queda `BLOCKED`, no `PASS`.
+
+El contador agregado `forwarded` del relay cuenta cada envío real de un frame a
+un enlace, incluidos los frames emitidos por store-and-forward `_replay()`. No
+cuenta como un único evento lógico cuando el mismo frame se envía a varios
+enlaces.
 
 ### D1-ROLE-01 — políticas PHONE e INFRA
 

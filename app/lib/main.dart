@@ -3,10 +3,14 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import 'controllers/authority_announcement_controller.dart';
 import 'controllers/mesh_controller.dart';
 import 'controllers/emergency_gateway_controller.dart';
 import 'controllers/family_controller.dart';
 import 'controllers/lan_gateway_controller.dart';
+import 'controllers/rescue_case_controller.dart';
+import 'controllers/rescue_roster_controller.dart';
+import 'controllers/swept_zone_controller.dart';
 import 'controllers/transfer_controller.dart';
 import 'l10n/l10n.dart';
 import 'screens/home_screen.dart';
@@ -137,6 +141,10 @@ class _HearthBitAppState extends State<HearthBitApp> {
   late final AppPreferences _preferences;
   late final EmergencyGatewayController _gateway;
   late final FamilyController _family;
+  late final RescueRosterController _rescueRoster;
+  late final RescueCaseController _rescueCases;
+  late final SweptZoneController _sweptZones;
+  late final AuthorityAnnouncementController _authorityAnnouncements;
   late final LanGatewayController _lanGateway;
   late final TransportDiagnostics _transportDiagnostics;
   late final Future<void> _initialization;
@@ -161,6 +169,19 @@ class _HearthBitAppState extends State<HearthBitApp> {
       preferences: _preferences,
     );
     _family = FamilyController(mesh: _controller);
+    _rescueRoster = RescueRosterController(
+      mesh: _controller,
+      platform: platform,
+    );
+    _rescueCases = RescueCaseController(
+      mesh: _controller,
+      roster: _rescueRoster,
+    );
+    _sweptZones = SweptZoneController(mesh: _controller, roster: _rescueRoster);
+    _authorityAnnouncements = AuthorityAnnouncementController(
+      mesh: _controller,
+      roster: _rescueRoster,
+    );
     _lanGateway = LanGatewayController();
     _initialization = _initialize();
   }
@@ -175,12 +196,20 @@ class _HearthBitAppState extends State<HearthBitApp> {
     await _gateway.initialize();
     await _lanGateway.initialize();
     await _family.initialize();
+    await _rescueRoster.initialize();
+    await _rescueCases.initialize();
+    await _sweptZones.initialize();
+    await _authorityAnnouncements.initialize();
   }
 
   @override
   void dispose() {
     _gateway.dispose();
     _family.dispose();
+    _sweptZones.dispose();
+    _authorityAnnouncements.dispose();
+    _rescueCases.dispose();
+    _rescueRoster.dispose();
     _lanGateway.dispose();
     _transfers.dispose();
     _controller.dispose();
@@ -196,6 +225,10 @@ class _HearthBitAppState extends State<HearthBitApp> {
         _controller,
         _transfers,
         _lanGateway,
+        _rescueRoster,
+        _rescueCases,
+        _sweptZones,
+        _authorityAnnouncements,
       ]),
       builder: (context, _) => MaterialApp(
         onGenerateTitle: (context) => context.l10n.appTitle,
@@ -257,6 +290,10 @@ class _HearthBitAppState extends State<HearthBitApp> {
               preferences: _preferences,
               gateway: _gateway,
               family: _family,
+              rescueRoster: _rescueRoster,
+              authorityAnnouncements: _authorityAnnouncements,
+              rescueCases: _rescueCases,
+              sweptZones: _sweptZones,
               lanGateway: _lanGateway,
             );
           },

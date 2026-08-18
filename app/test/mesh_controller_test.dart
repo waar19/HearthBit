@@ -28,11 +28,16 @@ class _FakePlatform extends MeshPlatformService {
   final List<String> retryEmergencyCalls = [];
   String? retryEmergencyResult;
   final List<({String content, String? channel})> publicMessages = [];
+  final List<({String messageId, String content, String channel})>
+  emergencyMessages = [];
   final List<({String peerId, String content, String? messageId})>
   privateMessages = [];
   final List<String> privateChannelRequests = [];
   bool permissionsGranted = true;
+  bool meshPermissionsGranted = true;
+  bool ignoringBatteryOptimizations = false;
   bool backgroundLocation = true;
+  String? diagnosticStatus;
   Object? startError;
   Object? privateMessageError;
   Completer<String>? privateMessageGate;
@@ -135,6 +140,11 @@ class _FakePlatform extends MeshPlatformService {
     required String content,
     required String channel,
   }) async {
+    emergencyMessages.add((
+      messageId: messageId,
+      content: content,
+      channel: channel,
+    ));
     if (channel == 'sos') {
       sosCalls += 1;
     } else {
@@ -181,7 +191,8 @@ class _FakePlatform extends MeshPlatformService {
 
   @override
   Future<Map<Object?, Object?>> getPowerStatus() async => {
-    'ignoringBatteryOptimizations': false,
+    'ignoringBatteryOptimizations': ignoringBatteryOptimizations,
+    'meshPermissionsGranted': meshPermissionsGranted,
     'lowPowerMode': true,
     'backgroundLocation': backgroundLocation,
     'batteryLevel': 14,
@@ -191,6 +202,7 @@ class _FakePlatform extends MeshPlatformService {
 
   @override
   Future<Map<Object?, Object?>> getMeshDiagnostics() async => {
+    if (diagnosticStatus != null) 'meshStatus': diagnosticStatus,
     'platform': 'android',
     'advertising': true,
     'meshScanActive': true,
@@ -203,6 +215,17 @@ class _FakePlatform extends MeshPlatformService {
     'activeScans': 1,
     'scanStarts': 8,
     'storeForwardEntries': 3,
+    'operationalCounters': {
+      'openEmergencyRateLimitedKnown': 2,
+      'openEmergencyRateLimitedUnknown': 7,
+      'relayDampingSuppressed': 3,
+      'relayDampingScheduled': 11,
+      'relayDampingExpired': 9,
+      'trustStoreEvictions': 1,
+      'trustConflicts': 4,
+      'peerId': 'must-not-be-parsed',
+    },
+    'operationalCountersLifetime': 'process',
     'transports': ['ble', 'lan', 'ble'],
   };
 
@@ -501,7 +524,27 @@ void main() {
     expect(controller.activeBleScans, 1);
     expect(controller.scanStarts, 8);
     expect(controller.storeForwardEntries, 3);
+    expect(controller.operationalCounters.openEmergencyRateLimitedKnown, 2);
+    expect(controller.operationalCounters.openEmergencyRateLimitedUnknown, 7);
+    expect(controller.operationalCounters.relayDampingSuppressed, 3);
+    expect(controller.operationalCounters.relayDampingScheduled, 11);
+    expect(controller.operationalCounters.relayDampingExpired, 9);
+    expect(controller.operationalCounters.trustStoreEvictions, 1);
+    expect(controller.operationalCounters.trustConflicts, 4);
+    expect(controller.operationalCounters.toJson(), isNot(contains('peerId')));
+    expect(controller.operationalCountersLifetime, 'process');
     expect(controller.activeTransports, {'ble', 'lan'});
+  });
+
+  test('el diagnóstico al volver detecta una malla suspendida', () async {
+    platform.emit({'type': 'status', 'status': 'active'});
+    await pumpEvents();
+    platform.diagnosticStatus = 'stopped';
+
+    await controller.refreshDiagnostics();
+
+    expect(controller.status, MeshConnectionStatus.stopped);
+    expect(controller.canSend, isFalse);
   });
 
   test('un evento inválido no cancela los eventos posteriores', () async {
@@ -1008,6 +1051,72 @@ void main() {
     expect(controller.status, MeshConnectionStatus.error);
     expect(platform.startCalls, 0);
     expect(controller.canSend, isFalse);
+    expect(controller.meshPermissionsGranted, isFalse);
+  });
+
+  test(
+    'un SOS sin salida queda persistido y se informa como en cola',
+    () async {
+      platform.permissionsGranted = false;
+
+      final result = await controller.activateEmergency(
+        description: 'Ayuda',
+        locationPrecision: SosLocationPrecision.none,
+        triage: const SosTriage(
+          trappedStatus: SosTrappedStatus.yes,
+          primaryNeed: SosPrimaryNeed.extraction,
+        ),
+      );
+
+      expect(result, EmergencyActivationResult.queuedWithoutRoute);
+      expect(controller.emergencyDeliveries, hasLength(1));
+      expect(repository.emergencyOutbox, hasLength(1));
+      expect(
+        repository.emergencyOutbox.single.content,
+        'SOS|Ayuda|||T1|?|?|Y|E',
+      );
+      expect(controller.rescueMode, isFalse);
+    },
+  );
+
+  test('expone la causa que interrumpe una malla solicitada', () async {
+    final preferences = AppPreferences();
+    await preferences.initialize();
+    await preferences.setMeshDesiredActive(true);
+    final healthPlatform = _FakePlatform()
+      ..meshPermissionsGranted = false
+      ..ignoringBatteryOptimizations = false;
+    final healthController = MeshController(
+      platform: healthPlatform,
+      repository: _FakeRepository(),
+      preferences: preferences,
+    );
+    addTearDown(() {
+      healthController.dispose();
+      preferences.dispose();
+    });
+
+    await healthController.initialize();
+    expect(
+      healthController.meshInterruptionReason,
+      MeshInterruptionReason.permissionsRevoked,
+    );
+
+    healthPlatform.meshPermissionsGranted = true;
+    await healthController.refreshPowerStatus();
+    expect(
+      healthController.meshInterruptionReason,
+      MeshInterruptionReason.batteryRestricted,
+    );
+
+    healthPlatform.ignoringBatteryOptimizations = true;
+    await healthController.refreshPowerStatus();
+    healthPlatform.emit({'type': 'status', 'status': 'stopped'});
+    await pumpEvents();
+    expect(
+      healthController.meshInterruptionReason,
+      MeshInterruptionReason.unavailable,
+    );
   });
 
   test(
@@ -1444,6 +1553,34 @@ void main() {
     final acknowledged = controller.emergencyDeliveries.single;
     expect(acknowledged.state, EmergencyDeliveryState.acknowledged);
     expect(acknowledged.confirmationCount, 1);
+  });
+
+  test('SOS conserva triage firmado en envío y cola persistida', () async {
+    platform.emit({
+      'type': 'status',
+      'status': 'active',
+      'role': 'PHONE_RELAY',
+    });
+    await pumpEvents();
+    const triage = SosTriage(
+      peopleCount: 3,
+      injuryStatus: SosInjuryStatus.injured,
+      injuredCount: 1,
+      trappedStatus: SosTrappedStatus.no,
+      primaryNeed: SosPrimaryNeed.medical,
+    );
+
+    await controller.sendSos(
+      'Ayuda',
+      locationPrecision: SosLocationPrecision.none,
+      triage: triage,
+    );
+
+    final content = platform.emergencyMessages.single.content;
+    expect(content, 'SOS|Ayuda|||T1|3|1|N|M');
+    expect(controller.emergencyDeliveries.single.content, content);
+    expect(repository.emergencyOutbox.single.content, content);
+    expect(SosMessageCodec.triage(content), triage);
   });
 
   test('reintenta una vez el ACK que se adelanta a la persistencia', () async {

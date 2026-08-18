@@ -141,9 +141,21 @@ class ReticulumConfig:
 
 @dataclass(frozen=True, slots=True)
 class IdentityVerificationConfig:
-    """Trust-on-first-valid-ANNOUNCE policy for signed mesh packets."""
+    """Trust-on-first-valid-ANNOUNCE policy for signed mesh packets.
 
-    unknown_signed_policy: str = "relay-live"
+    ``relay-live`` remains accepted as a legacy configuration value, but is
+    normalized to the safe ``reject`` behavior.
+    """
+
+    unknown_signed_policy: str = "reject"
+
+    def __post_init__(self) -> None:
+        if self.unknown_signed_policy not in {"reject", "relay-live"}:
+            raise ValueError(
+                "unknown_signed_policy must be 'reject' or legacy 'relay-live'"
+            )
+        if self.unknown_signed_policy == "relay-live":
+            object.__setattr__(self, "unknown_signed_policy", "reject")
 
 
 @dataclass(frozen=True, slots=True)
@@ -516,7 +528,7 @@ def load_config(path: str | Path | None) -> RelayConfig:
     if unknown_signed_policy not in {"reject", "relay-live"}:
         raise ValueError(
             "'identity_verification.unknown_signed_policy' must be "
-            "'reject' or 'relay-live'"
+            "'reject' or legacy 'relay-live'"
         )
     identity_verification = IdentityVerificationConfig(
         unknown_signed_policy=unknown_signed_policy

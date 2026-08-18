@@ -1,0 +1,76 @@
+{
+  "schema_version": 2,
+  "run_id": "RUN-YYYYMMDDTHHMMSSZ-RESCUE-PILOT",
+  "created_utc": "PENDING",
+  "status": "PENDING",
+  "commit": "PENDING",
+  "build": "PENDING",
+  "privacy": "No PII, serials, MAC, peer IDs, keys, real coordinates or real messages",
+  "hardware": {
+    "android_devices": "PENDING",
+    "iphone_and_mac": "PENDING",
+    "bitle_anchors": "PENDING",
+    "raspberry_pi_bluez": "PENDING",
+    "meshtastic_pair": "PENDING",
+    "authorized_lora_pair": "PENDING"
+  },
+  "required_scenarios": [
+    "ROSTER",
+    "TRIAGE",
+    "CASES",
+    "CLUSTERS",
+    "ZONES",
+    "AUTHORITY",
+    "GEOJSON",
+    "P0-SOS-NO-AUDIENCE",
+    "P0-SOS-ACK",
+    "P0-STORE-REBOOT",
+    "P0-RESCUE-KILL-DOZE",
+    "P0-PRIVATE-NOISE",
+    "P0-FOUR-NODE-TWO-HOP",
+    "P0-LAN-PI",
+    "P0-RADAR-10M",
+    "P0-BATTERY-24H",
+    "P0-IOS-MESH-RESTART",
+    "P0-INTEROP-OFF",
+    "P0-PANIC-WIPE",
+    "P0-OPTICAL-TRUST",
+    "P0-SOS-CLOCK-01",
+    "P0-SOS-BATTERY-01",
+    "P0-BT-RECOVERY-01",
+    "P0-RESCUE-RESTART-01",
+    "P0-IOS-FORCEQUIT-01",
+    "P0-RADAR-30M-01",
+    "P0-BEACON-HOP-01",
+    "P0-MESHTASTIC-QUEUE-01",
+    "P0-LORA-ATOMIC-01",
+    "P0-SONAR-NOISE-01"
+  ],
+  "required_evidence_categories": [
+    "android-log",
+    "diagnostics-export",
+    "operator-report",
+    "ui-evidence",
+    "topology-control",
+    "hardware-inventory",
+    "ios-evidence",
+    "anchor-evidence",
+    "meshtastic-evidence",
+    "lora-evidence"
+  ],
+  "criteria_documented": [],
+  "first_failed_criterion": "PENDING",
+  "evidence": [
+    {
+      "scenario": "PENDING",
+      "category": "PENDING",
+      "path": "PENDING",
+      "sha256": "PENDING"
+    }
+  ],
+  "independent_review": {
+    "required": true,
+    "recorded_by_script": false,
+    "external_record": "PENDING"
+  }
+}

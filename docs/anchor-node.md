@@ -4,6 +4,10 @@ El firmware fijado en `firmware/anchor-node` es Bitle. Funciona en ESP32-C3 y
 ESP32-S3 con ESP-IDF 6, anuncia el servicio BitChat, ejecuta Noise XX, retransmite
 paquetes y mantiene correo cifrado store-and-forward.
 
+Antes de decidir cantidades o ubicaciones, use la
+[guía de densidad y ubicación](anchor-density-guide.md). Sus perfiles son puntos
+de partida sujetos a site survey; no garantizan alcance ni cobertura.
+
 ## Hardware recomendado
 
 - Seeed XIAO ESP32-C3 con antena de 2,4 GHz para una casa.

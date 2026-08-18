@@ -19,7 +19,7 @@ internal enum class PowerProfile(
         scanPauseMs = 0L,
         advertiseMode = AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY,
         advertiseTxPower = AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM,
-        maximumClientConnections = Int.MAX_VALUE,
+        maximumClientConnections = MeshEngineConstants.MAX_BLE_CONNECTIONS,
     ),
     BALANCED(
         wireName = "balanced",
@@ -28,7 +28,7 @@ internal enum class PowerProfile(
         scanPauseMs = 0L,
         advertiseMode = AdvertiseSettings.ADVERTISE_MODE_BALANCED,
         advertiseTxPower = AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM,
-        maximumClientConnections = Int.MAX_VALUE,
+        maximumClientConnections = MeshEngineConstants.MAX_BLE_CONNECTIONS,
     ),
     POWER_SAVER(
         wireName = "powerSaver",
@@ -37,7 +37,7 @@ internal enum class PowerProfile(
         scanPauseMs = 50_000L,
         advertiseMode = AdvertiseSettings.ADVERTISE_MODE_LOW_POWER,
         advertiseTxPower = AdvertiseSettings.ADVERTISE_TX_POWER_LOW,
-        maximumClientConnections = Int.MAX_VALUE,
+        maximumClientConnections = MeshEngineConstants.MAX_BLE_CONNECTIONS,
     ),
     CRITICAL(
         wireName = "critical",

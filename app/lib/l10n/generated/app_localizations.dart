@@ -154,6 +154,24 @@ abstract class AppLocalizations {
   /// **'Mesh stopped'**
   String get statusStopped;
 
+  /// No description provided for @statusMeshPermissionsRevoked.
+  ///
+  /// In en, this message translates to:
+  /// **'Mesh suspended: Bluetooth or nearby-device permission was revoked.'**
+  String get statusMeshPermissionsRevoked;
+
+  /// No description provided for @statusMeshBatteryRestricted.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery restrictions may suspend the mesh in the background.'**
+  String get statusMeshBatteryRestricted;
+
+  /// No description provided for @statusMeshSuspended.
+  ///
+  /// In en, this message translates to:
+  /// **'Mesh suspended: messages remain queued until a route is available.'**
+  String get statusMeshSuspended;
+
   /// No description provided for @actionStop.
   ///
   /// In en, this message translates to:
@@ -520,6 +538,18 @@ abstract class AppLocalizations {
   /// **'SOS validated and added to the mesh'**
   String get sosQrRelayed;
 
+  /// No description provided for @sosSentToMesh.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS sent to the mesh.'**
+  String get sosSentToMesh;
+
+  /// No description provided for @sosQueuedWithoutRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS queued, but there is currently no route out of this phone.'**
+  String get sosQueuedWithoutRoute;
+
   /// No description provided for @emergencySmsOpen.
   ///
   /// In en, this message translates to:
@@ -601,6 +631,113 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No SOS alerts received.'**
   String get sosNoneReceived;
+
+  /// No description provided for @sosTriageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick rescue details'**
+  String get sosTriageTitle;
+
+  /// No description provided for @sosTriageOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional. Choose one need or send SOS immediately.'**
+  String get sosTriageOptional;
+
+  /// No description provided for @sosTriageNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No structured details'**
+  String get sosTriageNone;
+
+  /// No description provided for @sosTriageMedical.
+  ///
+  /// In en, this message translates to:
+  /// **'Medical'**
+  String get sosTriageMedical;
+
+  /// No description provided for @sosTriageWater.
+  ///
+  /// In en, this message translates to:
+  /// **'Water'**
+  String get sosTriageWater;
+
+  /// No description provided for @sosTriageExtraction.
+  ///
+  /// In en, this message translates to:
+  /// **'Extraction'**
+  String get sosTriageExtraction;
+
+  /// No description provided for @sosTriageShelter.
+  ///
+  /// In en, this message translates to:
+  /// **'Shelter'**
+  String get sosTriageShelter;
+
+  /// No description provided for @sosTriageOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get sosTriageOther;
+
+  /// No description provided for @sosTriageDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Add details'**
+  String get sosTriageDetails;
+
+  /// No description provided for @sosTriagePeople.
+  ///
+  /// In en, this message translates to:
+  /// **'People'**
+  String get sosTriagePeople;
+
+  /// No description provided for @sosTriageInjuries.
+  ///
+  /// In en, this message translates to:
+  /// **'Injured'**
+  String get sosTriageInjuries;
+
+  /// No description provided for @sosTriageTrapped.
+  ///
+  /// In en, this message translates to:
+  /// **'Trapped'**
+  String get sosTriageTrapped;
+
+  /// No description provided for @sosTriageUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get sosTriageUnknown;
+
+  /// No description provided for @sosTriageNo.
+  ///
+  /// In en, this message translates to:
+  /// **'No'**
+  String get sosTriageNo;
+
+  /// No description provided for @sosTriageYes.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes'**
+  String get sosTriageYes;
+
+  /// No description provided for @sosTriageSave.
+  ///
+  /// In en, this message translates to:
+  /// **'SAVE DETAILS'**
+  String get sosTriageSave;
+
+  /// No description provided for @sosTriageSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'People: {people} · Injured: {injured} · Trapped: {trapped} · Need: {need}'**
+  String sosTriageSummary(
+    String people,
+    String injured,
+    String trapped,
+    String need,
+  );
 
   /// No description provided for @checkInPrivateBody.
   ///
@@ -1411,6 +1548,12 @@ abstract class AppLocalizations {
   /// **'Could not export the diagnostic report'**
   String get diagnosticsExportError;
 
+  /// No description provided for @diagnosticsExportRefreshError.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics could not be refreshed. Nothing was exported.'**
+  String get diagnosticsExportRefreshError;
+
   /// No description provided for @diagnosticsTitle.
   ///
   /// In en, this message translates to:
@@ -1506,6 +1649,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Store-and-forward queue'**
   String get diagnosticsStoreForward;
+
+  /// No description provided for @diagnosticsOperationalCountersSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Operational counters'**
+  String get diagnosticsOperationalCountersSection;
+
+  /// No description provided for @diagnosticsOpenEmergencyLimitedKnown.
+  ///
+  /// In en, this message translates to:
+  /// **'Known emergency frames rate-limited'**
+  String get diagnosticsOpenEmergencyLimitedKnown;
+
+  /// No description provided for @diagnosticsOpenEmergencyLimitedUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown emergency frames rate-limited'**
+  String get diagnosticsOpenEmergencyLimitedUnknown;
+
+  /// No description provided for @diagnosticsRelaySuppressed.
+  ///
+  /// In en, this message translates to:
+  /// **'Relays suppressed by damping'**
+  String get diagnosticsRelaySuppressed;
+
+  /// No description provided for @diagnosticsRelayScheduled.
+  ///
+  /// In en, this message translates to:
+  /// **'Relays scheduled'**
+  String get diagnosticsRelayScheduled;
+
+  /// No description provided for @diagnosticsRelayExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Relay timers completed'**
+  String get diagnosticsRelayExpired;
+
+  /// No description provided for @diagnosticsTrustEvictions.
+  ///
+  /// In en, this message translates to:
+  /// **'Trust pins evicted'**
+  String get diagnosticsTrustEvictions;
+
+  /// No description provided for @diagnosticsTrustConflicts.
+  ///
+  /// In en, this message translates to:
+  /// **'Trust conflicts'**
+  String get diagnosticsTrustConflicts;
+
+  /// No description provided for @diagnosticsOperationalCountersLifetime.
+  ///
+  /// In en, this message translates to:
+  /// **'Counter period'**
+  String get diagnosticsOperationalCountersLifetime;
+
+  /// No description provided for @diagnosticsLifetimeProcess.
+  ///
+  /// In en, this message translates to:
+  /// **'Since this process started'**
+  String get diagnosticsLifetimeProcess;
+
+  /// No description provided for @diagnosticsLifetimeUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Period not reported'**
+  String get diagnosticsLifetimeUnknown;
 
   /// No description provided for @diagnosticsTransportsSection.
   ///
@@ -2328,6 +2537,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'ALLOW EMERGENCY LOCATION'**
   String get onboardingAllowLocation;
+
+  /// No description provided for @onboardingAllowMicrophone.
+  ///
+  /// In en, this message translates to:
+  /// **'ALLOW MICROPHONE FOR VOICE RESCUE'**
+  String get onboardingAllowMicrophone;
+
+  /// No description provided for @onboardingMicrophoneReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice notes and acoustic rescue tools are ready.'**
+  String get onboardingMicrophoneReady;
+
+  /// No description provided for @onboardingMicrophoneRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Required for voice notes and acoustic rescue tools.'**
+  String get onboardingMicrophoneRequired;
 
   /// No description provided for @onboardingFinish.
   ///
@@ -3346,7 +3573,7 @@ abstract class AppLocalizations {
   /// No description provided for @locationExportConfirmBody.
   ///
   /// In en, this message translates to:
-  /// **'The CSV can contain precise locations and emergency details. Share it only with trusted responders and protect the exported file.'**
+  /// **'The export can contain precise locations, identities and emergency details. Share it only with trusted responders and protect the file.'**
   String get locationExportConfirmBody;
 
   /// No description provided for @locationExportConfirmAction.
@@ -3354,6 +3581,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'EXPORT LOCATIONS'**
   String get locationExportConfirmAction;
+
+  /// No description provided for @mapExport.
+  ///
+  /// In en, this message translates to:
+  /// **'Export operational data'**
+  String get mapExport;
+
+  /// No description provided for @mapExportFormatTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose export format'**
+  String get mapExportFormatTitle;
+
+  /// No description provided for @mapExportCsv.
+  ///
+  /// In en, this message translates to:
+  /// **'CSV · active rescue cases'**
+  String get mapExportCsv;
+
+  /// No description provided for @mapExportGeoJson.
+  ///
+  /// In en, this message translates to:
+  /// **'GeoJSON · active cases and swept zones'**
+  String get mapExportGeoJson;
+
+  /// No description provided for @mapExportSubject.
+  ///
+  /// In en, this message translates to:
+  /// **'HearthBit rescue operations'**
+  String get mapExportSubject;
+
+  /// No description provided for @mapExportError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not export rescue operations: {error}'**
+  String mapExportError(String error);
 
   /// No description provided for @lanGatewayConnected.
   ///
@@ -3498,6 +3761,624 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'RETRY'**
   String get emergencyContactsRetry;
+
+  /// No description provided for @rescueRosterTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescue team roster'**
+  String get rescueRosterTitle;
+
+  /// No description provided for @rescueRosterSecurityBody.
+  ///
+  /// In en, this message translates to:
+  /// **'A roster is signed by its team leader. A person is shown as a verified rescuer only when both their peer ID and Ed25519 signing key match.'**
+  String get rescueRosterSecurityBody;
+
+  /// No description provided for @rescueRosterEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No rescue team roster is active on this phone.'**
+  String get rescueRosterEmpty;
+
+  /// No description provided for @rescueRosterCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'CREATE ROSTER'**
+  String get rescueRosterCreate;
+
+  /// No description provided for @rescueRosterTeamName.
+  ///
+  /// In en, this message translates to:
+  /// **'Team name'**
+  String get rescueRosterTeamName;
+
+  /// No description provided for @rescueRosterCallsign.
+  ///
+  /// In en, this message translates to:
+  /// **'Leader callsign'**
+  String get rescueRosterCallsign;
+
+  /// No description provided for @rescueRosterUtf8TooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'Use no more than {maximum} UTF-8 bytes.'**
+  String rescueRosterUtf8TooLarge(int maximum);
+
+  /// No description provided for @rescueRosterAddMember.
+  ///
+  /// In en, this message translates to:
+  /// **'ADD NEARBY MEMBER'**
+  String get rescueRosterAddMember;
+
+  /// No description provided for @rescueRosterNoEligiblePeers.
+  ///
+  /// In en, this message translates to:
+  /// **'No nearby HearthBit identity with a signing key is available to add.'**
+  String get rescueRosterNoEligiblePeers;
+
+  /// No description provided for @rescueRosterNearbyIdentity.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby identity'**
+  String get rescueRosterNearbyIdentity;
+
+  /// No description provided for @rescueRosterMemberCallsign.
+  ///
+  /// In en, this message translates to:
+  /// **'Member callsign'**
+  String get rescueRosterMemberCallsign;
+
+  /// No description provided for @rescueRosterMemberRole.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescue role'**
+  String get rescueRosterMemberRole;
+
+  /// No description provided for @rescueRosterRemoveMemberTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove roster member?'**
+  String get rescueRosterRemoveMemberTitle;
+
+  /// No description provided for @rescueRosterRemoveMemberBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{callsign} will no longer be a verified rescuer in this roster.'**
+  String rescueRosterRemoveMemberBody(String callsign);
+
+  /// No description provided for @rescueRosterMemberCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} verified members'**
+  String rescueRosterMemberCount(int count);
+
+  /// No description provided for @rescueRosterImportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import signed roster'**
+  String get rescueRosterImportTitle;
+
+  /// No description provided for @rescueRosterImportText.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste QR text'**
+  String get rescueRosterImportText;
+
+  /// No description provided for @rescueRosterPasteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'HBRT1:…'**
+  String get rescueRosterPasteHint;
+
+  /// No description provided for @rescueRosterImport.
+  ///
+  /// In en, this message translates to:
+  /// **'IMPORT'**
+  String get rescueRosterImport;
+
+  /// No description provided for @rescueRosterImportFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Open roster file'**
+  String get rescueRosterImportFile;
+
+  /// No description provided for @rescueRosterScanQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan roster QR'**
+  String get rescueRosterScanQr;
+
+  /// No description provided for @rescueRosterScanHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Point the camera at a signed HBRT1 rescue roster QR.'**
+  String get rescueRosterScanHint;
+
+  /// No description provided for @rescueRosterImported.
+  ///
+  /// In en, this message translates to:
+  /// **'The signed rescue roster was verified and activated.'**
+  String get rescueRosterImported;
+
+  /// No description provided for @rescueRosterExported.
+  ///
+  /// In en, this message translates to:
+  /// **'The rescue roster file was saved.'**
+  String get rescueRosterExported;
+
+  /// No description provided for @rescueRosterExportQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Show QR and text'**
+  String get rescueRosterExportQr;
+
+  /// No description provided for @rescueRosterQrTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'This roster is too large for one QR. Export it as a file or copy the signed text.'**
+  String get rescueRosterQrTooLarge;
+
+  /// No description provided for @rescueRosterExportFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Save roster file'**
+  String get rescueRosterExportFile;
+
+  /// No description provided for @rescueRosterRemoveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove active rescue roster?'**
+  String get rescueRosterRemoveTitle;
+
+  /// No description provided for @rescueRosterRemoveBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Members will no longer appear as verified rescuers and their protected native pins will be removed.'**
+  String get rescueRosterRemoveBody;
+
+  /// No description provided for @rescueRosterError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not process the rescue roster: {error}'**
+  String rescueRosterError(String error);
+
+  /// No description provided for @rescueRosterRoleLeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Team leader'**
+  String get rescueRosterRoleLeader;
+
+  /// No description provided for @rescueRosterRoleResponder.
+  ///
+  /// In en, this message translates to:
+  /// **'Responder'**
+  String get rescueRosterRoleResponder;
+
+  /// No description provided for @rescueRosterRoleMedic.
+  ///
+  /// In en, this message translates to:
+  /// **'Medic'**
+  String get rescueRosterRoleMedic;
+
+  /// No description provided for @rescueRosterRoleSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get rescueRosterRoleSearch;
+
+  /// No description provided for @rescueRosterRoleLogistics.
+  ///
+  /// In en, this message translates to:
+  /// **'Logistics'**
+  String get rescueRosterRoleLogistics;
+
+  /// No description provided for @rescueRosterRoleCommunications.
+  ///
+  /// In en, this message translates to:
+  /// **'Communications'**
+  String get rescueRosterRoleCommunications;
+
+  /// No description provided for @rescueRosterRoleAuthority.
+  ///
+  /// In en, this message translates to:
+  /// **'Authority'**
+  String get rescueRosterRoleAuthority;
+
+  /// No description provided for @authorityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Authority announcements'**
+  String get authorityTitle;
+
+  /// No description provided for @authorityTrustBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Only members assigned the Authority role in the active signed roster can issue these authenticated team announcements. Team leaders are not authorized automatically.'**
+  String get authorityTrustBody;
+
+  /// No description provided for @authorityCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'Create announcement'**
+  String get authorityCreate;
+
+  /// No description provided for @authorityPriority.
+  ///
+  /// In en, this message translates to:
+  /// **'Priority'**
+  String get authorityPriority;
+
+  /// No description provided for @authorityPriorityInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'INFORMATION'**
+  String get authorityPriorityInfo;
+
+  /// No description provided for @authorityPriorityWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'WARNING'**
+  String get authorityPriorityWarning;
+
+  /// No description provided for @authorityPriorityEvacuate.
+  ///
+  /// In en, this message translates to:
+  /// **'EVACUATE'**
+  String get authorityPriorityEvacuate;
+
+  /// No description provided for @authorityBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Official instruction'**
+  String get authorityBody;
+
+  /// No description provided for @authorityBodyBytes.
+  ///
+  /// In en, this message translates to:
+  /// **'{current}/{maximum} UTF-8 bytes'**
+  String authorityBodyBytes(int current, int maximum);
+
+  /// No description provided for @authorityBodyTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'The instruction must be no more than {maximum} UTF-8 bytes.'**
+  String authorityBodyTooLarge(int maximum);
+
+  /// No description provided for @authorityDuration.
+  ///
+  /// In en, this message translates to:
+  /// **'Valid for'**
+  String get authorityDuration;
+
+  /// No description provided for @authorityDurationMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes} minutes'**
+  String authorityDurationMinutes(int minutes);
+
+  /// No description provided for @authorityDurationHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours, plural, =1{1 hour} other{{hours} hours}}'**
+  String authorityDurationHours(int hours);
+
+  /// No description provided for @authoritySend.
+  ///
+  /// In en, this message translates to:
+  /// **'ISSUE ANNOUNCEMENT'**
+  String get authoritySend;
+
+  /// No description provided for @authoritySent.
+  ///
+  /// In en, this message translates to:
+  /// **'The signed authority announcement was sent.'**
+  String get authoritySent;
+
+  /// No description provided for @authoritySendError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not send the authority announcement: {error}'**
+  String authoritySendError(String error);
+
+  /// No description provided for @authorityHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Announcement history'**
+  String get authorityHistory;
+
+  /// No description provided for @authorityHistoryEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No authenticated authority announcements have been received.'**
+  String get authorityHistoryEmpty;
+
+  /// No description provided for @authorityActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get authorityActive;
+
+  /// No description provided for @authorityExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Expired'**
+  String get authorityExpired;
+
+  /// No description provided for @authorityExpires.
+  ///
+  /// In en, this message translates to:
+  /// **'Expires {date}'**
+  String authorityExpires(String date);
+
+  /// No description provided for @authorityBannerSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'Active authenticated authority announcement'**
+  String get authorityBannerSemantics;
+
+  /// No description provided for @verifiedRescuerBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'VERIFIED RESCUER'**
+  String get verifiedRescuerBadge;
+
+  /// No description provided for @rescueRosterFileType.
+  ///
+  /// In en, this message translates to:
+  /// **'HearthBit rescue roster'**
+  String get rescueRosterFileType;
+
+  /// No description provided for @rescueOperationsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescue operations'**
+  String get rescueOperationsTitle;
+
+  /// No description provided for @rescueOperationsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No SOS cases have been received.'**
+  String get rescueOperationsEmpty;
+
+  /// No description provided for @rescueOperationsError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not update rescue operations: {error}'**
+  String rescueOperationsError(String error);
+
+  /// No description provided for @rescueOperationsAssignMe.
+  ///
+  /// In en, this message translates to:
+  /// **'ASSIGN TO ME'**
+  String get rescueOperationsAssignMe;
+
+  /// No description provided for @rescueOperationsEnRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'EN ROUTE'**
+  String get rescueOperationsEnRoute;
+
+  /// No description provided for @rescueOperationsAttended.
+  ///
+  /// In en, this message translates to:
+  /// **'ATTENDED'**
+  String get rescueOperationsAttended;
+
+  /// No description provided for @rescueOperationsClose.
+  ///
+  /// In en, this message translates to:
+  /// **'CLOSE'**
+  String get rescueOperationsClose;
+
+  /// No description provided for @rescueOperationsNoActions.
+  ///
+  /// In en, this message translates to:
+  /// **'No authorized actions'**
+  String get rescueOperationsNoActions;
+
+  /// No description provided for @rescueOperationsAssignee.
+  ///
+  /// In en, this message translates to:
+  /// **'Assigned to {callsign}'**
+  String rescueOperationsAssignee(String callsign);
+
+  /// No description provided for @rescueOperationsReceivedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Received {date}'**
+  String rescueOperationsReceivedAt(String date);
+
+  /// No description provided for @rescueOperationsTriage.
+  ///
+  /// In en, this message translates to:
+  /// **'Priority: {need} · people: {people}'**
+  String rescueOperationsTriage(String need, String people);
+
+  /// No description provided for @rescueCaseStateNew.
+  ///
+  /// In en, this message translates to:
+  /// **'New'**
+  String get rescueCaseStateNew;
+
+  /// No description provided for @rescueCaseStateAssigned.
+  ///
+  /// In en, this message translates to:
+  /// **'Assigned'**
+  String get rescueCaseStateAssigned;
+
+  /// No description provided for @rescueCaseStateEnRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'En route'**
+  String get rescueCaseStateEnRoute;
+
+  /// No description provided for @rescueCaseStateAttended.
+  ///
+  /// In en, this message translates to:
+  /// **'Attended'**
+  String get rescueCaseStateAttended;
+
+  /// No description provided for @rescueCaseStateClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed'**
+  String get rescueCaseStateClosed;
+
+  /// No description provided for @rescueTriageMedical.
+  ///
+  /// In en, this message translates to:
+  /// **'Medical'**
+  String get rescueTriageMedical;
+
+  /// No description provided for @rescueTriageWater.
+  ///
+  /// In en, this message translates to:
+  /// **'Water'**
+  String get rescueTriageWater;
+
+  /// No description provided for @rescueTriageExtraction.
+  ///
+  /// In en, this message translates to:
+  /// **'Extraction'**
+  String get rescueTriageExtraction;
+
+  /// No description provided for @rescueTriageShelter.
+  ///
+  /// In en, this message translates to:
+  /// **'Shelter'**
+  String get rescueTriageShelter;
+
+  /// No description provided for @rescueTriageOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get rescueTriageOther;
+
+  /// No description provided for @mapFilterActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get mapFilterActive;
+
+  /// No description provided for @mapFilterUnassigned.
+  ///
+  /// In en, this message translates to:
+  /// **'Unassigned'**
+  String get mapFilterUnassigned;
+
+  /// No description provided for @mapFilterAssigned.
+  ///
+  /// In en, this message translates to:
+  /// **'Assigned'**
+  String get mapFilterAssigned;
+
+  /// No description provided for @mapFilterClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed'**
+  String get mapFilterClosed;
+
+  /// No description provided for @mapOperationalCases.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} operational cases'**
+  String mapOperationalCases(int count);
+
+  /// No description provided for @mapCasesEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No cases match this filter.'**
+  String get mapCasesEmpty;
+
+  /// No description provided for @mapClusterTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} SOS cases · maximum priority: {priority}'**
+  String mapClusterTooltip(int count, String priority);
+
+  /// No description provided for @mapPriorityLow.
+  ///
+  /// In en, this message translates to:
+  /// **'Low priority'**
+  String get mapPriorityLow;
+
+  /// No description provided for @mapPriorityMedium.
+  ///
+  /// In en, this message translates to:
+  /// **'Medium priority'**
+  String get mapPriorityMedium;
+
+  /// No description provided for @mapPriorityHigh.
+  ///
+  /// In en, this message translates to:
+  /// **'High priority'**
+  String get mapPriorityHigh;
+
+  /// No description provided for @mapPriorityCritical.
+  ///
+  /// In en, this message translates to:
+  /// **'Critical priority'**
+  String get mapPriorityCritical;
+
+  /// No description provided for @mapCaseNoCoordinates.
+  ///
+  /// In en, this message translates to:
+  /// **'This case has no coordinates'**
+  String get mapCaseNoCoordinates;
+
+  /// No description provided for @mapZoneConsent.
+  ///
+  /// In en, this message translates to:
+  /// **'Record a swept route only while this control remains visibly active.'**
+  String get mapZoneConsent;
+
+  /// No description provided for @mapZoneStart.
+  ///
+  /// In en, this message translates to:
+  /// **'RECORD ROUTE'**
+  String get mapZoneStart;
+
+  /// No description provided for @mapZoneRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording swept route · {count}/{maximum} points'**
+  String mapZoneRecording(int count, int maximum);
+
+  /// No description provided for @mapZoneVisibleOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Location recording stops when you cancel, publish, or leave this map.'**
+  String get mapZoneVisibleOnly;
+
+  /// No description provided for @mapZoneFinish.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish and share route'**
+  String get mapZoneFinish;
+
+  /// No description provided for @mapZonePublished.
+  ///
+  /// In en, this message translates to:
+  /// **'Swept route shared with the verified team.'**
+  String get mapZonePublished;
+
+  /// No description provided for @mapZoneLocationRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Location permission and services are required to record a route.'**
+  String get mapZoneLocationRequired;
+
+  /// No description provided for @mapZoneRosterChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording was cancelled because the active rescue roster or your membership changed.'**
+  String get mapZoneRosterChanged;
+
+  /// No description provided for @mapZoneError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not record or share the swept route: {error}'**
+  String mapZoneError(String error);
 }
 
 class _AppLocalizationsDelegate

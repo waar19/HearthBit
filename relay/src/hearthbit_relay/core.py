@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import threading
 import time
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -32,7 +35,12 @@ from .protocol import (
     relay_fingerprint,
 )
 from .store import PacketStore
-from .trust import TrustConflictError, TrustStore, TrustStoreError
+from .trust import (
+    TrustCapacityError,
+    TrustConflictError,
+    TrustStore,
+    TrustStoreError,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -43,6 +51,51 @@ class RelayResult:
     reason: str
     forwarded: int = 0
     stored: bool = False
+
+
+class RelayOperationalCounters:
+    """Process-lifetime aggregates with no peer or payload data.
+
+    ``forwarded`` counts each successful frame/link send, including every
+    stored frame emitted by replay. Reassembly outcomes are counted separately
+    only when the inner packet is rejected.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._reasons: Counter[str] = Counter()
+        self._accepted = 0
+        self._forwarded = 0
+        self._stored = 0
+
+    def record_result(
+        self,
+        result: RelayResult,
+        *,
+        count_outcome: bool = True,
+    ) -> None:
+        with self._lock:
+            if count_outcome:
+                self._reasons[result.reason] += 1
+                if result.accepted:
+                    self._accepted += 1
+                if result.stored:
+                    self._stored += 1
+            self._forwarded += result.forwarded
+
+    def snapshot(self) -> dict[str, object]:
+        with self._lock:
+            reasons = dict(sorted(self._reasons.items()))
+            return {
+                "lifetime": "process",
+                "accepted": self._accepted,
+                "rejected": sum(reasons.values()) - self._accepted,
+                "forwarded": self._forwarded,
+                "stored": self._stored,
+                "trustConflicts": reasons.get("identity-conflict", 0),
+                "trustCapacityRejected": reasons.get("trust-capacity", 0),
+                "resultsByReason": reasons,
+            }
 
 
 @dataclass(slots=True)
@@ -89,6 +142,7 @@ class RelayCore:
         self._buckets: dict[tuple[str, bytes], _TokenBucket] = {}
         self._monotonic = monotonic or time.monotonic
         self._announcement_clock_ms = announcement_clock_ms or _now_ms
+        self._operational_counters = RelayOperationalCounters()
 
     async def start(self) -> None:
         if self.identity is None or self._presence_task is not None:
@@ -96,11 +150,30 @@ class RelayCore:
         self._presence_task = asyncio.create_task(self._presence_loop())
 
     async def stop(self) -> None:
-        if self._presence_task is None:
-            return
-        self._presence_task.cancel()
-        await asyncio.gather(self._presence_task, return_exceptions=True)
-        self._presence_task = None
+        if self._presence_task is not None:
+            self._presence_task.cancel()
+            await asyncio.gather(self._presence_task, return_exceptions=True)
+            self._presence_task = None
+        LOGGER.info(
+            "operational counters: %s",
+            json.dumps(self.diagnostic_snapshot(), sort_keys=True),
+        )
+
+    def diagnostic_snapshot(self) -> dict[str, object]:
+        """Return deterministic local diagnostics; no network endpoint is opened."""
+        return self._operational_counters.snapshot()
+
+    def _record_result(
+        self,
+        result: RelayResult,
+        *,
+        count_outcome: bool = True,
+    ) -> RelayResult:
+        self._operational_counters.record_result(
+            result,
+            count_outcome=count_outcome,
+        )
+        return result
 
     async def register_link(self, link: RelayLink) -> int:
         async with self._lock:
@@ -133,9 +206,9 @@ class RelayCore:
             packet = decode_packet(raw, max_size=self.config.max_packet_size)
         except PacketError as error:
             LOGGER.warning("invalid packet from %s: %s", source_id, error)
-            return RelayResult(False, "invalid")
+            return self._record_result(RelayResult(False, "invalid"))
 
-        return await self._process_packet(
+        result = await self._process_packet(
             source_id,
             packet,
             gateway_path=gateway_path,
@@ -143,6 +216,7 @@ class RelayCore:
             apply_rate_limit=True,
             allow_reassembly=True,
         )
+        return self._record_result(result)
 
     async def _process_packet(
         self,
@@ -245,6 +319,7 @@ class RelayCore:
             )
             stored = stored or reassembled_result.stored
             if not reassembled_result.accepted:
+                self._record_result(reassembled_result)
                 LOGGER.warning(
                     "reassembled packet rejected from %s: %s",
                     source_id,
@@ -291,28 +366,29 @@ class RelayCore:
                         packet.sender_id.hex(),
                     )
                     return "identity-conflict", False
+                except TrustCapacityError:
+                    LOGGER.warning("trusted peer capacity reached")
+                    return "trust-capacity", False
                 except TrustStoreError:
                     LOGGER.error("failed to persist trusted peer identity")
                     return "trust-store-error", False
             elif packet.has_signature:
                 trusted = self._trust_store.get(packet.sender_id)
-                if trusted is not None:
-                    if not verify_packet_signature(
-                        packet,
-                        trusted.signing_public_key,
-                    ):
-                        LOGGER.warning(
-                            "invalid signature from pinned sender %s",
-                            packet.sender_id.hex(),
-                        )
-                        return "invalid-signature", False
-                elif (
-                    self.config.identity_verification.unknown_signed_policy
-                    == "reject"
-                ):
+                if trusted is None:
+                    LOGGER.warning(
+                        "missing signing key for signed packet from %s",
+                        packet.sender_id.hex(),
+                    )
                     return "unknown-signing-key", False
-                else:
-                    can_store = False
+                if not verify_packet_signature(
+                    packet,
+                    trusted.signing_public_key,
+                ):
+                    LOGGER.warning(
+                        "invalid signature from pinned sender %s",
+                        packet.sender_id.hex(),
+                    )
+                    return "invalid-signature", False
         return None, can_store
 
     async def _presence_loop(self) -> None:
@@ -369,6 +445,10 @@ class RelayCore:
             await self.store.amark_delivered(item.fingerprint, link.id)
             sent += 1
         if sent:
+            self._record_result(
+                RelayResult(True, "replay", forwarded=sent),
+                count_outcome=False,
+            )
             LOGGER.info("replayed %d stored packet(s) to %s", sent, link.id)
         return sent
 

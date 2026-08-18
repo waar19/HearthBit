@@ -39,6 +39,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get statusStopped => '网状网络已停止';
 
   @override
+  String get statusMeshPermissionsRevoked => '网状网络已暂停：蓝牙或附近设备权限已被撤销。';
+
+  @override
+  String get statusMeshBatteryRestricted => '电池限制可能会暂停后台网状网络。';
+
+  @override
+  String get statusMeshSuspended => '网状网络已暂停：消息将排队等待可用出口。';
+
+  @override
   String get actionStop => '停止';
 
   @override
@@ -230,6 +239,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sosQrRelayed => 'SOS 已验证并加入网状网络';
 
   @override
+  String get sosSentToMesh => 'SOS 已发送到网状网络。';
+
+  @override
+  String get sosQueuedWithoutRoute => 'SOS 已排队，但此手机当前没有可用出口。';
+
+  @override
   String get emergencySmsOpen => '通过短信通知可信联系人';
 
   @override
@@ -275,6 +290,64 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sosNoneReceived => '尚未收到 SOS 警报。';
+
+  @override
+  String get sosTriageTitle => '快速救援信息';
+
+  @override
+  String get sosTriageOptional => '可选。选择主要需求或立即发送 SOS。';
+
+  @override
+  String get sosTriageNone => '无结构化信息';
+
+  @override
+  String get sosTriageMedical => '医疗';
+
+  @override
+  String get sosTriageWater => '饮水';
+
+  @override
+  String get sosTriageExtraction => '救出';
+
+  @override
+  String get sosTriageShelter => '避难所';
+
+  @override
+  String get sosTriageOther => '其他';
+
+  @override
+  String get sosTriageDetails => '添加详情';
+
+  @override
+  String get sosTriagePeople => '人数';
+
+  @override
+  String get sosTriageInjuries => '伤员';
+
+  @override
+  String get sosTriageTrapped => '受困';
+
+  @override
+  String get sosTriageUnknown => '未知';
+
+  @override
+  String get sosTriageNo => '否';
+
+  @override
+  String get sosTriageYes => '是';
+
+  @override
+  String get sosTriageSave => '保存详情';
+
+  @override
+  String sosTriageSummary(
+    String people,
+    String injured,
+    String trapped,
+    String need,
+  ) {
+    return '人数：$people · 伤员：$injured · 受困：$trapped · 需求：$need';
+  }
 
   @override
   String get checkInPrivateBody => '仅向已验证的家人发送端到端加密状态。';
@@ -730,6 +803,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnosticsExportError => '无法导出诊断报告';
 
   @override
+  String get diagnosticsExportRefreshError => '无法刷新诊断信息，因此未导出任何内容。';
+
+  @override
   String get diagnosticsTitle => '诊断';
 
   @override
@@ -776,6 +852,39 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get diagnosticsStoreForward => '存储转发队列';
+
+  @override
+  String get diagnosticsOperationalCountersSection => '运行计数器';
+
+  @override
+  String get diagnosticsOpenEmergencyLimitedKnown => '已限流的已知紧急帧';
+
+  @override
+  String get diagnosticsOpenEmergencyLimitedUnknown => '已限流的未知紧急帧';
+
+  @override
+  String get diagnosticsRelaySuppressed => '因抑制而取消的中继';
+
+  @override
+  String get diagnosticsRelayScheduled => '已计划的中继';
+
+  @override
+  String get diagnosticsRelayExpired => '已完成的中继计时器';
+
+  @override
+  String get diagnosticsTrustEvictions => '已逐出的信任固定项';
+
+  @override
+  String get diagnosticsTrustConflicts => '信任冲突';
+
+  @override
+  String get diagnosticsOperationalCountersLifetime => '计数周期';
+
+  @override
+  String get diagnosticsLifetimeProcess => '自本进程启动以来';
+
+  @override
+  String get diagnosticsLifetimeUnknown => '未报告周期';
 
   @override
   String get diagnosticsTransportsSection => '活跃传输方式';
@@ -1230,6 +1339,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onboardingAllowLocation => '允许紧急位置';
+
+  @override
+  String get onboardingAllowMicrophone => '允许麦克风用于救援';
+
+  @override
+  String get onboardingMicrophoneReady => '语音留言和声学救援工具已就绪。';
+
+  @override
+  String get onboardingMicrophoneRequired => '语音留言和声学救援工具需要此权限。';
 
   @override
   String get onboardingFinish => '完成设置';
@@ -1792,10 +1910,30 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get locationExportConfirmBody =>
-      'CSV 可能包含精确位置和紧急详情。仅与可信救援人员共享并妥善保护文件。';
+      '导出内容可能包含精确位置、身份信息和紧急详情。仅与可信救援人员共享并妥善保护文件。';
 
   @override
   String get locationExportConfirmAction => '导出位置';
+
+  @override
+  String get mapExport => '导出行动数据';
+
+  @override
+  String get mapExportFormatTitle => '选择导出格式';
+
+  @override
+  String get mapExportCsv => 'CSV · 进行中的救援案件';
+
+  @override
+  String get mapExportGeoJson => 'GeoJSON · 进行中的案件和已搜索区域';
+
+  @override
+  String get mapExportSubject => 'HearthBit 救援行动';
+
+  @override
+  String mapExportError(String error) {
+    return '无法导出救援行动：$error';
+  }
 
   @override
   String get lanGatewayConnected => 'LAN 中继已连接';
@@ -1874,4 +2012,351 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get emergencyContactsRetry => '重试';
+
+  @override
+  String get rescueRosterTitle => '救援队名册';
+
+  @override
+  String get rescueRosterSecurityBody =>
+      '名册由队长签名。只有节点 ID 和 Ed25519 签名公钥都匹配时，成员才会显示为已验证救援人员。';
+
+  @override
+  String get rescueRosterEmpty => '此手机上没有启用的救援队名册。';
+
+  @override
+  String get rescueRosterCreate => '创建名册';
+
+  @override
+  String get rescueRosterTeamName => '队伍名称';
+
+  @override
+  String get rescueRosterCallsign => '队长呼号';
+
+  @override
+  String rescueRosterUtf8TooLarge(int maximum) {
+    return '请输入不超过 $maximum 个 UTF-8 字节。';
+  }
+
+  @override
+  String get rescueRosterAddMember => '添加附近成员';
+
+  @override
+  String get rescueRosterNoEligiblePeers => '附近没有可添加且带签名公钥的 HearthBit 身份。';
+
+  @override
+  String get rescueRosterNearbyIdentity => '附近身份';
+
+  @override
+  String get rescueRosterMemberCallsign => '成员呼号';
+
+  @override
+  String get rescueRosterMemberRole => '救援角色';
+
+  @override
+  String get rescueRosterRemoveMemberTitle => '从名册中移除成员？';
+
+  @override
+  String rescueRosterRemoveMemberBody(String callsign) {
+    return '$callsign 将不再是此名册中的已验证救援人员。';
+  }
+
+  @override
+  String rescueRosterMemberCount(int count) {
+    return '$count 名已验证成员';
+  }
+
+  @override
+  String get rescueRosterImportTitle => '导入签名名册';
+
+  @override
+  String get rescueRosterImportText => '粘贴二维码文本';
+
+  @override
+  String get rescueRosterPasteHint => 'HBRT1:…';
+
+  @override
+  String get rescueRosterImport => '导入';
+
+  @override
+  String get rescueRosterImportFile => '打开名册文件';
+
+  @override
+  String get rescueRosterScanQr => '扫描名册二维码';
+
+  @override
+  String get rescueRosterScanHint => '将相机对准已签名的 HBRT1 救援名册二维码。';
+
+  @override
+  String get rescueRosterImported => '签名名册已验证并启用。';
+
+  @override
+  String get rescueRosterExported => '救援名册文件已保存。';
+
+  @override
+  String get rescueRosterExportQr => '显示二维码和文本';
+
+  @override
+  String get rescueRosterQrTooLarge => '此名册过大，无法放入一个二维码。请导出文件或复制签名文本。';
+
+  @override
+  String get rescueRosterExportFile => '保存名册文件';
+
+  @override
+  String get rescueRosterRemoveTitle => '移除当前救援名册？';
+
+  @override
+  String get rescueRosterRemoveBody => '成员将不再显示为已验证救援人员，其受保护的原生固定密钥也会被移除。';
+
+  @override
+  String rescueRosterError(String error) {
+    return '无法处理救援名册：$error';
+  }
+
+  @override
+  String get rescueRosterRoleLeader => '队长';
+
+  @override
+  String get rescueRosterRoleResponder => '救援人员';
+
+  @override
+  String get rescueRosterRoleMedic => '医疗';
+
+  @override
+  String get rescueRosterRoleSearch => '搜救';
+
+  @override
+  String get rescueRosterRoleLogistics => '后勤';
+
+  @override
+  String get rescueRosterRoleCommunications => '通信';
+
+  @override
+  String get rescueRosterRoleAuthority => '主管部门';
+
+  @override
+  String get authorityTitle => '主管部门公告';
+
+  @override
+  String get authorityTrustBody =>
+      '只有当前已签名名册中被分配“主管部门”角色的成员才能发布这些已认证的队伍公告。队长不会自动获得该权限。';
+
+  @override
+  String get authorityCreate => '创建公告';
+
+  @override
+  String get authorityPriority => '优先级';
+
+  @override
+  String get authorityPriorityInfo => '信息';
+
+  @override
+  String get authorityPriorityWarning => '警告';
+
+  @override
+  String get authorityPriorityEvacuate => '撤离';
+
+  @override
+  String get authorityBody => '官方指示';
+
+  @override
+  String authorityBodyBytes(int current, int maximum) {
+    return '$current/$maximum 个 UTF-8 字节';
+  }
+
+  @override
+  String authorityBodyTooLarge(int maximum) {
+    return '指示不得超过 $maximum 个 UTF-8 字节。';
+  }
+
+  @override
+  String get authorityDuration => '有效时长';
+
+  @override
+  String authorityDurationMinutes(int minutes) {
+    return '$minutes 分钟';
+  }
+
+  @override
+  String authorityDurationHours(int hours) {
+    return '$hours 小时';
+  }
+
+  @override
+  String get authoritySend => '发布公告';
+
+  @override
+  String get authoritySent => '已发送签名的主管部门公告。';
+
+  @override
+  String authoritySendError(String error) {
+    return '无法发送主管部门公告：$error';
+  }
+
+  @override
+  String get authorityHistory => '公告历史';
+
+  @override
+  String get authorityHistoryEmpty => '尚未收到已认证的主管部门公告。';
+
+  @override
+  String get authorityActive => '有效';
+
+  @override
+  String get authorityExpired => '已过期';
+
+  @override
+  String authorityExpires(String date) {
+    return '到期时间：$date';
+  }
+
+  @override
+  String get authorityBannerSemantics => '当前有效的已认证主管部门公告';
+
+  @override
+  String get verifiedRescuerBadge => '已验证救援人员';
+
+  @override
+  String get rescueRosterFileType => 'HearthBit 救援名册';
+
+  @override
+  String get rescueOperationsTitle => '救援行动';
+
+  @override
+  String get rescueOperationsEmpty => '尚未收到 SOS 案件。';
+
+  @override
+  String rescueOperationsError(String error) {
+    return '无法更新救援行动：$error';
+  }
+
+  @override
+  String get rescueOperationsAssignMe => '分配给我';
+
+  @override
+  String get rescueOperationsEnRoute => '前往途中';
+
+  @override
+  String get rescueOperationsAttended => '已处置';
+
+  @override
+  String get rescueOperationsClose => '关闭';
+
+  @override
+  String get rescueOperationsNoActions => '没有获授权的操作';
+
+  @override
+  String rescueOperationsAssignee(String callsign) {
+    return '已分配给 $callsign';
+  }
+
+  @override
+  String rescueOperationsReceivedAt(String date) {
+    return '接收于 $date';
+  }
+
+  @override
+  String rescueOperationsTriage(String need, String people) {
+    return '优先事项：$need · 人数：$people';
+  }
+
+  @override
+  String get rescueCaseStateNew => '新案件';
+
+  @override
+  String get rescueCaseStateAssigned => '已分配';
+
+  @override
+  String get rescueCaseStateEnRoute => '前往途中';
+
+  @override
+  String get rescueCaseStateAttended => '已处置';
+
+  @override
+  String get rescueCaseStateClosed => '已关闭';
+
+  @override
+  String get rescueTriageMedical => '医疗';
+
+  @override
+  String get rescueTriageWater => '饮水';
+
+  @override
+  String get rescueTriageExtraction => '救出';
+
+  @override
+  String get rescueTriageShelter => '庇护';
+
+  @override
+  String get rescueTriageOther => '其他';
+
+  @override
+  String get mapFilterActive => '进行中';
+
+  @override
+  String get mapFilterUnassigned => '未分配';
+
+  @override
+  String get mapFilterAssigned => '已分配';
+
+  @override
+  String get mapFilterClosed => '已关闭';
+
+  @override
+  String mapOperationalCases(int count) {
+    return '$count 个行动案件';
+  }
+
+  @override
+  String get mapCasesEmpty => '没有符合此筛选条件的案件。';
+
+  @override
+  String mapClusterTooltip(int count, String priority) {
+    return '$count 个 SOS 案件 · 最高优先级：$priority';
+  }
+
+  @override
+  String get mapPriorityLow => '低优先级';
+
+  @override
+  String get mapPriorityMedium => '中优先级';
+
+  @override
+  String get mapPriorityHigh => '高优先级';
+
+  @override
+  String get mapPriorityCritical => '紧急优先级';
+
+  @override
+  String get mapCaseNoCoordinates => '此案件没有坐标';
+
+  @override
+  String get mapZoneConsent => '仅在此控件保持可见且启用时记录已搜索路线。';
+
+  @override
+  String get mapZoneStart => '记录路线';
+
+  @override
+  String mapZoneRecording(int count, int maximum) {
+    return '正在记录已搜索区域 · $count/$maximum 个点';
+  }
+
+  @override
+  String get mapZoneVisibleOnly => '取消、发布或离开此地图时，位置记录会停止。';
+
+  @override
+  String get mapZoneFinish => '完成并分享路线';
+
+  @override
+  String get mapZonePublished => '已搜索路线已与验证团队共享。';
+
+  @override
+  String get mapZoneLocationRequired => '记录路线需要位置权限并开启位置服务。';
+
+  @override
+  String get mapZoneRosterChanged => '由于当前名册或您的成员资格发生变化，记录已取消。';
+
+  @override
+  String mapZoneError(String error) {
+    return '无法记录或分享已搜索路线：$error';
+  }
 }

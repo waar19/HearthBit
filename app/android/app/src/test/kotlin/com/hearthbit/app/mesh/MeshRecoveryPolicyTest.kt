@@ -37,9 +37,9 @@ class MeshRecoveryPolicyTest {
     }
 
     @Test
-    fun `perfil limitado reserva un slot para peer conocido`() {
+    fun `conexion cliente nunca excede el limite efectivo`() {
         assertTrue(ConnectionPriorityPolicy.canOpenClientConnection(3, 1, knownPeer = false))
-        assertFalse(ConnectionPriorityPolicy.canOpenClientConnection(3, 2, knownPeer = false))
+        assertTrue(ConnectionPriorityPolicy.canOpenClientConnection(3, 2, knownPeer = false))
         assertTrue(ConnectionPriorityPolicy.canOpenClientConnection(3, 2, knownPeer = true))
         assertFalse(ConnectionPriorityPolicy.canOpenClientConnection(3, 3, knownPeer = true))
         assertFalse(ConnectionPriorityPolicy.canOpenClientConnection(0, 0, knownPeer = true))

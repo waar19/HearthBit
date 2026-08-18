@@ -130,6 +130,10 @@ class _MemoryTransferRepository extends TransferRepository {
   Future<List<TransferRecord>> load() async => records.values.toList();
 
   @override
+  Future<List<TransferRecord>> loadAllForRetention() async =>
+      records.values.toList();
+
+  @override
   Future<void> save(
     TransferRecord record, {
     Uint8List? bitmap,
@@ -156,6 +160,13 @@ class _MemoryTransferRepository extends TransferRepository {
     records.remove(id);
     bitmaps.remove(id);
     materials.remove(id);
+  }
+
+  @override
+  Future<void> deleteMany(Iterable<String> ids) async {
+    for (final id in ids) {
+      await delete(id);
+    }
   }
 
   @override
@@ -260,6 +271,7 @@ void main() {
   });
 
   tearDown(() async {
+    await controller.waitForRetention();
     controller.dispose();
     await mesh.eventsController.close();
     await platform.eventsController.close();

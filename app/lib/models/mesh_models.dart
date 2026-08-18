@@ -53,6 +53,68 @@ enum MeshPowerProfile {
       this != MeshPowerProfile.performance && this != MeshPowerProfile.balanced;
 }
 
+class MeshOperationalCounters {
+  const MeshOperationalCounters({
+    this.openEmergencyRateLimitedKnown = 0,
+    this.openEmergencyRateLimitedUnknown = 0,
+    this.relayDampingSuppressed = 0,
+    this.relayDampingScheduled = 0,
+    this.relayDampingExpired = 0,
+    this.trustStoreEvictions = 0,
+    this.trustConflicts = 0,
+  });
+
+  final int openEmergencyRateLimitedKnown;
+  final int openEmergencyRateLimitedUnknown;
+  final int relayDampingSuppressed;
+  final int relayDampingScheduled;
+  final int relayDampingExpired;
+  final int trustStoreEvictions;
+  final int trustConflicts;
+
+  @Deprecated('Use openEmergencyRateLimitedKnown')
+  int get openSosRateLimitedKnown => openEmergencyRateLimitedKnown;
+
+  @Deprecated('Use openEmergencyRateLimitedUnknown')
+  int get openSosRateLimitedUnknown => openEmergencyRateLimitedUnknown;
+
+  factory MeshOperationalCounters.fromNative(Map<Object?, Object?> value) {
+    int counter(String key, {String? legacyKey}) {
+      final parsed =
+          (value[key] as num?)?.toInt() ??
+          (legacyKey == null ? null : (value[legacyKey] as num?)?.toInt()) ??
+          0;
+      return parsed < 0 ? 0 : parsed;
+    }
+
+    return MeshOperationalCounters(
+      openEmergencyRateLimitedKnown: counter(
+        'openEmergencyRateLimitedKnown',
+        legacyKey: 'openSosRateLimitedKnown',
+      ),
+      openEmergencyRateLimitedUnknown: counter(
+        'openEmergencyRateLimitedUnknown',
+        legacyKey: 'openSosRateLimitedUnknown',
+      ),
+      relayDampingSuppressed: counter('relayDampingSuppressed'),
+      relayDampingScheduled: counter('relayDampingScheduled'),
+      relayDampingExpired: counter('relayDampingExpired'),
+      trustStoreEvictions: counter('trustStoreEvictions'),
+      trustConflicts: counter('trustConflicts'),
+    );
+  }
+
+  Map<String, int> toJson() => {
+    'openEmergencyRateLimitedKnown': openEmergencyRateLimitedKnown,
+    'openEmergencyRateLimitedUnknown': openEmergencyRateLimitedUnknown,
+    'relayDampingSuppressed': relayDampingSuppressed,
+    'relayDampingScheduled': relayDampingScheduled,
+    'relayDampingExpired': relayDampingExpired,
+    'trustStoreEvictions': trustStoreEvictions,
+    'trustConflicts': trustConflicts,
+  };
+}
+
 enum CheckInStatus {
   ok('OK'),
   needsHelp('HELP'),
@@ -76,6 +138,212 @@ enum SosLocationPrecision {
   none;
 
   String get wireName => name;
+}
+
+enum SosInjuryStatus { unknown, none, injured }
+
+enum SosTrappedStatus { unknown, no, yes }
+
+enum SosPrimaryNeed { medical, water, extraction, shelter, other }
+
+class SosTriage {
+  const SosTriage({
+    this.peopleCount,
+    this.injuryStatus = SosInjuryStatus.unknown,
+    this.injuredCount,
+    this.trappedStatus = SosTrappedStatus.unknown,
+    required this.primaryNeed,
+  }) : assert(
+         peopleCount == null ||
+             (peopleCount >= minimumCount && peopleCount <= maximumCount),
+       ),
+       assert(
+         injuredCount == null ||
+             (injuredCount >= minimumCount && injuredCount <= maximumCount),
+       ),
+       assert(injuredCount == null || injuryStatus == SosInjuryStatus.injured);
+
+  static const int currentVersion = 1;
+  static const int minimumCount = 1;
+  static const int maximumCount = 99;
+  static const String marker = 'T1';
+  static const Object _unchanged = Object();
+
+  final int? peopleCount;
+  final SosInjuryStatus injuryStatus;
+  final int? injuredCount;
+  final SosTrappedStatus trappedStatus;
+  final SosPrimaryNeed primaryNeed;
+
+  String encode() {
+    final injury = switch (injuryStatus) {
+      SosInjuryStatus.unknown => '?',
+      SosInjuryStatus.none => 'N',
+      SosInjuryStatus.injured => injuredCount?.toString() ?? 'Y',
+    };
+    final trapped = switch (trappedStatus) {
+      SosTrappedStatus.unknown => '?',
+      SosTrappedStatus.no => 'N',
+      SosTrappedStatus.yes => 'Y',
+    };
+    final need = switch (primaryNeed) {
+      SosPrimaryNeed.medical => 'M',
+      SosPrimaryNeed.water => 'W',
+      SosPrimaryNeed.extraction => 'E',
+      SosPrimaryNeed.shelter => 'S',
+      SosPrimaryNeed.other => 'O',
+    };
+    return '$marker|${peopleCount ?? '?'}|$injury|$trapped|$need';
+  }
+
+  static SosTriage? tryDecode(String value) {
+    final fields = value.split('|');
+    if (fields.length != 5 || fields[0] != marker) return null;
+    final people = _parseCount(fields[1]);
+    if (fields[1] != '?' && people == null) return null;
+
+    final injuryToken = fields[2];
+    final injuryCount = _parseCount(injuryToken);
+    final injury = switch (injuryToken) {
+      '?' => SosInjuryStatus.unknown,
+      'N' => SosInjuryStatus.none,
+      'Y' => SosInjuryStatus.injured,
+      _ when injuryCount != null => SosInjuryStatus.injured,
+      _ => null,
+    };
+    final trapped = switch (fields[3]) {
+      '?' => SosTrappedStatus.unknown,
+      'N' => SosTrappedStatus.no,
+      'Y' => SosTrappedStatus.yes,
+      _ => null,
+    };
+    final need = switch (fields[4]) {
+      'M' => SosPrimaryNeed.medical,
+      'W' => SosPrimaryNeed.water,
+      'E' => SosPrimaryNeed.extraction,
+      'S' => SosPrimaryNeed.shelter,
+      'O' => SosPrimaryNeed.other,
+      _ => null,
+    };
+    if (injury == null || trapped == null || need == null) return null;
+    return SosTriage(
+      peopleCount: people,
+      injuryStatus: injury,
+      injuredCount: injuryCount,
+      trappedStatus: trapped,
+      primaryNeed: need,
+    );
+  }
+
+  static int? _parseCount(String value) {
+    final parsed = int.tryParse(value);
+    if (parsed == null || parsed < minimumCount || parsed > maximumCount) {
+      return null;
+    }
+    return parsed;
+  }
+
+  SosTriage copyWith({
+    Object? peopleCount = _unchanged,
+    SosInjuryStatus? injuryStatus,
+    Object? injuredCount = _unchanged,
+    SosTrappedStatus? trappedStatus,
+    SosPrimaryNeed? primaryNeed,
+  }) {
+    final nextInjuryStatus = injuryStatus ?? this.injuryStatus;
+    final nextInjuredCount = identical(injuredCount, _unchanged)
+        ? this.injuredCount
+        : injuredCount as int?;
+    return SosTriage(
+      peopleCount: identical(peopleCount, _unchanged)
+          ? this.peopleCount
+          : peopleCount as int?,
+      injuryStatus: nextInjuryStatus,
+      injuredCount: nextInjuryStatus == SosInjuryStatus.injured
+          ? nextInjuredCount
+          : null,
+      trappedStatus: trappedStatus ?? this.trappedStatus,
+      primaryNeed: primaryNeed ?? this.primaryNeed,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SosTriage &&
+          peopleCount == other.peopleCount &&
+          injuryStatus == other.injuryStatus &&
+          injuredCount == other.injuredCount &&
+          trappedStatus == other.trappedStatus &&
+          primaryNeed == other.primaryNeed;
+
+  @override
+  int get hashCode => Object.hash(
+    peopleCount,
+    injuryStatus,
+    injuredCount,
+    trappedStatus,
+    primaryNeed,
+  );
+}
+
+class SosMessageCodec {
+  SosMessageCodec._();
+
+  static final RegExp _versionMarker = RegExp(r'^T[0-9]+$');
+
+  static String encode({
+    required String description,
+    double? latitude,
+    double? longitude,
+    SosTriage? triage,
+  }) {
+    final readable = triage == null
+        ? description
+        : description.replaceAll('|', '/');
+    final coordinates = latitude == null || longitude == null
+        ? '||'
+        : '|$latitude|$longitude';
+    return 'SOS|$readable$coordinates'
+        '${triage == null ? '' : '|${triage.encode()}'}';
+  }
+
+  static String description(String content) {
+    if (!content.startsWith('SOS|')) return content;
+    final parts = content.split('|');
+    if (_usesVersionedLayout(parts)) return parts[1];
+    if (parts.length < 4) return parts.skip(1).join('|');
+    return parts.sublist(1, parts.length - 2).join('|');
+  }
+
+  static double? latitude(String content) => _coordinate(content, true);
+
+  static double? longitude(String content) => _coordinate(content, false);
+
+  static SosTriage? triage(String content) {
+    if (!content.startsWith('SOS|')) return null;
+    final parts = content.split('|');
+    if (parts.length != 9 || parts[4] != SosTriage.marker) return null;
+    return SosTriage.tryDecode(parts.sublist(4).join('|'));
+  }
+
+  static double? _coordinate(String content, bool latitude) {
+    if (!content.startsWith('SOS|')) return null;
+    final parts = content.split('|');
+    if (parts.length < 4) return null;
+    final fixedLayout = _usesVersionedLayout(parts);
+    final index = fixedLayout
+        ? (latitude ? 2 : 3)
+        : parts.length - (latitude ? 2 : 1);
+    final value = double.tryParse(parts[index]);
+    if (value == null || !value.isFinite) return null;
+    if (latitude && (value < -90 || value > 90)) return null;
+    if (!latitude && (value < -180 || value > 180)) return null;
+    return value;
+  }
+
+  static bool _usesVersionedLayout(List<String> parts) =>
+      parts.length >= 5 && _versionMarker.hasMatch(parts[4]);
 }
 
 class DrillCheckIn {
@@ -603,6 +871,7 @@ class MeshMessage {
     this.channel,
     this.deliveryStatus = MeshMessageDeliveryStatus.transmitted,
     this.external = false,
+    this.canonicalHash,
   });
 
   factory MeshMessage.fromMap(Map<Object?, Object?> map) {
@@ -618,6 +887,7 @@ class MeshMessage {
     final senderPeerId = map['senderPeerId'];
     final timestamp = map['timestamp'];
     final channel = map['channel'];
+    final canonicalHash = map['canonicalHash'];
     if (id is! String ||
         id.isEmpty ||
         utf8.encode(id).length > maximumIdLength ||
@@ -634,7 +904,10 @@ class MeshMessage {
         timestamp > 8640000000000000 ||
         (channel != null &&
             (channel is! String ||
-                utf8.encode(channel).length > maximumChannelLength))) {
+                utf8.encode(channel).length > maximumChannelLength)) ||
+        (canonicalHash != null &&
+            (canonicalHash is! String ||
+                !RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(canonicalHash)))) {
       return null;
     }
     return MeshMessage(
@@ -647,6 +920,7 @@ class MeshMessage {
       timestamp: DateTime.fromMillisecondsSinceEpoch(timestamp.toInt()),
       channel: channel as String?,
       external: map['external'] == true,
+      canonicalHash: (canonicalHash as String?)?.toLowerCase(),
     );
   }
 
@@ -661,6 +935,7 @@ class MeshMessage {
       timestamp: DateTime.fromMillisecondsSinceEpoch(map['timestamp']! as int),
       channel: map['channel'] as String?,
       external: map['external'] == 1,
+      canonicalHash: (map['canonical_hash'] as String?)?.toLowerCase(),
     );
   }
 
@@ -674,6 +949,7 @@ class MeshMessage {
   final String? channel;
   final MeshMessageDeliveryStatus deliveryStatus;
   final bool external;
+  final String? canonicalHash;
 
   bool get isDrill => channel?.trim().toLowerCase() == 'drill';
 
@@ -718,25 +994,14 @@ class MeshMessage {
     }
   }
 
-  /// Las alertas viajan como 'SOS|descripción|lat|lon' (lat/lon vacíos si no
-  /// hubo GPS). Estos helpers separan las partes para la UI y el radar.
-  String get sosDescription {
-    if (!content.startsWith('SOS|')) return content;
-    final parts = content.split('|');
-    if (parts.length < 4) return parts.skip(1).join('|');
-    return parts.sublist(1, parts.length - 2).join('|');
-  }
+  /// Conserva `SOS|descripción|lat|lon` y acepta un sufijo de triage T1.
+  String get sosDescription => SosMessageCodec.description(content);
 
-  double? get sosLatitude => _sosCoordinate(2);
+  double? get sosLatitude => SosMessageCodec.latitude(content);
 
-  double? get sosLongitude => _sosCoordinate(1);
+  double? get sosLongitude => SosMessageCodec.longitude(content);
 
-  double? _sosCoordinate(int fromEnd) {
-    if (!content.startsWith('SOS|')) return null;
-    final parts = content.split('|');
-    if (parts.length < 4) return null;
-    return double.tryParse(parts[parts.length - fromEnd]);
-  }
+  SosTriage? get sosTriage => SosMessageCodec.triage(content);
 
   Map<String, Object?> toDatabase() => {
     'id': id,
@@ -748,6 +1013,7 @@ class MeshMessage {
     'timestamp': timestamp.millisecondsSinceEpoch,
     'channel': channel,
     'external': external ? 1 : 0,
+    'canonical_hash': canonicalHash,
   };
 }
 

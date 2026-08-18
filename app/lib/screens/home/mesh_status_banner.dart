@@ -18,8 +18,27 @@ class MeshStatusBanner extends StatelessWidget {
             isDefaultMeshNickname(controller.nickname)
         ? context.l10n.statusBannerYou
         : controller.nickname;
-    final (color, accent, icon, label) = switch (status) {
-      MeshConnectionStatus.active => (
+    final interruption = controller.meshInterruptionReason;
+    final (color, accent, icon, label) = switch ((interruption, status)) {
+      (MeshInterruptionReason.permissionsRevoked, _) => (
+        scheme.errorContainer,
+        scheme.onErrorContainer,
+        Icons.no_accounts_outlined,
+        context.l10n.statusMeshPermissionsRevoked,
+      ),
+      (MeshInterruptionReason.batteryRestricted, _) => (
+        scheme.tertiaryContainer,
+        scheme.onTertiaryContainer,
+        Icons.battery_alert_outlined,
+        context.l10n.statusMeshBatteryRestricted,
+      ),
+      (MeshInterruptionReason.unavailable, _) => (
+        scheme.errorContainer,
+        scheme.onErrorContainer,
+        Icons.portable_wifi_off_outlined,
+        context.l10n.statusMeshSuspended,
+      ),
+      (null, MeshConnectionStatus.active) => (
         scheme.surfaceContainerHigh,
         scheme.primary,
         Icons.bluetooth_connected,
@@ -28,30 +47,58 @@ class MeshStatusBanner extends StatelessWidget {
           controller.peers.length,
         ),
       ),
-      MeshConnectionStatus.degraded => (
+      (null, MeshConnectionStatus.degraded) => (
         scheme.tertiaryContainer,
         scheme.onTertiaryContainer,
         Icons.bluetooth_searching,
         context.l10n.statusDegradedLabel(displayNickname),
       ),
-      MeshConnectionStatus.starting => (
+      (null, MeshConnectionStatus.starting) => (
         scheme.surfaceContainerHighest,
         scheme.onSurfaceVariant,
         Icons.bluetooth_searching,
         context.l10n.statusStarting,
       ),
-      MeshConnectionStatus.error => (
+      (null, MeshConnectionStatus.error) => (
         scheme.errorContainer,
         scheme.onErrorContainer,
         Icons.bluetooth_disabled,
         context.l10n.statusError,
       ),
-      MeshConnectionStatus.stopped => (
+      (null, MeshConnectionStatus.stopped) => (
         scheme.surfaceContainerHighest,
         scheme.onSurfaceVariant,
         Icons.bluetooth_disabled,
         context.l10n.statusStopped,
       ),
+    };
+    final (action, actionLabel) = switch ((interruption, status)) {
+      (MeshInterruptionReason.batteryRestricted, _) => (
+        controller.requestDisableBatteryOptimizations,
+        context.l10n.actionAdjust,
+      ),
+      (MeshInterruptionReason.permissionsRevoked, _) => (
+        controller.start,
+        context.l10n.actionRetry,
+      ),
+      (MeshInterruptionReason.unavailable, _) => (
+        controller.start,
+        context.l10n.actionRestart,
+      ),
+      (null, MeshConnectionStatus.active) => (
+        controller.stop,
+        context.l10n.actionStop,
+      ),
+      (null, MeshConnectionStatus.degraded) => (
+        controller.start,
+        context.l10n.actionRestart,
+      ),
+      (null, MeshConnectionStatus.starting) => (null, null),
+      (null, MeshConnectionStatus.error) ||
+      (
+        null,
+        MeshConnectionStatus.stopped,
+      ) => (controller.start, context.l10n.actionActivate),
     };
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -67,26 +114,13 @@ class MeshStatusBanner extends StatelessWidget {
             Icon(icon, color: accent),
             const SizedBox(width: 10),
             Expanded(child: Text(label)),
-            if (status == MeshConnectionStatus.starting)
+            if (action == null)
               const SizedBox.square(
                 dimension: 24,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            else if (status == MeshConnectionStatus.active)
-              FilledButton.tonal(
-                onPressed: controller.stop,
-                child: Text(context.l10n.actionStop),
-              )
-            else if (status == MeshConnectionStatus.degraded)
-              FilledButton.tonal(
-                onPressed: controller.start,
-                child: Text(context.l10n.actionRestart),
-              )
             else
-              FilledButton.tonal(
-                onPressed: controller.start,
-                child: Text(context.l10n.actionActivate),
-              ),
+              FilledButton.tonal(onPressed: action, child: Text(actionLabel!)),
           ],
         ),
       ),

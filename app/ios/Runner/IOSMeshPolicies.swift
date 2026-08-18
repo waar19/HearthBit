@@ -33,7 +33,8 @@ enum IOSPowerProfile: String {
     switch self {
     case .critical: return 3
     case .survival: return 0
-    case .performance, .balanced, .powerSaver: return .max
+    case .performance, .balanced, .powerSaver:
+      return IOSBLENeighborSelectionPolicy.maximumNeighbors
     }
   }
 
@@ -53,6 +54,74 @@ enum IOSPowerProfile: String {
     if charging { return .balanced }
     if battery <= 40 { return .powerSaver }
     return .balanced
+  }
+}
+
+struct IOSBLENeighborCandidate: Equatable {
+  let identifier: UUID
+  let rssi: Int
+  let knownPeer: Bool
+  let preferred: Bool
+  let protected: Bool
+}
+
+enum IOSBLENeighborSelectionDecision: Equatable {
+  case accept
+  case reject
+  case replace(UUID)
+}
+
+enum IOSBLENeighborSelectionPolicy {
+  static let maximumNeighbors = 8
+  static let maximumSubscribedCentrals = 8
+  static let replacementRSSIMargin = 12
+
+  static func decision(
+    candidate: IOSBLENeighborCandidate,
+    current: [IOSBLENeighborCandidate],
+    maximum: Int = maximumNeighbors
+  ) -> IOSBLENeighborSelectionDecision {
+    guard maximum > 0 else { return .reject }
+    guard !current.contains(where: { $0.identifier == candidate.identifier }) else {
+      return .reject
+    }
+    guard current.count >= maximum else { return .accept }
+    guard
+      let worst = current
+        .filter({ !$0.protected && !$0.preferred })
+        .min(by: isWorse)
+    else { return .reject }
+    guard isClearlyBetter(candidate, than: worst) else { return .reject }
+    return .replace(worst.identifier)
+  }
+
+  private static func isWorse(
+    _ lhs: IOSBLENeighborCandidate,
+    _ rhs: IOSBLENeighborCandidate
+  ) -> Bool {
+    let lhsPriority = priority(lhs)
+    let rhsPriority = priority(rhs)
+    if lhsPriority != rhsPriority { return lhsPriority < rhsPriority }
+    if lhs.rssi != rhs.rssi { return lhs.rssi < rhs.rssi }
+    return lhs.identifier.uuidString < rhs.identifier.uuidString
+  }
+
+  private static func isClearlyBetter(
+    _ candidate: IOSBLENeighborCandidate,
+    than current: IOSBLENeighborCandidate
+  ) -> Bool {
+    let candidatePriority = priority(candidate)
+    let currentPriority = priority(current)
+    if candidatePriority != currentPriority {
+      return candidatePriority > currentPriority
+    }
+    let threshold = current.rssi.addingReportingOverflow(replacementRSSIMargin)
+    return !threshold.overflow && candidate.rssi >= threshold.partialValue
+  }
+
+  private static func priority(_ candidate: IOSBLENeighborCandidate) -> Int {
+    if candidate.preferred { return 2 }
+    return candidate.knownPeer ? 1 : 0
   }
 }
 
@@ -121,6 +190,142 @@ enum IOSPeerReachabilityPolicy {
   static func requiresTransportRekey(previousLastSeen: Date?, now: Date) -> Bool {
     previousLastSeen != nil &&
       !isOnline(lastActivity: previousLastSeen, now: now)
+  }
+}
+
+enum IOSMeshRetentionPolicy {
+  static let maximumRemembered = 256
+
+  static func evictions<Key: Hashable>(
+    lastSeen: [Key: Date],
+    protected: Set<Key>,
+    maximum: Int = maximumRemembered,
+    stableKey: (Key) -> String
+  ) -> [Key] {
+    precondition(maximum > 0)
+    let overflow = max(0, lastSeen.count - maximum)
+    guard overflow > 0 else { return [] }
+    return lastSeen
+      .filter { !protected.contains($0.key) }
+      .sorted {
+        if $0.value != $1.value { return $0.value < $1.value }
+        return stableKey($0.key) < stableKey($1.key)
+      }
+      .prefix(overflow)
+      .map(\.key)
+  }
+}
+
+struct IOSBoundedPeerPendingQueue<Element> {
+  struct Limits: Equatable {
+    let maximumPeers: Int
+    let maximumPerPeer: Int
+    let maximumGlobal: Int
+
+    static var standard: Limits {
+      Limits(maximumPeers: 256, maximumPerPeer: 64, maximumGlobal: 1024)
+    }
+  }
+
+  private struct Entry {
+    let sequence: UInt64
+    let value: Element
+  }
+
+  private let limits: Limits
+  private var entries: [String: [Entry]] = [:]
+  private var nextSequence: UInt64 = 0
+
+  init(limits: Limits = .standard) {
+    precondition(limits.maximumPeers > 0)
+    precondition(limits.maximumPerPeer > 0)
+    precondition(limits.maximumGlobal > 0)
+    self.limits = limits
+  }
+
+  var count: Int {
+    entries.values.reduce(0) { $0 + $1.count }
+  }
+
+  var peerCount: Int { entries.count }
+  var peerIDs: Set<String> { Set(entries.keys) }
+
+  func contains(peerID: String) -> Bool {
+    entries[peerID]?.isEmpty == false
+  }
+
+  func values(for peerID: String) -> [Element] {
+    entries[peerID]?.map(\.value) ?? []
+  }
+
+  @discardableResult
+  mutating func enqueue(
+    _ value: Element,
+    for peerID: String,
+    protectedPeerIDs: Set<String> = []
+  ) -> Bool {
+    if entries[peerID] == nil && entries.count >= limits.maximumPeers {
+      let existingUnprotected = entries.keys.filter {
+        !protectedPeerIDs.contains($0)
+      }
+      if existingUnprotected.isEmpty && !protectedPeerIDs.contains(peerID) {
+        return false
+      }
+      let candidates = existingUnprotected.isEmpty
+        ? Array(entries.keys)
+        : existingUnprotected
+      guard let victim = oldestPeer(in: candidates) else { return false }
+      entries.removeValue(forKey: victim)
+    }
+
+    let entry = Entry(sequence: nextSequence, value: value)
+    nextSequence &+= 1
+    entries[peerID, default: []].append(entry)
+    if entries[peerID]!.count > limits.maximumPerPeer {
+      entries[peerID]!.removeFirst(entries[peerID]!.count - limits.maximumPerPeer)
+    }
+    trimGlobal(protectedPeerIDs: protectedPeerIDs)
+    return entries[peerID]?.contains(where: { $0.sequence == entry.sequence }) == true
+  }
+
+  mutating func removeValues(for peerID: String) -> [Element] {
+    entries.removeValue(forKey: peerID)?.map(\.value) ?? []
+  }
+
+  mutating func removeAll() {
+    entries.removeAll(keepingCapacity: false)
+    nextSequence = 0
+  }
+
+  private func oldestPeer(in peerIDs: [String]) -> String? {
+    peerIDs.min {
+      let lhs = entries[$0]?.first?.sequence ?? UInt64.max
+      let rhs = entries[$1]?.first?.sequence ?? UInt64.max
+      if lhs != rhs { return lhs < rhs }
+      return $0 < $1
+    }
+  }
+
+  private mutating func trimGlobal(protectedPeerIDs: Set<String>) {
+    while count > limits.maximumGlobal {
+      let unprotected = entries.keys.filter {
+        !protectedPeerIDs.contains($0)
+      }
+      let candidates = unprotected.isEmpty ? Array(entries.keys) : unprotected
+      guard
+        let peerID = candidates.min(by: {
+          let lhs = entries[$0]?.first?.sequence ?? UInt64.max
+          let rhs = entries[$1]?.first?.sequence ?? UInt64.max
+          if lhs != rhs { return lhs < rhs }
+          return $0 < $1
+        }),
+        entries[peerID]?.isEmpty == false
+      else { return }
+      entries[peerID]!.removeFirst()
+      if entries[peerID]!.isEmpty {
+        entries.removeValue(forKey: peerID)
+      }
+    }
   }
 }
 
@@ -281,6 +486,100 @@ final class IOSUnknownIngressRateLimiter {
   }
 }
 
+final class IOSOpenEmergencyRateLimiter {
+  static let defaultKnownMaximumFrames = 600
+  static let defaultUnknownMaximumFrames = 240
+  static let defaultWindow: TimeInterval = 60
+
+  private let knownMaximumFrames: Int
+  private let unknownMaximumFrames: Int
+  private let window: TimeInterval
+  private var knownFrames: [TimeInterval] = []
+  private var unknownFrames: [TimeInterval] = []
+  private var knownRateLimited: UInt64 = 0
+  private var unknownRateLimited: UInt64 = 0
+  private let lock = NSLock()
+
+  init(
+    knownMaximumFrames: Int = defaultKnownMaximumFrames,
+    unknownMaximumFrames: Int = defaultUnknownMaximumFrames,
+    window: TimeInterval = defaultWindow
+  ) {
+    precondition(knownMaximumFrames > 0)
+    precondition(unknownMaximumFrames > 0)
+    precondition(window > 0)
+    self.knownMaximumFrames = knownMaximumFrames
+    self.unknownMaximumFrames = unknownMaximumFrames
+    self.window = window
+  }
+
+  func allow(
+    knownRelationship: Bool,
+    now: TimeInterval = Date().timeIntervalSince1970
+  ) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+
+    if knownRelationship {
+      let allowed = Self.record(
+        now: now,
+        window: window,
+        maximumFrames: knownMaximumFrames,
+        frames: &knownFrames
+      )
+      if !allowed { knownRateLimited &+= 1 }
+      return allowed
+    }
+    let allowed = Self.record(
+      now: now,
+      window: window,
+      maximumFrames: unknownMaximumFrames,
+      frames: &unknownFrames
+    )
+    if !allowed { unknownRateLimited &+= 1 }
+    return allowed
+  }
+
+  /// Counters are process-lifetime unless `reset()` is explicitly invoked.
+  func operationalCounters() -> [String: UInt64] {
+    lock.lock()
+    defer { lock.unlock() }
+    return [
+      "openEmergencyRateLimitedKnown": knownRateLimited,
+      "openEmergencyRateLimitedUnknown": unknownRateLimited,
+    ]
+  }
+
+  func clear() {
+    lock.lock()
+    knownFrames.removeAll(keepingCapacity: true)
+    unknownFrames.removeAll(keepingCapacity: true)
+    lock.unlock()
+  }
+
+  func reset() {
+    lock.lock()
+    knownFrames.removeAll(keepingCapacity: true)
+    unknownFrames.removeAll(keepingCapacity: true)
+    knownRateLimited = 0
+    unknownRateLimited = 0
+    lock.unlock()
+  }
+
+  private static func record(
+    now: TimeInterval,
+    window: TimeInterval,
+    maximumFrames: Int,
+    frames: inout [TimeInterval]
+  ) -> Bool {
+    let cutoff = now - window
+    frames.removeAll { $0 <= cutoff || $0 > now }
+    guard frames.count < maximumFrames else { return false }
+    frames.append(now)
+    return true
+  }
+}
+
 enum IOSMeshIngressPolicy {
   private static let publicSignatureTypes: Set<UInt8> = [
     IOSMeshProtocol.message,
@@ -335,6 +634,102 @@ enum IOSMeshRelayPolicy {
     }
   }
 }
+
+enum IOSRelayDampingPolicy {
+  struct Settings: Equatable {
+    let minimumJitterMilliseconds: Int
+    let maximumJitterMilliseconds: Int
+    let suppressionAdditionalCopies: Int
+  }
+
+  static let normal = Settings(
+    minimumJitterMilliseconds: 180,
+    maximumJitterMilliseconds: 420,
+    suppressionAdditionalCopies: 2
+  )
+  static let emergency = Settings(
+    minimumJitterMilliseconds: 80,
+    maximumJitterMilliseconds: 160,
+    suppressionAdditionalCopies: 3
+  )
+
+  static func settings(emergency: Bool) -> Settings {
+    emergency ? self.emergency : normal
+  }
+
+  static func jitterMilliseconds(
+    fingerprint: String,
+    salt: Data,
+    emergency: Bool
+  ) -> Int {
+    let settings = settings(emergency: emergency)
+    var material = Data(fingerprint.utf8)
+    material.append(0)
+    material.append(salt)
+    let digest = SHA256.hash(data: material)
+    let value = digest.prefix(8).reduce(UInt64(0)) {
+      ($0 << 8) | UInt64($1)
+    }
+    let width = UInt64(
+      settings.maximumJitterMilliseconds -
+        settings.minimumJitterMilliseconds +
+        1
+    )
+    return settings.minimumJitterMilliseconds + Int(value % width)
+  }
+
+  static func shouldRelay(additionalCopies: Int, emergency: Bool) -> Bool {
+    additionalCopies < settings(emergency: emergency).suppressionAdditionalCopies
+  }
+
+  static func sourceKey(_ source: UUID?) -> String {
+    source?.uuidString ?? "source:nil"
+  }
+
+  static func sourceKeys(
+    afterObserving sourceKey: String,
+    in existing: Set<String>
+  ) -> Set<String> {
+    var updated = existing
+    updated.insert(sourceKey)
+    return updated
+  }
+
+  static func additionalCopies(sourceKeys: Set<String>) -> Int {
+    max(0, sourceKeys.count - 1)
+  }
+}
+
+final class IOSRelayOperationalCounters {
+  private let lock = NSLock()
+  private var scheduled: UInt64 = 0
+  private var expired: UInt64 = 0
+  private var suppressed: UInt64 = 0
+
+  func recordScheduled() {
+    lock.lock()
+    scheduled &+= 1
+    lock.unlock()
+  }
+
+  func recordExpiration(suppressed wasSuppressed: Bool) {
+    lock.lock()
+    expired &+= 1
+    if wasSuppressed { suppressed &+= 1 }
+    lock.unlock()
+  }
+
+  func snapshot() -> [String: UInt64] {
+    lock.lock()
+    defer { lock.unlock() }
+    return [
+      "relayDampingSuppressed": suppressed,
+      "relayDampingScheduled": scheduled,
+      "relayDampingExpired": expired,
+    ]
+  }
+}
+
 enum IOSEmergencySMSPolicy {
   static func normalizeRecipient(_ value: String) -> String? {
     let normalized = String(value.trimmingCharacters(in: .whitespacesAndNewlines).filter {

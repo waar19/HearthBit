@@ -95,11 +95,13 @@ importantes son:
 - `central_enabled`: busca y conecta otros relays además de aceptar teléfonos.
 - `max_central_links`: máximo de conexiones centrales.
 - `max_packet_size`: límite antes de decodificar.
-- `identity_verification.unknown_signed_policy`: `relay-live` reenvía, pero no
-  almacena, firmas sin ANNOUNCE conocido; `reject` exige identidad previa. Una
-  clave aprendida queda fijada también tras reinicios y toda firma posterior
-  se verifica antes de reenviar o guardar. Un trust store corrupto impide el
-  arranque; nunca se reinicia silenciosamente.
+- `identity_verification.unknown_signed_policy`: `reject` exige un ANNOUNCE
+  válido antes de reenviar o guardar cualquier paquete firmado. El valor
+  legacy `relay-live` sigue aceptándose por compatibilidad, pero se trata como
+  `reject` y nunca habilita reenvío sin verificar. Una clave aprendida queda
+  fijada también tras reinicios y toda firma posterior se verifica antes de
+  reenviar o guardar. Un trust store corrupto impide el arranque; nunca se
+  reinicia silenciosamente.
 - `flood`: buckets por sender y bridge, con reserva separada para emergencias.
 - `lan`: gateway local desactivado por defecto; requiere `psk_base64` de al
   menos 32 bytes. Consulte
