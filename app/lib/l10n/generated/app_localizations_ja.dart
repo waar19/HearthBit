@@ -298,6 +298,64 @@ class AppLocalizationsJa extends AppLocalizations {
   String get sosNoneReceived => 'SOS アラートは受信していません。';
 
   @override
+  String get sosTriageTitle => '救助用クイック情報';
+
+  @override
+  String get sosTriageOptional => '任意です。必要な支援を選ぶか、すぐに SOS を送信できます。';
+
+  @override
+  String get sosTriageNone => '構造化情報なし';
+
+  @override
+  String get sosTriageMedical => '医療';
+
+  @override
+  String get sosTriageWater => '水';
+
+  @override
+  String get sosTriageExtraction => '救出';
+
+  @override
+  String get sosTriageShelter => '避難場所';
+
+  @override
+  String get sosTriageOther => 'その他';
+
+  @override
+  String get sosTriageDetails => '詳細を追加';
+
+  @override
+  String get sosTriagePeople => '人数';
+
+  @override
+  String get sosTriageInjuries => '負傷者';
+
+  @override
+  String get sosTriageTrapped => '閉じ込め';
+
+  @override
+  String get sosTriageUnknown => '不明';
+
+  @override
+  String get sosTriageNo => 'いいえ';
+
+  @override
+  String get sosTriageYes => 'はい';
+
+  @override
+  String get sosTriageSave => '詳細を保存';
+
+  @override
+  String sosTriageSummary(
+    String people,
+    String injured,
+    String trapped,
+    String need,
+  ) {
+    return '人数：$people・負傷者：$injured・閉じ込め：$trapped・必要：$need';
+  }
+
+  @override
   String get checkInPrivateBody => '確認済みの家族だけにエンドツーエンド暗号化された更新を送ります。';
 
   @override
@@ -1936,4 +1994,195 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get emergencyContactsRetry => '再試行';
+
+  @override
+  String get rescueRosterTitle => '救助チーム名簿';
+
+  @override
+  String get rescueRosterSecurityBody =>
+      '名簿はチームリーダーが署名します。ピアIDとEd25519署名鍵の両方が一致した場合のみ、確認済み救助者として表示されます。';
+
+  @override
+  String get rescueRosterEmpty => 'この端末に有効な救助チーム名簿はありません。';
+
+  @override
+  String get rescueRosterCreate => '名簿を作成';
+
+  @override
+  String get rescueRosterTeamName => 'チーム名';
+
+  @override
+  String get rescueRosterCallsign => 'リーダーのコールサイン';
+
+  @override
+  String get rescueRosterAddMember => '近くのメンバーを追加';
+
+  @override
+  String get rescueRosterNoEligiblePeers => '追加できる署名鍵付きの近くのHearthBit IDがありません。';
+
+  @override
+  String get rescueRosterNearbyIdentity => '近くのID';
+
+  @override
+  String get rescueRosterMemberCallsign => 'メンバーのコールサイン';
+
+  @override
+  String get rescueRosterMemberRole => '救助役割';
+
+  @override
+  String get rescueRosterRemoveMemberTitle => '名簿からメンバーを削除しますか？';
+
+  @override
+  String rescueRosterRemoveMemberBody(String callsign) {
+    return '$callsign はこの名簿で確認済み救助者ではなくなります。';
+  }
+
+  @override
+  String rescueRosterMemberCount(int count) {
+    return '確認済みメンバー $count 人';
+  }
+
+  @override
+  String get rescueRosterImportTitle => '署名済み名簿を取り込む';
+
+  @override
+  String get rescueRosterImportText => 'QRテキストを貼り付け';
+
+  @override
+  String get rescueRosterPasteHint => 'HBRT1:…';
+
+  @override
+  String get rescueRosterImport => '取り込む';
+
+  @override
+  String get rescueRosterImportFile => '名簿ファイルを開く';
+
+  @override
+  String get rescueRosterScanQr => '名簿QRを読み取る';
+
+  @override
+  String get rescueRosterScanHint => '署名済みHBRT1救助名簿QRにカメラを向けてください。';
+
+  @override
+  String get rescueRosterImported => '署名済み名簿を確認して有効化しました。';
+
+  @override
+  String get rescueRosterExported => '名簿ファイルを保存しました。';
+
+  @override
+  String get rescueRosterExportQr => 'QRとテキストを表示';
+
+  @override
+  String get rescueRosterQrTooLarge =>
+      'この名簿は1つのQRには大きすぎます。ファイルとして保存するか、署名済みテキストをコピーしてください。';
+
+  @override
+  String get rescueRosterExportFile => '名簿ファイルを保存';
+
+  @override
+  String get rescueRosterRemoveTitle => '有効な救助名簿を削除しますか？';
+
+  @override
+  String get rescueRosterRemoveBody =>
+      'メンバーは確認済み救助者として表示されなくなり、保護されたネイティブピンも削除されます。';
+
+  @override
+  String rescueRosterError(String error) {
+    return '救助名簿を処理できませんでした：$error';
+  }
+
+  @override
+  String get rescueRosterRoleLeader => 'チームリーダー';
+
+  @override
+  String get rescueRosterRoleResponder => '救助者';
+
+  @override
+  String get rescueRosterRoleMedic => '医療';
+
+  @override
+  String get rescueRosterRoleSearch => '捜索';
+
+  @override
+  String get rescueRosterRoleLogistics => '兵站';
+
+  @override
+  String get rescueRosterRoleCommunications => '通信';
+
+  @override
+  String get verifiedRescuerBadge => '確認済み救助者';
+
+  @override
+  String get rescueRosterFileType => 'HearthBit救助名簿';
+
+  @override
+  String get rescueOperationsTitle => '救助活動';
+
+  @override
+  String get rescueOperationsEmpty => 'SOS案件は受信されていません。';
+
+  @override
+  String rescueOperationsError(String error) {
+    return '救助活動を更新できませんでした：$error';
+  }
+
+  @override
+  String get rescueOperationsAssignMe => '自分に割り当て';
+
+  @override
+  String get rescueOperationsEnRoute => '移動中';
+
+  @override
+  String get rescueOperationsAttended => '対応済み';
+
+  @override
+  String get rescueOperationsClose => '完了';
+
+  @override
+  String get rescueOperationsNoActions => '許可された操作はありません';
+
+  @override
+  String rescueOperationsAssignee(String callsign) {
+    return '$callsign に割り当て済み';
+  }
+
+  @override
+  String rescueOperationsReceivedAt(String date) {
+    return '受信 $date';
+  }
+
+  @override
+  String rescueOperationsTriage(String need, String people) {
+    return '優先：$need・人数：$people';
+  }
+
+  @override
+  String get rescueCaseStateNew => '新規';
+
+  @override
+  String get rescueCaseStateAssigned => '割り当て済み';
+
+  @override
+  String get rescueCaseStateEnRoute => '移動中';
+
+  @override
+  String get rescueCaseStateAttended => '対応済み';
+
+  @override
+  String get rescueCaseStateClosed => '完了';
+
+  @override
+  String get rescueTriageMedical => '医療';
+
+  @override
+  String get rescueTriageWater => '水';
+
+  @override
+  String get rescueTriageExtraction => '救出';
+
+  @override
+  String get rescueTriageShelter => '避難所';
+
+  @override
+  String get rescueTriageOther => 'その他';
 }

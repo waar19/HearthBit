@@ -92,6 +92,11 @@ struct IOSPeerIdentityPin: Codable, Equatable {
   var retired: Bool? = nil
 }
 
+struct IOSRescueRosterPin: Codable, Equatable {
+  let peerID: String
+  let signingPublicKey: Data
+}
+
 enum IOSPeerIdentityPinDecision: Equatable {
   case firstBinding
   case matched
@@ -106,6 +111,7 @@ final class IOSPeerIdentityPinStore {
   private struct Envelope: Codable {
     let version: Int
     let pins: [IOSPeerIdentityPin]
+    let rescueRosterPins: [IOSRescueRosterPin]?
   }
 
   private static let service = "HearthBit.PeerIdentityPins"
@@ -120,6 +126,7 @@ final class IOSPeerIdentityPinStore {
   private let delete: Delete
   private let maximumPins: Int
   private var pins: [String: IOSPeerIdentityPin] = [:]
+  private var rescueRosterPins: [String: Data] = [:]
   private(set) var failure: Error?
 
   convenience init(defaults: UserDefaults = .standard) {
@@ -191,6 +198,10 @@ final class IOSPeerIdentityPinStore {
         account: "invalid-pin"
       )
     }
+    if let expectedSigningKey = rescueRosterPins[normalized],
+       expectedSigningKey != signingPublicKey {
+      return .conflict(noiseChanged: false, signingChanged: true)
+    }
     if let existing = pins[normalized] {
       if existing.retired == true {
         return .conflict(noiseChanged: true, signingChanged: true)
@@ -219,6 +230,7 @@ final class IOSPeerIdentityPinStore {
     }
     if pins.count == maximumPins {
       let protected = Set(protectedPeerIDs.map { $0.lowercased() })
+        .union(rescueRosterPins.keys)
       guard let eviction = pins.values
         .filter({ $0.retired != true && !protected.contains($0.peerID) })
         .map(\.peerID)
@@ -248,6 +260,49 @@ final class IOSPeerIdentityPinStore {
       throw error
     }
     return .firstBinding
+  }
+
+  func importRescueRosterPins(_ values: [IOSRescueRosterPin]) throws {
+    try ensureAvailable()
+    guard values.count <= Self.defaultMaximumPins else {
+      throw IOSMeshError.invalidPayload
+    }
+    var replacement: [String: Data] = [:]
+    var signingKeys = Set<Data>()
+    for value in values {
+      let normalized = value.peerID.lowercased()
+      guard
+        normalized == value.peerID,
+        normalized.range(of: "^[0-9a-f]{16}$", options: .regularExpression) != nil,
+        value.signingPublicKey.count == 32,
+        value.signingPublicKey.contains(where: { $0 != 0 }),
+        replacement[normalized] == nil,
+        signingKeys.insert(value.signingPublicKey).inserted,
+        pins[normalized].map({
+          $0.retired != true && $0.signingPublicKey == value.signingPublicKey
+        }) ?? true
+      else {
+        throw IOSMeshError.invalidPayload
+      }
+      replacement[normalized] = value.signingPublicKey
+    }
+    let previous = rescueRosterPins
+    rescueRosterPins = replacement
+    do {
+      try persist()
+    } catch {
+      rescueRosterPins = previous
+      failure = error
+      throw error
+    }
+  }
+
+  func rescueSigningKey(for peerID: String) -> Data? {
+    rescueRosterPins[peerID.lowercased()]
+  }
+
+  var rescueProtectedPeerIDs: Set<String> {
+    Set(rescueRosterPins.keys)
   }
 
   func rotate(
@@ -304,6 +359,7 @@ final class IOSPeerIdentityPinStore {
       try delete()
       defaults.removeObject(forKey: Self.legacyDefaultsKey)
       pins.removeAll()
+      rescueRosterPins.removeAll()
       failure = nil
     } catch {
       failure = error
@@ -323,6 +379,9 @@ final class IOSPeerIdentityPinStore {
       if let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
          envelope.version == Self.version {
         pins = try validatedDictionary(envelope.pins)
+        rescueRosterPins = try validatedRescueRosterDictionary(
+          envelope.rescueRosterPins ?? []
+        )
         return
       }
       // Migra el formato inicial no versionado si existió en una build previa.
@@ -377,10 +436,47 @@ final class IOSPeerIdentityPinStore {
     return output
   }
 
+  private func validatedRescueRosterDictionary(
+    _ values: [IOSRescueRosterPin]
+  ) throws -> [String: Data] {
+    guard values.count <= Self.defaultMaximumPins else {
+      throw IOSSecureStorageError.corruptValue(
+        service: Self.service,
+        account: Self.account
+      )
+    }
+    var output: [String: Data] = [:]
+    var signingKeys = Set<Data>()
+    for pin in values {
+      let normalized = pin.peerID.lowercased()
+      guard
+        normalized == pin.peerID,
+        normalized.range(of: "^[0-9a-f]{16}$", options: .regularExpression) != nil,
+        pin.signingPublicKey.count == 32,
+        pin.signingPublicKey.contains(where: { $0 != 0 }),
+        output[normalized] == nil,
+        signingKeys.insert(pin.signingPublicKey).inserted,
+        pins[normalized].map({
+          $0.retired != true && $0.signingPublicKey == pin.signingPublicKey
+        }) ?? true
+      else {
+        throw IOSSecureStorageError.corruptValue(
+          service: Self.service,
+          account: Self.account
+        )
+      }
+      output[normalized] = pin.signingPublicKey
+    }
+    return output
+  }
+
   private func persist() throws {
     let envelope = Envelope(
       version: Self.version,
-      pins: pins.values.sorted { $0.peerID < $1.peerID }
+      pins: pins.values.sorted { $0.peerID < $1.peerID },
+      rescueRosterPins: rescueRosterPins
+        .map { IOSRescueRosterPin(peerID: $0.key, signingPublicKey: $0.value) }
+        .sorted { $0.peerID < $1.peerID }
     )
     try upsert(JSONEncoder().encode(envelope))
   }

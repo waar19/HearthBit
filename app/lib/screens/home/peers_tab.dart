@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/lan_gateway_controller.dart';
 import '../../controllers/mesh_controller.dart';
+import '../../controllers/rescue_roster_controller.dart';
 import '../../l10n/l10n.dart';
 import '../../models/mesh_models.dart';
 import '../../utils/avatar_utils.dart';
@@ -15,6 +16,7 @@ import 'peer_capability_badges.dart';
 class PeersTab extends StatelessWidget {
   const PeersTab({
     required this.controller,
+    this.rescueRoster,
     required this.lanGateway,
     required this.onShareInvite,
     required this.onOpenPrivateChat,
@@ -27,6 +29,7 @@ class PeersTab extends StatelessWidget {
   });
 
   final MeshController controller;
+  final RescueRosterController? rescueRoster;
   final LanGatewayController? lanGateway;
   final void Function(BuildContext anchorContext) onShareInvite;
   final void Function(MeshPeer peer) onOpenPrivateChat;
@@ -146,6 +149,7 @@ class PeersTab extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     PeerCapabilityBadges(peer: peer),
+                    _verifiedRescuerBadge(context, peer),
                   ],
                 ),
                 trailing: Column(
@@ -200,6 +204,7 @@ class PeersTab extends StatelessWidget {
                   '${chatAvailable ? (peer.secure ? context.l10n.peerSecure : context.l10n.peerTapToEncrypt) : context.l10n.externalPresenceNoChat}',
                 ),
                 PeerCapabilityBadges(peer: peer),
+                _verifiedRescuerBadge(context, peer),
               ],
             ),
             onTap: chatAvailable ? () => onOpenPrivateChat(peer) : null,
@@ -247,6 +252,25 @@ class PeersTab extends StatelessWidget {
               ),
             )
             .toList(growable: false),
+      ),
+    );
+  }
+
+  Widget _verifiedRescuerBadge(BuildContext context, MeshPeer peer) {
+    final member = rescueRoster?.verifiedMember(
+      peerId: peer.id,
+      signingPublicKey: peer.signingPublicKey,
+    );
+    if (member == null) return const SizedBox.shrink();
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: Tooltip(
+        message: member.callsign,
+        child: Chip(
+          avatar: const Icon(Icons.verified, size: 16),
+          label: Text(context.l10n.verifiedRescuerBadge),
+          visualDensity: VisualDensity.compact,
+        ),
       ),
     );
   }

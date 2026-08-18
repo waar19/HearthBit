@@ -86,6 +86,21 @@ void main() {
         isPrivate: true,
       ),
       _message(
+        id: 'triage-sos',
+        content: SosMessageCodec.encode(
+          description: 'Rescate',
+          triage: const SosTriage(
+            peopleCount: 4,
+            injuryStatus: SosInjuryStatus.injured,
+            injuredCount: 2,
+            trappedStatus: SosTrappedStatus.yes,
+            primaryNeed: SosPrimaryNeed.extraction,
+          ),
+        ),
+        timestamp: timestamp,
+        channel: 'sos',
+      ),
+      _message(
         id: 'drill',
         content:
             'SIMULACRO - no solicita rescate\n'
@@ -100,6 +115,18 @@ void main() {
     expect(csv, contains('"Ana, sector 2"'));
     expect(csv, contains('"Herida ""leve""\nconsciente"'));
     expect(csv, contains('INJURED'));
+    expect(
+      csv,
+      contains(
+        'people_count,injury_status,injured_count,trapped_status,primary_need',
+      ),
+    );
+    expect(
+      csv,
+      contains(
+        'Rescate,2026-08-13T12:00:00.000Z,,,,4,injured,2,yes,extraction',
+      ),
+    );
     expect(csv, isNot(contains('9.999999')));
     expect(csv, isNot(contains(RadarLocationUpdate.marker)));
     expect(csv, isNot(contains(DrillCheckIn.marker)));

@@ -114,14 +114,17 @@ class _EmergencyActionController extends MeshController {
   final _DrillPlatform testPlatform;
   var emergencyActivations = 0;
   SosLocationPrecision? lastLocationPrecision;
+  SosTriage? lastTriage;
 
   @override
   Future<EmergencyActivationResult> activateEmergency({
     String? description,
     SosLocationPrecision locationPrecision = SosLocationPrecision.approximate,
+    SosTriage? triage,
   }) async {
     emergencyActivations += 1;
     lastLocationPrecision = locationPrecision;
+    lastTriage = triage;
     await testPlatform.sendSos(content: description ?? 'real emergency');
     return EmergencyActivationResult.sentToMesh;
   }
@@ -214,6 +217,8 @@ void main() {
     await pumpScreen(tester);
     final holdButton = find.byKey(const Key('emergency-hold-button'));
     await tester.ensureVisible(holdButton);
+    await tester.tap(find.byKey(const ValueKey('sos-triage-medical')));
+    await tester.pump();
 
     final semantics = tester.widget<Semantics>(
       find.ancestor(of: holdButton, matching: find.byType(Semantics)).first,
@@ -227,6 +232,13 @@ void main() {
     expect(platform.sosCalls, 1);
     expect(mesh.emergencyActivations, 1);
     expect(mesh.lastLocationPrecision, SosLocationPrecision.approximate);
+    expect(
+      mesh.lastTriage,
+      const SosTriage(
+        injuryStatus: SosInjuryStatus.injured,
+        primaryNeed: SosPrimaryNeed.medical,
+      ),
+    );
     expect(platform.publicMessages, isEmpty);
   });
 
@@ -239,7 +251,7 @@ void main() {
       'message': {
         'id': 'external-sos',
         'sender': 'BitChat',
-        'content': 'SOS|Ayuda||',
+        'content': 'SOS|Ayuda|||T1|2|1|Y|E',
         'senderPeerId': 'external-peer',
         'private': false,
         'mine': false,
@@ -254,10 +266,20 @@ void main() {
       mesh.messages.any((message) => message.id == 'external-sos'),
       isTrue,
     );
-    await tester.fling(find.byType(ListView), const Offset(0, -2000), 1000);
-    await tester.pumpAndSettle();
     final badge = find.text('RED EXTERNA');
+    await tester.scrollUntilVisible(
+      badge,
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     expect(badge, findsOneWidget);
+    expect(
+      find.textContaining(
+        'Personas: 2 · Heridos: 1 · Atrapado: Sí · Necesidad: Extracción',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('la acción accesible activa el SOS sin gesto mantenido', (
@@ -304,17 +326,15 @@ void main() {
     expect(find.byKey(const Key('drill-safety-banner')), findsOneWidget);
     expect(find.text('SIMULACRO - no solicita rescate'), findsOneWidget);
     expect(find.text('Modo rescate'), findsNothing);
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('drill-hold-button')),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
     final beaconButton = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'HACERME VISIBLE'),
     );
     expect(beaconButton.onPressed, isNull);
+    final drillHoldButton = find.byKey(const Key('drill-hold-button'));
+    await tester.ensureVisible(drillHoldButton);
+    await tester.pumpAndSettle();
 
-    await tester.longPress(find.byKey(const Key('drill-hold-button')));
+    await tester.longPress(drillHoldButton);
     await tester.pumpAndSettle();
 
     expect(platform.publicMessages, hasLength(1));

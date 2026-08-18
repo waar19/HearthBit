@@ -131,6 +131,26 @@ class RunnerTests: XCTestCase {
     )
   }
 
+  func testEmergencyCanonicalHashSurvivesRelayMutation() {
+    let original = IOSMeshPacket(
+      type: IOSMeshProtocol.message,
+      ttl: 7,
+      timestamp: 1_700_000_000_000,
+      senderID: sender,
+      payload: Data("SOS|Ayuda||".utf8),
+      signature: Data(repeating: 7, count: 64)
+    )
+    var relayed = original
+    relayed.ttl = 2
+    relayed.isRSR = true
+
+    XCTAssertEqual(
+      IOSMeshProtocol.emergencyCanonicalHash(original),
+      IOSMeshProtocol.emergencyCanonicalHash(relayed)
+    )
+    XCTAssertTrue(IOSMeshProtocol.isEmergency(original))
+  }
+
   func testFragmentPayloadMatchesBitChatWireFormat() {
     let encoded = IOSMeshProtocol.encodeFragmentPayload(
       IOSMeshProtocol.FragmentPayload(
@@ -1539,6 +1559,74 @@ class RunnerTests: XCTestCase {
     )
     XCTAssertEqual(store.pin(for: identity.peerID)?.noisePublicKey, identity.noise)
     XCTAssertNotNil(backend.data)
+  }
+
+  func testRescueRosterBatchPersistsPrePinsAndProtectsThem() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore(maximumPins: 1)
+    let rescuer = makePeerPinMaterial()
+    try store.importRescueRosterPins([
+      IOSRescueRosterPin(
+        peerID: rescuer.peerID,
+        signingPublicKey: rescuer.signing
+      ),
+    ])
+
+    let restored = backend.makeStore(maximumPins: 1)
+    XCTAssertEqual(
+      restored.rescueSigningKey(for: rescuer.peerID),
+      rescuer.signing
+    )
+    XCTAssertTrue(restored.rescueProtectedPeerIDs.contains(rescuer.peerID))
+    XCTAssertEqual(
+      try restored.validateAndPin(
+        peerID: rescuer.peerID,
+        noisePublicKey: rescuer.noise,
+        signingPublicKey: rescuer.signing
+      ),
+      .firstBinding
+    )
+    let newcomer = makePeerPinMaterial()
+    XCTAssertThrowsError(
+      try restored.validateAndPin(
+        peerID: newcomer.peerID,
+        noisePublicKey: newcomer.noise,
+        signingPublicKey: newcomer.signing
+      )
+    )
+  }
+
+  func testRescueRosterBatchValidatesBeforeReplacing() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore()
+    let original = makePeerPinMaterial()
+    try store.importRescueRosterPins([
+      IOSRescueRosterPin(
+        peerID: original.peerID,
+        signingPublicKey: original.signing
+      ),
+    ])
+    let persisted = backend.data
+    let valid = makePeerPinMaterial()
+
+    XCTAssertThrowsError(
+      try store.importRescueRosterPins([
+        IOSRescueRosterPin(
+          peerID: valid.peerID,
+          signingPublicKey: valid.signing
+        ),
+        IOSRescueRosterPin(
+          peerID: valid.peerID.uppercased(),
+          signingPublicKey: Curve25519.Signing.PrivateKey()
+            .publicKey.rawRepresentation
+        ),
+      ])
+    )
+    XCTAssertEqual(backend.data, persisted)
+    XCTAssertEqual(
+      store.rescueSigningKey(for: original.peerID),
+      original.signing
+    )
   }
 
   func testPeerPinCapacityEvictsDeterministicUnprotectedBinding() throws {

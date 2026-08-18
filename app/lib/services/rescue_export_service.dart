@@ -22,6 +22,7 @@ class RescueIncident {
     this.latitude,
     this.longitude,
     this.distanceMeters,
+    this.triage,
   });
 
   final String id;
@@ -34,6 +35,7 @@ class RescueIncident {
   final double? latitude;
   final double? longitude;
   final double? distanceMeters;
+  final SosTriage? triage;
 
   RescueIncident copyWithDistance(double? value) => RescueIncident(
     id: id,
@@ -46,6 +48,7 @@ class RescueIncident {
     latitude: latitude,
     longitude: longitude,
     distanceMeters: value,
+    triage: triage,
   );
 }
 
@@ -89,6 +92,7 @@ class RescueIncidentList {
           timestamp: message.timestamp,
           latitude: coordinates.$1,
           longitude: coordinates.$2,
+          triage: message.sosTriage,
         );
       }
       if (incident == null) continue;
@@ -177,6 +181,11 @@ class RescueCsv {
         'latitude',
         'longitude',
         'distance_meters',
+        'people_count',
+        'injury_status',
+        'injured_count',
+        'trapped_status',
+        'primary_need',
       ],
       ...incidents.map(
         (incident) => [
@@ -191,6 +200,11 @@ class RescueCsv {
           incident.latitude?.toStringAsFixed(6) ?? '',
           incident.longitude?.toStringAsFixed(6) ?? '',
           incident.distanceMeters?.round().toString() ?? '',
+          incident.triage?.peopleCount?.toString() ?? '',
+          incident.triage?.injuryStatus.name ?? '',
+          incident.triage?.injuredCount?.toString() ?? '',
+          incident.triage?.trappedStatus.name ?? '',
+          incident.triage?.primaryNeed.name ?? '',
         ],
       ),
     ];

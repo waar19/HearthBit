@@ -58,13 +58,11 @@ class EmergencyScreen extends StatelessWidget {
         const SizedBox(height: 8),
         Text(context.l10n.emergencyInstructions, textAlign: TextAlign.center),
         const SizedBox(height: 20),
-        Center(
-          child: _HoldSosButton(
-            enabled: !controller.activatingEmergency,
-            active: controller.rescueMode,
-            holdDuration: emergencyHoldDuration,
-            onActivated: () => _activateRealEmergency(context),
-          ),
+        _SosTriagePanel(
+          enabled: !controller.activatingEmergency,
+          active: controller.rescueMode,
+          holdDuration: emergencyHoldDuration,
+          onActivated: (triage) => _activateRealEmergency(context, triage),
         ),
         const SizedBox(height: 16),
         if (controller.rescueMode)
@@ -314,6 +312,7 @@ class EmergencyScreen extends StatelessWidget {
                 ),
                 subtitle: Text(
                   '${message.sosDescription}\n'
+                  '${message.sosTriage == null ? '' : '${_triageSummary(context, message.sosTriage!)}\n'}'
                   '${_formatDateTime(context, message.timestamp)}',
                 ),
                 isThreeLine: true,
@@ -389,7 +388,10 @@ class EmergencyScreen extends StatelessWidget {
     if (confirmed == true) await controller.setRescueMode(false);
   }
 
-  Future<void> _activateRealEmergency(BuildContext context) async {
+  Future<void> _activateRealEmergency(
+    BuildContext context,
+    SosTriage? triage,
+  ) async {
     if (controller.drillModeEnabled) {
       final confirmed = await showDialog<bool>(
         context: context,
@@ -422,6 +424,7 @@ class EmergencyScreen extends StatelessWidget {
     if (precision == null) return;
     final result = await controller.activateEmergency(
       locationPrecision: precision,
+      triage: triage,
     );
     if (!context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
@@ -636,6 +639,297 @@ class EmergencyScreen extends StatelessWidget {
     );
   }
 }
+
+class _SosTriagePanel extends StatefulWidget {
+  const _SosTriagePanel({
+    required this.enabled,
+    required this.active,
+    required this.holdDuration,
+    required this.onActivated,
+  });
+
+  final bool enabled;
+  final bool active;
+  final Duration holdDuration;
+  final Future<void> Function(SosTriage? triage) onActivated;
+
+  @override
+  State<_SosTriagePanel> createState() => _SosTriagePanelState();
+}
+
+class _SosTriagePanelState extends State<_SosTriagePanel> {
+  SosTriage? _triage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                context.l10n.sosTriageTitle,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                context.l10n.sosTriageOptional,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                ChoiceChip(
+                  key: const Key('sos-triage-none'),
+                  selected: _triage == null,
+                  label: Text(context.l10n.sosTriageNone),
+                  onSelected: (_) => setState(() => _triage = null),
+                ),
+                ...SosPrimaryNeed.values.map(
+                  (need) => ChoiceChip(
+                    key: ValueKey('sos-triage-${need.name}'),
+                    selected: _triage?.primaryNeed == need,
+                    label: Text(_needLabel(context, need)),
+                    onSelected: (_) =>
+                        setState(() => _triage = _presetForNeed(need)),
+                  ),
+                ),
+              ],
+            ),
+            if (_triage != null) ...[
+              const SizedBox(height: 8),
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  _triageSummary(context, _triage!),
+                  key: const Key('sos-triage-summary'),
+                ),
+              ),
+            ],
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: TextButton.icon(
+                key: const Key('sos-triage-details'),
+                onPressed: _editDetails,
+                icon: const Icon(Icons.tune),
+                label: Text(context.l10n.sosTriageDetails),
+              ),
+            ),
+            Center(
+              child: _HoldSosButton(
+                enabled: widget.enabled,
+                active: widget.active,
+                holdDuration: widget.holdDuration,
+                onActivated: () => widget.onActivated(_triage),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  SosTriage _presetForNeed(SosPrimaryNeed need) {
+    return switch (need) {
+      SosPrimaryNeed.medical => const SosTriage(
+        injuryStatus: SosInjuryStatus.injured,
+        primaryNeed: SosPrimaryNeed.medical,
+      ),
+      SosPrimaryNeed.water => const SosTriage(
+        primaryNeed: SosPrimaryNeed.water,
+      ),
+      SosPrimaryNeed.extraction => const SosTriage(
+        trappedStatus: SosTrappedStatus.yes,
+        primaryNeed: SosPrimaryNeed.extraction,
+      ),
+      SosPrimaryNeed.shelter => const SosTriage(
+        primaryNeed: SosPrimaryNeed.shelter,
+      ),
+      SosPrimaryNeed.other => const SosTriage(
+        primaryNeed: SosPrimaryNeed.other,
+      ),
+    };
+  }
+
+  Future<void> _editDetails() async {
+    final current =
+        _triage ?? const SosTriage(primaryNeed: SosPrimaryNeed.other);
+    final peopleController = TextEditingController(
+      text: current.peopleCount?.toString() ?? '',
+    );
+    final injuredController = TextEditingController(
+      text: current.injuredCount?.toString() ?? '',
+    );
+    var injury = current.injuryStatus;
+    var trapped = current.trappedStatus;
+    var need = current.primaryNeed;
+    final updated = await showDialog<SosTriage>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(context.l10n.sosTriageTitle),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: peopleController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 2,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.sosTriagePeople,
+                  ),
+                ),
+                DropdownButtonFormField<SosInjuryStatus>(
+                  initialValue: injury,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.sosTriageInjuries,
+                  ),
+                  items: SosInjuryStatus.values
+                      .map(
+                        (value) => DropdownMenuItem(
+                          value: value,
+                          child: Text(_injuryLabel(context, value)),
+                        ),
+                      )
+                      .toList(growable: false),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => injury = value);
+                    }
+                  },
+                ),
+                if (injury == SosInjuryStatus.injured)
+                  TextField(
+                    controller: injuredController,
+                    keyboardType: TextInputType.number,
+                    maxLength: 2,
+                    decoration: InputDecoration(
+                      labelText: context.l10n.sosTriageInjuries,
+                    ),
+                  ),
+                DropdownButtonFormField<SosTrappedStatus>(
+                  initialValue: trapped,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.sosTriageTrapped,
+                  ),
+                  items: SosTrappedStatus.values
+                      .map(
+                        (value) => DropdownMenuItem(
+                          value: value,
+                          child: Text(_trappedLabel(context, value)),
+                        ),
+                      )
+                      .toList(growable: false),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => trapped = value);
+                    }
+                  },
+                ),
+                DropdownButtonFormField<SosPrimaryNeed>(
+                  initialValue: need,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.sosTriageTitle,
+                  ),
+                  items: SosPrimaryNeed.values
+                      .map(
+                        (value) => DropdownMenuItem(
+                          value: value,
+                          child: Text(_needLabel(context, value)),
+                        ),
+                      )
+                      .toList(growable: false),
+                  onChanged: (value) {
+                    if (value != null) setDialogState(() => need = value);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(context.l10n.actionCancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                SosTriage(
+                  peopleCount: _boundedCount(peopleController.text),
+                  injuryStatus: injury,
+                  injuredCount: injury == SosInjuryStatus.injured
+                      ? _boundedCount(injuredController.text)
+                      : null,
+                  trappedStatus: trapped,
+                  primaryNeed: need,
+                ),
+              ),
+              child: Text(context.l10n.sosTriageSave),
+            ),
+          ],
+        ),
+      ),
+    );
+    peopleController.dispose();
+    injuredController.dispose();
+    if (updated != null && mounted) setState(() => _triage = updated);
+  }
+
+  int? _boundedCount(String value) {
+    final parsed = int.tryParse(value.trim());
+    if (parsed == null ||
+        parsed < SosTriage.minimumCount ||
+        parsed > SosTriage.maximumCount) {
+      return null;
+    }
+    return parsed;
+  }
+}
+
+String _triageSummary(BuildContext context, SosTriage triage) {
+  final injured =
+      triage.injuredCount?.toString() ??
+      _injuryLabel(context, triage.injuryStatus);
+  return context.l10n.sosTriageSummary(
+    triage.peopleCount?.toString() ?? context.l10n.sosTriageUnknown,
+    injured,
+    _trappedLabel(context, triage.trappedStatus),
+    _needLabel(context, triage.primaryNeed),
+  );
+}
+
+String _needLabel(BuildContext context, SosPrimaryNeed need) => switch (need) {
+  SosPrimaryNeed.medical => context.l10n.sosTriageMedical,
+  SosPrimaryNeed.water => context.l10n.sosTriageWater,
+  SosPrimaryNeed.extraction => context.l10n.sosTriageExtraction,
+  SosPrimaryNeed.shelter => context.l10n.sosTriageShelter,
+  SosPrimaryNeed.other => context.l10n.sosTriageOther,
+};
+
+String _injuryLabel(BuildContext context, SosInjuryStatus status) =>
+    switch (status) {
+      SosInjuryStatus.unknown => context.l10n.sosTriageUnknown,
+      SosInjuryStatus.none => context.l10n.sosTriageNo,
+      SosInjuryStatus.injured => context.l10n.sosTriageYes,
+    };
+
+String _trappedLabel(BuildContext context, SosTrappedStatus status) =>
+    switch (status) {
+      SosTrappedStatus.unknown => context.l10n.sosTriageUnknown,
+      SosTrappedStatus.no => context.l10n.sosTriageNo,
+      SosTrappedStatus.yes => context.l10n.sosTriageYes,
+    };
 
 String _emergencyChannelLabel(String channel) => switch (channel) {
   'ble' => 'BLE',

@@ -2,8 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 
-import 'beacon_control_protocol.dart';
 import '../models/mesh_models.dart';
+import '../models/rescue_roster_models.dart';
+import 'beacon_control_protocol.dart';
 import 'mesh_native_event.dart';
 
 String normalizeSmsRecipient(String value) {
@@ -600,6 +601,33 @@ class MeshPlatformService {
           'signature': signature,
         }) ??
         false;
+  }
+
+  Future<bool> verifySignatureWithPublicKey({
+    required Uint8List signingPublicKey,
+    required Uint8List data,
+    required Uint8List signature,
+  }) async {
+    return await _methods.invokeMethod<bool>('verifySignatureWithPublicKey', {
+          'signingPublicKey': signingPublicKey,
+          'data': data,
+          'signature': signature,
+        }) ??
+        false;
+  }
+
+  Future<void> importRescueRosterPins(Iterable<RescueRosterMember> members) {
+    final pins = members
+        .map(
+          (member) => <String, Object>{
+            'peerId': member.peerId,
+            'signingPublicKey': member.signingPublicKey,
+          },
+        )
+        .toList(growable: false);
+    return _methods.invokeMethod<void>('importRescueRosterPins', {
+      'pins': pins,
+    });
   }
 
   Future<SealedTransferRecipient> getSealedTransferRecipient(

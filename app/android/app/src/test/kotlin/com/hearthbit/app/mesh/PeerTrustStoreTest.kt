@@ -200,6 +200,79 @@ class PeerTrustStoreTest {
         )
     }
 
+    @Test
+    fun `rescue roster batch is persisted pre-pinned and protected`() {
+        val storage = FakePeerTrustStorage()
+        val store = PeerTrustStore(storage, maximumTrustedPeers = 1)
+        val rescuer = keys(70)
+        val rescuerId = peerId(rescuer)
+        store.importRescueRosterPins(
+            listOf(RescueRosterPin(rescuerId, rescuer.signingPublicKey)),
+        )
+
+        val restored = PeerTrustStore(storage, maximumTrustedPeers = 1)
+        assertEquals(
+            rescuer.signingPublicKey.toList(),
+            restored.rescueSigningKey(rescuerId)?.toList(),
+        )
+        assertTrue(rescuerId in restored.rescueProtectedPeerIds())
+        assertEquals(
+            PeerIdentityDecision.FIRST_BINDING,
+            restored.validateAndPin(rescuerId, rescuer),
+        )
+        val newcomer = keys(71)
+        assertEquals(
+            PeerIdentityDecision.REJECT_CAPACITY,
+            restored.validateAndPin(peerId(newcomer), newcomer),
+        )
+    }
+
+    @Test
+    fun `rescue roster batch validates everything before replacing`() {
+        val storage = FakePeerTrustStorage()
+        val store = PeerTrustStore(storage)
+        val original = keys(80)
+        val originalId = peerId(original)
+        store.importRescueRosterPins(
+            listOf(RescueRosterPin(originalId, original.signingPublicKey)),
+        )
+        val before = storage.values.toMap()
+
+        val valid = keys(81)
+        val invalid = keys(82)
+        val error = runCatching {
+            store.importRescueRosterPins(
+                listOf(
+                    RescueRosterPin(peerId(valid), valid.signingPublicKey),
+                    RescueRosterPin(peerId(invalid).uppercase(), invalid.signingPublicKey),
+                ),
+            )
+        }.exceptionOrNull()
+
+        assertTrue(error is IllegalArgumentException)
+        assertEquals(before, storage.values)
+        assertTrue(store.rescueSigningKey(originalId) != null)
+    }
+
+    @Test
+    fun `rescue roster rejects an announced signing key conflict`() {
+        val storage = FakePeerTrustStorage()
+        val store = PeerTrustStore(storage)
+        val rescuer = keys(90)
+        store.importRescueRosterPins(
+            listOf(RescueRosterPin(peerId(rescuer), rescuer.signingPublicKey)),
+        )
+
+        assertEquals(
+            PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION,
+            store.validateAndPin(
+                peerId(rescuer),
+                rescuer.copy(signingPublicKey = ByteArray(32) { 7 }),
+            ),
+        )
+        assertEquals(PeerTrustLookup.Unknown, store.lookup(peerId(rescuer)))
+    }
+
     private fun keys(seed: Int): PeerIdentityKeys = PeerIdentityKeys(
         signingPublicKey = ByteArray(32) { (seed + it).toByte() },
         noisePublicKey = ByteArray(32) { (seed * 3 + it).toByte() },

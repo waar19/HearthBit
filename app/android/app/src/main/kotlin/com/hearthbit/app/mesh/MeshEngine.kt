@@ -981,7 +981,21 @@ internal class MeshEngine(
             ),
         )
         broadcast(packet)
-        emitMessage(id, nickname, content, peerId, false, true, packet.timestamp, channel)
+        emitMessage(
+            id,
+            nickname,
+            content,
+            peerId,
+            false,
+            true,
+            packet.timestamp,
+            channel,
+            canonicalHash = if (MeshProtocol.isEmergencyPublicPacket(packet)) {
+                MeshProtocol.hex(MeshProtocol.emergencyCanonicalHash(packet))
+            } else {
+                null
+            },
+        )
         return id to packet
     }
 
@@ -1166,6 +1180,16 @@ internal class MeshEngine(
 
     fun signPayload(data: ByteArray): ByteArray = identity.signBytes(data)
 
+    fun verifySignatureWithPublicKey(
+        signingPublicKey: ByteArray,
+        data: ByteArray,
+        signature: ByteArray,
+    ): Boolean = identity.verifyBytes(data, signature, signingPublicKey)
+
+    fun importRescueRosterPins(pins: List<RescueRosterPin>) {
+        peerTrustStore.importRescueRosterPins(pins)
+    }
+
     fun rotateLocalIdentity(): Map<String, Any> = synchronized(this) {
         check(running) { "mesh_not_running" }
         val oldPeerId = identity.peerIdHex
@@ -1203,8 +1227,8 @@ internal class MeshEngine(
         ) {
             is PeerTrustLookup.Pinned -> lookup.keys.signingPublicKey
             PeerTrustLookup.Invalid,
-            PeerTrustLookup.Unknown,
             -> return false
+            PeerTrustLookup.Unknown -> peerTrustStore.rescueSigningKey(peerIdHex) ?: return false
         }
         return identity.verifyBytes(data, signature, key)
     }
@@ -1832,6 +1856,7 @@ internal class MeshEngine(
     }
 
     private fun protectedTrustPeerIds(): Set<String> = buildSet {
+        addAll(peerTrustStore.rescueProtectedPeerIds())
         addAll(peersWithSessionHistory)
         addAll(pendingPrivate.peerIds())
         addAll(pendingFrames.peerIds())
@@ -2619,6 +2644,7 @@ internal class MeshEngine(
             message.timestamp,
             channel,
             external,
+            emergencyHash,
         )
     }
 
@@ -4051,6 +4077,7 @@ internal class MeshEngine(
             addAll(serverSubscribers.map { it.address })
         }
         val protectedPeerIds = buildSet {
+            addAll(peerTrustStore.rescueProtectedPeerIds())
             peers.values.filter { isPeerOnline(it, now) }.mapTo(this) { it.id }
             activeAddresses.mapNotNullTo(this) { address ->
                 addressToPeer[address] ?: reconnectPeerByAddress[address]
@@ -4530,6 +4557,7 @@ internal class MeshEngine(
         timestamp: Long,
         channel: String?,
         external: Boolean = false,
+        canonicalHash: String? = null,
     ) {
         emit(
             mapOf(
@@ -4544,6 +4572,7 @@ internal class MeshEngine(
                     "timestamp" to timestamp,
                     "channel" to channel,
                     "external" to external,
+                    "canonicalHash" to canonicalHash,
                 ),
             ),
         )

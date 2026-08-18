@@ -309,6 +309,65 @@ class AppLocalizationsFr extends AppLocalizations {
   String get sosNoneReceived => 'Aucune alerte SOS reçue.';
 
   @override
+  String get sosTriageTitle => 'Détails rapides de secours';
+
+  @override
+  String get sosTriageOptional =>
+      'Facultatif. Choisissez un besoin ou envoyez le SOS immédiatement.';
+
+  @override
+  String get sosTriageNone => 'Aucun détail structuré';
+
+  @override
+  String get sosTriageMedical => 'Médical';
+
+  @override
+  String get sosTriageWater => 'Eau';
+
+  @override
+  String get sosTriageExtraction => 'Extraction';
+
+  @override
+  String get sosTriageShelter => 'Abri';
+
+  @override
+  String get sosTriageOther => 'Autre';
+
+  @override
+  String get sosTriageDetails => 'Ajouter des détails';
+
+  @override
+  String get sosTriagePeople => 'Personnes';
+
+  @override
+  String get sosTriageInjuries => 'Blessés';
+
+  @override
+  String get sosTriageTrapped => 'Coincé';
+
+  @override
+  String get sosTriageUnknown => 'Inconnu';
+
+  @override
+  String get sosTriageNo => 'Non';
+
+  @override
+  String get sosTriageYes => 'Oui';
+
+  @override
+  String get sosTriageSave => 'ENREGISTRER';
+
+  @override
+  String sosTriageSummary(
+    String people,
+    String injured,
+    String trapped,
+    String need,
+  ) {
+    return 'Personnes : $people · Blessés : $injured · Coincé : $trapped · Besoin : $need';
+  }
+
+  @override
   String get checkInPrivateBody =>
       'Envoie une mise à jour chiffrée de bout en bout uniquement aux proches vérifiés.';
 
@@ -2022,4 +2081,200 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get emergencyContactsRetry => 'RÉESSAYER';
+
+  @override
+  String get rescueRosterTitle => 'Liste de l’équipe de secours';
+
+  @override
+  String get rescueRosterSecurityBody =>
+      'Le chef signe la liste. Une personne n’est affichée comme secouriste vérifié que si son identifiant et sa clé de signature Ed25519 correspondent.';
+
+  @override
+  String get rescueRosterEmpty =>
+      'Aucune liste d’équipe de secours n’est active sur ce téléphone.';
+
+  @override
+  String get rescueRosterCreate => 'CRÉER LA LISTE';
+
+  @override
+  String get rescueRosterTeamName => 'Nom de l’équipe';
+
+  @override
+  String get rescueRosterCallsign => 'Indicatif du chef';
+
+  @override
+  String get rescueRosterAddMember => 'AJOUTER UN MEMBRE PROCHE';
+
+  @override
+  String get rescueRosterNoEligiblePeers =>
+      'Aucune identité HearthBit proche avec une clé de signature n’est disponible.';
+
+  @override
+  String get rescueRosterNearbyIdentity => 'Identité proche';
+
+  @override
+  String get rescueRosterMemberCallsign => 'Indicatif du membre';
+
+  @override
+  String get rescueRosterMemberRole => 'Rôle de secours';
+
+  @override
+  String get rescueRosterRemoveMemberTitle => 'Retirer ce membre de la liste ?';
+
+  @override
+  String rescueRosterRemoveMemberBody(String callsign) {
+    return '$callsign ne sera plus un secouriste vérifié dans cette liste.';
+  }
+
+  @override
+  String rescueRosterMemberCount(int count) {
+    return '$count membres vérifiés';
+  }
+
+  @override
+  String get rescueRosterImportTitle => 'Importer une liste signée';
+
+  @override
+  String get rescueRosterImportText => 'Coller le texte QR';
+
+  @override
+  String get rescueRosterPasteHint => 'HBRT1:…';
+
+  @override
+  String get rescueRosterImport => 'IMPORTER';
+
+  @override
+  String get rescueRosterImportFile => 'Ouvrir le fichier de liste';
+
+  @override
+  String get rescueRosterScanQr => 'Scanner le QR de la liste';
+
+  @override
+  String get rescueRosterScanHint =>
+      'Pointez la caméra vers le QR HBRT1 signé de la liste de secours.';
+
+  @override
+  String get rescueRosterImported =>
+      'La liste signée a été vérifiée et activée.';
+
+  @override
+  String get rescueRosterExported => 'Le fichier de liste a été enregistré.';
+
+  @override
+  String get rescueRosterExportQr => 'Afficher le QR et le texte';
+
+  @override
+  String get rescueRosterQrTooLarge =>
+      'Cette liste est trop grande pour un seul QR. Exportez-la comme fichier ou copiez le texte signé.';
+
+  @override
+  String get rescueRosterExportFile => 'Enregistrer le fichier';
+
+  @override
+  String get rescueRosterRemoveTitle =>
+      'Supprimer la liste de secours active ?';
+
+  @override
+  String get rescueRosterRemoveBody =>
+      'Les membres ne seront plus affichés comme secouristes vérifiés et leurs clés natives protégées seront retirées.';
+
+  @override
+  String rescueRosterError(String error) {
+    return 'Impossible de traiter la liste de secours : $error';
+  }
+
+  @override
+  String get rescueRosterRoleLeader => 'Chef d’équipe';
+
+  @override
+  String get rescueRosterRoleResponder => 'Secouriste';
+
+  @override
+  String get rescueRosterRoleMedic => 'Médecin';
+
+  @override
+  String get rescueRosterRoleSearch => 'Recherche';
+
+  @override
+  String get rescueRosterRoleLogistics => 'Logistique';
+
+  @override
+  String get rescueRosterRoleCommunications => 'Communications';
+
+  @override
+  String get verifiedRescuerBadge => 'SECOURISTE VÉRIFIÉ';
+
+  @override
+  String get rescueRosterFileType => 'Liste de secours HearthBit';
+
+  @override
+  String get rescueOperationsTitle => 'Opérations de secours';
+
+  @override
+  String get rescueOperationsEmpty => 'Aucun cas SOS n’a été reçu.';
+
+  @override
+  String rescueOperationsError(String error) {
+    return 'Impossible de mettre à jour les opérations : $error';
+  }
+
+  @override
+  String get rescueOperationsAssignMe => 'M’ASSIGNER';
+
+  @override
+  String get rescueOperationsEnRoute => 'EN ROUTE';
+
+  @override
+  String get rescueOperationsAttended => 'PRIS EN CHARGE';
+
+  @override
+  String get rescueOperationsClose => 'CLÔTURER';
+
+  @override
+  String get rescueOperationsNoActions => 'Aucune action autorisée';
+
+  @override
+  String rescueOperationsAssignee(String callsign) {
+    return 'Assigné à $callsign';
+  }
+
+  @override
+  String rescueOperationsReceivedAt(String date) {
+    return 'Reçu $date';
+  }
+
+  @override
+  String rescueOperationsTriage(String need, String people) {
+    return 'Priorité : $need · personnes : $people';
+  }
+
+  @override
+  String get rescueCaseStateNew => 'Nouveau';
+
+  @override
+  String get rescueCaseStateAssigned => 'Assigné';
+
+  @override
+  String get rescueCaseStateEnRoute => 'En route';
+
+  @override
+  String get rescueCaseStateAttended => 'Pris en charge';
+
+  @override
+  String get rescueCaseStateClosed => 'Clôturé';
+
+  @override
+  String get rescueTriageMedical => 'Médical';
+
+  @override
+  String get rescueTriageWater => 'Eau';
+
+  @override
+  String get rescueTriageExtraction => 'Extraction';
+
+  @override
+  String get rescueTriageShelter => 'Abri';
+
+  @override
+  String get rescueTriageOther => 'Autre';
 }

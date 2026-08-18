@@ -20,6 +20,11 @@ internal sealed interface PeerTrustLookup {
     data object Invalid : PeerTrustLookup
 }
 
+internal data class RescueRosterPin(
+    val peerId: String,
+    val signingPublicKey: ByteArray,
+)
+
 /**
  * Pins the first valid ANNOUNCE (TOFU) across process restarts.
  *
@@ -61,6 +66,14 @@ internal class PeerTrustStore private constructor(
         ) {
             return PeerIdentityDecision.REJECT_INVALID_IDENTITY
         }
+        val rosterSigningKey = runCatching { rescueRosterPins()[peerId] }.getOrElse {
+            return PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION
+        }
+        if (rosterSigningKey != null &&
+            !MessageDigest.isEqual(rosterSigningKey, announced.signingPublicKey)
+        ) {
+            return PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION
+        }
         val storageKey = key(peerId)
         val stored = runCatching { storage.getString(storageKey) }.getOrElse {
             return PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION
@@ -88,7 +101,7 @@ internal class PeerTrustStore private constructor(
             if (trustCount >= maximumTrustedPeers) {
                 evictionCandidate = selectEvictionCandidate(
                     validatingStorageKey = storageKey,
-                    protectedPeerIds = protectedPeerIds,
+                    protectedPeerIds = protectedPeerIds + rescueProtectedPeerIds(),
                 ) ?: return PeerIdentityDecision.REJECT_CAPACITY
             }
         }
@@ -187,6 +200,47 @@ internal class PeerTrustStore private constructor(
         return PeerTrustLookup.Pinned(record.keys)
     }
 
+    @Synchronized
+    fun importRescueRosterPins(pins: List<RescueRosterPin>) {
+        require(pins.size <= MAX_RESCUE_ROSTER_PINS) { "rescue_roster_too_large" }
+        val normalized = LinkedHashMap<String, ByteArray>()
+        val signingKeys = ArrayList<ByteArray>(pins.size)
+        pins.forEach { pin ->
+            require(pin.peerId.matches(PEER_ID_PATTERN)) { "invalid_rescue_peer_id" }
+            require(
+                pin.signingPublicKey.size == PUBLIC_KEY_SIZE &&
+                    pin.signingPublicKey.any { it != 0.toByte() },
+            ) { "invalid_rescue_signing_key" }
+            require(normalized.put(pin.peerId, pin.signingPublicKey.copyOf()) == null) {
+                "duplicate_rescue_peer_id"
+            }
+            require(signingKeys.none { MessageDigest.isEqual(it, pin.signingPublicKey) }) {
+                "duplicate_rescue_signing_key"
+            }
+            signingKeys += pin.signingPublicKey.copyOf()
+            val stored = storage.getString(key(pin.peerId))
+            val existing = stored?.let(::decode)
+            require(
+                stored == null ||
+                    existing != null &&
+                    MessageDigest.isEqual(existing.keys.signingPublicKey, pin.signingPublicKey),
+            ) { "rescue_pin_conflicts_with_trust_store" }
+        }
+        val encoded = encodeRescueRosterPins(normalized)
+        check(storage.putString(RESCUE_ROSTER_KEY, encoded)) {
+            "rescue_roster_persistence_failed"
+        }
+    }
+
+    @Synchronized
+    fun rescueSigningKey(peerId: String): ByteArray? {
+        if (!peerId.matches(PEER_ID_PATTERN)) return null
+        return rescueRosterPins()[peerId]?.copyOf()
+    }
+
+    @Synchronized
+    fun rescueProtectedPeerIds(): Set<String> = rescueRosterPins().keys
+
     fun clear() {
         check(storage.clear())
     }
@@ -280,6 +334,40 @@ internal class PeerTrustStore private constructor(
     private fun fingerprint(key: ByteArray): String =
         MeshProtocol.hex(MessageDigest.getInstance("SHA-256").digest(key))
 
+    private fun rescueRosterPins(): Map<String, ByteArray> {
+        val encoded = storage.getString(RESCUE_ROSTER_KEY) ?: return emptyMap()
+        val fields = encoded.split(SEPARATOR, limit = 2)
+        check(fields.size == 2 && fields[0] == RESCUE_ROSTER_VERSION) {
+            "Corrupt rescue roster pins"
+        }
+        if (fields[1].isEmpty()) return emptyMap()
+        val output = LinkedHashMap<String, ByteArray>()
+        val signingKeys = ArrayList<ByteArray>()
+        fields[1].split(RESCUE_ENTRY_SEPARATOR).forEach { entry ->
+            val separator = entry.indexOf(RESCUE_VALUE_SEPARATOR)
+            check(separator > 0) { "Corrupt rescue roster pin" }
+            val peerId = entry.substring(0, separator)
+            val publicKey = Base64.getDecoder().decode(entry.substring(separator + 1))
+            check(
+                peerId.matches(PEER_ID_PATTERN) &&
+                    publicKey.size == PUBLIC_KEY_SIZE &&
+                    publicKey.any { it != 0.toByte() } &&
+                    signingKeys.none { MessageDigest.isEqual(it, publicKey) } &&
+                    output.put(peerId, publicKey) == null,
+            ) { "Corrupt rescue roster pin" }
+            signingKeys += publicKey
+        }
+        check(output.size <= MAX_RESCUE_ROSTER_PINS) { "Corrupt rescue roster pins" }
+        return output
+    }
+
+    private fun encodeRescueRosterPins(pins: Map<String, ByteArray>): String =
+        RESCUE_ROSTER_VERSION + SEPARATOR + pins.entries
+            .sortedBy { it.key }
+            .joinToString(RESCUE_ENTRY_SEPARATOR) { (peerId, publicKey) ->
+                "$peerId$RESCUE_VALUE_SEPARATOR${Base64.getEncoder().encodeToString(publicKey)}"
+            }
+
     private fun key(peerId: String): String = KEY_PREFIX + peerId
 
     private data class Record(
@@ -301,7 +389,12 @@ internal class PeerTrustStore private constructor(
         const val FIELD_COUNT = 7
         const val PUBLIC_KEY_SIZE = 32
         const val MAX_TRUSTED_PEERS = 4_096
+        const val MAX_RESCUE_ROSTER_PINS = 512
         const val KEY_PREFIX = "peer_"
+        const val RESCUE_ROSTER_KEY = "rescue_roster_pins"
+        const val RESCUE_ROSTER_VERSION = "1"
+        const val RESCUE_ENTRY_SEPARATOR = ";"
+        const val RESCUE_VALUE_SEPARATOR = "="
         val PEER_ID_PATTERN = Regex("^[0-9a-f]{16}$")
     }
 }

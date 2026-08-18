@@ -101,7 +101,7 @@ class MessageRepository {
     );
     return _database ??= await SecureDatabase.open(
       databasePath: resolvedDatabasePath,
-      version: 6,
+      version: 7,
       testFactory: databaseFactory,
       onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
       onCreate: (database, version) async {
@@ -145,6 +145,18 @@ class MessageRepository {
             WHERE canonical_hash IS NOT NULL
           ''');
         }
+        if (oldVersion < 7) {
+          await _addColumnIfMissing(
+            database,
+            table: 'messages',
+            column: 'canonical_hash',
+            definition: 'TEXT',
+          );
+          await database.execute(
+            'CREATE UNIQUE INDEX IF NOT EXISTS messages_canonical_hash_idx '
+            'ON messages(canonical_hash) WHERE canonical_hash IS NOT NULL',
+          );
+        }
       },
     );
   }
@@ -164,11 +176,16 @@ class MessageRepository {
             is_mine INTEGER NOT NULL,
             timestamp INTEGER NOT NULL,
             channel TEXT,
-            external INTEGER NOT NULL DEFAULT 0
+            external INTEGER NOT NULL DEFAULT 0,
+            canonical_hash TEXT
           )
         ''');
     await database.execute(
       'CREATE INDEX messages_timestamp_idx ON messages(timestamp)',
+    );
+    await database.execute(
+      'CREATE UNIQUE INDEX messages_canonical_hash_idx '
+      'ON messages(canonical_hash) WHERE canonical_hash IS NOT NULL',
     );
   }
 

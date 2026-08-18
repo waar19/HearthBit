@@ -78,6 +78,8 @@ void main() {
         timestamp: DateTime.fromMillisecondsSinceEpoch(1234),
         channel: 'sos',
         external: true,
+        canonicalHash:
+            '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
       ),
     );
     await repository.saveKnownPeers([
@@ -90,7 +92,12 @@ void main() {
       ),
     ]);
 
-    expect((await repository.load()).single.external, isTrue);
+    final restoredMessage = (await repository.load()).single;
+    expect(restoredMessage.external, isTrue);
+    expect(
+      restoredMessage.canonicalHash,
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+    );
     expect(
       (await repository.loadKnownPeers()).single.hearthbitVerified,
       isTrue,

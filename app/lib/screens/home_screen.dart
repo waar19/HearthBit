@@ -9,6 +9,8 @@ import '../controllers/emergency_gateway_controller.dart';
 import '../controllers/family_controller.dart';
 import '../controllers/lan_gateway_controller.dart';
 import '../controllers/mesh_controller.dart';
+import '../controllers/rescue_case_controller.dart';
+import '../controllers/rescue_roster_controller.dart';
 import '../controllers/transfer_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
@@ -37,10 +39,14 @@ import 'map_screen.dart';
 import 'optical_receive_screen.dart';
 import 'optical_send_screen.dart';
 import 'radar_screen.dart';
+import 'rescue_operations_screen.dart';
+import 'rescue_roster_screen.dart';
 import 'transfers_tab.dart';
 
 enum _AppMenuAction {
   family,
+  rescueOperations,
+  rescueRoster,
   diagnostics,
   changeNickname,
   privacy,
@@ -56,6 +62,8 @@ class HomeScreen extends StatefulWidget {
     required this.preferences,
     required this.gateway,
     required this.family,
+    this.rescueRoster,
+    this.rescueCases,
     this.lanGateway,
     this.emergencyOpens,
     this.consumeInitialEmergencyOpen,
@@ -67,6 +75,8 @@ class HomeScreen extends StatefulWidget {
   final AppPreferences preferences;
   final EmergencyGatewayController gateway;
   final FamilyController family;
+  final RescueRosterController? rescueRoster;
+  final RescueCaseController? rescueCases;
   final LanGatewayController? lanGateway;
   final Stream<void>? emergencyOpens;
   final Future<bool> Function()? consumeInitialEmergencyOpen;
@@ -347,6 +357,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       title: Text(context.l10n.familyTitle),
                     ),
                   ),
+                  if (widget.rescueCases != null &&
+                      widget.rescueRoster?.activeRoster != null)
+                    PopupMenuItem(
+                      value: _AppMenuAction.rescueOperations,
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(
+                          Icons.assignment_turned_in_outlined,
+                        ),
+                        title: Text(context.l10n.rescueOperationsTitle),
+                      ),
+                    ),
+                  if (widget.rescueRoster != null)
+                    PopupMenuItem(
+                      value: _AppMenuAction.rescueRoster,
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.health_and_safety_outlined),
+                        title: Text(context.l10n.rescueRosterTitle),
+                      ),
+                    ),
                   PopupMenuItem(
                     value: _AppMenuAction.diagnostics,
                     child: ListTile(
@@ -440,6 +471,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
                       PeersTab(
                         controller: controller,
+                        rescueRoster: widget.rescueRoster,
                         lanGateway: widget.lanGateway,
                         onShareInvite: _shareInvite,
                         onOpenPrivateChat: (peer) =>
@@ -590,6 +622,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
             builder: (_) => FamilyScreen(controller: widget.family),
+          ),
+        );
+        return;
+      case _AppMenuAction.rescueOperations:
+        final rescueCases = widget.rescueCases;
+        if (rescueCases == null) return;
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => RescueOperationsScreen(controller: rescueCases),
+          ),
+        );
+        return;
+      case _AppMenuAction.rescueRoster:
+        final rescueRoster = widget.rescueRoster;
+        if (rescueRoster == null) return;
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => RescueRosterScreen(controller: rescueRoster),
           ),
         );
         return;
@@ -1040,6 +1090,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       await widget.transfers.wipe();
       await widget.family.panicWipe();
+      await widget.rescueRoster?.clearRoster();
       await widget.gateway.panicWipe();
       await widget.lanGateway?.panicWipe();
       await controller.panicWipe();

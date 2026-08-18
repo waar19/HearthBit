@@ -28,6 +28,8 @@ class _FakePlatform extends MeshPlatformService {
   final List<String> retryEmergencyCalls = [];
   String? retryEmergencyResult;
   final List<({String content, String? channel})> publicMessages = [];
+  final List<({String messageId, String content, String channel})>
+  emergencyMessages = [];
   final List<({String peerId, String content, String? messageId})>
   privateMessages = [];
   final List<String> privateChannelRequests = [];
@@ -138,6 +140,11 @@ class _FakePlatform extends MeshPlatformService {
     required String content,
     required String channel,
   }) async {
+    emergencyMessages.add((
+      messageId: messageId,
+      content: content,
+      channel: channel,
+    ));
     if (channel == 'sos') {
       sosCalls += 1;
     } else {
@@ -1035,11 +1042,19 @@ void main() {
       final result = await controller.activateEmergency(
         description: 'Ayuda',
         locationPrecision: SosLocationPrecision.none,
+        triage: const SosTriage(
+          trappedStatus: SosTrappedStatus.yes,
+          primaryNeed: SosPrimaryNeed.extraction,
+        ),
       );
 
       expect(result, EmergencyActivationResult.queuedWithoutRoute);
       expect(controller.emergencyDeliveries, hasLength(1));
       expect(repository.emergencyOutbox, hasLength(1));
+      expect(
+        repository.emergencyOutbox.single.content,
+        'SOS|Ayuda|||T1|?|?|Y|E',
+      );
       expect(controller.rescueMode, isFalse);
     },
   );
@@ -1518,6 +1533,34 @@ void main() {
     final acknowledged = controller.emergencyDeliveries.single;
     expect(acknowledged.state, EmergencyDeliveryState.acknowledged);
     expect(acknowledged.confirmationCount, 1);
+  });
+
+  test('SOS conserva triage firmado en envío y cola persistida', () async {
+    platform.emit({
+      'type': 'status',
+      'status': 'active',
+      'role': 'PHONE_RELAY',
+    });
+    await pumpEvents();
+    const triage = SosTriage(
+      peopleCount: 3,
+      injuryStatus: SosInjuryStatus.injured,
+      injuredCount: 1,
+      trappedStatus: SosTrappedStatus.no,
+      primaryNeed: SosPrimaryNeed.medical,
+    );
+
+    await controller.sendSos(
+      'Ayuda',
+      locationPrecision: SosLocationPrecision.none,
+      triage: triage,
+    );
+
+    final content = platform.emergencyMessages.single.content;
+    expect(content, 'SOS|Ayuda|||T1|3|1|N|M');
+    expect(controller.emergencyDeliveries.single.content, content);
+    expect(repository.emergencyOutbox.single.content, content);
+    expect(SosMessageCodec.triage(content), triage);
   });
 
   test('reintenta una vez el ACK que se adelanta a la persistencia', () async {

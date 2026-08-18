@@ -148,6 +148,7 @@ class MeshController extends ChangeNotifier {
   String _rescueDescription = '';
   SosLocationPrecision _rescueLocationPrecision =
       SosLocationPrecision.approximate;
+  SosTriage? _rescueTriage;
 
   // Estado de energía/ubicación reportado por el sistema.
   bool ignoringBatteryOptimizations = true;
@@ -463,6 +464,7 @@ class MeshController extends ChangeNotifier {
     String? description,
     Duration? interval,
     SosLocationPrecision? locationPrecision,
+    SosTriage? triage,
   }) async {
     if (!enabled) {
       final wasRescueActive = rescueMode;
@@ -488,6 +490,7 @@ class MeshController extends ChangeNotifier {
     if (locationPrecision != null) {
       _rescueLocationPrecision = locationPrecision;
     }
+    _rescueTriage = triage;
     final now = DateTime.now();
     rescueMode = true;
     _emergencyChannelsUsed.clear();
@@ -525,6 +528,7 @@ class MeshController extends ChangeNotifier {
     await sendSos(
       _rescueDescription,
       locationPrecision: _rescueLocationPrecision,
+      triage: _rescueTriage,
     );
     lastRescuePing = DateTime.now();
     notifyListeners();
@@ -627,9 +631,9 @@ class MeshController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> sendPublic(String content) async {
-    if (content.trim().isEmpty) return;
-    await _run(() => _platform.sendPublic(content.trim()));
+  Future<String?> sendPublic(String content, {String? channel}) async {
+    if (content.trim().isEmpty) return null;
+    return _run(() => _platform.sendPublic(content.trim(), channel: channel));
   }
 
   Future<PrivateMessageSendResult> sendPrivate(
@@ -679,6 +683,7 @@ class MeshController extends ChangeNotifier {
   Future<void> sendSos(
     String description, {
     SosLocationPrecision locationPrecision = SosLocationPrecision.approximate,
+    SosTriage? triage,
   }) async {
     DiagnosticsLog.instance.info('sos.send.started');
     final position = locationPrecision == SosLocationPrecision.none
@@ -700,12 +705,14 @@ class MeshController extends ChangeNotifier {
             ),
             SosLocationPrecision.none => null,
           };
-    final location = coordinates == null
-        ? '||'
-        : '|${coordinates.$1}|${coordinates.$2}';
     final delivery = await _enqueueEmergency(
       kind: EmergencyDeliveryKind.sos,
-      content: 'SOS|$readable$location',
+      content: SosMessageCodec.encode(
+        description: readable,
+        latitude: coordinates?.$1,
+        longitude: coordinates?.$2,
+        triage: triage,
+      ),
       lifetime: emergencySosLifetime,
     );
     await _transmitEmergency(delivery, force: true);
@@ -907,6 +914,7 @@ class MeshController extends ChangeNotifier {
   Future<EmergencyActivationResult> activateEmergency({
     String? description,
     SosLocationPrecision locationPrecision = SosLocationPrecision.approximate,
+    SosTriage? triage,
   }) async {
     if (activatingEmergency) return EmergencyActivationResult.failed;
     if (rescueMode) return EmergencyActivationResult.sentToMesh;
@@ -932,6 +940,7 @@ class MeshController extends ChangeNotifier {
         await sendSos(
           description ?? currentL10n.sosDefaultMessage,
           locationPrecision: locationPrecision,
+          triage: triage,
         );
         DiagnosticsLog.instance.warning('sos.activation.queued_without_route');
         return EmergencyActivationResult.queuedWithoutRoute;
@@ -940,6 +949,7 @@ class MeshController extends ChangeNotifier {
         true,
         description: description ?? currentL10n.sosDefaultMessage,
         locationPrecision: locationPrecision,
+        triage: triage,
       );
       DiagnosticsLog.instance.info('sos.activation.completed');
       return EmergencyActivationResult.sentToMesh;

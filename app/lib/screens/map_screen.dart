@@ -472,6 +472,7 @@ class _MapScreenState extends State<MapScreen> {
                       title: Text(incident.sender),
                       subtitle: Text(
                         '${incident.message}\n'
+                        '${incident.triage == null ? '' : '${_incidentTriage(context, incident.triage!)}\n'}'
                         '${_incidentDistance(context, incident)} · '
                         '${_formatTime(context, incident.timestamp)}',
                       ),
@@ -521,6 +522,34 @@ class _MapScreenState extends State<MapScreen> {
     }
     return context.l10n.rescueDistanceKilometers(
       (distance / 1000).toStringAsFixed(1),
+    );
+  }
+
+  String _incidentTriage(BuildContext context, SosTriage triage) {
+    final injured =
+        triage.injuredCount?.toString() ??
+        switch (triage.injuryStatus) {
+          SosInjuryStatus.unknown => context.l10n.sosTriageUnknown,
+          SosInjuryStatus.none => context.l10n.sosTriageNo,
+          SosInjuryStatus.injured => context.l10n.sosTriageYes,
+        };
+    final trapped = switch (triage.trappedStatus) {
+      SosTrappedStatus.unknown => context.l10n.sosTriageUnknown,
+      SosTrappedStatus.no => context.l10n.sosTriageNo,
+      SosTrappedStatus.yes => context.l10n.sosTriageYes,
+    };
+    final need = switch (triage.primaryNeed) {
+      SosPrimaryNeed.medical => context.l10n.sosTriageMedical,
+      SosPrimaryNeed.water => context.l10n.sosTriageWater,
+      SosPrimaryNeed.extraction => context.l10n.sosTriageExtraction,
+      SosPrimaryNeed.shelter => context.l10n.sosTriageShelter,
+      SosPrimaryNeed.other => context.l10n.sosTriageOther,
+    };
+    return context.l10n.sosTriageSummary(
+      triage.peopleCount?.toString() ?? context.l10n.sosTriageUnknown,
+      injured,
+      trapped,
+      need,
     );
   }
 

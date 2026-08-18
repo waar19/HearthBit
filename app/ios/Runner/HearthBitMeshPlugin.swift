@@ -744,6 +744,33 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         guard let data = arguments["data"] as? FlutterStandardTypedData
         else { throw IOSMeshError.peerUnavailable }
         result(FlutterStandardTypedData(bytes: try identity.signBytes(data.data)))
+      case "verifySignatureWithPublicKey":
+        guard
+          let signingPublicKey =
+            (arguments["signingPublicKey"] as? FlutterStandardTypedData)?.data,
+          let data = (arguments["data"] as? FlutterStandardTypedData)?.data,
+          let signature = (arguments["signature"] as? FlutterStandardTypedData)?.data
+        else { throw IOSMeshError.invalidPayload }
+        result(
+          IOSMeshIdentity.verifyBytes(
+            data,
+            signature: signature,
+            key: signingPublicKey
+          )
+        )
+      case "importRescueRosterPins":
+        guard let rawPins = arguments["pins"] as? [[String: Any]],
+              rawPins.count <= IOSPeerIdentityPinStore.defaultMaximumPins
+        else { throw IOSMeshError.invalidPayload }
+        let rosterPins = try rawPins.map { raw -> IOSRescueRosterPin in
+          guard
+            let peerID = raw["peerId"] as? String,
+            let key = (raw["signingPublicKey"] as? FlutterStandardTypedData)?.data
+          else { throw IOSMeshError.invalidPayload }
+          return IOSRescueRosterPin(peerID: peerID, signingPublicKey: key)
+        }
+        try peerIdentityPins.importRescueRosterPins(rosterPins)
+        result(nil)
       case "rotateLocalIdentity":
         guard running, identity != nil else { throw IOSMeshError.identityUnavailable }
         let oldPeerID = identity.peerIDHex
@@ -780,6 +807,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         else { throw IOSMeshError.peerUnavailable }
         let signingKey = peers[peerID.lowercased()]?.signingPublicKey
           ?? peerIdentityPins.pin(for: peerID)?.signingPublicKey
+          ?? peerIdentityPins.rescueSigningKey(for: peerID)
         let verified = signingKey.map {
           IOSMeshIdentity.verifyBytes(data.data, signature: signature.data, key: $0)
         } ?? false
@@ -1971,7 +1999,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       isPrivate: false,
       isMine: true,
       timestamp: packet.timestamp,
-      channel: channel
+      channel: channel,
+      canonicalHash: IOSMeshProtocol.isEmergency(packet)
+        ? IOSMeshProtocol.emergencyCanonicalHash(packet).hex
+        : nil
     )
     return (id, packet)
   }
@@ -2085,6 +2116,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
 
   private func protectedRelationshipPeerIDs() -> Set<String> {
     var protected = securePeerIDs.union(privateChatPeerIDs)
+    protected.formUnion(peerIdentityPins.rescueProtectedPeerIDs)
     let pendingIDs = pendingPrivate.peerIDs
       .union(pendingFrames.peerIDs)
       .union(pendingCourier.peerIDs)
@@ -3436,7 +3468,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         isMine: false,
         timestamp: message.timestamp,
         channel: message.channel,
-        external: external
+        external: external,
+        canonicalHash: emergencyHash
       )
     case IOSMeshProtocol.noiseHandshake:
       processHandshake(packet, senderID: senderID)
@@ -4288,7 +4321,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     isMine: Bool,
     timestamp: UInt64,
     channel: String?,
-    external: Bool = false
+    external: Bool = false,
+    canonicalHash: String? = nil
   ) {
     var message: [String: Any] = [
       "id": id,
@@ -4301,6 +4335,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       "external": external,
     ]
     if let channel { message["channel"] = channel }
+    if let canonicalHash { message["canonicalHash"] = canonicalHash }
     emit(["type": "message", "message": message])
   }
 
@@ -4319,6 +4354,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
 
   private func activeRetentionPeerIDs() -> Set<String> {
     var protected = securePeerIDs.union(privateChatPeerIDs)
+    protected.formUnion(peerIdentityPins.rescueProtectedPeerIDs)
     if let radarPeerID { protected.insert(radarPeerID) }
     protected.formUnion(remoteRadarConsents.keys)
     protected.formUnion(sessions.compactMap {

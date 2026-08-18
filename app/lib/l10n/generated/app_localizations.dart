@@ -632,6 +632,113 @@ abstract class AppLocalizations {
   /// **'No SOS alerts received.'**
   String get sosNoneReceived;
 
+  /// No description provided for @sosTriageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick rescue details'**
+  String get sosTriageTitle;
+
+  /// No description provided for @sosTriageOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional. Choose one need or send SOS immediately.'**
+  String get sosTriageOptional;
+
+  /// No description provided for @sosTriageNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No structured details'**
+  String get sosTriageNone;
+
+  /// No description provided for @sosTriageMedical.
+  ///
+  /// In en, this message translates to:
+  /// **'Medical'**
+  String get sosTriageMedical;
+
+  /// No description provided for @sosTriageWater.
+  ///
+  /// In en, this message translates to:
+  /// **'Water'**
+  String get sosTriageWater;
+
+  /// No description provided for @sosTriageExtraction.
+  ///
+  /// In en, this message translates to:
+  /// **'Extraction'**
+  String get sosTriageExtraction;
+
+  /// No description provided for @sosTriageShelter.
+  ///
+  /// In en, this message translates to:
+  /// **'Shelter'**
+  String get sosTriageShelter;
+
+  /// No description provided for @sosTriageOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get sosTriageOther;
+
+  /// No description provided for @sosTriageDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Add details'**
+  String get sosTriageDetails;
+
+  /// No description provided for @sosTriagePeople.
+  ///
+  /// In en, this message translates to:
+  /// **'People'**
+  String get sosTriagePeople;
+
+  /// No description provided for @sosTriageInjuries.
+  ///
+  /// In en, this message translates to:
+  /// **'Injured'**
+  String get sosTriageInjuries;
+
+  /// No description provided for @sosTriageTrapped.
+  ///
+  /// In en, this message translates to:
+  /// **'Trapped'**
+  String get sosTriageTrapped;
+
+  /// No description provided for @sosTriageUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get sosTriageUnknown;
+
+  /// No description provided for @sosTriageNo.
+  ///
+  /// In en, this message translates to:
+  /// **'No'**
+  String get sosTriageNo;
+
+  /// No description provided for @sosTriageYes.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes'**
+  String get sosTriageYes;
+
+  /// No description provided for @sosTriageSave.
+  ///
+  /// In en, this message translates to:
+  /// **'SAVE DETAILS'**
+  String get sosTriageSave;
+
+  /// No description provided for @sosTriageSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'People: {people} · Injured: {injured} · Trapped: {trapped} · Need: {need}'**
+  String sosTriageSummary(
+    String people,
+    String injured,
+    String trapped,
+    String need,
+  );
+
   /// No description provided for @checkInPrivateBody.
   ///
   /// In en, this message translates to:
@@ -3546,6 +3653,354 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'RETRY'**
   String get emergencyContactsRetry;
+
+  /// No description provided for @rescueRosterTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescue team roster'**
+  String get rescueRosterTitle;
+
+  /// No description provided for @rescueRosterSecurityBody.
+  ///
+  /// In en, this message translates to:
+  /// **'A roster is signed by its team leader. A person is shown as a verified rescuer only when both their peer ID and Ed25519 signing key match.'**
+  String get rescueRosterSecurityBody;
+
+  /// No description provided for @rescueRosterEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No rescue team roster is active on this phone.'**
+  String get rescueRosterEmpty;
+
+  /// No description provided for @rescueRosterCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'CREATE ROSTER'**
+  String get rescueRosterCreate;
+
+  /// No description provided for @rescueRosterTeamName.
+  ///
+  /// In en, this message translates to:
+  /// **'Team name'**
+  String get rescueRosterTeamName;
+
+  /// No description provided for @rescueRosterCallsign.
+  ///
+  /// In en, this message translates to:
+  /// **'Leader callsign'**
+  String get rescueRosterCallsign;
+
+  /// No description provided for @rescueRosterAddMember.
+  ///
+  /// In en, this message translates to:
+  /// **'ADD NEARBY MEMBER'**
+  String get rescueRosterAddMember;
+
+  /// No description provided for @rescueRosterNoEligiblePeers.
+  ///
+  /// In en, this message translates to:
+  /// **'No nearby HearthBit identity with a signing key is available to add.'**
+  String get rescueRosterNoEligiblePeers;
+
+  /// No description provided for @rescueRosterNearbyIdentity.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby identity'**
+  String get rescueRosterNearbyIdentity;
+
+  /// No description provided for @rescueRosterMemberCallsign.
+  ///
+  /// In en, this message translates to:
+  /// **'Member callsign'**
+  String get rescueRosterMemberCallsign;
+
+  /// No description provided for @rescueRosterMemberRole.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescue role'**
+  String get rescueRosterMemberRole;
+
+  /// No description provided for @rescueRosterRemoveMemberTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove roster member?'**
+  String get rescueRosterRemoveMemberTitle;
+
+  /// No description provided for @rescueRosterRemoveMemberBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{callsign} will no longer be a verified rescuer in this roster.'**
+  String rescueRosterRemoveMemberBody(String callsign);
+
+  /// No description provided for @rescueRosterMemberCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} verified members'**
+  String rescueRosterMemberCount(int count);
+
+  /// No description provided for @rescueRosterImportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import signed roster'**
+  String get rescueRosterImportTitle;
+
+  /// No description provided for @rescueRosterImportText.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste QR text'**
+  String get rescueRosterImportText;
+
+  /// No description provided for @rescueRosterPasteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'HBRT1:…'**
+  String get rescueRosterPasteHint;
+
+  /// No description provided for @rescueRosterImport.
+  ///
+  /// In en, this message translates to:
+  /// **'IMPORT'**
+  String get rescueRosterImport;
+
+  /// No description provided for @rescueRosterImportFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Open roster file'**
+  String get rescueRosterImportFile;
+
+  /// No description provided for @rescueRosterScanQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan roster QR'**
+  String get rescueRosterScanQr;
+
+  /// No description provided for @rescueRosterScanHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Point the camera at a signed HBRT1 rescue roster QR.'**
+  String get rescueRosterScanHint;
+
+  /// No description provided for @rescueRosterImported.
+  ///
+  /// In en, this message translates to:
+  /// **'The signed rescue roster was verified and activated.'**
+  String get rescueRosterImported;
+
+  /// No description provided for @rescueRosterExported.
+  ///
+  /// In en, this message translates to:
+  /// **'The rescue roster file was saved.'**
+  String get rescueRosterExported;
+
+  /// No description provided for @rescueRosterExportQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Show QR and text'**
+  String get rescueRosterExportQr;
+
+  /// No description provided for @rescueRosterQrTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'This roster is too large for one QR. Export it as a file or copy the signed text.'**
+  String get rescueRosterQrTooLarge;
+
+  /// No description provided for @rescueRosterExportFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Save roster file'**
+  String get rescueRosterExportFile;
+
+  /// No description provided for @rescueRosterRemoveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove active rescue roster?'**
+  String get rescueRosterRemoveTitle;
+
+  /// No description provided for @rescueRosterRemoveBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Members will no longer appear as verified rescuers and their protected native pins will be removed.'**
+  String get rescueRosterRemoveBody;
+
+  /// No description provided for @rescueRosterError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not process the rescue roster: {error}'**
+  String rescueRosterError(String error);
+
+  /// No description provided for @rescueRosterRoleLeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Team leader'**
+  String get rescueRosterRoleLeader;
+
+  /// No description provided for @rescueRosterRoleResponder.
+  ///
+  /// In en, this message translates to:
+  /// **'Responder'**
+  String get rescueRosterRoleResponder;
+
+  /// No description provided for @rescueRosterRoleMedic.
+  ///
+  /// In en, this message translates to:
+  /// **'Medic'**
+  String get rescueRosterRoleMedic;
+
+  /// No description provided for @rescueRosterRoleSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get rescueRosterRoleSearch;
+
+  /// No description provided for @rescueRosterRoleLogistics.
+  ///
+  /// In en, this message translates to:
+  /// **'Logistics'**
+  String get rescueRosterRoleLogistics;
+
+  /// No description provided for @rescueRosterRoleCommunications.
+  ///
+  /// In en, this message translates to:
+  /// **'Communications'**
+  String get rescueRosterRoleCommunications;
+
+  /// No description provided for @verifiedRescuerBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'VERIFIED RESCUER'**
+  String get verifiedRescuerBadge;
+
+  /// No description provided for @rescueRosterFileType.
+  ///
+  /// In en, this message translates to:
+  /// **'HearthBit rescue roster'**
+  String get rescueRosterFileType;
+
+  /// No description provided for @rescueOperationsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescue operations'**
+  String get rescueOperationsTitle;
+
+  /// No description provided for @rescueOperationsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No SOS cases have been received.'**
+  String get rescueOperationsEmpty;
+
+  /// No description provided for @rescueOperationsError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not update rescue operations: {error}'**
+  String rescueOperationsError(String error);
+
+  /// No description provided for @rescueOperationsAssignMe.
+  ///
+  /// In en, this message translates to:
+  /// **'ASSIGN TO ME'**
+  String get rescueOperationsAssignMe;
+
+  /// No description provided for @rescueOperationsEnRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'EN ROUTE'**
+  String get rescueOperationsEnRoute;
+
+  /// No description provided for @rescueOperationsAttended.
+  ///
+  /// In en, this message translates to:
+  /// **'ATTENDED'**
+  String get rescueOperationsAttended;
+
+  /// No description provided for @rescueOperationsClose.
+  ///
+  /// In en, this message translates to:
+  /// **'CLOSE'**
+  String get rescueOperationsClose;
+
+  /// No description provided for @rescueOperationsNoActions.
+  ///
+  /// In en, this message translates to:
+  /// **'No authorized actions'**
+  String get rescueOperationsNoActions;
+
+  /// No description provided for @rescueOperationsAssignee.
+  ///
+  /// In en, this message translates to:
+  /// **'Assigned to {callsign}'**
+  String rescueOperationsAssignee(String callsign);
+
+  /// No description provided for @rescueOperationsReceivedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Received {date}'**
+  String rescueOperationsReceivedAt(String date);
+
+  /// No description provided for @rescueOperationsTriage.
+  ///
+  /// In en, this message translates to:
+  /// **'Priority: {need} · people: {people}'**
+  String rescueOperationsTriage(String need, String people);
+
+  /// No description provided for @rescueCaseStateNew.
+  ///
+  /// In en, this message translates to:
+  /// **'New'**
+  String get rescueCaseStateNew;
+
+  /// No description provided for @rescueCaseStateAssigned.
+  ///
+  /// In en, this message translates to:
+  /// **'Assigned'**
+  String get rescueCaseStateAssigned;
+
+  /// No description provided for @rescueCaseStateEnRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'En route'**
+  String get rescueCaseStateEnRoute;
+
+  /// No description provided for @rescueCaseStateAttended.
+  ///
+  /// In en, this message translates to:
+  /// **'Attended'**
+  String get rescueCaseStateAttended;
+
+  /// No description provided for @rescueCaseStateClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed'**
+  String get rescueCaseStateClosed;
+
+  /// No description provided for @rescueTriageMedical.
+  ///
+  /// In en, this message translates to:
+  /// **'Medical'**
+  String get rescueTriageMedical;
+
+  /// No description provided for @rescueTriageWater.
+  ///
+  /// In en, this message translates to:
+  /// **'Water'**
+  String get rescueTriageWater;
+
+  /// No description provided for @rescueTriageExtraction.
+  ///
+  /// In en, this message translates to:
+  /// **'Extraction'**
+  String get rescueTriageExtraction;
+
+  /// No description provided for @rescueTriageShelter.
+  ///
+  /// In en, this message translates to:
+  /// **'Shelter'**
+  String get rescueTriageShelter;
+
+  /// No description provided for @rescueTriageOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get rescueTriageOther;
 }
 
 class _AppLocalizationsDelegate

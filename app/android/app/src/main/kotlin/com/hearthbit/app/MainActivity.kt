@@ -22,6 +22,7 @@ import com.google.android.gms.common.GoogleApiAvailability
 import com.hearthbit.app.mesh.AdaptivePowerPolicy
 import com.hearthbit.app.mesh.MeshForegroundService
 import com.hearthbit.app.mesh.MeshRuntime
+import com.hearthbit.app.mesh.RescueRosterPin
 import com.hearthbit.app.mesh.RescueModeStore
 import com.hearthbit.app.transfer.NearbyTransport
 import com.hearthbit.app.transfer.WifiAwareTransport
@@ -340,6 +341,30 @@ class MainActivity : FlutterActivity() {
                     MeshRuntime.engine(this).signPayload(
                         requireNotNull(call.argument<ByteArray>("data")),
                     )
+                }
+                "verifySignatureWithPublicKey" -> runMethod(result) {
+                    MeshRuntime.engine(this).verifySignatureWithPublicKey(
+                        signingPublicKey =
+                            requireNotNull(call.argument<ByteArray>("signingPublicKey")),
+                        data = requireNotNull(call.argument<ByteArray>("data")),
+                        signature = requireNotNull(call.argument<ByteArray>("signature")),
+                    )
+                }
+                "importRescueRosterPins" -> runMethod(result) {
+                    val rawPins = requireNotNull(call.argument<List<*>>("pins"))
+                    require(rawPins.size <= 512) { "rescue_roster_too_large" }
+                    val pins = rawPins.map { raw ->
+                        val pin = raw as? Map<*, *>
+                            ?: throw IllegalArgumentException("invalid_rescue_pin")
+                        RescueRosterPin(
+                            peerId = pin["peerId"] as? String
+                                ?: throw IllegalArgumentException("invalid_rescue_peer_id"),
+                            signingPublicKey = pin["signingPublicKey"] as? ByteArray
+                                ?: throw IllegalArgumentException("invalid_rescue_signing_key"),
+                        )
+                    }
+                    MeshRuntime.engine(this).importRescueRosterPins(pins)
+                    null
                 }
                 "rotateLocalIdentity" -> runMethod(result) {
                     MeshRuntime.engine(this).rotateLocalIdentity()
