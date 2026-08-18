@@ -432,17 +432,14 @@ class EmergencyScreen extends StatelessWidget {
           duration: result == EmergencyActivationResult.queuedWithoutRoute
               ? const Duration(seconds: 8)
               : const Duration(seconds: 4),
-          content: Text(
-            switch (result) {
-              EmergencyActivationResult.sentToMesh =>
-                context.l10n.sosSentToMesh,
-              EmergencyActivationResult.queuedWithoutRoute =>
-                context.l10n.sosQueuedWithoutRoute,
-              EmergencyActivationResult.failed =>
-                controller.lastError ??
-                    context.l10n.errorEmergencyMeshUnavailable,
-            },
-          ),
+          content: Text(switch (result) {
+            EmergencyActivationResult.sentToMesh => context.l10n.sosSentToMesh,
+            EmergencyActivationResult.queuedWithoutRoute =>
+              context.l10n.sosQueuedWithoutRoute,
+            EmergencyActivationResult.failed =>
+              controller.lastError ??
+                  context.l10n.errorEmergencyMeshUnavailable,
+          }),
         ),
       );
   }

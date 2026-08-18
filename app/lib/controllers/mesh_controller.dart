@@ -377,7 +377,8 @@ class MeshController extends ChangeNotifier {
     final diagnostics = await _platform.getMeshDiagnostics();
     if (diagnostics.isEmpty) return;
     final diagnosticStatus =
-        diagnostics['status'] as String? ?? diagnostics['meshStatus'] as String?;
+        diagnostics['status'] as String? ??
+        diagnostics['meshStatus'] as String?;
     if (diagnosticStatus != null) {
       final couldSend = canSend;
       _updateConnectionStatus(diagnosticStatus);

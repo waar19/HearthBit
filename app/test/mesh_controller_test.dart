@@ -1027,19 +1027,22 @@ void main() {
     expect(controller.meshPermissionsGranted, isFalse);
   });
 
-  test('un SOS sin salida queda persistido y se informa como en cola', () async {
-    platform.permissionsGranted = false;
+  test(
+    'un SOS sin salida queda persistido y se informa como en cola',
+    () async {
+      platform.permissionsGranted = false;
 
-    final result = await controller.activateEmergency(
-      description: 'Ayuda',
-      locationPrecision: SosLocationPrecision.none,
-    );
+      final result = await controller.activateEmergency(
+        description: 'Ayuda',
+        locationPrecision: SosLocationPrecision.none,
+      );
 
-    expect(result, EmergencyActivationResult.queuedWithoutRoute);
-    expect(controller.emergencyDeliveries, hasLength(1));
-    expect(repository.emergencyOutbox, hasLength(1));
-    expect(controller.rescueMode, isFalse);
-  });
+      expect(result, EmergencyActivationResult.queuedWithoutRoute);
+      expect(controller.emergencyDeliveries, hasLength(1));
+      expect(repository.emergencyOutbox, hasLength(1));
+      expect(controller.rescueMode, isFalse);
+    },
+  );
 
   test('expone la causa que interrumpe una malla solicitada', () async {
     final preferences = AppPreferences();

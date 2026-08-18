@@ -50,10 +50,13 @@ void main() {
     expect(state.active, isTrue);
   });
 
-  test('estado de rescate distingue inactivo de nativo no disponible', () async {
-    final state = await service.getRescueModeState();
+  test(
+    'estado de rescate distingue inactivo de nativo no disponible',
+    () async {
+      final state = await service.getRescueModeState();
 
-    expect(state.active, isFalse);
-    expect(state.available, isFalse);
-  });
+      expect(state.active, isFalse);
+      expect(state.available, isFalse);
+    },
+  );
 }

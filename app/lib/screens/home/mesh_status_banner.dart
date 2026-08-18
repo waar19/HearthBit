@@ -95,10 +95,10 @@ class MeshStatusBanner extends StatelessWidget {
       ),
       (null, MeshConnectionStatus.starting) => (null, null),
       (null, MeshConnectionStatus.error) ||
-      (null, MeshConnectionStatus.stopped) => (
-        controller.start,
-        context.l10n.actionActivate,
-      ),
+      (
+        null,
+        MeshConnectionStatus.stopped,
+      ) => (controller.start, context.l10n.actionActivate),
     };
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -120,10 +120,7 @@ class MeshStatusBanner extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             else
-              FilledButton.tonal(
-                onPressed: action,
-                child: Text(actionLabel!),
-              ),
+              FilledButton.tonal(onPressed: action, child: Text(actionLabel!)),
           ],
         ),
       ),
