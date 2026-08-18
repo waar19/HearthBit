@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../models/rescue_protocol_limits.dart';
 import '../models/rescue_roster_models.dart';
 
 typedef RescueRosterPayloadSigner =
@@ -24,7 +25,8 @@ class RescueRosterCodec {
   static const int signatureBytes = 64;
   static const int maximumMembers = 512;
   static const int maximumTeamNameBytes = 80;
-  static const int maximumCallsignBytes = 63;
+  static const int maximumCallsignBytes =
+      RescueProtocolLimits.maximumCallsignBytes;
   static const int maximumEncodedCharacters = 100000;
   static const int maximumTimestampMilliseconds = 253402300799999;
 

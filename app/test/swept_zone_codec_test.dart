@@ -48,14 +48,34 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('acepta callsign de 63 bytes y rechaza 64 bytes', () {
+    final maximum = 'a' * 63;
+    final excessive = 'a' * 64;
+
+    expect(
+      SweptZoneCodec.tryDecode(
+        SweptZoneCodec.encode(_zone(callsign: maximum)),
+      )?.callsign,
+      maximum,
+    );
+    expect(
+      () => SweptZoneCodec.encode(_zone(callsign: excessive)),
+      throwsFormatException,
+    );
+  });
 }
 
-SweptZone _zone({List<SweptZonePoint>? points, DateTime? endedAt}) => SweptZone(
+SweptZone _zone({
+  List<SweptZonePoint>? points,
+  DateTime? endedAt,
+  String callsign = 'Águila',
+}) => SweptZone(
   version: SweptZoneCodec.version,
   zoneId: '00112233445566778899aabbccddeeff',
   teamId: 'ffeeddccbbaa99887766554433221100',
   actorPeerId: '0011223344556677',
-  callsign: 'Águila',
+  callsign: callsign,
   startedAt: DateTime.fromMillisecondsSinceEpoch(1000, isUtc: true),
   endedAt: endedAt ?? DateTime.fromMillisecondsSinceEpoch(2000, isUtc: true),
   points:

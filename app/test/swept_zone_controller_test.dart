@@ -15,9 +15,16 @@ const _actor = '0011223344556677';
 
 class _Mesh extends MeshController {
   final List<MeshMessage> storedMessages = [];
+  String? sentContent;
 
   @override
   List<MeshMessage> get messages => List.unmodifiable(storedMessages);
+
+  @override
+  Future<String?> sendPublic(String content, {String? channel}) async {
+    sentContent = content;
+    return 'sent';
+  }
 
   void emit(MeshMessage message) {
     storedMessages.add(message);
@@ -26,7 +33,9 @@ class _Mesh extends MeshController {
 }
 
 class _Roster extends RescueRosterController {
-  _Roster({required super.mesh});
+  _Roster({required super.mesh}) {
+    loading = false;
+  }
 
   RescueTeamRoster? current;
 
@@ -159,39 +168,200 @@ void main() {
     roster.dispose();
     mesh.dispose();
   });
+
+  test('reintenta un mensaje cuando el roster todavía está cargando', () async {
+    final mesh = _Mesh();
+    final roster = _Roster(mesh: mesh)..loading = true;
+    final now = DateTime.utc(2026, 8, 18, 12);
+    final controller = SweptZoneController(
+      mesh: mesh,
+      roster: roster,
+      repository: _Repository(),
+      now: () => now,
+    );
+    await controller.initialize();
+
+    mesh.emit(_message('pending-roster', _zone(now), sender: _actor));
+    await _settle();
+    expect(controller.zones, isEmpty);
+
+    roster.activate(_roster());
+    roster.loading = false;
+    roster.notifyListeners();
+    await _settle();
+    expect(controller.zones, hasLength(1));
+
+    controller.dispose();
+    roster.dispose();
+    mesh.dispose();
+  });
+
+  test(
+    'cancela el borrador si cambia el roster durante la grabación',
+    () async {
+      final now = DateTime.utc(2026, 8, 18, 12);
+      final mesh = _Mesh()
+        ..peerId = _actor
+        ..signingPublicKey = Uint8List(32);
+      final roster = _Roster(mesh: mesh)..activate(_roster());
+      final controller = SweptZoneController(
+        mesh: mesh,
+        roster: roster,
+        repository: _Repository(),
+        now: () => now,
+      );
+      await controller.initialize();
+      controller.startRecording();
+      controller.addRecordedPoint(
+        latitude: 4.7,
+        longitude: -74.1,
+        accuracyMeters: 5,
+        recordedAt: now,
+      );
+
+      roster.activate(_roster(createdAt: DateTime.utc(2026, 1, 1, 0, 0, 1)));
+
+      expect(controller.isRecording, isFalse);
+      expect(controller.draftPoints, isEmpty);
+      expect(
+        controller.draftCancellationReason,
+        SweptZoneDraftCancellationReason.rosterChanged,
+      );
+      expect(controller.finishAndPublish, throwsStateError);
+      expect(mesh.sentContent, isNull);
+
+      controller.dispose();
+      roster.dispose();
+      mesh.dispose();
+    },
+  );
+
+  test('rechaza zonas externas aunque coincidan canal y actor', () async {
+    final mesh = _Mesh();
+    final roster = _Roster(mesh: mesh)..activate(_roster());
+    final now = DateTime.utc(2026, 8, 18, 12);
+    final controller = SweptZoneController(
+      mesh: mesh,
+      roster: roster,
+      repository: _Repository(),
+      now: () => now,
+    );
+    await controller.initialize();
+
+    mesh.emit(_message('external', _zone(now), sender: _actor, external: true));
+    await _settle();
+    expect(controller.zones, isEmpty);
+
+    controller.dispose();
+    roster.dispose();
+    mesh.dispose();
+  });
+
+  test('publica callsign de 63 bytes y rechaza uno de 64', () async {
+    final now = DateTime.utc(2026, 8, 18, 12);
+    final validMesh = _Mesh()
+      ..peerId = _actor
+      ..signingPublicKey = Uint8List(32);
+    final validRoster = _Roster(mesh: validMesh)
+      ..activate(_roster(callsign: 'a' * 63));
+    final validController = SweptZoneController(
+      mesh: validMesh,
+      roster: validRoster,
+      repository: _Repository(),
+      now: () => now,
+    );
+    await validController.initialize();
+    _recordTwoPoints(validController, now);
+
+    final published = await validController.finishAndPublish();
+    expect(published.callsign, 'a' * 63);
+    expect(validMesh.sentContent, isNotNull);
+
+    final invalidMesh = _Mesh()
+      ..peerId = _actor
+      ..signingPublicKey = Uint8List(32);
+    final invalidRoster = _Roster(mesh: invalidMesh)
+      ..activate(_roster(callsign: 'a' * 64));
+    final invalidController = SweptZoneController(
+      mesh: invalidMesh,
+      roster: invalidRoster,
+      repository: _Repository(),
+      now: () => now,
+    );
+    await invalidController.initialize();
+    _recordTwoPoints(invalidController, now);
+
+    expect(invalidController.finishAndPublish, throwsFormatException);
+    expect(invalidMesh.sentContent, isNull);
+
+    validController.dispose();
+    validRoster.dispose();
+    validMesh.dispose();
+    invalidController.dispose();
+    invalidRoster.dispose();
+    invalidMesh.dispose();
+  });
+}
+
+void _recordTwoPoints(SweptZoneController controller, DateTime now) {
+  controller.startRecording();
+  expect(
+    controller.addRecordedPoint(
+      latitude: 4.7,
+      longitude: -74.1,
+      accuracyMeters: 5,
+      recordedAt: now,
+    ),
+    isTrue,
+  );
+  expect(
+    controller.addRecordedPoint(
+      latitude: 4.7001,
+      longitude: -74.1001,
+      accuracyMeters: 5,
+      recordedAt: now.add(const Duration(seconds: 1)),
+    ),
+    isTrue,
+  );
 }
 
 Future<void> _settle() async {
   await Future<void>.delayed(const Duration(milliseconds: 10));
 }
 
-MeshMessage _message(String id, SweptZone zone, {required String sender}) =>
-    MeshMessage(
-      id: id,
-      sender: 'Águila',
-      content: SweptZoneCodec.encode(zone),
-      senderPeerId: sender,
-      isPrivate: false,
-      isMine: false,
-      timestamp: zone.endedAt,
-      channel: SweptZoneController.channel,
-    );
-
-RescueTeamRoster _roster() => RescueTeamRoster(
-  teamId: _team,
-  name: 'Equipo',
-  createdAt: DateTime.utc(2026),
-  leaderPeerId: _actor,
-  members: [
-    RescueRosterMember(
-      peerId: _actor,
-      callsign: 'Águila',
-      role: RescueRosterRole.leader,
-      signingPublicKey: Uint8List(32),
-    ),
-  ],
-  signature: Uint8List(64),
+MeshMessage _message(
+  String id,
+  SweptZone zone, {
+  required String sender,
+  bool external = false,
+}) => MeshMessage(
+  id: id,
+  sender: 'Águila',
+  content: SweptZoneCodec.encode(zone),
+  senderPeerId: sender,
+  isPrivate: false,
+  isMine: false,
+  timestamp: zone.endedAt,
+  channel: SweptZoneController.channel,
+  external: external,
 );
+
+RescueTeamRoster _roster({DateTime? createdAt, String callsign = 'Águila'}) =>
+    RescueTeamRoster(
+      teamId: _team,
+      name: 'Equipo',
+      createdAt: createdAt ?? DateTime.utc(2026),
+      leaderPeerId: _actor,
+      members: [
+        RescueRosterMember(
+          peerId: _actor,
+          callsign: callsign,
+          role: RescueRosterRole.leader,
+          signingPublicKey: Uint8List(32),
+        ),
+      ],
+      signature: Uint8List(64),
+    );
 
 SweptZone _zone(DateTime now) {
   final startedAt = now.subtract(const Duration(minutes: 2));

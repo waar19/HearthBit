@@ -10,6 +10,8 @@ import '../services/swept_zone_repository.dart';
 import 'mesh_controller.dart';
 import 'rescue_roster_controller.dart';
 
+enum SweptZoneDraftCancellationReason { rosterChanged }
+
 class SweptZoneController extends ChangeNotifier {
   SweptZoneController({
     required this.mesh,
@@ -39,11 +41,17 @@ class SweptZoneController extends ChangeNotifier {
   bool _processing = false;
   bool _processingRequested = false;
   String? _loadedTeamId;
+  int _reloadGeneration = 0;
   DateTime? _recordingStartedAt;
+  int? _recordingRosterCreatedAtMs;
+  String? _recordingTeamId;
+  String? _recordingActorPeerId;
+  String? _recordingCallsign;
 
   bool loading = true;
   bool publishing = false;
   String? lastError;
+  SweptZoneDraftCancellationReason? draftCancellationReason;
 
   bool get isRecording => _recordingStartedAt != null;
   List<SweptZonePoint> get draftPoints => List.unmodifiable(_draftPoints);
@@ -86,6 +94,13 @@ class SweptZoneController extends ChangeNotifier {
     }
     _draftPoints.clear();
     _recordingStartedAt = _now().toUtc();
+    _recordingRosterCreatedAtMs = activeRoster.createdAt
+        .toUtc()
+        .millisecondsSinceEpoch;
+    _recordingTeamId = activeRoster.teamId;
+    _recordingActorPeerId = member.peerId;
+    _recordingCallsign = member.callsign;
+    draftCancellationReason = null;
     lastError = null;
     notifyListeners();
   }
@@ -137,8 +152,8 @@ class SweptZoneController extends ChangeNotifier {
   }
 
   void cancelRecording() {
-    _recordingStartedAt = null;
-    _draftPoints.clear();
+    _clearRecording();
+    draftCancellationReason = null;
     lastError = null;
     notifyListeners();
   }
@@ -147,8 +162,20 @@ class SweptZoneController extends ChangeNotifier {
     final activeRoster = roster.activeRoster;
     final member = localMember;
     final startedAt = _recordingStartedAt;
-    if (activeRoster == null || member == null || startedAt == null) {
+    final teamId = _recordingTeamId;
+    final actorPeerId = _recordingActorPeerId;
+    final callsign = _recordingCallsign;
+    if (activeRoster == null ||
+        member == null ||
+        startedAt == null ||
+        teamId == null ||
+        actorPeerId == null ||
+        callsign == null) {
       throw StateError('No authorized swept-zone recording is active');
+    }
+    if (!_recordingIdentityMatches(activeRoster, member)) {
+      _cancelForRosterChange();
+      throw StateError('The rescue roster changed during route recording');
     }
     if (_draftPoints.length < SweptZoneCodec.minimumPoints) {
       throw StateError('At least two valid route points are required');
@@ -158,9 +185,9 @@ class SweptZoneController extends ChangeNotifier {
     final zone = SweptZone(
       version: SweptZoneCodec.version,
       zoneId: _randomHex(16),
-      teamId: activeRoster.teamId,
-      actorPeerId: member.peerId,
-      callsign: member.callsign,
+      teamId: teamId,
+      actorPeerId: actorPeerId,
+      callsign: callsign,
       startedAt: startedAt,
       endedAt: endedAt,
       points: points,
@@ -179,8 +206,7 @@ class SweptZoneController extends ChangeNotifier {
       }
       await _repository.insert(zone);
       _zonesById[zone.zoneId] = zone;
-      _recordingStartedAt = null;
-      _draftPoints.clear();
+      _clearRecording();
       return zone;
     } catch (error) {
       lastError = error.toString();
@@ -192,20 +218,40 @@ class SweptZoneController extends ChangeNotifier {
   }
 
   void _handleMeshChanged() {
+    _cancelIfRecordingIdentityChanged();
     unawaited(_processMessages());
   }
 
   void _handleRosterChanged() {
+    _cancelIfRecordingIdentityChanged();
     unawaited(_reloadForActiveTeam());
+  }
+
+  void _cancelIfRecordingIdentityChanged() {
+    final activeRoster = roster.activeRoster;
+    final member = localMember;
+    if (isRecording &&
+        (activeRoster == null ||
+            member == null ||
+            !_recordingIdentityMatches(activeRoster, member))) {
+      _cancelForRosterChange();
+    }
   }
 
   Future<void> _reloadForActiveTeam() async {
     final teamId = roster.activeRoster?.teamId;
     if (teamId == _loadedTeamId) return;
+    final generation = ++_reloadGeneration;
     _loadedTeamId = teamId;
     _zonesById.clear();
+    if (!_disposed) notifyListeners();
     if (teamId != null) {
-      for (final zone in await _repository.loadZones(teamId: teamId)) {
+      final zones = await _repository.loadZones(teamId: teamId);
+      if (generation != _reloadGeneration ||
+          roster.activeRoster?.teamId != teamId) {
+        return;
+      }
+      for (final zone in zones.where((zone) => zone.teamId == teamId)) {
         _zonesById[zone.zoneId] = zone;
       }
     }
@@ -230,15 +276,21 @@ class SweptZoneController extends ChangeNotifier {
         for (final message in messages) {
           if (_processedMessageIds.contains(message.id) ||
               message.isPrivate ||
+              message.external ||
               message.channel != channel ||
               !message.content.startsWith(SweptZoneCodec.marker)) {
             continue;
           }
+          var outcome = _IngestOutcome.permanent;
           if (!message.isMine) {
             final zone = SweptZoneCodec.tryDecode(message.content);
-            if (zone != null) await _ingestIncoming(message, zone);
+            if (zone != null) {
+              outcome = await _ingestIncoming(message, zone);
+            }
           }
-          _processedMessageIds.add(message.id);
+          if (outcome != _IngestOutcome.retryLater) {
+            _processedMessageIds.add(message.id);
+          }
         }
       } while (_processingRequested);
       lastError = null;
@@ -250,26 +302,62 @@ class SweptZoneController extends ChangeNotifier {
     }
   }
 
-  Future<void> _ingestIncoming(MeshMessage message, SweptZone zone) async {
+  Future<_IngestOutcome> _ingestIncoming(
+    MeshMessage message,
+    SweptZone zone,
+  ) async {
     final activeRoster = roster.activeRoster;
+    if (activeRoster == null) {
+      return roster.loading
+          ? _IngestOutcome.retryLater
+          : _IngestOutcome.permanent;
+    }
     final sender = message.senderPeerId.trim().toLowerCase();
-    if (activeRoster == null ||
-        zone.teamId != activeRoster.teamId ||
+    if (zone.teamId != activeRoster.teamId ||
         zone.actorPeerId != sender ||
         zone.endedAt.isAfter(_now().toUtc().add(maximumFutureSkew)) ||
         zone.endedAt.isBefore(
           _now().toUtc().subtract(SweptZoneRepository.retention),
         )) {
-      return;
+      return _IngestOutcome.permanent;
     }
     final member = _memberByPeerId(sender);
-    if (member == null || member.callsign != zone.callsign) return;
+    if (member == null || member.callsign != zone.callsign) {
+      return _IngestOutcome.permanent;
+    }
 
     // Native MESSAGE verification is pinned to this active roster. Looking up
     // the persisted roster by peer ID keeps authorization valid after a sender
     // moves out of radio visibility without weakening the native signature.
     final inserted = await _repository.insert(zone);
     if (inserted) _zonesById[zone.zoneId] = zone;
+    return _IngestOutcome.accepted;
+  }
+
+  bool _recordingIdentityMatches(
+    RescueTeamRoster activeRoster,
+    RescueRosterMember member,
+  ) =>
+      activeRoster.createdAt.toUtc().millisecondsSinceEpoch ==
+          _recordingRosterCreatedAtMs &&
+      activeRoster.teamId == _recordingTeamId &&
+      member.peerId == _recordingActorPeerId &&
+      member.callsign == _recordingCallsign;
+
+  void _cancelForRosterChange() {
+    _clearRecording();
+    draftCancellationReason = SweptZoneDraftCancellationReason.rosterChanged;
+    lastError = null;
+    if (!_disposed) notifyListeners();
+  }
+
+  void _clearRecording() {
+    _recordingStartedAt = null;
+    _recordingRosterCreatedAtMs = null;
+    _recordingTeamId = null;
+    _recordingActorPeerId = null;
+    _recordingCallsign = null;
+    _draftPoints.clear();
   }
 
   RescueRosterMember? _memberByPeerId(String peerId) {
@@ -313,3 +401,5 @@ class SweptZoneController extends ChangeNotifier {
     super.dispose();
   }
 }
+
+enum _IngestOutcome { accepted, permanent, retryLater }

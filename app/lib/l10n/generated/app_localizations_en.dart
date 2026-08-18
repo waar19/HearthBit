@@ -2258,6 +2258,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authorityBody => 'Official instruction';
 
   @override
+  String authorityBodyBytes(int current, int maximum) {
+    return '$current/$maximum UTF-8 bytes';
+  }
+
+  @override
+  String authorityBodyTooLarge(int maximum) {
+    return 'The instruction must be no more than $maximum UTF-8 bytes.';
+  }
+
+  @override
   String get authorityDuration => 'Valid for';
 
   @override
@@ -2451,6 +2461,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get mapZoneLocationRequired =>
       'Location permission and services are required to record a route.';
+
+  @override
+  String get mapZoneRosterChanged =>
+      'Recording was cancelled because the active rescue roster or your membership changed.';
 
   @override
   String mapZoneError(String error) {

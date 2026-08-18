@@ -2276,6 +2276,16 @@ class AppLocalizationsFr extends AppLocalizations {
   String get authorityBody => 'Instruction officielle';
 
   @override
+  String authorityBodyBytes(int current, int maximum) {
+    return '$current/$maximum octets UTF-8';
+  }
+
+  @override
+  String authorityBodyTooLarge(int maximum) {
+    return 'L’instruction ne doit pas dépasser $maximum octets UTF-8.';
+  }
+
+  @override
   String get authorityDuration => 'Valide pendant';
 
   @override
@@ -2470,6 +2480,10 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get mapZoneLocationRequired =>
       'L’autorisation et les services de localisation sont requis pour enregistrer un parcours.';
+
+  @override
+  String get mapZoneRosterChanged =>
+      'L’enregistrement a été annulé car l’équipe active ou votre adhésion a changé.';
 
   @override
   String mapZoneError(String error) {

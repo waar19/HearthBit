@@ -137,6 +137,53 @@ void main() {
     expect(csv, isNot(contains('SIMULACRO')));
   });
 
+  test('CSV neutraliza fórmulas y conserva números negativos internos', () {
+    final now = DateTime.utc(2026, 8, 18, 12);
+    final incidentCsv = RescueCsv.build([
+      RescueIncident(
+        id: 'formula',
+        kind: RescueIncidentKind.sos,
+        sender: '=HYPERLINK("https://invalid")',
+        peerId: '+SUM(1,1)',
+        message: '   @comando',
+        timestamp: now,
+        latitude: 4.61,
+        longitude: -74.07,
+      ),
+      RescueIncident(
+        id: 'controls',
+        kind: RescueIncidentKind.sos,
+        sender: '\tpeligro',
+        peerId: 'normal',
+        message: '\rpeligro',
+        timestamp: now,
+      ),
+    ]);
+    final operationalCsv = RescueOperationalCsv.build([
+      _case(
+        hash: _repeat('a', 64),
+        latitude: 4.61,
+        longitude: -74.07,
+        now: now,
+        victim: '-1+1',
+        message: 'Mensaje normal',
+      ),
+    ], teamId: _repeat('2', 32));
+
+    expect(incidentCsv, contains("'=HYPERLINK"));
+    expect(incidentCsv, contains("'+SUM"));
+    expect(incidentCsv, contains("'   @comando"));
+    expect(incidentCsv, contains("'\tpeligro"));
+    expect(incidentCsv, contains("'\rpeligro"));
+    expect(incidentCsv, contains('normal'));
+    expect(incidentCsv, contains('-74.070000'));
+    expect(incidentCsv, isNot(contains("'-74.070000")));
+    expect(operationalCsv, contains("'-1+1"));
+    expect(operationalCsv, contains('Mensaje normal'));
+    expect(operationalCsv, contains('-74.070000'));
+    expect(operationalCsv, isNot(contains("'-74.070000")));
+  });
+
   test('GeoJSON RFC 7946 es determinista y limpia geometrías inválidas', () {
     final now = DateTime.utc(2026, 8, 18, 12);
     final first = _case(
@@ -150,6 +197,13 @@ void main() {
       latitude: double.nan,
       longitude: 200,
       now: now,
+    );
+    final otherTeamCase = _case(
+      hash: _repeat('c', 64),
+      latitude: 1,
+      longitude: 1,
+      now: now,
+      teamId: _repeat('9', 32),
     );
     final validZone = SweptZone(
       version: 1,
@@ -186,11 +240,28 @@ void main() {
         SweptZonePoint(latitude: 4.6, longitude: -74, recordedAt: now),
       ],
     );
+    final otherTeamZone = SweptZone(
+      version: 1,
+      zoneId: _repeat('5', 32),
+      teamId: _repeat('9', 32),
+      actorPeerId: _repeat('3', 16),
+      callsign: 'Cóndor',
+      startedAt: now,
+      endedAt: now.add(const Duration(minutes: 1)),
+      points: [
+        SweptZonePoint(latitude: 1, longitude: 1, recordedAt: now),
+        SweptZonePoint(
+          latitude: 1.1,
+          longitude: 1.1,
+          recordedAt: now.add(const Duration(minutes: 1)),
+        ),
+      ],
+    );
 
     final encoded = RescueGeoJson.build(
       teamId: _repeat('2', 32),
-      cases: [second, first],
-      zones: [invalidZone, validZone],
+      cases: [second, otherTeamCase, first],
+      zones: [invalidZone, otherTeamZone, validZone],
     );
     final repeated = RescueGeoJson.build(
       teamId: _repeat('2', 32),
@@ -228,6 +299,15 @@ void main() {
     expect(properties['version'], RescueGeoJson.version);
     expect(properties['priority'], 'critical');
     expect(properties['triage'], isA<Map<String, dynamic>>());
+    expect(
+      features.every(
+        (feature) =>
+            ((feature as Map<String, dynamic>)['properties']
+                as Map<String, dynamic>)['teamId'] ==
+            _repeat('2', 32),
+      ),
+      isTrue,
+    );
   });
 
   test('contrato de extensión y MIME distingue CSV de GeoJSON', () {
@@ -265,12 +345,15 @@ RescueCase _case({
   required double latitude,
   required double longitude,
   required DateTime now,
+  String victim = 'Víctima',
+  String message = 'Necesita extracción',
+  String? teamId,
 }) => RescueCase(
-  teamId: _repeat('2', 32),
+  teamId: teamId ?? _repeat('2', 32),
   caseHash: hash,
   victimPeerId: _repeat('0', 16),
-  victim: 'Víctima',
-  message: 'Necesita extracción',
+  victim: victim,
+  message: message,
   triage: const SosTriage(
     peopleCount: 2,
     injuryStatus: SosInjuryStatus.injured,

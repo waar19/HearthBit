@@ -681,6 +681,8 @@
   "authorityPriorityWarning": "AVERTISSEMENT",
   "authorityPriorityEvacuate": "ÉVACUER",
   "authorityBody": "Instruction officielle",
+  "authorityBodyBytes": "{current}/{maximum} octets UTF-8",
+  "authorityBodyTooLarge": "L’instruction ne doit pas dépasser {maximum} octets UTF-8.",
   "authorityDuration": "Valide pendant",
   "authorityDurationMinutes": "{minutes} minutes",
   "@authorityDurationMinutes": {"placeholders": {"minutes": {"type": "int"}}},
@@ -739,5 +741,6 @@
   "mapZoneFinish": "Terminer et partager le parcours",
   "mapZonePublished": "Parcours balayé partagé avec l’équipe vérifiée.",
   "mapZoneLocationRequired": "L’autorisation et les services de localisation sont requis pour enregistrer un parcours.",
+  "mapZoneRosterChanged": "L’enregistrement a été annulé car l’équipe active ou votre adhésion a changé.",
   "mapZoneError": "Impossible d’enregistrer ou de partager le parcours balayé : {error}"
 }

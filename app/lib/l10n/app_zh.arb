@@ -681,6 +681,8 @@
   "authorityPriorityWarning": "警告",
   "authorityPriorityEvacuate": "撤离",
   "authorityBody": "官方指示",
+  "authorityBodyBytes": "{current}/{maximum} 个 UTF-8 字节",
+  "authorityBodyTooLarge": "指示不得超过 {maximum} 个 UTF-8 字节。",
   "authorityDuration": "有效时长",
   "authorityDurationMinutes": "{minutes} 分钟",
   "@authorityDurationMinutes": {"placeholders": {"minutes": {"type": "int"}}},
@@ -739,5 +741,6 @@
   "mapZoneFinish": "完成并分享路线",
   "mapZonePublished": "已搜索路线已与验证团队共享。",
   "mapZoneLocationRequired": "记录路线需要位置权限并开启位置服务。",
+  "mapZoneRosterChanged": "由于当前名册或您的成员资格发生变化，记录已取消。",
   "mapZoneError": "无法记录或分享已搜索路线：{error}"
 }

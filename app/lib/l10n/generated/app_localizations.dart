@@ -4002,6 +4002,18 @@ abstract class AppLocalizations {
   /// **'Official instruction'**
   String get authorityBody;
 
+  /// No description provided for @authorityBodyBytes.
+  ///
+  /// In en, this message translates to:
+  /// **'{current}/{maximum} UTF-8 bytes'**
+  String authorityBodyBytes(int current, int maximum);
+
+  /// No description provided for @authorityBodyTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'The instruction must be no more than {maximum} UTF-8 bytes.'**
+  String authorityBodyTooLarge(int maximum);
+
   /// No description provided for @authorityDuration.
   ///
   /// In en, this message translates to:
@@ -4325,6 +4337,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Location permission and services are required to record a route.'**
   String get mapZoneLocationRequired;
+
+  /// No description provided for @mapZoneRosterChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording was cancelled because the active rescue roster or your membership changed.'**
+  String get mapZoneRosterChanged;
 
   /// No description provided for @mapZoneError.
   ///

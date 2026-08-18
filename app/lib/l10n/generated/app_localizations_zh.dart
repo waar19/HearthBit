@@ -2142,6 +2142,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authorityBody => '官方指示';
 
   @override
+  String authorityBodyBytes(int current, int maximum) {
+    return '$current/$maximum 个 UTF-8 字节';
+  }
+
+  @override
+  String authorityBodyTooLarge(int maximum) {
+    return '指示不得超过 $maximum 个 UTF-8 字节。';
+  }
+
+  @override
   String get authorityDuration => '有效时长';
 
   @override
@@ -2324,6 +2334,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mapZoneLocationRequired => '记录路线需要位置权限并开启位置服务。';
+
+  @override
+  String get mapZoneRosterChanged => '由于当前名册或您的成员资格发生变化，记录已取消。';
 
   @override
   String mapZoneError(String error) {

@@ -36,7 +36,9 @@ class _Mesh extends MeshController {
 }
 
 class _Roster extends RescueRosterController {
-  _Roster({required super.mesh, required this.current});
+  _Roster({required super.mesh, required this.current}) {
+    loading = false;
+  }
 
   RescueTeamRoster? current;
 
@@ -46,6 +48,11 @@ class _Roster extends RescueRosterController {
   @override
   List<RescueRosterMember> get members =>
       current?.members ?? const <RescueRosterMember>[];
+
+  void activate(RescueTeamRoster? roster) {
+    current = roster;
+    notifyListeners();
+  }
 }
 
 void main() {
@@ -107,6 +114,18 @@ void main() {
     mesh.emit(
       _message(id: 'duplicate', sender: _authority, announcement: accepted),
     );
+    mesh.emit(
+      _message(
+        id: 'external',
+        sender: _authority,
+        announcement: _announcement(
+          issuedAt: now,
+          announcementId: 'fedcba9876543210fedcba9876543210',
+          body: 'No debe aceptarse',
+        ),
+        external: true,
+      ),
+    );
     await _settle();
 
     expect(controller.announcements, hasLength(1));
@@ -151,6 +170,36 @@ void main() {
     roster.dispose();
     mesh.dispose();
   });
+
+  test('reintenta el anuncio si el roster aún no está listo', () async {
+    final now = DateTime.utc(2026, 8, 18, 12);
+    final mesh = _Mesh();
+    final roster = _Roster(mesh: mesh, current: null)..loading = true;
+    final controller = AuthorityAnnouncementController(
+      mesh: mesh,
+      roster: roster,
+      now: () => now,
+    );
+    await controller.initialize();
+    mesh.emit(
+      _message(
+        id: 'pending-roster',
+        sender: _authority,
+        announcement: _announcement(issuedAt: now),
+      ),
+    );
+    await _settle();
+    expect(controller.announcements, isEmpty);
+
+    roster.loading = false;
+    roster.activate(_roster());
+    await _settle();
+    expect(controller.announcements, hasLength(1));
+
+    controller.dispose();
+    roster.dispose();
+    mesh.dispose();
+  });
 }
 
 Future<void> _settle() =>
@@ -160,6 +209,7 @@ MeshMessage _message({
   required String id,
   required String sender,
   required AuthorityAnnouncement announcement,
+  bool external = false,
 }) => MeshMessage(
   id: id,
   sender: 'Origen',
@@ -169,6 +219,7 @@ MeshMessage _message({
   isMine: false,
   timestamp: announcement.issuedAt,
   channel: AuthorityAnnouncementController.channel,
+  external: external,
 );
 
 AuthorityAnnouncement _announcement({
@@ -176,15 +227,17 @@ AuthorityAnnouncement _announcement({
   String team = _team,
   required DateTime issuedAt,
   Duration lifetime = const Duration(hours: 1),
+  String announcementId = '0123456789abcdef0123456789abcdef',
+  String body = 'Orden oficial',
 }) => AuthorityAnnouncement(
   version: AuthorityAnnouncementCodec.version,
-  announcementId: '0123456789abcdef0123456789abcdef',
+  announcementId: announcementId,
   teamId: team,
   actorPeerId: actor,
   priority: AuthorityAnnouncementPriority.evacuate,
   issuedAt: issuedAt,
   expiresAt: issuedAt.add(lifetime),
-  body: 'Orden oficial',
+  body: body,
   callsign: 'Autoridad',
 );
 

@@ -55,7 +55,16 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
+    widget.sweptZones.addListener(_handleSweptZonesChanged);
     unawaited(_initialize());
+  }
+
+  void _handleSweptZonesChanged() {
+    if (!widget.sweptZones.isRecording && _positionSubscription != null) {
+      final subscription = _positionSubscription;
+      _positionSubscription = null;
+      unawaited(subscription?.cancel());
+    }
   }
 
   Future<void> _initialize() async {
@@ -109,12 +118,12 @@ class _MapScreenState extends State<MapScreen> {
   LatLng? get _initialCenter {
     final local = _localPosition;
     if (local != null) return LatLng(local.latitude, local.longitude);
-    for (final rescueCase in widget.rescueCases.cases) {
+    for (final rescueCase in _teamCases) {
       if (rescueCase.latitude != null && rescueCase.longitude != null) {
         return LatLng(rescueCase.latitude!, rescueCase.longitude!);
       }
     }
-    for (final zone in widget.sweptZones.zones) {
+    for (final zone in _teamZones) {
       if (zone.points.isNotEmpty) {
         return LatLng(zone.points.first.latitude, zone.points.first.longitude);
       }
@@ -123,7 +132,23 @@ class _MapScreenState extends State<MapScreen> {
     return peer == null ? null : LatLng(peer.latitude, peer.longitude);
   }
 
-  List<RescueCase> get _filteredCases => widget.rescueCases.cases
+  List<RescueCase> get _teamCases {
+    final teamId = widget.rescueCases.activeTeamId;
+    if (teamId == null) return const [];
+    return widget.rescueCases.cases
+        .where((rescueCase) => rescueCase.teamId == teamId)
+        .toList(growable: false);
+  }
+
+  List<SweptZone> get _teamZones {
+    final teamId = widget.rescueCases.activeTeamId;
+    if (teamId == null) return const [];
+    return widget.sweptZones.zones
+        .where((zone) => zone.teamId == teamId)
+        .toList(growable: false);
+  }
+
+  List<RescueCase> get _filteredCases => _teamCases
       .where(
         (rescueCase) => switch (_filter) {
           MapCaseFilter.active => rescueCase.state != RescueCaseState.closed,
@@ -349,6 +374,7 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   void dispose() {
+    widget.sweptZones.removeListener(_handleSweptZonesChanged);
     _positionSubscription?.cancel();
     if (widget.sweptZones.isRecording) widget.sweptZones.cancelRecording();
     _mapController.dispose();
@@ -625,7 +651,7 @@ class _MapScreenState extends State<MapScreen> {
               strokeWidth: 2,
             ),
           ),
-      ...widget.sweptZones.zones.map(
+      ..._teamZones.map(
         (zone) => Polyline(
           points: zone.points
               .map((point) => LatLng(point.latitude, point.longitude))
@@ -654,18 +680,33 @@ class _MapScreenState extends State<MapScreen> {
   Widget _buildRecordingControls(BuildContext context) {
     final zones = widget.sweptZones;
     if (!zones.isRecording) {
-      return Material(
-        color: Theme.of(context).colorScheme.surfaceContainer,
-        child: ListTile(
-          dense: true,
-          leading: const Icon(Icons.route_outlined),
-          title: Text(context.l10n.mapZoneConsent),
-          trailing: FilledButton.icon(
-            onPressed: zones.localMember == null ? null : _startRecording,
-            icon: const Icon(Icons.fiber_manual_record),
-            label: Text(context.l10n.mapZoneStart),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (zones.draftCancellationReason ==
+              SweptZoneDraftCancellationReason.rosterChanged)
+            Material(
+              color: Theme.of(context).colorScheme.errorContainer,
+              child: ListTile(
+                dense: true,
+                leading: const Icon(Icons.warning_amber_rounded),
+                title: Text(context.l10n.mapZoneRosterChanged),
+              ),
+            ),
+          Material(
+            color: Theme.of(context).colorScheme.surfaceContainer,
+            child: ListTile(
+              dense: true,
+              leading: const Icon(Icons.route_outlined),
+              title: Text(context.l10n.mapZoneConsent),
+              trailing: FilledButton.icon(
+                onPressed: zones.localMember == null ? null : _startRecording,
+                icon: const Icon(Icons.fiber_manual_record),
+                label: Text(context.l10n.mapZoneStart),
+              ),
+            ),
           ),
-        ),
+        ],
       );
     }
     return Material(

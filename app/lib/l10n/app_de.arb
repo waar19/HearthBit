@@ -681,6 +681,8 @@
   "authorityPriorityWarning": "WARNUNG",
   "authorityPriorityEvacuate": "EVAKUIEREN",
   "authorityBody": "Offizielle Anweisung",
+  "authorityBodyBytes": "{current}/{maximum} UTF-8-Bytes",
+  "authorityBodyTooLarge": "Die Anweisung darf höchstens {maximum} UTF-8-Bytes umfassen.",
   "authorityDuration": "Gültig für",
   "authorityDurationMinutes": "{minutes} Minuten",
   "@authorityDurationMinutes": {"placeholders": {"minutes": {"type": "int"}}},
@@ -739,5 +741,6 @@
   "mapZoneFinish": "Route abschließen und teilen",
   "mapZonePublished": "Abgesuchte Route wurde mit dem verifizierten Team geteilt.",
   "mapZoneLocationRequired": "Standortberechtigung und Standortdienste sind für die Aufzeichnung erforderlich.",
+  "mapZoneRosterChanged": "Die Aufzeichnung wurde abgebrochen, weil sich das aktive Team oder Ihre Mitgliedschaft geändert hat.",
   "mapZoneError": "Abgesuchte Route konnte nicht aufgezeichnet oder geteilt werden: {error}"
 }

@@ -194,6 +194,8 @@ class RescueIncidentList {
 class RescueCsv {
   RescueCsv._();
 
+  static const Set<int> _trustedNumericColumns = {6, 7, 8, 9, 11};
+
   static String build(Iterable<RescueIncident> incidents) {
     final rows = <List<String>>[
       [
@@ -233,16 +235,13 @@ class RescueCsv {
         ],
       ),
     ];
-    return '${rows.map((row) => row.map(_escape).join(',')).join('\r\n')}\r\n';
-  }
-
-  static String _escape(String value) {
-    if (!value.contains(RegExp(r'[,"\r\n]'))) return value;
-    return '"${value.replaceAll('"', '""')}"';
+    return _encodeCsv(rows, trustedNumericColumns: _trustedNumericColumns);
   }
 }
 
 abstract final class RescueOperationalCsv {
+  static const Set<int> _trustedNumericColumns = {9, 10};
+
   static String build(Iterable<RescueCase> cases, {required String teamId}) {
     final sorted =
         cases
@@ -283,12 +282,7 @@ abstract final class RescueOperationalCsv {
         ],
       ),
     ];
-    return '${rows.map((row) => row.map(_escape).join(',')).join('\r\n')}\r\n';
-  }
-
-  static String _escape(String value) {
-    if (!value.contains(RegExp(r'[,"\r\n]'))) return value;
-    return '"${value.replaceAll('"', '""')}"';
+    return _encodeCsv(rows, trustedNumericColumns: _trustedNumericColumns);
   }
 }
 
@@ -395,6 +389,34 @@ bool _validCoordinates(double? latitude, double? longitude) =>
     latitude <= 90 &&
     longitude >= -180 &&
     longitude <= 180;
+
+String _escapeCsv(String value, {required bool trustedNumeric}) {
+  final parsedNumber = trustedNumeric ? num.tryParse(value) : null;
+  final safeNumeric =
+      parsedNumber != null && parsedNumber.isFinite && value.trim() == value;
+  final neutralized = !safeNumeric && RegExp(r'^ *[=+\-@\t\r]').hasMatch(value)
+      ? "'$value"
+      : value;
+  if (!neutralized.contains(RegExp(r'[,"\t\r\n]'))) return neutralized;
+  return '"${neutralized.replaceAll('"', '""')}"';
+}
+
+String _encodeCsv(
+  List<List<String>> rows, {
+  required Set<int> trustedNumericColumns,
+}) {
+  final encodedRows = rows.map(
+    (row) => row.indexed
+        .map(
+          (entry) => _escapeCsv(
+            entry.$2,
+            trustedNumeric: trustedNumericColumns.contains(entry.$1),
+          ),
+        )
+        .join(','),
+  );
+  return '${encodedRows.join('\r\n')}\r\n';
+}
 
 class RescueExportService {
   RescueExportService._();

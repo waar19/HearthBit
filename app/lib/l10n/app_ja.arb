@@ -681,6 +681,8 @@
   "authorityPriorityWarning": "警告",
   "authorityPriorityEvacuate": "避難",
   "authorityBody": "公式指示",
+  "authorityBodyBytes": "{current}/{maximum} UTF-8 バイト",
+  "authorityBodyTooLarge": "指示は {maximum} UTF-8 バイト以内にしてください。",
   "authorityDuration": "有効期間",
   "authorityDurationMinutes": "{minutes}分",
   "@authorityDurationMinutes": {"placeholders": {"minutes": {"type": "int"}}},
@@ -739,5 +741,6 @@
   "mapZoneFinish": "経路を終了して共有",
   "mapZonePublished": "捜索済み経路を確認済みチームと共有しました。",
   "mapZoneLocationRequired": "経路の記録には位置情報の許可とサービスが必要です。",
+  "mapZoneRosterChanged": "有効な名簿またはメンバー情報が変更されたため、記録をキャンセルしました。",
   "mapZoneError": "捜索済み経路を記録または共有できませんでした：{error}"
 }

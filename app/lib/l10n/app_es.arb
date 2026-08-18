@@ -681,6 +681,8 @@
   "authorityPriorityWarning": "ADVERTENCIA",
   "authorityPriorityEvacuate": "EVACUAR",
   "authorityBody": "Instrucción oficial",
+  "authorityBodyBytes": "{current}/{maximum} bytes UTF-8",
+  "authorityBodyTooLarge": "La instrucción no puede superar {maximum} bytes UTF-8.",
   "authorityDuration": "Válido durante",
   "authorityDurationMinutes": "{minutes} minutos",
   "@authorityDurationMinutes": {"placeholders": {"minutes": {"type": "int"}}},
@@ -739,5 +741,6 @@
   "mapZoneFinish": "Finalizar y compartir recorrido",
   "mapZonePublished": "Recorrido barrido compartido con el equipo verificado.",
   "mapZoneLocationRequired": "Se requieren el permiso y el servicio de ubicación para registrar un recorrido.",
+  "mapZoneRosterChanged": "La grabación se canceló porque cambió el roster activo o tu membresía.",
   "mapZoneError": "No se pudo registrar o compartir el recorrido barrido: {error}"
 }

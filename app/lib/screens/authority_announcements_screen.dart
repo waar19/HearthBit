@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../controllers/authority_announcement_controller.dart';
@@ -21,6 +23,11 @@ class _AuthorityAnnouncementsScreenState
   Duration _lifetime = const Duration(hours: 1);
   bool _sending = false;
 
+  int get _bodyBytes => utf8.encode(_body.text.trim()).length;
+  bool get _bodyIsValid =>
+      _bodyBytes > 0 &&
+      _bodyBytes <= AuthorityAnnouncementCodec.maximumBodyBytes;
+
   @override
   void dispose() {
     _body.dispose();
@@ -28,7 +35,7 @@ class _AuthorityAnnouncementsScreenState
   }
 
   Future<void> _send() async {
-    if (_body.text.trim().isEmpty || _sending) return;
+    if (!_bodyIsValid || _sending) return;
     setState(() => _sending = true);
     try {
       await widget.controller.issue(
@@ -98,9 +105,20 @@ class _AuthorityAnnouncementsScreenState
                         controller: _body,
                         minLines: 2,
                         maxLines: 5,
-                        maxLength: AuthorityAnnouncementCodec.maximumBodyBytes,
+                        onChanged: (_) => setState(() {}),
                         decoration: InputDecoration(
                           labelText: context.l10n.authorityBody,
+                          counterText: context.l10n.authorityBodyBytes(
+                            _bodyBytes,
+                            AuthorityAnnouncementCodec.maximumBodyBytes,
+                          ),
+                          errorText:
+                              _bodyBytes >
+                                  AuthorityAnnouncementCodec.maximumBodyBytes
+                              ? context.l10n.authorityBodyTooLarge(
+                                  AuthorityAnnouncementCodec.maximumBodyBytes,
+                                )
+                              : null,
                         ),
                       ),
                       DropdownButtonFormField<Duration>(
@@ -133,7 +151,7 @@ class _AuthorityAnnouncementsScreenState
                       const SizedBox(height: 16),
                       FilledButton.icon(
                         key: const Key('authority-send'),
-                        onPressed: _sending ? null : _send,
+                        onPressed: _sending || !_bodyIsValid ? null : _send,
                         icon: _sending
                             ? const SizedBox.square(
                                 dimension: 18,

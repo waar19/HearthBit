@@ -2182,6 +2182,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get authorityBody => '公式指示';
 
   @override
+  String authorityBodyBytes(int current, int maximum) {
+    return '$current/$maximum UTF-8 バイト';
+  }
+
+  @override
+  String authorityBodyTooLarge(int maximum) {
+    return '指示は $maximum UTF-8 バイト以内にしてください。';
+  }
+
+  @override
   String get authorityDuration => '有効期間';
 
   @override
@@ -2364,6 +2374,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get mapZoneLocationRequired => '経路の記録には位置情報の許可とサービスが必要です。';
+
+  @override
+  String get mapZoneRosterChanged => '有効な名簿またはメンバー情報が変更されたため、記録をキャンセルしました。';
 
   @override
   String mapZoneError(String error) {

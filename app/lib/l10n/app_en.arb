@@ -738,6 +738,10 @@
   "authorityPriorityWarning": "WARNING",
   "authorityPriorityEvacuate": "EVACUATE",
   "authorityBody": "Official instruction",
+  "authorityBodyBytes": "{current}/{maximum} UTF-8 bytes",
+  "@authorityBodyBytes": {"placeholders": {"current": {"type": "int"}, "maximum": {"type": "int"}}},
+  "authorityBodyTooLarge": "The instruction must be no more than {maximum} UTF-8 bytes.",
+  "@authorityBodyTooLarge": {"placeholders": {"maximum": {"type": "int"}}},
   "authorityDuration": "Valid for",
   "authorityDurationMinutes": "{minutes} minutes",
   "@authorityDurationMinutes": {"placeholders": {"minutes": {"type": "int"}}},
@@ -803,6 +807,7 @@
   "mapZoneFinish": "Finish and share route",
   "mapZonePublished": "Swept route shared with the verified team.",
   "mapZoneLocationRequired": "Location permission and services are required to record a route.",
+  "mapZoneRosterChanged": "Recording was cancelled because the active rescue roster or your membership changed.",
   "mapZoneError": "Could not record or share the swept route: {error}",
   "@mapZoneError": {"placeholders": {"error": {"type": "String"}}}
 }

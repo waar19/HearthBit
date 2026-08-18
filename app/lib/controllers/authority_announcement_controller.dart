@@ -142,10 +142,12 @@ class AuthorityAnnouncementController extends ChangeNotifier {
               !message.content.startsWith(AuthorityAnnouncementCodec.marker)) {
             continue;
           }
-          _ingest(message);
-          _processedMessageIds.add(message.id);
-          if (_processedMessageIds.length > maximumProcessedMessageIds) {
-            _processedMessageIds.remove(_processedMessageIds.first);
+          final outcome = _ingest(message);
+          if (outcome != _IngestOutcome.retryLater) {
+            _processedMessageIds.add(message.id);
+            if (_processedMessageIds.length > maximumProcessedMessageIds) {
+              _processedMessageIds.remove(_processedMessageIds.first);
+            }
           }
         }
       } while (_processingRequested);
@@ -159,25 +161,32 @@ class AuthorityAnnouncementController extends ChangeNotifier {
     }
   }
 
-  void _ingest(MeshMessage message) {
+  _IngestOutcome _ingest(MeshMessage message) {
+    final activeRoster = roster.activeRoster;
+    if (activeRoster == null) {
+      return roster.loading
+          ? _IngestOutcome.retryLater
+          : _IngestOutcome.permanent;
+    }
     final senderPeerId = message.senderPeerId.trim().toLowerCase();
     final member = _memberByPeerId(senderPeerId);
-    if (member == null || member.role != RescueRosterRole.authority) return;
+    if (member == null || member.role != RescueRosterRole.authority) {
+      return _IngestOutcome.permanent;
+    }
     final announcement = AuthorityAnnouncementCodec.tryDecode(
       message.content,
       callsign: member.callsign,
     );
-    final activeRoster = roster.activeRoster;
     final now = _now().toUtc();
     if (announcement == null ||
-        activeRoster == null ||
         announcement.actorPeerId != senderPeerId ||
         announcement.teamId != activeRoster.teamId ||
         announcement.issuedAt.isAfter(now.add(maximumFutureSkew)) ||
         !announcement.expiresAt.isAfter(now)) {
-      return;
+      return _IngestOutcome.permanent;
     }
     _accept(announcement);
+    return _IngestOutcome.accepted;
   }
 
   void _accept(AuthorityAnnouncement announcement) {
@@ -241,3 +250,5 @@ class AuthorityAnnouncementController extends ChangeNotifier {
     super.dispose();
   }
 }
+
+enum _IngestOutcome { accepted, permanent, retryLater }

@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'rescue_protocol_limits.dart';
+
 class SweptZonePoint {
   const SweptZonePoint({
     required this.latitude,
@@ -40,7 +42,8 @@ abstract final class SweptZoneCodec {
   static const int minimumPoints = 2;
   static const int maximumPoints = 256;
   static const int maximumPayloadBytes = 12 * 1024;
-  static const int maximumCallsignBytes = 48;
+  static const int maximumCallsignBytes =
+      RescueProtocolLimits.maximumCallsignBytes;
   static const int maximumDurationSeconds = 24 * 60 * 60;
   static const int maximumTimestampMilliseconds = 8640000000000000;
 
