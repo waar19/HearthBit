@@ -413,6 +413,29 @@ Acción: mostrar el estado real, no ocultar restricciones, registrar fabricante 
 perfil de batería, y validar cada modelo físico. Una promesa genérica de
 background basada en emulador o manifiesto es inválida.
 
+## Revisión de seguridad del firmware de ancla
+
+La clasificación siguiente se basa en el firmware actual de
+`firmware/anchor-node` y en el impacto para el piloto. `P0` bloquea una
+afirmación de integridad o persistencia; `P1` y `P2` son hardening pendiente
+antes de producción. La columna «Mitigación futura» no describe un control
+presente ni resuelve el riesgo en esta fase.
+
+| Hallazgo verificado | Estado y prioridad | Justificación para el piloto | Mitigación futura |
+| --- | --- | --- | --- |
+| NVS sin flash encryption | **Abierto — P0** | `sdkconfig.defaults` no habilita flash encryption y las claves privadas Curve25519/Ed25519 se persisten en NVS. Con acceso físico, extraer o clonar esas claves invalida la continuidad de identidad y la integridad atribuida al nodo. | Definir un perfil de producción con flash encryption, provisión y recuperación de claves; validarlo en C3/S3 físicos antes de cerrar el gate. |
+| Secure Boot no habilitado | **Abierto — P0** | El perfil versionado tampoco habilita Secure Boot. La firma OTA y el rollback protegen el flujo OTA normal, pero no impiden que un atacante físico sustituya el firmware por otra vía; por eso la integridad de ejecución no está demostrada. | Habilitar y provisionar Secure Boot junto con flash encryption, documentar recuperación y verificar la cadena completa en hardware. |
+| Compatibilidad con `ANNOUNCE` sin firma | **Abierto — P2** | El firmware emite su propio `ANNOUNCE` firmado con Ed25519 y verifica en recepción el binding `senderId = SHA-256(clave Noise)[0:8]` y, cuando existe, la firma contra la clave anunciada. Sin embargo, el ingress compatible puede conservar un anuncio sin firma o con firma no verificable como identidad **unverified**; no le concede estado `verified`, courier ni confianza/pin. El gap restante es de representación y posible confusión de identidad, no una concesión actual de esos privilegios, por lo que no se cierra globalmente ni se clasifica P0. El primer anuncio válido sigue siendo autoafirmado/TOFU; además, el relay puede cambiar TTL y el replay de sync `isRSR`, campos excluidos de la firma, pero no identidad, payload ni timestamp firmados. | Mantener pruebas que separen identidad observada de verificada, impedir que UI o políticas eleven `unverified`, y evaluar el retiro de compatibilidad unsigned cuando la interoperabilidad lo permita. |
+| Caché de deduplicación de 64 entradas | **Abierto — P2** | `bitle_mesh.c` usa un anillo de 64 huellas. Una tormenta de paquetes únicos puede expulsar rápido una huella y permitir que una copia antigua vuelva a procesarse o retransmitirse. El riesgo es acotado por TTL y memoria fija, pero la caché no garantiza deduplicación bajo tormenta. | Medir tasa de evicción en pruebas adversarias y dimensionar o temporizar la caché junto con límites de ingreso, sin prometer defensa frente a jamming. |
+| Watchdogs y suscripción | **Parcial — P1** | Sí existe un watchdog funcional de suscripción BLE: desconecta a los 30 segundos enlaces que no habilitan notificaciones, y el bucle principal lo ejecuta mediante `bitchat_ble_poll()`. No hay configuración `CONFIG_ESP_TASK_WDT*` explícita en `sdkconfig.defaults` ni llamadas `esp_task_wdt_*` en el firmware; el estado efectivo del Task Watchdog depende de los defaults de ESP-IDF y del `sdkconfig` generado. Por tanto, no se afirma que esté ausente ni que cubra stalls de las tareas. | Fijar explícitamente la política del Task Watchdog por target, registrar resets y hacer fault injection en tareas BLE, Noise, OTA y almacenamiento sobre hardware. |
+| Rotación de owner key OTA | **Abierto — Future** | OTA sí verifica manifiesto Ed25519 con una owner key compilada, comprueba SHA-256, exige versión creciente y usa prueba A/B con rollback. El firmware y el procedimiento actuales confían en una sola clave y no implementan rotación o revocación autenticada de esa owner key; una pérdida bloquea futuras OTA y un compromiso afecta toda la flota que la confía. No invalida por sí solo el piloto mientras la clave permanezca controlada, pero bloquea escalar esa confianza como control de producción. | Diseñar una transición de claves con solapamiento, autorización por la clave anterior, anti-rollback/revocación y una ruta física de recuperación, y probarla antes de depender de OTA en producción. |
+
+Los dos `P0` físicos anteriores **no están superados**. Una caja sellada o una
+owner key OTA offline reducen exposición operativa, pero no reemplazan flash
+encryption, Secure Boot ni evidencia física. La declaración «lista para
+emergencias reales» continúa bloqueada además por todo gate P0 físico aplicable
+que permanezca `PENDING`, `FAIL` o `BLOCKED`.
+
 ## Riesgos priorizados y aceptación
 
 ### Críticos
@@ -452,6 +475,25 @@ background basada en emulador o manifiesto es inválida.
 
 Aceptar un riesgo significa documentar responsable, entorno, controles y fecha
 de revisión; no significa declarar que dejó de existir.
+
+## Métricas honestas de retransmisión y saltos
+
+`EmergencyDeliveryState.relayed` se establece en Flutter únicamente después de
+que `sendEmergency` o `retryEmergency` termina con éxito en el stack nativo.
+Ese estado confirma que la transmisión local fue aceptada; no observa ni prueba
+la primera retransmisión realizada por un peer remoto.
+
+El TTL de origen predeterminado es 7 y cada relay lo decrementa antes de
+retransmitir. Sin embargo, los reintentos de emergencia vuelven a emitir con el
+TTL inicial. Además, el TTL del wire es mutable y no está firmado: la firma
+canónica lo normaliza a cero para permitir el decremento por relays. Por estas
+razones, calcular `7 - ttl` mezcla intentos distintos y datos no autenticados;
+no produce un conteo de saltos fiable.
+
+La pantalla y el export de diagnósticos publican las claves reales camelCase
+`firstRelayObserved: unavailable` y `hopCount: unavailable` —equivalentes
+conceptuales a «primer relay observado» y «conteo de saltos»—. No estiman
+ninguno de esos valores a partir de `relayed`, TTL ni snapshots nativos.
 
 ## Señales operativas y respuesta
 

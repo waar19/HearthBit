@@ -91,6 +91,10 @@ class _DrillMessages extends MessageRepository {
   Future<List<EmergencyDelivery>> loadEmergencyDeliveries() async => const [];
 
   @override
+  Future<SosOperationalMetrics> loadSosOperationalMetrics() async =>
+      const SosOperationalMetrics();
+
+  @override
   Future<void> expireEmergencyDeliveries(DateTime now) async {}
 
   @override

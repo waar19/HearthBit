@@ -121,6 +121,7 @@ class MeshController extends ChangeNotifier {
   int storeForwardEntries = 0;
   MeshOperationalCounters operationalCounters = const MeshOperationalCounters();
   String operationalCountersLifetime = 'unknown';
+  SosOperationalMetrics sosOperationalMetrics = const SosOperationalMetrics();
   Set<String> activeTransports = const {};
   DateTime? radarConsentUntil;
   PendingBeaconRequest? pendingBeaconRequest;
@@ -308,6 +309,7 @@ class MeshController extends ChangeNotifier {
     _emergencyDeliveries
       ..clear()
       ..addAll(await _repository.loadEmergencyDeliveries());
+    sosOperationalMetrics = await _repository.loadSosOperationalMetrics();
     for (final pending in _privateMessageOutbox) {
       if (_messages.every((message) => message.id != pending.localId)) {
         _messages.add(_pendingMessage(pending));
@@ -377,8 +379,12 @@ class MeshController extends ChangeNotifier {
   }
 
   Future<void> refreshDiagnostics({bool notify = true}) async {
+    await refreshSosOperationalMetrics(notify: false);
     final diagnostics = await _platform.getMeshDiagnostics();
-    if (diagnostics.isEmpty) return;
+    if (diagnostics.isEmpty) {
+      if (notify) notifyListeners();
+      return;
+    }
     final diagnosticStatus =
         diagnostics['status'] as String? ??
         diagnostics['meshStatus'] as String?;
@@ -425,6 +431,11 @@ class MeshController extends ChangeNotifier {
           .where((value) => value.isNotEmpty)
           .toSet();
     }
+    if (notify) notifyListeners();
+  }
+
+  Future<void> refreshSosOperationalMetrics({bool notify = true}) async {
+    sosOperationalMetrics = await _repository.loadSosOperationalMetrics();
     if (notify) notifyListeners();
   }
 
@@ -1279,6 +1290,7 @@ class MeshController extends ChangeNotifier {
     if (_emergencyDeliveries.length > 200) {
       _emergencyDeliveries.removeRange(200, _emergencyDeliveries.length);
     }
+    await refreshSosOperationalMetrics(notify: false);
     notifyListeners();
     return delivery;
   }
@@ -1417,6 +1429,7 @@ class MeshController extends ChangeNotifier {
     } else {
       _emergencyDeliveries.insert(0, delivery);
     }
+    await refreshSosOperationalMetrics(notify: false);
     notifyListeners();
   }
 
@@ -1435,6 +1448,7 @@ class MeshController extends ChangeNotifier {
         _emergencyDeliveries
           ..clear()
           ..addAll(await _repository.loadEmergencyDeliveries());
+        await refreshSosOperationalMetrics(notify: false);
         if (!canSend) break;
         final now = DateTime.now();
         final due = _emergencyDeliveries
@@ -1483,6 +1497,7 @@ class MeshController extends ChangeNotifier {
     peerLocations.clear();
     _privateMessageOutbox.clear();
     _emergencyDeliveries.clear();
+    sosOperationalMetrics = const SosOperationalMetrics();
     _emergencyRetryTimer?.cancel();
     _emergencyRetryTimer = null;
     _peers.clear();
@@ -1901,6 +1916,7 @@ class MeshController extends ChangeNotifier {
     _emergencyDeliveries
       ..clear()
       ..addAll(await _repository.loadEmergencyDeliveries());
+    await refreshSosOperationalMetrics(notify: false);
     _scheduleEmergencyRetry();
     DiagnosticsLog.instance.info('emergency.outbox.acknowledged');
     notifyListeners();

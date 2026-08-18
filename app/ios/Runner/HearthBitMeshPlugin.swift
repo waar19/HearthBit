@@ -66,6 +66,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private let peerIdentityPins = IOSPeerIdentityPinStore()
   private let unknownIngressRateLimiter = IOSUnknownIngressRateLimiter()
   private let openEmergencyRateLimiter = IOSOpenEmergencyRateLimiter()
+  private let packetCounters = IOSMeshPacketCounters()
   private let emergencyFingerprints = IOSEmergencyFingerprintCache()
   private var central: CBCentralManager?
   private var peripheralManager: CBPeripheralManager?
@@ -2334,7 +2335,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func depositCourierWithDirectAnchors(innerPacket: IOSMeshPacket) {
     let directPeerIDs = Set(peripheralPeers.values)
     for anchor in peers.values
-    where anchor.isInfrastructure && directPeerIDs.contains(anchor.id) {
+    where anchor.role.acceptsCourierDeposits && directPeerIDs.contains(anchor.id) {
       if sessions[anchor.id]?.established == true {
         sendCourierDeposit(anchorID: anchor.id, innerPacket: innerPacket)
       } else {
@@ -2999,6 +3000,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     frames: Int,
     message: String? = nil
   ) {
+    packetCounters.recordTransportFailure(code: code)
     var event: [String: Any] = [
       "type": "bleTransportFailure",
       "code": code,
@@ -3024,16 +3026,24 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       }
       return
     }
-    guard
-      let fingerprint = IOSMeshProtocol.relayFingerprint(data),
-      let packet = IOSMeshProtocol.decode(data)
-    else { return }
+    packetCounters.recordReceived()
+    guard let packet = IOSMeshProtocol.decode(data) else {
+      packetCounters.recordRejected()
+      return
+    }
+    guard let fingerprint = IOSMeshProtocol.relayFingerprint(data) else {
+      packetCounters.recordRejected()
+      return
+    }
     let senderID = packet.senderID.hex
     if senderID == identity.peerIDHex { return }
     let pinnedIdentity = peerIdentityPins.pin(for: senderID)
     if pinnedIdentity == nil {
       let rateLimitKey = source?.uuidString ?? senderID
-      guard unknownIngressRateLimiter.allow(source: rateLimitKey) else { return }
+      guard unknownIngressRateLimiter.allow(source: rateLimitKey) else {
+        packetCounters.recordDroppedRateLimit()
+        return
+      }
     }
     var validatedAnnouncement: IOSMeshProtocol.Announcement?
     var validatedKeyRotation: IOSMeshProtocol.KeyRotation?
@@ -3041,10 +3051,16 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       guard let announcement = validateAnnouncementIdentity(
         packet,
         senderID: senderID
-      ) else { return }
+      ) else {
+        packetCounters.recordRejected()
+        return
+      }
       validatedAnnouncement = announcement
     } else if packet.type == IOSMeshProtocol.keyRotation {
-      guard let rotation = validateKeyRotation(packet, senderID: senderID) else { return }
+      guard let rotation = validateKeyRotation(packet, senderID: senderID) else {
+        packetCounters.recordRejected()
+        return
+      }
       validatedKeyRotation = rotation
     } else {
       let originalType = packet.type == IOSMeshProtocol.fragment
@@ -3052,12 +3068,18 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         : nil
       let effectiveType = originalType ?? packet.type
       if IOSMeshIngressPolicy.requiresPublicSignature(effectiveType) {
-        guard let pinnedIdentity else { return }
+        guard let pinnedIdentity else {
+          packetCounters.recordRejected()
+          return
+        }
         if packet.type != IOSMeshProtocol.fragment {
           guard IOSMeshIngressPolicy.accepts(
             packet,
             signingPublicKey: pinnedIdentity.signingPublicKey
-          ) else { return }
+          ) else {
+            packetCounters.recordRejected()
+            return
+          }
         }
       }
     }
@@ -3067,15 +3089,23 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         in: pendingRelay.sourceKeys
       )
       pendingRelays[fingerprint] = pendingRelay
+      packetCounters.recordDeduplicated()
       return
     }
-    if seen[fingerprint] != nil { return }
+    if seen[fingerprint] != nil {
+      packetCounters.recordDeduplicated()
+      return
+    }
     if isOpenEmergencyLanPacket(packet) {
       guard openEmergencyRateLimiter.allow(
         knownRelationship: isKnownRelationship(senderID)
-      ) else { return }
+      ) else {
+        packetCounters.recordDroppedRateLimit()
+        return
+      }
     }
     rememberSeenFingerprint(fingerprint)
+    packetCounters.recordAccepted()
     let forUs = packet.recipientID == nil ||
       packet.recipientID == identity.peerID ||
       packet.recipientID == Data(repeating: 0xff, count: 8)
@@ -3096,13 +3126,14 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let directedRecipient = packet.recipientID.map {
       $0 != Data(repeating: 0xff, count: 8)
     } ?? false
-    if IOSMeshRelayPolicy.shouldRelay(
+    let shouldRelay = IOSMeshRelayPolicy.shouldRelay(
       role: localRole,
       packetType: effectiveType,
       ttl: packet.ttl,
       addressedToLocalNode: addressedToLocalNode,
       hasDirectedRecipient: directedRecipient
-    ) {
+    )
+    if shouldRelay {
       var relayed = packet
       relayed.ttl -= 1
       let emergency =
@@ -3116,6 +3147,19 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         source: source,
         emergency: emergency
       )
+    } else if packet.ttl <= 1 {
+      let candidateTTL = effectiveType == IOSMeshProtocol.beaconControl
+        ? IOSBeaconControlProtocol.initialTTL
+        : 2
+      if IOSMeshRelayPolicy.shouldRelay(
+        role: localRole,
+        packetType: effectiveType,
+        ttl: candidateTTL,
+        addressedToLocalNode: addressedToLocalNode,
+        hasDirectedRecipient: directedRecipient
+      ) {
+        packetCounters.recordDroppedTtl()
+      }
     }
   }
 
@@ -3159,6 +3203,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         )
       self.relayOperationalCounters.recordExpiration(suppressed: !shouldRelay)
       guard self.running, self.localRole.relaysPackets, shouldRelay else { return }
+      self.packetCounters.recordForwarded()
       self.broadcast(pending.packet, excluding: pending.source)
     }
     pendingRelays[fingerprint] = PendingRelay(
@@ -3193,6 +3238,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     return openEmergencyRateLimiter.operationalCounters()
       .merging(peerIdentityPins.operationalCounters()) { _, latest in latest }
       .merging(relayOperationalCounters.snapshot()) { _, latest in latest }
+      .merging(packetCounters.snapshot()) { _, latest in latest }
   }
 
   private func validateAnnouncementIdentity(

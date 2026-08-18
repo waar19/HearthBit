@@ -878,6 +878,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnosticsTrustConflicts => '信任冲突';
 
   @override
+  String get diagnosticsPacketsReceived => '入口接收的数据包';
+
+  @override
+  String get diagnosticsPacketsAccepted => '已接受的唯一数据包';
+
+  @override
+  String get diagnosticsPacketsRejected => '永久拒绝的数据包';
+
+  @override
+  String get diagnosticsPacketsForwarded => '已中继到广播的数据包';
+
+  @override
+  String get diagnosticsPacketsDeduplicated => '重复数据包';
+
+  @override
+  String get diagnosticsPacketsExpired => '明确过期的数据包';
+
+  @override
+  String get diagnosticsPacketsDroppedRateLimit => '因速率限制丢弃的数据包';
+
+  @override
+  String get diagnosticsPacketsDroppedTtl => '因TTL丢弃的中继候选';
+
+  @override
+  String get diagnosticsPacketsFailedTransport => '失败的链路尝试';
+
+  @override
   String get diagnosticsOperationalCountersLifetime => '计数周期';
 
   @override
@@ -885,6 +912,48 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get diagnosticsLifetimeUnknown => '未报告周期';
+
+  @override
+  String get diagnosticsSosMetricsSection => 'SOS投递指标 · 保留的发件箱';
+
+  @override
+  String get diagnosticsSosMetricsScope => '指标范围';
+
+  @override
+  String get diagnosticsSosMetricsScopeRetainedOutbox => '保留的发件箱（最多200条紧急记录）';
+
+  @override
+  String get diagnosticsSosCreated => '已创建SOS';
+
+  @override
+  String get diagnosticsSosRelayedLocal => '已确认本地发送的SOS';
+
+  @override
+  String get diagnosticsSosAckReceived => '至少收到一个ACK的SOS';
+
+  @override
+  String get diagnosticsSosAckCount => 'SOS ACK总数';
+
+  @override
+  String get diagnosticsSosExpired => '已过期SOS';
+
+  @override
+  String get diagnosticsSosDeliveryLatency => '最新SOS：首次ACK延迟';
+
+  @override
+  String get diagnosticsValueUnavailable => '不可用';
+
+  @override
+  String get diagnosticsFirstRelayObserved => '首次观测到远端中继';
+
+  @override
+  String get diagnosticsFirstRelayObservedReason => '“已中继”状态仅确认原生协议栈接受了本地发送。';
+
+  @override
+  String get diagnosticsHopCount => '跳数';
+
+  @override
+  String get diagnosticsHopCountReason => '紧急重试会重置TTL，且传输中的TTL未签名。';
 
   @override
   String get diagnosticsTransportsSection => '活跃传输方式';

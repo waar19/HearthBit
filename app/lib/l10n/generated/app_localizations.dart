@@ -1698,6 +1698,60 @@ abstract class AppLocalizations {
   /// **'Trust conflicts'**
   String get diagnosticsTrustConflicts;
 
+  /// No description provided for @diagnosticsPacketsReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'Packets received at ingress'**
+  String get diagnosticsPacketsReceived;
+
+  /// No description provided for @diagnosticsPacketsAccepted.
+  ///
+  /// In en, this message translates to:
+  /// **'Unique packets accepted'**
+  String get diagnosticsPacketsAccepted;
+
+  /// No description provided for @diagnosticsPacketsRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'Packets permanently rejected'**
+  String get diagnosticsPacketsRejected;
+
+  /// No description provided for @diagnosticsPacketsForwarded.
+  ///
+  /// In en, this message translates to:
+  /// **'Packets relayed to broadcast'**
+  String get diagnosticsPacketsForwarded;
+
+  /// No description provided for @diagnosticsPacketsDeduplicated.
+  ///
+  /// In en, this message translates to:
+  /// **'Duplicate packets'**
+  String get diagnosticsPacketsDeduplicated;
+
+  /// No description provided for @diagnosticsPacketsExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Packets explicitly expired'**
+  String get diagnosticsPacketsExpired;
+
+  /// No description provided for @diagnosticsPacketsDroppedRateLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Packets dropped by rate limit'**
+  String get diagnosticsPacketsDroppedRateLimit;
+
+  /// No description provided for @diagnosticsPacketsDroppedTtl.
+  ///
+  /// In en, this message translates to:
+  /// **'Relay candidates dropped by TTL'**
+  String get diagnosticsPacketsDroppedTtl;
+
+  /// No description provided for @diagnosticsPacketsFailedTransport.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed link attempts'**
+  String get diagnosticsPacketsFailedTransport;
+
   /// No description provided for @diagnosticsOperationalCountersLifetime.
   ///
   /// In en, this message translates to:
@@ -1715,6 +1769,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Period not reported'**
   String get diagnosticsLifetimeUnknown;
+
+  /// No description provided for @diagnosticsSosMetricsSection.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS delivery metrics · retained outbox'**
+  String get diagnosticsSosMetricsSection;
+
+  /// No description provided for @diagnosticsSosMetricsScope.
+  ///
+  /// In en, this message translates to:
+  /// **'Metric scope'**
+  String get diagnosticsSosMetricsScope;
+
+  /// No description provided for @diagnosticsSosMetricsScopeRetainedOutbox.
+  ///
+  /// In en, this message translates to:
+  /// **'Retained outbox (up to 200 emergencies)'**
+  String get diagnosticsSosMetricsScopeRetainedOutbox;
+
+  /// No description provided for @diagnosticsSosCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS created'**
+  String get diagnosticsSosCreated;
+
+  /// No description provided for @diagnosticsSosRelayedLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS with confirmed local transmission'**
+  String get diagnosticsSosRelayedLocal;
+
+  /// No description provided for @diagnosticsSosAckReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS with at least one ACK'**
+  String get diagnosticsSosAckReceived;
+
+  /// No description provided for @diagnosticsSosAckCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Total SOS ACKs'**
+  String get diagnosticsSosAckCount;
+
+  /// No description provided for @diagnosticsSosExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS expired'**
+  String get diagnosticsSosExpired;
+
+  /// No description provided for @diagnosticsSosDeliveryLatency.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest SOS: latency to first ACK'**
+  String get diagnosticsSosDeliveryLatency;
+
+  /// No description provided for @diagnosticsValueUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable'**
+  String get diagnosticsValueUnavailable;
+
+  /// No description provided for @diagnosticsFirstRelayObserved.
+  ///
+  /// In en, this message translates to:
+  /// **'First remote relay observed'**
+  String get diagnosticsFirstRelayObserved;
+
+  /// No description provided for @diagnosticsFirstRelayObservedReason.
+  ///
+  /// In en, this message translates to:
+  /// **'Relayed state only confirms a local transmission accepted by the native stack.'**
+  String get diagnosticsFirstRelayObservedReason;
+
+  /// No description provided for @diagnosticsHopCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Hop count'**
+  String get diagnosticsHopCount;
+
+  /// No description provided for @diagnosticsHopCountReason.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency retries reset TTL, and the transmitted TTL is not signed.'**
+  String get diagnosticsHopCountReason;
 
   /// No description provided for @diagnosticsTransportsSection.
   ///

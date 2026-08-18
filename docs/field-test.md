@@ -10,6 +10,9 @@ manifiesto y reporte en estado `PENDING`/`BLOCKED`; la validación automática
 solo puede elevar el paquete a `READY_FOR_REVIEW` y nunca declara `PASS` ni
 evidencia RF.
 
+Para ejecutar los cinco gates P0 prioritarios y las tres topologías mínimas del
+piloto, use la [guía de ejecución P0](p0-execution-guide.md).
+
 ## Gates P0 de publicación
 
 Estos casos bloquean la declaración «lista para emergencias reales». Su estado

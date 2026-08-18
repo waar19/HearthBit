@@ -925,6 +925,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String get diagnosticsTrustConflicts => 'Trust conflicts';
 
   @override
+  String get diagnosticsPacketsReceived => 'Packets received at ingress';
+
+  @override
+  String get diagnosticsPacketsAccepted => 'Unique packets accepted';
+
+  @override
+  String get diagnosticsPacketsRejected => 'Packets permanently rejected';
+
+  @override
+  String get diagnosticsPacketsForwarded => 'Packets relayed to broadcast';
+
+  @override
+  String get diagnosticsPacketsDeduplicated => 'Duplicate packets';
+
+  @override
+  String get diagnosticsPacketsExpired => 'Packets explicitly expired';
+
+  @override
+  String get diagnosticsPacketsDroppedRateLimit =>
+      'Packets dropped by rate limit';
+
+  @override
+  String get diagnosticsPacketsDroppedTtl => 'Relay candidates dropped by TTL';
+
+  @override
+  String get diagnosticsPacketsFailedTransport => 'Failed link attempts';
+
+  @override
   String get diagnosticsOperationalCountersLifetime => 'Counter period';
 
   @override
@@ -932,6 +960,54 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagnosticsLifetimeUnknown => 'Period not reported';
+
+  @override
+  String get diagnosticsSosMetricsSection =>
+      'SOS delivery metrics · retained outbox';
+
+  @override
+  String get diagnosticsSosMetricsScope => 'Metric scope';
+
+  @override
+  String get diagnosticsSosMetricsScopeRetainedOutbox =>
+      'Retained outbox (up to 200 emergencies)';
+
+  @override
+  String get diagnosticsSosCreated => 'SOS created';
+
+  @override
+  String get diagnosticsSosRelayedLocal =>
+      'SOS with confirmed local transmission';
+
+  @override
+  String get diagnosticsSosAckReceived => 'SOS with at least one ACK';
+
+  @override
+  String get diagnosticsSosAckCount => 'Total SOS ACKs';
+
+  @override
+  String get diagnosticsSosExpired => 'SOS expired';
+
+  @override
+  String get diagnosticsSosDeliveryLatency =>
+      'Latest SOS: latency to first ACK';
+
+  @override
+  String get diagnosticsValueUnavailable => 'Unavailable';
+
+  @override
+  String get diagnosticsFirstRelayObserved => 'First remote relay observed';
+
+  @override
+  String get diagnosticsFirstRelayObservedReason =>
+      'Relayed state only confirms a local transmission accepted by the native stack.';
+
+  @override
+  String get diagnosticsHopCount => 'Hop count';
+
+  @override
+  String get diagnosticsHopCountReason =>
+      'Emergency retries reset TTL, and the transmitted TTL is not signed.';
 
   @override
   String get diagnosticsTransportsSection => 'Active transports';

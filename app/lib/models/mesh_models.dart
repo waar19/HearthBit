@@ -62,6 +62,15 @@ class MeshOperationalCounters {
     this.relayDampingExpired = 0,
     this.trustStoreEvictions = 0,
     this.trustConflicts = 0,
+    this.packetsReceived = 0,
+    this.packetsAccepted = 0,
+    this.packetsRejected = 0,
+    this.packetsForwarded = 0,
+    this.packetsDeduplicated = 0,
+    this.packetsExpired = 0,
+    this.packetsDroppedRateLimit = 0,
+    this.packetsDroppedTtl = 0,
+    this.packetsFailedTransport = 0,
   });
 
   final int openEmergencyRateLimitedKnown;
@@ -71,6 +80,15 @@ class MeshOperationalCounters {
   final int relayDampingExpired;
   final int trustStoreEvictions;
   final int trustConflicts;
+  final int packetsReceived;
+  final int packetsAccepted;
+  final int packetsRejected;
+  final int packetsForwarded;
+  final int packetsDeduplicated;
+  final int packetsExpired;
+  final int packetsDroppedRateLimit;
+  final int packetsDroppedTtl;
+  final int packetsFailedTransport;
 
   @Deprecated('Use openEmergencyRateLimitedKnown')
   int get openSosRateLimitedKnown => openEmergencyRateLimitedKnown;
@@ -101,8 +119,58 @@ class MeshOperationalCounters {
       relayDampingExpired: counter('relayDampingExpired'),
       trustStoreEvictions: counter('trustStoreEvictions'),
       trustConflicts: counter('trustConflicts'),
+      packetsReceived: counter('packetsReceived'),
+      packetsAccepted: counter('packetsAccepted'),
+      packetsRejected: counter('packetsRejected'),
+      packetsForwarded: counter('packetsForwarded'),
+      packetsDeduplicated: counter('packetsDeduplicated'),
+      packetsExpired: counter('packetsExpired'),
+      packetsDroppedRateLimit: counter('packetsDroppedRateLimit'),
+      packetsDroppedTtl: counter('packetsDroppedTtl'),
+      packetsFailedTransport: counter('packetsFailedTransport'),
     );
   }
+
+  MeshOperationalCounters copyWith({
+    int? openEmergencyRateLimitedKnown,
+    int? openEmergencyRateLimitedUnknown,
+    int? relayDampingSuppressed,
+    int? relayDampingScheduled,
+    int? relayDampingExpired,
+    int? trustStoreEvictions,
+    int? trustConflicts,
+    int? packetsReceived,
+    int? packetsAccepted,
+    int? packetsRejected,
+    int? packetsForwarded,
+    int? packetsDeduplicated,
+    int? packetsExpired,
+    int? packetsDroppedRateLimit,
+    int? packetsDroppedTtl,
+    int? packetsFailedTransport,
+  }) => MeshOperationalCounters(
+    openEmergencyRateLimitedKnown:
+        openEmergencyRateLimitedKnown ?? this.openEmergencyRateLimitedKnown,
+    openEmergencyRateLimitedUnknown:
+        openEmergencyRateLimitedUnknown ?? this.openEmergencyRateLimitedUnknown,
+    relayDampingSuppressed:
+        relayDampingSuppressed ?? this.relayDampingSuppressed,
+    relayDampingScheduled: relayDampingScheduled ?? this.relayDampingScheduled,
+    relayDampingExpired: relayDampingExpired ?? this.relayDampingExpired,
+    trustStoreEvictions: trustStoreEvictions ?? this.trustStoreEvictions,
+    trustConflicts: trustConflicts ?? this.trustConflicts,
+    packetsReceived: packetsReceived ?? this.packetsReceived,
+    packetsAccepted: packetsAccepted ?? this.packetsAccepted,
+    packetsRejected: packetsRejected ?? this.packetsRejected,
+    packetsForwarded: packetsForwarded ?? this.packetsForwarded,
+    packetsDeduplicated: packetsDeduplicated ?? this.packetsDeduplicated,
+    packetsExpired: packetsExpired ?? this.packetsExpired,
+    packetsDroppedRateLimit:
+        packetsDroppedRateLimit ?? this.packetsDroppedRateLimit,
+    packetsDroppedTtl: packetsDroppedTtl ?? this.packetsDroppedTtl,
+    packetsFailedTransport:
+        packetsFailedTransport ?? this.packetsFailedTransport,
+  );
 
   Map<String, int> toJson() => {
     'openEmergencyRateLimitedKnown': openEmergencyRateLimitedKnown,
@@ -112,6 +180,15 @@ class MeshOperationalCounters {
     'relayDampingExpired': relayDampingExpired,
     'trustStoreEvictions': trustStoreEvictions,
     'trustConflicts': trustConflicts,
+    'packetsReceived': packetsReceived,
+    'packetsAccepted': packetsAccepted,
+    'packetsRejected': packetsRejected,
+    'packetsForwarded': packetsForwarded,
+    'packetsDeduplicated': packetsDeduplicated,
+    'packetsExpired': packetsExpired,
+    'packetsDroppedRateLimit': packetsDroppedRateLimit,
+    'packetsDroppedTtl': packetsDroppedTtl,
+    'packetsFailedTransport': packetsFailedTransport,
   };
 }
 
@@ -560,6 +637,60 @@ enum EmergencyDeliveryState {
       _ => EmergencyDeliveryState.pending,
     };
   }
+}
+
+/// Métricas agregadas del outbox SOS retenido; no contienen contenido ni IDs.
+class SosOperationalMetrics {
+  static const retainedOutboxScope = 'retained_outbox';
+
+  const SosOperationalMetrics({
+    this.sosCreated = 0,
+    this.sosRelayedLocal = 0,
+    this.sosAckReceived = 0,
+    this.sosAckCount = 0,
+    this.sosExpired = 0,
+    this.sosDeliveryLatencyMs,
+  });
+
+  factory SosOperationalMetrics.fromDatabase(Map<String, Object?> row) {
+    int count(String key) {
+      final value = (row[key] as num?)?.toInt() ?? 0;
+      return value < 0 ? 0 : value;
+    }
+
+    final latency = (row['sos_delivery_latency_ms'] as num?)?.toInt();
+    return SosOperationalMetrics(
+      sosCreated: count('sos_created'),
+      // acknowledged implica que hubo al menos un TX local previo.
+      sosRelayedLocal: count('sos_relayed_local'),
+      sosAckReceived: count('sos_ack_received'),
+      sosAckCount: count('sos_ack_count'),
+      sosExpired: count('sos_expired'),
+      sosDeliveryLatencyMs: latency == null || latency < 0 ? null : latency,
+    );
+  }
+
+  final int sosCreated;
+  final int sosRelayedLocal;
+  final int sosAckReceived;
+  final int sosAckCount;
+  final int sosExpired;
+
+  /// El outbox se poda y sus ACK se eliminan en cascada; no son totales lifetime.
+  String get scope => retainedOutboxScope;
+
+  /// Primer ACK menos creación para el SOS con ACK más reciente por created_at.
+  final int? sosDeliveryLatencyMs;
+
+  Map<String, Object?> toJson() => {
+    'scope': scope,
+    'sosCreated': sosCreated,
+    'sosRelayedLocal': sosRelayedLocal,
+    'sosAckReceived': sosAckReceived,
+    'sosAckCount': sosAckCount,
+    'sosExpired': sosExpired,
+    'sosDeliveryLatencyMs': sosDeliveryLatencyMs,
+  };
 }
 
 class EmergencyDelivery {

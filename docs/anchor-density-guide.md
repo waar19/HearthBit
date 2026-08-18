@@ -6,6 +6,9 @@ hardware, firmware, antenas, potencia y obstáculos reales. No existe una cifra
 universal de metros, metros cuadrados o nodos por persona aplicable a BLE o
 LoRa.
 
+Para provisión, operación y el checklist store-and-forward use la
+[guía de despliegue del ancla](anchor-deployment-guide.md).
+
 ## Límite confirmado del ancla Bitle
 
 El perfil fijado en `firmware/anchor-node` configura seis conexiones NimBLE

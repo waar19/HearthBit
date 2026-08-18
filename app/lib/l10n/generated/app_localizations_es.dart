@@ -931,6 +931,36 @@ class AppLocalizationsEs extends AppLocalizations {
   String get diagnosticsTrustConflicts => 'Conflictos de confianza';
 
   @override
+  String get diagnosticsPacketsReceived => 'Paquetes recibidos en ingress';
+
+  @override
+  String get diagnosticsPacketsAccepted => 'Paquetes únicos aceptados';
+
+  @override
+  String get diagnosticsPacketsRejected =>
+      'Paquetes rechazados permanentemente';
+
+  @override
+  String get diagnosticsPacketsForwarded => 'Paquetes relayados a broadcast';
+
+  @override
+  String get diagnosticsPacketsDeduplicated => 'Paquetes duplicados';
+
+  @override
+  String get diagnosticsPacketsExpired => 'Paquetes expirados explícitamente';
+
+  @override
+  String get diagnosticsPacketsDroppedRateLimit =>
+      'Paquetes descartados por límite de tasa';
+
+  @override
+  String get diagnosticsPacketsDroppedTtl =>
+      'Candidatos a relay descartados por TTL';
+
+  @override
+  String get diagnosticsPacketsFailedTransport => 'Intentos de enlace fallidos';
+
+  @override
   String get diagnosticsOperationalCountersLifetime =>
       'Periodo de los contadores';
 
@@ -939,6 +969,55 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get diagnosticsLifetimeUnknown => 'Periodo no informado';
+
+  @override
+  String get diagnosticsSosMetricsSection =>
+      'Métricas de entrega SOS · outbox retenido';
+
+  @override
+  String get diagnosticsSosMetricsScope => 'Alcance de las métricas';
+
+  @override
+  String get diagnosticsSosMetricsScopeRetainedOutbox =>
+      'Outbox retenido (hasta 200 emergencias)';
+
+  @override
+  String get diagnosticsSosCreated => 'SOS creados';
+
+  @override
+  String get diagnosticsSosRelayedLocal =>
+      'SOS con transmisión local confirmada';
+
+  @override
+  String get diagnosticsSosAckReceived => 'SOS con al menos una ACK';
+
+  @override
+  String get diagnosticsSosAckCount => 'Total de ACK de SOS';
+
+  @override
+  String get diagnosticsSosExpired => 'SOS expirados';
+
+  @override
+  String get diagnosticsSosDeliveryLatency =>
+      'Último SOS: latencia hasta primera ACK';
+
+  @override
+  String get diagnosticsValueUnavailable => 'No disponible';
+
+  @override
+  String get diagnosticsFirstRelayObserved =>
+      'Primera retransmisión remota observada';
+
+  @override
+  String get diagnosticsFirstRelayObservedReason =>
+      'El estado retransmitido solo confirma una transmisión local aceptada por el sistema nativo.';
+
+  @override
+  String get diagnosticsHopCount => 'Conteo de saltos';
+
+  @override
+  String get diagnosticsHopCountReason =>
+      'Los reintentos reinician el TTL y el TTL transmitido no está firmado.';
 
   @override
   String get diagnosticsTransportsSection => 'Transportes activos';

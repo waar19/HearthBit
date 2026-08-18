@@ -895,6 +895,33 @@ class AppLocalizationsJa extends AppLocalizations {
   String get diagnosticsTrustConflicts => '信頼の競合';
 
   @override
+  String get diagnosticsPacketsReceived => '入口で受信したパケット';
+
+  @override
+  String get diagnosticsPacketsAccepted => '受理した一意のパケット';
+
+  @override
+  String get diagnosticsPacketsRejected => '恒久的に拒否したパケット';
+
+  @override
+  String get diagnosticsPacketsForwarded => 'ブロードキャストへ中継したパケット';
+
+  @override
+  String get diagnosticsPacketsDeduplicated => '重複パケット';
+
+  @override
+  String get diagnosticsPacketsExpired => '明示的に期限切れとなったパケット';
+
+  @override
+  String get diagnosticsPacketsDroppedRateLimit => 'レート制限で破棄したパケット';
+
+  @override
+  String get diagnosticsPacketsDroppedTtl => 'TTLで破棄した中継候補';
+
+  @override
+  String get diagnosticsPacketsFailedTransport => '失敗したリンク試行';
+
+  @override
   String get diagnosticsOperationalCountersLifetime => 'カウンター期間';
 
   @override
@@ -902,6 +929,49 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get diagnosticsLifetimeUnknown => '期間は報告されていません';
+
+  @override
+  String get diagnosticsSosMetricsSection => 'SOS配信メトリクス・保持中の送信箱';
+
+  @override
+  String get diagnosticsSosMetricsScope => 'メトリクスの範囲';
+
+  @override
+  String get diagnosticsSosMetricsScopeRetainedOutbox => '保持中の送信箱（最大200件の緊急情報）';
+
+  @override
+  String get diagnosticsSosCreated => '作成したSOS';
+
+  @override
+  String get diagnosticsSosRelayedLocal => 'ローカル送信確認済みSOS';
+
+  @override
+  String get diagnosticsSosAckReceived => '1件以上のACKがあるSOS';
+
+  @override
+  String get diagnosticsSosAckCount => 'SOS ACK合計';
+
+  @override
+  String get diagnosticsSosExpired => '期限切れSOS';
+
+  @override
+  String get diagnosticsSosDeliveryLatency => '最新SOS：最初のACKまでの遅延';
+
+  @override
+  String get diagnosticsValueUnavailable => '利用不可';
+
+  @override
+  String get diagnosticsFirstRelayObserved => '最初に観測されたリモート中継';
+
+  @override
+  String get diagnosticsFirstRelayObservedReason =>
+      '中継済み状態は、ネイティブスタックがローカル送信を受理したことだけを示します。';
+
+  @override
+  String get diagnosticsHopCount => 'ホップ数';
+
+  @override
+  String get diagnosticsHopCountReason => '緊急再試行ではTTLがリセットされ、送信TTLは署名されていません。';
 
   @override
   String get diagnosticsTransportsSection => '有効な通信経路';

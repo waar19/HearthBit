@@ -929,6 +929,36 @@ class AppLocalizationsFr extends AppLocalizations {
   String get diagnosticsTrustConflicts => 'Conflits de confiance';
 
   @override
+  String get diagnosticsPacketsReceived => 'Paquets reçus à l\'entrée';
+
+  @override
+  String get diagnosticsPacketsAccepted => 'Paquets uniques acceptés';
+
+  @override
+  String get diagnosticsPacketsRejected => 'Paquets rejetés définitivement';
+
+  @override
+  String get diagnosticsPacketsForwarded => 'Paquets relayés vers la diffusion';
+
+  @override
+  String get diagnosticsPacketsDeduplicated => 'Paquets en double';
+
+  @override
+  String get diagnosticsPacketsExpired => 'Paquets explicitement expirés';
+
+  @override
+  String get diagnosticsPacketsDroppedRateLimit =>
+      'Paquets écartés par limitation de débit';
+
+  @override
+  String get diagnosticsPacketsDroppedTtl =>
+      'Candidats au relais écartés par TTL';
+
+  @override
+  String get diagnosticsPacketsFailedTransport =>
+      'Tentatives de liaison échouées';
+
+  @override
   String get diagnosticsOperationalCountersLifetime => 'Période des compteurs';
 
   @override
@@ -937,6 +967,54 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get diagnosticsLifetimeUnknown => 'Période non signalée';
+
+  @override
+  String get diagnosticsSosMetricsSection =>
+      'Métriques SOS · boîte d’envoi conservée';
+
+  @override
+  String get diagnosticsSosMetricsScope => 'Portée des métriques';
+
+  @override
+  String get diagnosticsSosMetricsScopeRetainedOutbox =>
+      'Boîte d’envoi conservée (jusqu’à 200 urgences)';
+
+  @override
+  String get diagnosticsSosCreated => 'SOS créés';
+
+  @override
+  String get diagnosticsSosRelayedLocal =>
+      'SOS avec transmission locale confirmée';
+
+  @override
+  String get diagnosticsSosAckReceived => 'SOS avec au moins un ACK';
+
+  @override
+  String get diagnosticsSosAckCount => 'Total des ACK SOS';
+
+  @override
+  String get diagnosticsSosExpired => 'SOS expirés';
+
+  @override
+  String get diagnosticsSosDeliveryLatency =>
+      'Dernier SOS : latence jusqu\'au premier ACK';
+
+  @override
+  String get diagnosticsValueUnavailable => 'Indisponible';
+
+  @override
+  String get diagnosticsFirstRelayObserved => 'Premier relais distant observé';
+
+  @override
+  String get diagnosticsFirstRelayObservedReason =>
+      'L’état relayé confirme uniquement une transmission locale acceptée par la pile native.';
+
+  @override
+  String get diagnosticsHopCount => 'Nombre de sauts';
+
+  @override
+  String get diagnosticsHopCountReason =>
+      'Les nouvelles tentatives d’urgence réinitialisent le TTL et le TTL transmis n’est pas signé.';
 
   @override
   String get diagnosticsTransportsSection => 'Transports actifs';

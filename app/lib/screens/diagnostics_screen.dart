@@ -97,6 +97,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
         'transportCount': controller.activeTransports.length,
         'operationalCountersLifetime': controller.operationalCountersLifetime,
         ...controller.operationalCounters.toJson(),
+        ...controller.sosOperationalMetrics.toJson(),
       },
     );
     try {
@@ -106,6 +107,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
         subject: context.l10n.diagnosticsExportSubject,
         operationalCounters: controller.operationalCounters.toJson(),
         operationalCountersLifetime: controller.operationalCountersLifetime,
+        sosMetrics: controller.sosOperationalMetrics,
       );
     } catch (error, stackTrace) {
       DiagnosticsLog.instance.warning(
@@ -244,12 +246,99 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                     '${controller.operationalCounters.trustConflicts}',
                   ),
                   (
+                    context.l10n.diagnosticsPacketsReceived,
+                    '${controller.operationalCounters.packetsReceived}',
+                  ),
+                  (
+                    context.l10n.diagnosticsPacketsAccepted,
+                    '${controller.operationalCounters.packetsAccepted}',
+                  ),
+                  (
+                    context.l10n.diagnosticsPacketsRejected,
+                    '${controller.operationalCounters.packetsRejected}',
+                  ),
+                  (
+                    context.l10n.diagnosticsPacketsForwarded,
+                    '${controller.operationalCounters.packetsForwarded}',
+                  ),
+                  (
+                    context.l10n.diagnosticsPacketsDeduplicated,
+                    '${controller.operationalCounters.packetsDeduplicated}',
+                  ),
+                  (
+                    context.l10n.diagnosticsPacketsExpired,
+                    '${controller.operationalCounters.packetsExpired}',
+                  ),
+                  (
+                    context.l10n.diagnosticsPacketsDroppedRateLimit,
+                    '${controller.operationalCounters.packetsDroppedRateLimit}',
+                  ),
+                  (
+                    context.l10n.diagnosticsPacketsDroppedTtl,
+                    '${controller.operationalCounters.packetsDroppedTtl}',
+                  ),
+                  (
+                    context.l10n.diagnosticsPacketsFailedTransport,
+                    '${controller.operationalCounters.packetsFailedTransport}',
+                  ),
+                  (
                     context.l10n.diagnosticsOperationalCountersLifetime,
                     controller.operationalCountersLifetime == 'process'
                         ? context.l10n.diagnosticsLifetimeProcess
                         : context.l10n.diagnosticsLifetimeUnknown,
                   ),
                 ],
+              ),
+              _DiagnosticCard(
+                title: context.l10n.diagnosticsSosMetricsSection,
+                icon: Icons.sos_outlined,
+                rows: [
+                  (
+                    context.l10n.diagnosticsSosMetricsScope,
+                    context.l10n.diagnosticsSosMetricsScopeRetainedOutbox,
+                  ),
+                  (
+                    context.l10n.diagnosticsSosCreated,
+                    '${controller.sosOperationalMetrics.sosCreated}',
+                  ),
+                  (
+                    context.l10n.diagnosticsSosRelayedLocal,
+                    '${controller.sosOperationalMetrics.sosRelayedLocal}',
+                  ),
+                  (
+                    context.l10n.diagnosticsSosAckReceived,
+                    '${controller.sosOperationalMetrics.sosAckReceived}',
+                  ),
+                  (
+                    context.l10n.diagnosticsSosAckCount,
+                    '${controller.sosOperationalMetrics.sosAckCount}',
+                  ),
+                  (
+                    context.l10n.diagnosticsSosExpired,
+                    '${controller.sosOperationalMetrics.sosExpired}',
+                  ),
+                  (
+                    context.l10n.diagnosticsSosDeliveryLatency,
+                    controller.sosOperationalMetrics.sosDeliveryLatencyMs ==
+                            null
+                        ? context.l10n.diagnosticsValueUnavailable
+                        : '${controller.sosOperationalMetrics.sosDeliveryLatencyMs} ms',
+                  ),
+                  (
+                    context.l10n.diagnosticsFirstRelayObserved,
+                    context.l10n.diagnosticsValueUnavailable,
+                  ),
+                  (
+                    context.l10n.diagnosticsHopCount,
+                    context.l10n.diagnosticsValueUnavailable,
+                  ),
+                ],
+                details: {
+                  context.l10n.diagnosticsFirstRelayObserved:
+                      context.l10n.diagnosticsFirstRelayObservedReason,
+                  context.l10n.diagnosticsHopCount:
+                      context.l10n.diagnosticsHopCountReason,
+                },
               ),
               Card(
                 child: Padding(
@@ -394,11 +483,13 @@ class _DiagnosticCard extends StatelessWidget {
     required this.title,
     required this.icon,
     required this.rows,
+    this.details = const {},
   });
 
   final String title;
   final IconData icon;
   final List<(String, String)> rows;
+  final Map<String, String> details;
 
   @override
   Widget build(BuildContext context) {
@@ -414,8 +505,21 @@ class _DiagnosticCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: Text(label)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(label),
+                          if (details[label] case final detail?)
+                            Text(
+                              detail,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                        ],
+                      ),
+                    ),
                     const SizedBox(width: 12),
                     Flexible(
                       child: Text(

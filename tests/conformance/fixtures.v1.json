@@ -32,7 +32,7 @@
     {"id":"courier.envelope.valid","operation":"courier.decode","blob":"blobs/courier-envelope-valid.hex","valid":true,"expect":{"tag":"81570f9c02cad65cc297a85facc44ff7","expiry":1725000060000,"ciphertextBytes":96,"copies":4}},
     {"id":"courier.invalid.truncated","operation":"courier.decode","blob":"blobs/courier-envelope-truncated.hex","valid":false},
     {"id":"extension.hbt_capability.v1","operation":"extension.decode","blob":"blobs/extension-hbt-capability.hex","valid":true,"expect":{"type":36,"version":1}},
-    {"id":"extension.node_capability.anchor","operation":"extension.decode","blob":"blobs/extension-node-capability.hex","valid":true,"expect":{"type":37,"version":1,"role":4,"flags":1}},
+    {"id":"extension.node_capability.anchor","operation":"extension.decode","blob":"blobs/extension-node-capability.hex","valid":true,"expect":{"type":37,"version":1,"role":4,"flags":5}},
     {"id":"extension.radar_grant","operation":"extension.decode","blob":"blobs/extension-radar-grant.hex","valid":true,"expect":{"type":35,"version":1,"action":1}},
     {"id":"extension.beacon_control.request","operation":"extension.decode","blob":"blobs/extension-beacon-request.hex","valid":true,"expect":{"type":38,"version":1,"action":1,"flags":7}},
     {"id":"extension.ranging_control.request","operation":"extension.decode","blob":"blobs/extension-ranging-request.hex","valid":true,"expect":{"type":39,"version":1,"action":2,"technology":4,"round":3,"opaque":"aabbcc"}},

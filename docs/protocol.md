@@ -43,6 +43,9 @@ tanto, nunca decide ni amplía la ventana de reloj: cambiar un TTL firmado como
 1 a 7 conserva la firma, pero el anuncio sigue sujeto a 10 minutos si no lleva
 el marcador firmado.
 
+Los límites para interpretar `relayed` y TTL como métricas están documentados
+en [Métricas honestas de retransmisión y saltos](threat-model.md#métricas-honestas-de-retransmisión-y-saltos).
+
 El relay de infraestructura no aplica la excepción de emergencia: exige
 siempre ±10 minutos, tanto para anuncios atrasados como adelantados. Las
 implementaciones comparan límites de tiempo sin valor absoluto ni aritmética

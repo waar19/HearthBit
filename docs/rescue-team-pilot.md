@@ -42,6 +42,11 @@ equivalente.
 
 ## Secuencia del piloto
 
+Para las tres topologías mínimas y los procedimientos completos de
+`P0-SOS-ACK`, `P0-STORE-REBOOT`, `P0-FOUR-NODE-TWO-HOP`,
+`P0-RESCUE-KILL-DOZE` y `P0-IOS-FORCEQUIT-01`, siga la
+[guía de ejecución P0](p0-execution-guide.md).
+
 ### 1. Roster y autoridad
 
 - Importe un roster de rescate firmado con roles sintéticos; pruebe firma

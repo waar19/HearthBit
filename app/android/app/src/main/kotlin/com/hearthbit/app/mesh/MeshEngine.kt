@@ -112,6 +112,7 @@ internal class MeshEngine(
     private val storeForward = StoreForwardCache(context)
     private val emergencyFingerprints = EmergencyFingerprintCache(context)
     private val openEmergencyRateLimiter = OpenEmergencyRateLimiter()
+    private val packetCounters = MeshPacketCounters()
     private val peerTrustStore = PeerTrustStore(context)
     private val ingressAuthenticator = MeshIngressAuthenticator(
         trustLookup = peerTrustStore::lookup,
@@ -397,6 +398,7 @@ internal class MeshEngine(
         putAll(openEmergencyRateLimiter.operationalCounters())
         putAll(relayDamping.operationalCounters())
         putAll(peerTrustStore.operationalCounters())
+        putAll(packetCounters.snapshot())
     }
 
     fun notificationSnapshot(): MeshNotificationState = MeshNotificationState(
@@ -2197,6 +2199,7 @@ internal class MeshEngine(
         }
         val priority = GattFramePriority.forOriginalPacket(bytes)
         val accepted = frames.all { link.send(it, priority) }
+        if (!accepted) packetCounters.recordFailedTransport()
         emitLinkTelemetry(link.capabilities, bytes.size, frames.size, accepted)
         return accepted
     }
@@ -2225,6 +2228,7 @@ internal class MeshEngine(
         attempts: Int,
         reason: String,
     ) {
+        packetCounters.recordGattDeliveryFailure(reason)
         emit(
             mapOf(
                 "type" to "gattDeliveryFailure",
@@ -2244,6 +2248,7 @@ internal class MeshEngine(
             }
             return
         }
+        packetCounters.recordReceived()
         MeshLog.d(
             MeshEngineConstants.LOG_TAG,
             "RX address=${sourceAddress.takeLast(5)} bytes=${bytes.size} " +
@@ -2251,6 +2256,7 @@ internal class MeshEngine(
         )
         val packet = MeshProtocol.decode(bytes)
         if (packet == null) {
+            packetCounters.recordRejected()
             MeshLog.w(MeshEngineConstants.LOG_TAG, "RX rejected: packet decode failed (${bytes.size} bytes)")
             return
         }
@@ -2263,6 +2269,7 @@ internal class MeshEngine(
         if (senderHex == peerId) return
         val authentication = ingressAuthenticator.authenticate(packet, sourceAddress)
         if (!authentication.relayAllowed) {
+            packetCounters.recordIngressRejection(authentication.rateLimited)
             MeshLog.w(
                 MeshEngineConstants.LOG_TAG,
                 "RX rejected before relay: type=${packet.type.toUByte()} " +
@@ -2270,25 +2277,39 @@ internal class MeshEngine(
             )
             return
         }
-        val fingerprint = MeshProtocol.relayFingerprint(bytes) ?: return
+        val fingerprint = MeshProtocol.relayFingerprint(bytes) ?: run {
+            packetCounters.recordRejected()
+            return
+        }
         relayDamping.observeDuplicate(fingerprint, sourceAddress)
         val receivedAt = System.currentTimeMillis()
+        var duplicate = false
+        var rateLimited = false
         val acceptedAsNew = synchronized(seen) {
             if (seen.containsKey(fingerprint) || relayDamping.isPending(fingerprint)) {
+                duplicate = true
                 false
+            // Unknown-ingress rate limits already returned above; this branch
+            // counts only the independent open-emergency policy.
             } else if (EmergencyLanPolicy.isOpenEmergencyLanPacket(packet) &&
                 !openEmergencyRateLimiter.allow(
                     knownRelationship = isKnownRelationship(senderHex),
                     now = receivedAt,
                 )
             ) {
+                rateLimited = true
                 false
             } else {
                 seen[fingerprint] = receivedAt
                 true
             }
         }
-        if (!acceptedAsNew) return
+        if (!acceptedAsNew) {
+            if (duplicate) packetCounters.recordDeduplicated()
+            if (rateLimited) packetCounters.recordDroppedRateLimit()
+            return
+        }
+        packetCounters.recordAccepted()
 
         val addressedToLocalNode = packet.recipientId?.contentEquals(identity.peerId) == true
         val hasDirectedRecipient = packet.recipientId != null &&
@@ -2298,14 +2319,14 @@ internal class MeshEngine(
         } else {
             packet.type
         }
-        if (MeshRelayPolicy.shouldRelay(
+        val shouldRelay = MeshRelayPolicy.shouldRelay(
                 role = localRole,
                 packetType = relayType,
                 ttl = packet.ttl.toInt() and 0xFF,
                 addressedToLocalNode = addressedToLocalNode,
                 hasDirectedRecipient = hasDirectedRecipient,
             )
-        ) {
+        if (shouldRelay) {
             val relayed = packet.copy(ttl = ((packet.ttl.toInt() and 0xFF) - 1).toByte())
             val relayedBytes = MeshProtocol.encodeForBle(relayed)
             relayDamping.schedule(
@@ -2314,8 +2335,25 @@ internal class MeshEngine(
                 initialSource = sourceAddress,
             ) {
                 if (running) {
+                    packetCounters.recordForwarded()
                     broadcastBytes(relayedBytes, sourceAddress)
                 }
+            }
+        } else if ((packet.ttl.toInt() and 0xFF) <= 1) {
+            val candidateTtl = if (relayType == MeshProtocol.TYPE_BEACON_CONTROL) {
+                BeaconControlProtocol.INITIAL_TTL
+            } else {
+                2
+            }
+            if (MeshRelayPolicy.shouldRelay(
+                    role = localRole,
+                    packetType = relayType,
+                    ttl = candidateTtl,
+                    addressedToLocalNode = addressedToLocalNode,
+                    hasDirectedRecipient = hasDirectedRecipient,
+                )
+            ) {
+                packetCounters.recordDroppedTtl()
             }
         }
 

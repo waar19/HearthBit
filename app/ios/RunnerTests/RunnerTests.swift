@@ -10,6 +10,49 @@ class RunnerTests: XCTestCase {
   private let sender = Data([1, 2, 3, 4, 5, 6, 7, 8])
   private let fragmentID = Data([9, 8, 7, 6, 5, 4, 3, 2])
 
+  func testMeshPacketCountersExposeExactAggregateSemantics() {
+    let counters = IOSMeshPacketCounters()
+    counters.recordReceived()
+    counters.recordAccepted()
+    counters.recordRejected()
+    counters.recordForwarded()
+    counters.recordDeduplicated()
+    counters.recordDroppedRateLimit()
+    counters.recordDroppedTtl()
+    counters.recordFailedTransport()
+
+    XCTAssertEqual(counters.snapshot(), [
+      "packetsReceived": 1,
+      "packetsAccepted": 1,
+      "packetsRejected": 1,
+      "packetsForwarded": 1,
+      "packetsDeduplicated": 1,
+      "packetsExpired": 0,
+      "packetsDroppedRateLimit": 1,
+      "packetsDroppedTtl": 1,
+      "packetsFailedTransport": 1,
+    ])
+  }
+
+  func testMeshPacketCountersAreThreadSafe() {
+    let counters = IOSMeshPacketCounters()
+    DispatchQueue.concurrentPerform(iterations: 8_000) { _ in
+      counters.recordReceived()
+    }
+    XCTAssertEqual(counters.snapshot()["packetsReceived"], 8_000)
+  }
+
+  func testMeshPacketCountersCountEachObservableTransportFailureCode() {
+    let counters = IOSMeshPacketCounters()
+
+    counters.recordTransportFailure(code: "central_queue_full")
+    counters.recordTransportFailure(code: "peripheral_queue_full")
+    counters.recordTransportFailure(code: "central_write_failed")
+    counters.recordTransportFailure(code: "temporary_backpressure")
+
+    XCTAssertEqual(counters.snapshot()["packetsFailedTransport"], 3)
+  }
+
   func testMultipeerFileTokenAndContainerPolicy() {
     let first = IOSMultipeerFilePolicy.rendezvousToken(
       "00112233445566778899aabbccddeeff"
@@ -821,6 +864,13 @@ class RunnerTests: XCTestCase {
     XCTAssertTrue(IOSMeshNodeRole.phoneRelay.allowsDataPlane)
     XCTAssertTrue(IOSMeshNodeRole.phoneRelay.relaysPackets)
     XCTAssertTrue(IOSMeshNodeRole.phoneRelay.canChat)
+  }
+
+  func testCourierDepositsRequireStoringInfrastructureRole() {
+    XCTAssertTrue(IOSMeshNodeRole.infraDataAnchor.acceptsCourierDeposits)
+    XCTAssertFalse(IOSMeshNodeRole.infraRelay.acceptsCourierDeposits)
+    XCTAssertFalse(IOSMeshNodeRole.phoneRelay.acceptsCourierDeposits)
+    XCTAssertFalse(IOSMeshNodeRole.phoneBeacon.acceptsCourierDeposits)
   }
 
   func testPeerReachabilityAllowsNinetySecondKeepaliveAndBoundary() {
@@ -2331,12 +2381,13 @@ final class ConformanceFixtureTests: XCTestCase {
     )
 
     XCTAssertEqual(fixtures.bytes("extension.hbt_capability.v1"), Data([0x01]))
-    XCTAssertEqual(
+    let nodeCapability = try XCTUnwrap(
       IOSMeshNodeRole.decodeCapability(
         fixtures.bytes("extension.node_capability.anchor")
-      )?.role,
-      .infraDataAnchor
+      )
     )
+    XCTAssertEqual(nodeCapability.role, .infraDataAnchor)
+    XCTAssertEqual(nodeCapability.flags, 0x05)
     let radar = try XCTUnwrap(
       IOSRadarConsentProtocol.decode(fixtures.bytes("extension.radar_grant"))
     )

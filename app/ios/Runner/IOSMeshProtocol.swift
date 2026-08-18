@@ -42,6 +42,10 @@ enum IOSMeshNodeRole: String, CaseIterable {
     self == .infraRelay || self == .infraDataAnchor
   }
 
+  var acceptsCourierDeposits: Bool {
+    isInfrastructure && storesDirectedPackets
+  }
+
   var capabilityPayload: Data {
     capabilityPayload(hasLongRangeTrunk: false)
   }
