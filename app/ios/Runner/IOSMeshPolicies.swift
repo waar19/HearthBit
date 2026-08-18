@@ -88,7 +88,7 @@ enum IOSBLENeighborSelectionPolicy {
     guard current.count >= maximum else { return .accept }
     guard
       let worst = current
-        .filter { !$0.protected && !$0.preferred }
+        .filter({ !$0.protected && !$0.preferred })
         .min(by: isWorse)
     else { return .reject }
     guard isClearlyBetter(candidate, than: worst) else { return .reject }
