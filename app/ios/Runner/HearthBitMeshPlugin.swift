@@ -65,6 +65,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private let storeForward = IOSStoreForward()
   private let peerIdentityPins = IOSPeerIdentityPinStore()
   private let unknownIngressRateLimiter = IOSUnknownIngressRateLimiter()
+  private let openEmergencyRateLimiter = IOSOpenEmergencyRateLimiter()
   private let emergencyFingerprints = IOSEmergencyFingerprintCache()
   private var central: CBCentralManager?
   private var peripheralManager: CBPeripheralManager?
@@ -757,6 +758,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         privateChatPeerIDs.removeAll()
         decryptFailures.removeAll()
         latestAnnouncementTimestampByPeer.removeAll()
+        openEmergencyRateLimiter.clear()
         sendAnnouncement()
         let event: [String: Any] = [
           "type": "keyRotation",
@@ -821,6 +823,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         }
         try storeForward.clear()
         emergencyFingerprints.clear()
+        openEmergencyRateLimiter.clear()
         try IOSRescueModeStore.clear()
         locationManager.stopUpdatingLocation()
         peers.removeAll()
@@ -2059,11 +2062,28 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func shouldAutoHandshake(peerID: String) -> Bool {
-    securePeerIDs.contains(peerID) ||
-      privateChatPeerIDs.contains(peerID) ||
-      !(pendingPrivate[peerID] ?? []).isEmpty ||
+    isKnownRelationship(peerID)
+  }
+
+  private func hasPendingRelationship(_ peerID: String) -> Bool {
+    !(pendingPrivate[peerID] ?? []).isEmpty ||
       !(pendingFrames[peerID] ?? []).isEmpty ||
       !(pendingCourier[peerID] ?? []).isEmpty
+  }
+
+  private func isKnownRelationship(_ peerID: String) -> Bool {
+    securePeerIDs.contains(peerID) ||
+      privateChatPeerIDs.contains(peerID) ||
+      hasPendingRelationship(peerID)
+  }
+
+  private func protectedRelationshipPeerIDs() -> Set<String> {
+    var protected = securePeerIDs.union(privateChatPeerIDs)
+    let pendingIDs = Set(pendingPrivate.keys)
+      .union(pendingFrames.keys)
+      .union(pendingCourier.keys)
+    protected.formUnion(pendingIDs.filter(hasPendingRelationship))
+    return protected
   }
 
   private func isPeerReachable(_ peerID: String) -> Bool {
@@ -2943,14 +2963,6 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     else { return }
     let senderID = packet.senderID.hex
     if senderID == identity.peerIDHex { return }
-    if var pendingRelay = pendingRelays[fingerprint] {
-      pendingRelay.sourceKeys = IOSRelayDampingPolicy.sourceKeys(
-        afterObserving: IOSRelayDampingPolicy.sourceKey(source),
-        in: pendingRelay.sourceKeys
-      )
-      pendingRelays[fingerprint] = pendingRelay
-      return
-    }
     let pinnedIdentity = peerIdentityPins.pin(for: senderID)
     if pinnedIdentity == nil {
       let rateLimitKey = source?.uuidString ?? senderID
@@ -2982,7 +2994,20 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         }
       }
     }
+    if var pendingRelay = pendingRelays[fingerprint] {
+      pendingRelay.sourceKeys = IOSRelayDampingPolicy.sourceKeys(
+        afterObserving: IOSRelayDampingPolicy.sourceKey(source),
+        in: pendingRelay.sourceKeys
+      )
+      pendingRelays[fingerprint] = pendingRelay
+      return
+    }
     if seen[fingerprint] != nil { return }
+    if isOpenEmergencyLanPacket(packet) {
+      guard openEmergencyRateLimiter.allow(
+        knownRelationship: isKnownRelationship(senderID)
+      ) else { return }
+    }
     rememberSeenFingerprint(fingerprint)
     let forUs = packet.recipientID == nil ||
       packet.recipientID == identity.peerID ||
@@ -3132,7 +3157,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       switch try peerIdentityPins.validateAndPin(
         peerID: senderID,
         noisePublicKey: announcement.noisePublicKey,
-        signingPublicKey: announcement.signingPublicKey
+        signingPublicKey: announcement.signingPublicKey,
+        protectedPeerIDs: protectedRelationshipPeerIDs()
       ) {
       case .firstBinding:
         emit(["type": "identityPinned", "peerId": senderID, "method": "tofu"])

@@ -90,10 +90,12 @@ as central and peripheral simultaneously.
   phones.
 - `max_central_links`: maximum central connections.
 - `max_packet_size`: pre-decode input limit.
-- `identity_verification.unknown_signed_policy`: `relay-live` forwards but
-  never stores signed packets without a known ANNOUNCE; `reject` requires the
-  identity first. Learned signing keys remain pinned across restarts. A corrupt
-  trust store prevents startup rather than resetting trust.
+- `identity_verification.unknown_signed_policy`: `reject` requires a valid
+  ANNOUNCE before any signed packet can be forwarded or stored. The legacy
+  `relay-live` value remains accepted for configuration compatibility but is
+  treated as `reject`; it never permits unverified forwarding. Learned signing
+  keys remain pinned across restarts. A corrupt trust store prevents startup
+  rather than resetting trust.
 - `flood`: per-sender and per-bridge token buckets with emergency reserve.
 - `lan`: local gateway, disabled by default; requires a `psk_base64` of at
   least 32 bytes. See

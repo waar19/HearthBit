@@ -994,6 +994,26 @@ class RunnerTests: XCTestCase {
     XCTAssertTrue(limiter.allow(source: "source-a", now: 110))
   }
 
+  func testOpenEmergencyRateLimiterHasIndependentGlobalPoolsAndExactLimits() {
+    let limiter = IOSOpenEmergencyRateLimiter()
+
+    for _ in 0..<100 {
+      XCTAssertTrue(limiter.allow(knownRelationship: false, now: 100))
+    }
+    for _ in 100..<IOSOpenEmergencyRateLimiter.defaultUnknownMaximumFrames {
+      XCTAssertTrue(limiter.allow(knownRelationship: false, now: 100))
+    }
+    XCTAssertFalse(limiter.allow(knownRelationship: false, now: 100))
+
+    for _ in 0..<IOSOpenEmergencyRateLimiter.defaultKnownMaximumFrames {
+      XCTAssertTrue(limiter.allow(knownRelationship: true, now: 100))
+    }
+    XCTAssertFalse(limiter.allow(knownRelationship: true, now: 100))
+
+    XCTAssertTrue(limiter.allow(knownRelationship: false, now: 160))
+    XCTAssertTrue(limiter.allow(knownRelationship: true, now: 160))
+  }
+
   func testEmergencySMSRecipientIsRevalidatedNatively() {
     XCTAssertEqual(
       IOSEmergencySMSPolicy.normalizeRecipient(" (+56) 9-1234-5678 "),
@@ -1471,6 +1491,113 @@ class RunnerTests: XCTestCase {
     XCTAssertNotNil(backend.data)
   }
 
+  func testPeerPinCapacityEvictsDeterministicUnprotectedBinding() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore(maximumPins: 2)
+    let first = makePeerPinMaterial()
+    let second = makePeerPinMaterial()
+    let incoming = makePeerPinMaterial()
+    for identity in [first, second] {
+      _ = try store.validateAndPin(
+        peerID: identity.peerID,
+        noisePublicKey: identity.noise,
+        signingPublicKey: identity.signing
+      )
+    }
+    let ordered = [first.peerID, second.peerID].sorted()
+    let evictedPeerID = try XCTUnwrap(ordered.first)
+    let protectedPeerID = try XCTUnwrap(ordered.last)
+
+    XCTAssertEqual(
+      try store.validateAndPin(
+        peerID: incoming.peerID,
+        noisePublicKey: incoming.noise,
+        signingPublicKey: incoming.signing,
+        protectedPeerIDs: [protectedPeerID]
+      ),
+      .firstBinding
+    )
+    XCTAssertNil(store.pin(for: evictedPeerID))
+    XCTAssertNotNil(store.pin(for: protectedPeerID))
+    XCTAssertNotNil(store.pin(for: incoming.peerID))
+  }
+
+  func testPeerPinEvictionRollsBackAndFailsClosedWhenPersistenceFails() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore(maximumPins: 2)
+    let first = makePeerPinMaterial()
+    let second = makePeerPinMaterial()
+    let incoming = makePeerPinMaterial()
+    for identity in [first, second] {
+      _ = try store.validateAndPin(
+        peerID: identity.peerID,
+        noisePublicKey: identity.noise,
+        signingPublicKey: identity.signing
+      )
+    }
+    let persistedBeforeFailure = backend.data
+    backend.failUpsert = true
+
+    XCTAssertThrowsError(
+      try store.validateAndPin(
+        peerID: incoming.peerID,
+        noisePublicKey: incoming.noise,
+        signingPublicKey: incoming.signing
+      )
+    )
+    XCTAssertEqual(backend.data, persistedBeforeFailure)
+    XCTAssertNotNil(store.pin(for: first.peerID))
+    XCTAssertNotNil(store.pin(for: second.peerID))
+    XCTAssertNil(store.pin(for: incoming.peerID))
+    XCTAssertNotNil(store.failure)
+    XCTAssertThrowsError(
+      try store.validateAndPin(
+        peerID: incoming.peerID,
+        noisePublicKey: incoming.noise,
+        signingPublicKey: incoming.signing
+      )
+    )
+  }
+
+  func testPeerPinCapacityPreservesRotationTombstoneAndProtectedSuccessor() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore(maximumPins: 2)
+    let old = makePeerPinMaterial()
+    _ = try store.validateAndPin(
+      peerID: old.peerID,
+      noisePublicKey: old.noise,
+      signingPublicKey: old.signing
+    )
+    let newNoise = Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation
+    let newSigning = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+    let newPeerID = IOSMeshProtocol.peerID(newNoise).hex
+    _ = try store.rotate(
+      oldPeerID: old.peerID,
+      noisePublicKey: newNoise,
+      signingPublicKey: newSigning,
+      sequence: 1
+    )
+    let incoming = makePeerPinMaterial()
+
+    XCTAssertThrowsError(
+      try store.validateAndPin(
+        peerID: incoming.peerID,
+        noisePublicKey: incoming.noise,
+        signingPublicKey: incoming.signing,
+        protectedPeerIDs: [newPeerID]
+      )
+    )
+    XCTAssertNotNil(store.pin(for: newPeerID))
+    XCTAssertEqual(
+      try store.validateAndPin(
+        peerID: old.peerID,
+        noisePublicKey: old.noise,
+        signingPublicKey: old.signing
+      ),
+      .conflict(noiseChanged: true, signingChanged: true)
+    )
+  }
+
   func testPeerPinAcceptsSameBoundKeys() throws {
     let backend = TestSecurePinBackend()
     let store = backend.makeStore()
@@ -1625,6 +1752,26 @@ class RunnerTests: XCTestCase {
     XCTAssertNil(backend.data)
     XCTAssertNil(store.pin(for: identity.peerID))
     XCTAssertNil(backend.makeStore().pin(for: identity.peerID))
+  }
+
+  func testEmergencyFingerprintCacheUses2048DefaultAndEvictsOldest() {
+    XCTAssertEqual(IOSEmergencyFingerprintCache.defaultMaximumEntries, 2048)
+    let suiteName = "HearthBit.EmergencyFingerprintTests.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let cache = IOSEmergencyFingerprintCache(
+      defaults: defaults,
+      maximumEntries: 3
+    )
+    let fingerprints = (0..<4).map {
+      String(format: "%064llx", UInt64($0))
+    }
+
+    for (index, fingerprint) in fingerprints.enumerated() {
+      XCTAssertFalse(cache.seenOrRemember(fingerprint, now: UInt64(100 + index)))
+    }
+    XCTAssertTrue(cache.seenOrRemember(fingerprints[1], now: 104))
+    XCTAssertFalse(cache.seenOrRemember(fingerprints[0], now: 105))
   }
 
   func testNoiseSessionRequiresTemporalRekeyAtOneHourWithoutSleeping() throws {
@@ -2202,6 +2349,7 @@ private extension Data {
 
 private final class TestSecurePinBackend {
   var data: Data?
+  var failUpsert = false
   private let suiteName: String
   private let defaults: UserDefaults
 
@@ -2215,7 +2363,7 @@ private final class TestSecurePinBackend {
     defaults.removePersistentDomain(forName: suiteName)
   }
 
-  func makeStore() -> IOSPeerIdentityPinStore {
+  func makeStore(maximumPins: Int = 512) -> IOSPeerIdentityPinStore {
     IOSPeerIdentityPinStore(
       defaults: defaults,
       read: { [weak self] in
@@ -2223,11 +2371,17 @@ private final class TestSecurePinBackend {
         return .value(data)
       },
       upsert: { [weak self] data in
+        if self?.failUpsert == true {
+          throw IOSSecureStorageError.logicalTransactionFailed(
+            "Injected peer pin persistence failure"
+          )
+        }
         self?.data = data
       },
       delete: { [weak self] in
         self?.data = nil
-      }
+      },
+      maximumPins: maximumPins
     )
   }
 }

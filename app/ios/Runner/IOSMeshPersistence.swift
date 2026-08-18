@@ -2,9 +2,21 @@ import CryptoKit
 import Foundation
 
 final class IOSEmergencyFingerprintCache {
+  static let defaultMaximumEntries = 2048
+
   private let key = "hearthbit.emergency_fingerprints"
   private let lifetime: UInt64 = 24 * 60 * 60 * 1_000
-  private let maximum = 512
+  private let defaults: UserDefaults
+  private let maximumEntries: Int
+
+  init(
+    defaults: UserDefaults = .standard,
+    maximumEntries: Int = defaultMaximumEntries
+  ) {
+    precondition(maximumEntries > 0)
+    self.defaults = defaults
+    self.maximumEntries = maximumEntries
+  }
 
   func seenOrRemember(_ fingerprint: String, now: UInt64? = nil) -> Bool {
     let timestamp = now ?? UInt64(Date().timeIntervalSince1970 * 1000)
@@ -14,8 +26,8 @@ final class IOSEmergencyFingerprintCache {
     if !duplicate {
       entries.append((timestamp, normalized))
     }
-    UserDefaults.standard.set(
-      entries.suffix(maximum).map {
+    defaults.set(
+      entries.suffix(maximumEntries).map {
         ["at": $0.at, "fingerprint": $0.fingerprint]
       },
       forKey: key
@@ -24,13 +36,13 @@ final class IOSEmergencyFingerprintCache {
   }
 
   func clear() {
-    UserDefaults.standard.removeObject(forKey: key)
+    defaults.removeObject(forKey: key)
   }
 
   private func validEntries(
     now: UInt64
   ) -> [(at: UInt64, fingerprint: String)] {
-    let values = UserDefaults.standard.array(forKey: key) as? [[String: Any]] ?? []
+    let values = defaults.array(forKey: key) as? [[String: Any]] ?? []
     return values.compactMap {
       guard
         let number = $0["at"] as? NSNumber,
@@ -99,13 +111,14 @@ final class IOSPeerIdentityPinStore {
   private static let service = "HearthBit.PeerIdentityPins"
   private static let account = "pins.v1"
   private static let version = 1
-  private static let maximumPins = 512
+  static let defaultMaximumPins = 512
   static let legacyDefaultsKey = "hearthbit.peer_identity_pins"
 
   private let defaults: UserDefaults
   private let read: Read
   private let upsert: Upsert
   private let delete: Delete
+  private let maximumPins: Int
   private var pins: [String: IOSPeerIdentityPin] = [:]
   private(set) var failure: Error?
 
@@ -130,7 +143,8 @@ final class IOSPeerIdentityPinStore {
           service: IOSPeerIdentityPinStore.service,
           account: IOSPeerIdentityPinStore.account
         )
-      }
+      },
+      maximumPins: IOSPeerIdentityPinStore.defaultMaximumPins
     )
   }
 
@@ -138,12 +152,15 @@ final class IOSPeerIdentityPinStore {
     defaults: UserDefaults,
     read: @escaping Read,
     upsert: @escaping Upsert,
-    delete: @escaping Delete
+    delete: @escaping Delete,
+    maximumPins: Int = defaultMaximumPins
   ) {
+    precondition(maximumPins > 0)
     self.defaults = defaults
     self.read = read
     self.upsert = upsert
     self.delete = delete
+    self.maximumPins = maximumPins
     do {
       try restore()
     } catch {
@@ -159,7 +176,8 @@ final class IOSPeerIdentityPinStore {
   func validateAndPin(
     peerID: String,
     noisePublicKey: Data,
-    signingPublicKey: Data
+    signingPublicKey: Data,
+    protectedPeerIDs: Set<String> = []
   ) throws -> IOSPeerIdentityPinDecision {
     try ensureAvailable()
     let normalized = peerID.lowercased()
@@ -193,10 +211,25 @@ final class IOSPeerIdentityPinStore {
         account: "peer-id-binding"
       )
     }
-    guard pins.count < Self.maximumPins else {
+    let previousPins = pins
+    guard pins.count <= maximumPins else {
       throw IOSSecureStorageError.logicalTransactionFailed(
-        "Peer identity pin capacity reached"
+        "Peer identity pin capacity exceeded"
       )
+    }
+    if pins.count == maximumPins {
+      let protected = Set(protectedPeerIDs.map { $0.lowercased() })
+      guard let eviction = pins.values
+        .filter { $0.retired != true && !protected.contains($0.peerID) }
+        .map(\.peerID)
+        .sorted()
+        .first
+      else {
+        throw IOSSecureStorageError.logicalTransactionFailed(
+          "Peer identity pin capacity reached with no evictable pin"
+        )
+      }
+      pins.removeValue(forKey: eviction)
     }
 
     let pin = IOSPeerIdentityPin(
@@ -210,7 +243,7 @@ final class IOSPeerIdentityPinStore {
     do {
       try persist()
     } catch {
-      pins.removeValue(forKey: normalized)
+      pins = previousPins
       failure = error
       throw error
     }
@@ -312,7 +345,7 @@ final class IOSPeerIdentityPinStore {
   private func validatedDictionary(
     _ values: [IOSPeerIdentityPin]
   ) throws -> [String: IOSPeerIdentityPin] {
-    guard values.count <= Self.maximumPins else {
+    guard values.count <= maximumPins else {
       throw IOSSecureStorageError.corruptValue(
         service: Self.service,
         account: Self.account

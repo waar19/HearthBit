@@ -8,6 +8,7 @@ internal interface PeerTrustStorage {
     fun getString(key: String): String?
     fun contains(key: String): Boolean
     fun putString(key: String, value: String): Boolean
+    fun swapString(oldKey: String, newKey: String, value: String): Boolean
     fun replaceString(oldKey: String, newKey: String, value: String): Boolean
     fun keys(): Set<String>
     fun clear(): Boolean
@@ -29,18 +30,27 @@ internal sealed interface PeerTrustLookup {
  */
 internal class PeerTrustStore private constructor(
     private val storage: PeerTrustStorage,
+    private val maximumTrustedPeers: Int,
 ) {
     constructor(context: Context) : this(
         SecurePeerTrustStorage(KeystoreSecureStore.open(context, PREFERENCES)),
+        MAX_TRUSTED_PEERS,
     )
 
-    internal constructor(storage: PeerTrustStorage, testOnly: Unit = Unit) : this(storage)
+    internal constructor(
+        storage: PeerTrustStorage,
+        maximumTrustedPeers: Int = MAX_TRUSTED_PEERS,
+        testOnly: Unit = Unit,
+    ) : this(storage, maximumTrustedPeers) {
+        require(maximumTrustedPeers > 0)
+    }
 
     @Synchronized
     fun validateAndPin(
         peerId: String,
         announced: PeerIdentityKeys,
         authenticatedRotation: Boolean = false,
+        protectedPeerIds: Set<String> = emptySet(),
     ): PeerIdentityDecision {
         if (!peerId.matches(PEER_ID_PATTERN) ||
             announced.noisePublicKey.size != PUBLIC_KEY_SIZE ||
@@ -65,19 +75,37 @@ internal class PeerTrustStore private constructor(
         if (stored != null && pinned == null) {
             return PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION
         }
-        val trustCount = runCatching(::trustEntryCount).getOrElse {
-            return PeerIdentityDecision.REJECT_CAPACITY
-        }
-        if (stored == null && trustCount >= MAX_TRUSTED_PEERS) {
-            return PeerIdentityDecision.REJECT_CAPACITY
-        }
         val decision = PeerIdentityPolicy.evaluate(
             pinned = pinned,
             announced = announced,
             authenticatedRotation = authenticatedRotation,
         )
+        var evictionCandidate: StoredPin? = null
+        if (decision == PeerIdentityDecision.FIRST_BINDING) {
+            val trustCount = runCatching(::trustEntryCount).getOrElse {
+                return PeerIdentityDecision.REJECT_CAPACITY
+            }
+            if (trustCount >= maximumTrustedPeers) {
+                evictionCandidate = selectEvictionCandidate(
+                    validatingStorageKey = storageKey,
+                    protectedPeerIds = protectedPeerIds,
+                ) ?: return PeerIdentityDecision.REJECT_CAPACITY
+            }
+        }
         if (decision.accepted) {
-            check(storage.putString(storageKey, encode(announced, decision, 0L)))
+            val encoded = encode(announced, decision, 0L)
+            val persisted = runCatching {
+                evictionCandidate?.let { candidate ->
+                    storage.swapString(candidate.storageKey, storageKey, encoded)
+                } ?: storage.putString(storageKey, encoded)
+            }.getOrDefault(false)
+            if (!persisted) {
+                return if (decision == PeerIdentityDecision.FIRST_BINDING) {
+                    PeerIdentityDecision.REJECT_CAPACITY
+                } else {
+                    PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION
+                }
+            }
         }
         return decision
     }
@@ -163,7 +191,40 @@ internal class PeerTrustStore private constructor(
         check(storage.clear())
     }
 
-    private fun trustEntryCount(): Int = storage.keys().count { it.startsWith(KEY_PREFIX) }
+    private fun trustEntryCount(): Int = storage.keys()
+        .asSequence()
+        .mapNotNull(::decodeBoundPin)
+        .count()
+
+    private fun selectEvictionCandidate(
+        validatingStorageKey: String,
+        protectedPeerIds: Set<String>,
+    ): StoredPin? = runCatching {
+        storage.keys()
+            .asSequence()
+            .filter { it.startsWith(KEY_PREFIX) && it != validatingStorageKey }
+            .sorted()
+            .mapNotNull { storageKey ->
+                val peerId = storageKey.removePrefix(KEY_PREFIX)
+                if (peerId in protectedPeerIds || !peerId.matches(PEER_ID_PATTERN)) {
+                    return@mapNotNull null
+                }
+                decodeBoundPin(storageKey)
+            }
+            .firstOrNull()
+    }.getOrNull()
+
+    private fun decodeBoundPin(storageKey: String): StoredPin? {
+        if (!storageKey.startsWith(KEY_PREFIX)) return null
+        val peerId = storageKey.removePrefix(KEY_PREFIX)
+        if (!peerId.matches(PEER_ID_PATTERN)) return null
+        val encoded = storage.getString(storageKey) ?: return null
+        val record = decode(encoded) ?: return null
+        val boundPeerId = MeshProtocol.hex(
+            MeshProtocol.peerIdFromNoiseKey(record.keys.noisePublicKey),
+        )
+        return if (boundPeerId == peerId) StoredPin(storageKey) else null
+    }
 
     private fun encode(
         keys: PeerIdentityKeys,
@@ -227,6 +288,10 @@ internal class PeerTrustStore private constructor(
         val lastRotationSequence: Long,
     )
 
+    private data class StoredPin(
+        val storageKey: String,
+    )
+
     private companion object {
         const val PREFERENCES = "hearthbit_peer_trust"
         const val FORMAT_VERSION = "2"
@@ -247,6 +312,8 @@ private class SecurePeerTrustStorage(
     override fun getString(key: String): String? = store.getString(key)
     override fun contains(key: String): Boolean = store.contains(key)
     override fun putString(key: String, value: String): Boolean = store.putString(key, value)
+    override fun swapString(oldKey: String, newKey: String, value: String): Boolean =
+        store.swapString(oldKey, newKey, value)
     override fun replaceString(oldKey: String, newKey: String, value: String): Boolean =
         store.replaceString(oldKey, newKey, value)
     override fun keys(): Set<String> = store.keys()

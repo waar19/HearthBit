@@ -350,6 +350,75 @@ final class IOSUnknownIngressRateLimiter {
   }
 }
 
+final class IOSOpenEmergencyRateLimiter {
+  static let defaultKnownMaximumFrames = 600
+  static let defaultUnknownMaximumFrames = 240
+  static let defaultWindow: TimeInterval = 60
+
+  private let knownMaximumFrames: Int
+  private let unknownMaximumFrames: Int
+  private let window: TimeInterval
+  private var knownFrames: [TimeInterval] = []
+  private var unknownFrames: [TimeInterval] = []
+  private let lock = NSLock()
+
+  init(
+    knownMaximumFrames: Int = defaultKnownMaximumFrames,
+    unknownMaximumFrames: Int = defaultUnknownMaximumFrames,
+    window: TimeInterval = defaultWindow
+  ) {
+    precondition(knownMaximumFrames > 0)
+    precondition(unknownMaximumFrames > 0)
+    precondition(window > 0)
+    self.knownMaximumFrames = knownMaximumFrames
+    self.unknownMaximumFrames = unknownMaximumFrames
+    self.window = window
+  }
+
+  func allow(
+    knownRelationship: Bool,
+    now: TimeInterval = Date().timeIntervalSince1970
+  ) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+
+    if knownRelationship {
+      return Self.record(
+        now: now,
+        window: window,
+        maximumFrames: knownMaximumFrames,
+        frames: &knownFrames
+      )
+    }
+    return Self.record(
+      now: now,
+      window: window,
+      maximumFrames: unknownMaximumFrames,
+      frames: &unknownFrames
+    )
+  }
+
+  func clear() {
+    lock.lock()
+    knownFrames.removeAll(keepingCapacity: true)
+    unknownFrames.removeAll(keepingCapacity: true)
+    lock.unlock()
+  }
+
+  private static func record(
+    now: TimeInterval,
+    window: TimeInterval,
+    maximumFrames: Int,
+    frames: inout [TimeInterval]
+  ) -> Bool {
+    let cutoff = now - window
+    frames.removeAll { $0 <= cutoff || $0 > now }
+    guard frames.count < maximumFrames else { return false }
+    frames.append(now)
+    return true
+  }
+}
+
 enum IOSMeshIngressPolicy {
   private static let publicSignatureTypes: Set<UInt8> = [
     IOSMeshProtocol.message,

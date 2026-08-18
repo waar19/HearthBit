@@ -73,6 +73,9 @@ internal class RelayDampingCoordinator(
         return relay.sources.add(SourceKey(source))
     }
 
+    @Synchronized
+    fun isPending(fingerprint: String): Boolean = pending.containsKey(fingerprint)
+
     fun clear() {
         val cancellations = synchronized(this) {
             pending.values.mapNotNull(PendingRelay::cancellation).also {

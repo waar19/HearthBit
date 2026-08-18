@@ -1,11 +1,13 @@
 import asyncio
 import base64
+import time
 from dataclasses import replace
 
 import pytest
 
 from hearthbit_relay.config import LanConfig, RelayConfig, StoreConfig
 from hearthbit_relay.core import RelayCore
+from hearthbit_relay.identity import RelayIdentity
 from hearthbit_relay.lan import LanTransport
 from hearthbit_relay.lan_protocol import (
     HELLO_SIZE,
@@ -22,7 +24,11 @@ from hearthbit_relay.link import (
     LinkReliability,
 )
 from hearthbit_relay.mdns import DiscoveredGateway, build_announcement, parse_announcement
-from hearthbit_relay.protocol import decode_packet, encode_packet
+from hearthbit_relay.protocol import (
+    canonical_packet_bytes,
+    decode_packet,
+    encode_packet,
+)
 from hearthbit_relay.store import PacketStore
 
 
@@ -118,7 +124,9 @@ def test_mdns_announcement_exposes_gateway_endpoint() -> None:
     ]
 
 
-async def test_loopback_gateway_relays_complete_opaque_frame_once_per_core() -> None:
+async def test_loopback_gateway_relays_complete_opaque_frame_once_per_core(
+    tmp_path,
+) -> None:
     psk = b"shared-test-key-material-32-bytes!"
     core_a, store_a = _core()
     core_b, store_b = _core()
@@ -153,13 +161,37 @@ async def test_loopback_gateway_relays_complete_opaque_frame_once_per_core() -> 
             await asyncio.sleep(0.01)
         assert transport_a.status.connections == transport_b.status.connections == 1
 
+        identity = RelayIdentity.load_or_create(tmp_path / "sender.json")
+        now_ms = time.time_ns() // 1_000_000
+        announcement = identity.build_announcement(
+            nickname="LAN sender",
+            timestamp_ms=now_ms,
+        )
+        announced = await core_a.inbound(source.id, announcement)
+        assert announced.accepted and announced.forwarded == 1
+        for _ in range(100):
+            if sink.sent:
+                break
+            await asyncio.sleep(0.01)
+        assert len(sink.sent) == 1
+        sink.sent.clear()
+
+        unsigned = decode_packet(
+            encode_packet(
+                message_type=0x02,
+                ttl=5,
+                timestamp_ms=123,
+                sender_id=identity.peer_id,
+                payload=b"full opaque BitChat frame",
+            )
+        )
         raw = encode_packet(
             message_type=0x02,
             ttl=5,
             timestamp_ms=123,
-            sender_id=b"sender01",
+            sender_id=identity.peer_id,
             payload=b"full opaque BitChat frame",
-            signature=b"s" * 64,
+            signature=identity.sign(canonical_packet_bytes(unsigned)),
             pad=True,
         )
         result = await core_a.inbound(source.id, raw)

@@ -2,11 +2,30 @@ package com.hearthbit.app.mesh
 
 import android.content.Context
 
-internal class EmergencyFingerprintCache(context: Context) {
-    private val preferences = KeystoreSecureStore.open(
-        context,
-        "hearthbit_emergency_fingerprints",
+internal interface EmergencyFingerprintStorage {
+    fun getStringSet(key: String): Set<String>
+    fun putStringSet(key: String, value: Set<String>): Boolean
+    fun clear(): Boolean
+}
+
+internal class EmergencyFingerprintCache private constructor(
+    private val storage: EmergencyFingerprintStorage,
+    private val maximumEntries: Int,
+) {
+    constructor(context: Context) : this(
+        SecureEmergencyFingerprintStorage(
+            KeystoreSecureStore.open(context, PREFERENCES),
+        ),
+        MAX_ENTRIES,
     )
+
+    internal constructor(
+        storage: EmergencyFingerprintStorage,
+        maximumEntries: Int = MAX_ENTRIES,
+        testOnly: Unit = Unit,
+    ) : this(storage, maximumEntries) {
+        require(maximumEntries > 0)
+    }
 
     @Synchronized
     fun seenOrRemember(
@@ -14,7 +33,7 @@ internal class EmergencyFingerprintCache(context: Context) {
         now: Long = System.currentTimeMillis(),
     ): Boolean {
         val normalized = fingerprint.lowercase()
-        val valid = preferences.getStringSet(KEY_ENTRIES)
+        val valid = storage.getStringSet(KEY_ENTRIES)
             .mapNotNull(::decode)
             .filter { now - it.timestamp <= LIFETIME_MS }
             .sortedBy(Entry::timestamp)
@@ -22,9 +41,9 @@ internal class EmergencyFingerprintCache(context: Context) {
         val duplicate = valid.any { it.fingerprint == normalized }
         if (!duplicate) valid += Entry(now, normalized)
         check(
-            preferences.putStringSet(
+            storage.putStringSet(
                 KEY_ENTRIES,
-                valid.takeLast(MAX_ENTRIES)
+                valid.takeLast(maximumEntries)
                     .mapTo(mutableSetOf()) { "${it.timestamp}:${it.fingerprint}" },
             ),
         )
@@ -32,7 +51,7 @@ internal class EmergencyFingerprintCache(context: Context) {
     }
 
     fun clear() {
-        check(preferences.clear())
+        check(storage.clear())
     }
 
     private fun decode(value: String): Entry? {
@@ -46,9 +65,19 @@ internal class EmergencyFingerprintCache(context: Context) {
 
     private data class Entry(val timestamp: Long, val fingerprint: String)
 
-    private companion object {
+    companion object {
+        private const val PREFERENCES = "hearthbit_emergency_fingerprints"
         const val KEY_ENTRIES = "entries"
-        const val MAX_ENTRIES = 512
+        const val MAX_ENTRIES = 2_048
         const val LIFETIME_MS = 24 * 60 * 60 * 1_000L
     }
+}
+
+private class SecureEmergencyFingerprintStorage(
+    private val store: KeystoreSecureStore,
+) : EmergencyFingerprintStorage {
+    override fun getStringSet(key: String): Set<String> = store.getStringSet(key)
+    override fun putStringSet(key: String, value: Set<String>): Boolean =
+        store.putStringSet(key, value)
+    override fun clear(): Boolean = store.clear()
 }

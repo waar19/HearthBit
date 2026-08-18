@@ -296,23 +296,21 @@ class RelayCore:
                     return "trust-store-error", False
             elif packet.has_signature:
                 trusted = self._trust_store.get(packet.sender_id)
-                if trusted is not None:
-                    if not verify_packet_signature(
-                        packet,
-                        trusted.signing_public_key,
-                    ):
-                        LOGGER.warning(
-                            "invalid signature from pinned sender %s",
-                            packet.sender_id.hex(),
-                        )
-                        return "invalid-signature", False
-                elif (
-                    self.config.identity_verification.unknown_signed_policy
-                    == "reject"
-                ):
+                if trusted is None:
+                    LOGGER.warning(
+                        "missing signing key for signed packet from %s",
+                        packet.sender_id.hex(),
+                    )
                     return "unknown-signing-key", False
-                else:
-                    can_store = False
+                if not verify_packet_signature(
+                    packet,
+                    trusted.signing_public_key,
+                ):
+                    LOGGER.warning(
+                        "invalid signature from pinned sender %s",
+                        packet.sender_id.hex(),
+                    )
+                    return "invalid-signature", False
         return None, can_store
 
     async def _presence_loop(self) -> None:

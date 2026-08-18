@@ -34,6 +34,13 @@ def test_store_defaults_include_current_emergency_ack() -> None:
     assert TYPE_EMERGENCY_ACK in RelayConfig().store.message_types
 
 
+def test_unknown_signed_packets_are_rejected_by_default() -> None:
+    assert (
+        RelayConfig().identity_verification.unknown_signed_policy
+        == "reject"
+    )
+
+
 def test_privacy_defaults_bind_lan_to_loopback() -> None:
     config = RelayConfig()
     assert config.lan.listen_host == "127.0.0.1"
@@ -333,6 +340,21 @@ def test_identity_and_flood_policies_are_bounded(tmp_path) -> None:
     assert config.flood.sender_burst == 8
     assert config.flood.bridge_emergency_rate_per_second == 12
     assert config.flood.bridge_emergency_burst == 24
+
+    path.write_text(
+        json.dumps(
+            {
+                "identity_verification": {
+                    "unknown_signed_policy": "relay-live",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert (
+        load_config(path).identity_verification.unknown_signed_policy
+        == "reject"
+    )
 
     path.write_text(
         json.dumps(

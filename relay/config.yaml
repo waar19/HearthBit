@@ -30,7 +30,7 @@ options:
   max_packet_size: 2048
   log_level: "INFO"
   identity_verification:
-    unknown_signed_policy: "relay-live"
+    unknown_signed_policy: "reject"
   flood:
     sender_rate_per_second: 8
     sender_burst: 32

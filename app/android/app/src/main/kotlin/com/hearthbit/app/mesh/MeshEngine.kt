@@ -112,10 +112,17 @@ internal class MeshEngine(
     private val serverMaximumGattValueSizes = ConcurrentHashMap<String, Int>()
     private val storeForward = StoreForwardCache(context)
     private val emergencyFingerprints = EmergencyFingerprintCache(context)
+    private val openEmergencyRateLimiter = OpenEmergencyRateLimiter()
     private val peerTrustStore = PeerTrustStore(context)
     private val ingressAuthenticator = MeshIngressAuthenticator(
         trustLookup = peerTrustStore::lookup,
-        validateAndPin = { peerId, keys -> peerTrustStore.validateAndPin(peerId, keys) },
+        validateAndPin = { peerId, keys ->
+            peerTrustStore.validateAndPin(
+                peerId = peerId,
+                announced = keys,
+                protectedPeerIds = protectedTrustPeerIds(),
+            )
+        },
         rotatePin = peerTrustStore::rotate,
         verifySignature = { packet, key -> identity.verify(packet, key) },
         verifyBytes = { data, signature, key -> identity.verifyBytes(data, signature, key) },
@@ -1314,6 +1321,7 @@ internal class MeshEngine(
         fragmentReassembler.clear()
         storeForward.clear()
         emergencyFingerprints.clear()
+        openEmergencyRateLimiter.clear()
         peerTrustStore.clear()
         rescueModeStore.disable()
         rescueModeExpiresAt = 0L
@@ -1806,6 +1814,17 @@ internal class MeshEngine(
         peersWithSessionHistory.contains(peerIdHex) ||
             hasPendingRelationship(peerIdHex)
 
+    private fun protectedTrustPeerIds(): Set<String> = buildSet {
+        addAll(peersWithSessionHistory)
+        pendingPrivate.filterValues { it.isNotEmpty() }.keys.mapTo(this) { it }
+        pendingFrames.filterValues { it.isNotEmpty() }.keys.mapTo(this) { it }
+        pendingCourier.filterValues { it.isNotEmpty() }.keys.mapTo(this) { it }
+        noiseSessions.snapshot()
+            .asSequence()
+            .filter(NoiseSessionInfo::established)
+            .mapTo(this, NoiseSessionInfo::peerId)
+    }
+
     private fun sendEncryptedPrivate(peerIdHex: String, id: String, content: String) {
         val privateData = MeshProtocol.encodePrivateMessage(id, content)
         val typedPayload = byteArrayOf(MeshProtocol.NOISE_PRIVATE_MESSAGE) + privateData
@@ -2197,7 +2216,23 @@ internal class MeshEngine(
         }
         val fingerprint = MeshProtocol.relayFingerprint(bytes) ?: return
         relayDamping.observeDuplicate(fingerprint, sourceAddress)
-        if (seen.put(fingerprint, System.currentTimeMillis()) != null) return
+        val receivedAt = System.currentTimeMillis()
+        val acceptedAsNew = synchronized(seen) {
+            if (seen.containsKey(fingerprint) || relayDamping.isPending(fingerprint)) {
+                false
+            } else if (EmergencyLanPolicy.isOpenEmergencyLanPacket(packet) &&
+                !openEmergencyRateLimiter.allow(
+                    knownRelationship = isKnownRelationship(senderHex),
+                    now = receivedAt,
+                )
+            ) {
+                false
+            } else {
+                seen[fingerprint] = receivedAt
+                true
+            }
+        }
+        if (!acceptedAsNew) return
 
         val addressedToLocalNode = packet.recipientId?.contentEquals(identity.peerId) == true
         val hasDirectedRecipient = packet.recipientId != null &&
