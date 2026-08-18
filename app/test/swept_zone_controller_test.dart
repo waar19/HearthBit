@@ -132,7 +132,7 @@ void main() {
     },
   );
 
-  test('rechaza actor distinto, ausencia de roster y duplicados', () async {
+  test('reprocesa tras activar roster y rechaza actor y duplicados', () async {
     final mesh = _Mesh();
     final roster = _Roster(mesh: mesh);
     final repository = _Repository();
@@ -151,9 +151,11 @@ void main() {
     expect(controller.zones, isEmpty);
 
     roster.activate(_roster());
+    await _settle();
+    expect(controller.zones, hasLength(1));
     mesh.emit(_message('wrong-actor', zone, sender: '8899aabbccddeeff'));
     await _settle();
-    expect(controller.zones, isEmpty);
+    expect(controller.zones, hasLength(1));
 
     mesh.emit(_message('accepted', zone, sender: _actor));
     await _settle();
@@ -169,9 +171,9 @@ void main() {
     mesh.dispose();
   });
 
-  test('reintenta un mensaje cuando el roster todavía está cargando', () async {
+  test('reintenta un mensaje aunque no haya roster activo', () async {
     final mesh = _Mesh();
-    final roster = _Roster(mesh: mesh)..loading = true;
+    final roster = _Roster(mesh: mesh)..loading = false;
     final now = DateTime.utc(2026, 8, 18, 12);
     final controller = SweptZoneController(
       mesh: mesh,
@@ -186,8 +188,31 @@ void main() {
     expect(controller.zones, isEmpty);
 
     roster.activate(_roster());
-    roster.loading = false;
     roster.notifyListeners();
+    await _settle();
+    expect(controller.zones, hasLength(1));
+
+    controller.dispose();
+    roster.dispose();
+    mesh.dispose();
+  });
+
+  test('reprocesa zona de A recibida mientras B está activo', () async {
+    final mesh = _Mesh();
+    final roster = _Roster(mesh: mesh)..activate(_roster(teamId: '0' * 32));
+    final now = DateTime.utc(2026, 8, 18, 12);
+    final controller = SweptZoneController(
+      mesh: mesh,
+      roster: roster,
+      repository: _Repository(),
+      now: () => now,
+    );
+    await controller.initialize();
+    mesh.emit(_message('team-a-under-b', _zone(now), sender: _actor));
+    await _settle();
+    expect(controller.zones, isEmpty);
+
+    roster.activate(_roster());
     await _settle();
     expect(controller.zones, hasLength(1));
 
@@ -346,22 +371,25 @@ MeshMessage _message(
   external: external,
 );
 
-RescueTeamRoster _roster({DateTime? createdAt, String callsign = 'Águila'}) =>
-    RescueTeamRoster(
-      teamId: _team,
-      name: 'Equipo',
-      createdAt: createdAt ?? DateTime.utc(2026),
-      leaderPeerId: _actor,
-      members: [
-        RescueRosterMember(
-          peerId: _actor,
-          callsign: callsign,
-          role: RescueRosterRole.leader,
-          signingPublicKey: Uint8List(32),
-        ),
-      ],
-      signature: Uint8List(64),
-    );
+RescueTeamRoster _roster({
+  DateTime? createdAt,
+  String callsign = 'Águila',
+  String teamId = _team,
+}) => RescueTeamRoster(
+  teamId: teamId,
+  name: 'Equipo',
+  createdAt: createdAt ?? DateTime.utc(2026),
+  leaderPeerId: _actor,
+  members: [
+    RescueRosterMember(
+      peerId: _actor,
+      callsign: callsign,
+      role: RescueRosterRole.leader,
+      signingPublicKey: Uint8List(32),
+    ),
+  ],
+  signature: Uint8List(64),
+);
 
 SweptZone _zone(DateTime now) {
   final startedAt = now.subtract(const Duration(minutes: 2));

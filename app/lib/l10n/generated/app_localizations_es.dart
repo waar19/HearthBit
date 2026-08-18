@@ -2166,6 +2166,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get rescueRosterCallsign => 'Indicativo del líder';
 
   @override
+  String rescueRosterUtf8TooLarge(int maximum) {
+    return 'Usa como máximo $maximum bytes UTF-8.';
+  }
+
+  @override
   String get rescueRosterAddMember => 'AÑADIR MIEMBRO CERCANO';
 
   @override

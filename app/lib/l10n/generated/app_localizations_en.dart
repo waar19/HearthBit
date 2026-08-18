@@ -2147,6 +2147,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get rescueRosterCallsign => 'Leader callsign';
 
   @override
+  String rescueRosterUtf8TooLarge(int maximum) {
+    return 'Use no more than $maximum UTF-8 bytes.';
+  }
+
+  @override
   String get rescueRosterAddMember => 'ADD NEARBY MEMBER';
 
   @override

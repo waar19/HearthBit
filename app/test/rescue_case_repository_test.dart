@@ -68,8 +68,8 @@ void main() {
 
   test('deduplica SOS por hash y eventos por identidad canónica', () async {
     final rescueCase = _case();
-    expect(await repository.insertSos(rescueCase), isTrue);
-    expect(await repository.insertSos(rescueCase), isFalse);
+    expect((await repository.insertSos(rescueCase)).inserted, isTrue);
+    expect((await repository.insertSos(rescueCase)).inserted, isFalse);
 
     final update = RescueCaseUpdate(
       teamId: rescueCase.teamId,
@@ -80,8 +80,11 @@ void main() {
       assigneePeerId: '0011223344556677',
       timestamp: DateTime.utc(2026, 8, 17, 1),
     );
-    expect(await repository.applyIncomingUpdate(update), isNotNull);
-    expect(await repository.applyIncomingUpdate(update), isNull);
+    expect(
+      (await repository.applyIncomingUpdate(update)).rescueCase,
+      isNotNull,
+    );
+    expect((await repository.applyIncomingUpdate(update)).rescueCase, isNull);
     expect(
       await repository.eventCount(
         teamId: rescueCase.teamId,
@@ -115,7 +118,7 @@ void main() {
         updatedAt: oldClosed.updatedAt,
         lastActorPeerId: oldClosed.lastActorPeerId,
       );
-      expect(await repository.insertSos(validOldClosed), isTrue);
+      expect((await repository.insertSos(validOldClosed)).inserted, isTrue);
 
       for (
         var index = 0;
@@ -150,6 +153,43 @@ void main() {
       );
     },
   );
+
+  test(
+    'migra v3 poblada al roster activo sin perder casos ni eventos',
+    () async {
+      final legacy = await _openPopulatedV3(databasePath, activeTeam: '0' * 32);
+      await legacy.close();
+
+      final cases = await repository.loadCases(teamId: '0' * 32);
+      expect(cases, hasLength(1));
+      expect(cases.single.message, 'Ayuda legado');
+      expect(cases.single.state, RescueCaseState.assigned);
+
+      final migrated = await databaseFactoryFfi.openDatabase(databasePath);
+      final events = await migrated.query('rescue_case_events');
+      expect(events, hasLength(1));
+      expect(events.single['team_id'], '0' * 32);
+      expect(events.single['previous_state'], RescueCaseState.newCase.wireCode);
+      expect(await _tableExists(migrated, 'legacy_rescue_cases_v3'), isFalse);
+      await migrated.close();
+    },
+  );
+
+  test('migra v3 sin roster a cuarentena recuperable y no la mezcla', () async {
+    final legacy = await _openPopulatedV3(databasePath);
+    await legacy.close();
+
+    expect(await repository.loadCases(teamId: '0' * 32), isEmpty);
+
+    final migrated = await databaseFactoryFfi.openDatabase(databasePath);
+    expect(await migrated.query('rescue_cases'), isEmpty);
+    expect(await migrated.query('rescue_case_events'), isEmpty);
+    final legacyCases = await migrated.query('legacy_rescue_cases_v3');
+    final legacyEvents = await migrated.query('legacy_rescue_case_events_v3');
+    expect(legacyCases.single['message'], 'Ayuda legado');
+    expect(legacyEvents.single['state'], RescueCaseState.assigned.wireCode);
+    await migrated.close();
+  });
 }
 
 RescueCase _case() => RescueCase(
@@ -163,3 +203,97 @@ RescueCase _case() => RescueCase(
   updatedAt: DateTime.utc(2026, 8, 17),
   lastActorPeerId: '8899aabbccddeeff',
 );
+
+Future<Database> _openPopulatedV3(
+  String databasePath, {
+  String? activeTeam,
+}) async {
+  final database = await databaseFactoryFfi.openDatabase(
+    databasePath,
+    options: OpenDatabaseOptions(
+      version: 3,
+      onCreate: (database, version) async {
+        await RescueDatabaseSchema.createRosterTables(database);
+        await database.execute('''
+          CREATE TABLE rescue_cases (
+            case_hash TEXT PRIMARY KEY,
+            victim_peer_id TEXT NOT NULL,
+            victim TEXT NOT NULL,
+            message TEXT NOT NULL,
+            triage TEXT,
+            latitude REAL,
+            longitude REAL,
+            state TEXT NOT NULL,
+            assignee_peer_id TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            last_actor_peer_id TEXT NOT NULL
+          )
+        ''');
+        await database.execute('''
+          CREATE TABLE rescue_case_events (
+            event_id TEXT PRIMARY KEY,
+            case_hash TEXT NOT NULL,
+            state TEXT NOT NULL,
+            actor_peer_id TEXT NOT NULL,
+            assignee_peer_id TEXT,
+            created_at INTEGER NOT NULL,
+            applied INTEGER NOT NULL CHECK(applied IN (0, 1)),
+            FOREIGN KEY(case_hash) REFERENCES rescue_cases(case_hash)
+              ON DELETE CASCADE
+          )
+        ''');
+        await RescueDatabaseSchema.createSweptZoneTables(database);
+      },
+    ),
+  );
+  if (activeTeam != null) {
+    await database.insert('rescue_teams', {
+      'team_id': activeTeam,
+      'name': 'Equipo',
+      'created_at': 1,
+      'leader_peer_id': '0011223344556677',
+      'signature': Uint8List(64),
+      'active': 1,
+    });
+  }
+  final rescueCase = _case().copyWith(
+    state: RescueCaseState.assigned,
+    assigneePeerId: '0011223344556677',
+    updatedAt: DateTime.utc(2026, 8, 17, 1),
+  );
+  await database.insert('rescue_cases', {
+    'case_hash': rescueCase.caseHash,
+    'victim_peer_id': rescueCase.victimPeerId,
+    'victim': rescueCase.victim,
+    'message': 'Ayuda legado',
+    'triage': null,
+    'latitude': null,
+    'longitude': null,
+    'state': rescueCase.state.wireCode,
+    'assignee_peer_id': rescueCase.assigneePeerId,
+    'created_at': rescueCase.createdAt.millisecondsSinceEpoch,
+    'updated_at': rescueCase.updatedAt.millisecondsSinceEpoch,
+    'last_actor_peer_id': rescueCase.lastActorPeerId,
+  });
+  await database.insert('rescue_case_events', {
+    'event_id': 'legacy-event',
+    'case_hash': rescueCase.caseHash,
+    'state': RescueCaseState.assigned.wireCode,
+    'actor_peer_id': '0011223344556677',
+    'assignee_peer_id': '0011223344556677',
+    'created_at': rescueCase.updatedAt.millisecondsSinceEpoch,
+    'applied': 1,
+  });
+  return database;
+}
+
+Future<bool> _tableExists(Database database, String name) async {
+  final rows = await database.query(
+    'sqlite_master',
+    columns: ['name'],
+    where: "type = 'table' AND name = ?",
+    whereArgs: [name],
+  );
+  return rows.isNotEmpty;
+}

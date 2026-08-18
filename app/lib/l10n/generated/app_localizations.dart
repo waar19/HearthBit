@@ -3798,6 +3798,12 @@ abstract class AppLocalizations {
   /// **'Leader callsign'**
   String get rescueRosterCallsign;
 
+  /// No description provided for @rescueRosterUtf8TooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'Use no more than {maximum} UTF-8 bytes.'**
+  String rescueRosterUtf8TooLarge(int maximum);
+
   /// No description provided for @rescueRosterAddMember.
   ///
   /// In en, this message translates to:

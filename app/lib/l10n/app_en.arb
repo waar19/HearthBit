@@ -701,6 +701,8 @@
   "rescueRosterCreate": "CREATE ROSTER",
   "rescueRosterTeamName": "Team name",
   "rescueRosterCallsign": "Leader callsign",
+  "rescueRosterUtf8TooLarge": "Use no more than {maximum} UTF-8 bytes.",
+  "@rescueRosterUtf8TooLarge": {"placeholders": {"maximum": {"type": "int"}}},
   "rescueRosterAddMember": "ADD NEARBY MEMBER",
   "rescueRosterNoEligiblePeers": "No nearby HearthBit identity with a signing key is available to add.",
   "rescueRosterNearbyIdentity": "Nearby identity",

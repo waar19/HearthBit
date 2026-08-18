@@ -22,6 +22,8 @@ class RescueCaseController extends ChangeNotifier {
 
   static const String channel = 'rescue-case';
   static const Duration maximumFutureSkew = Duration(minutes: 5);
+  static const Duration packetTimestampTolerance = Duration(seconds: 1);
+  static const int maximumProcessedMessageIds = 4096;
   static const String _caseHashDomain = 'hearthbit.rescue-case.v1';
 
   final MeshController mesh;
@@ -145,9 +147,7 @@ class RescueCaseController extends ChangeNotifier {
         throw StateError('Rescue case update was not transmitted');
       }
       final committed = await _repository.commitLocalUpdate(update);
-      if (committed.teamId == _loadedTeamId) {
-        _casesByHash[caseHash] = committed;
-      }
+      _applyWriteResult(committed);
       lastError = null;
       if (!_disposed) notifyListeners();
     } catch (error) {
@@ -192,13 +192,17 @@ class RescueCaseController extends ChangeNotifier {
                 : first.id.compareTo(second.id);
           });
         for (final message in messages) {
-          if (_processedMessageIds.contains(message.id)) continue;
+          final processingKey = _processingKey(message.id);
+          if (processingKey != null &&
+              _processedMessageIds.contains(processingKey)) {
+            continue;
+          }
           if (message.isSos) {
             final outcome = await _ingestSos(message);
-            if (outcome != _IngestOutcome.retryLater) {
-              _rememberProcessed(message.id);
+            if (outcome != _IngestOutcome.retryLater && processingKey != null) {
+              _rememberProcessed(processingKey);
             } else {
-              _recordRetry(message.id);
+              _recordRetry(processingKey);
             }
             continue;
           }
@@ -213,10 +217,10 @@ class RescueCaseController extends ChangeNotifier {
           if (update != null && !message.isMine) {
             outcome = await _ingestUpdate(message, update);
           }
-          if (outcome != _IngestOutcome.retryLater) {
-            _rememberProcessed(message.id);
+          if (outcome != _IngestOutcome.retryLater && processingKey != null) {
+            _rememberProcessed(processingKey);
           } else {
-            _recordRetry(message.id);
+            _recordRetry(processingKey);
           }
         }
       } while (_processingRequested);
@@ -235,9 +239,7 @@ class RescueCaseController extends ChangeNotifier {
     }
     final activeRoster = roster.activeRoster;
     if (activeRoster == null) {
-      return roster.loading
-          ? _IngestOutcome.retryLater
-          : _IngestOutcome.permanent;
+      return _IngestOutcome.retryLater;
     }
     final sender = message.senderPeerId.trim().toLowerCase();
     if (!RegExp(r'^[0-9a-f]{16}$').hasMatch(sender) || message.id.isEmpty) {
@@ -269,7 +271,7 @@ class RescueCaseController extends ChangeNotifier {
       lastActorPeerId: sender,
     );
     final inserted = await _repository.insertSos(rescueCase);
-    if (inserted) _casesByHash[hash] = rescueCase;
+    _applyWriteResult(inserted);
     return _IngestOutcome.accepted;
   }
 
@@ -279,9 +281,7 @@ class RescueCaseController extends ChangeNotifier {
   ) async {
     final activeRoster = roster.activeRoster;
     if (activeRoster == null) {
-      return roster.loading
-          ? _IngestOutcome.retryLater
-          : _IngestOutcome.permanent;
+      return _IngestOutcome.retryLater;
     }
     final senderPeerId = message.senderPeerId.toLowerCase();
     if (update.teamId != activeRoster.teamId ||
@@ -292,15 +292,18 @@ class RescueCaseController extends ChangeNotifier {
     if (member == null) return _IngestOutcome.permanent;
     final current = _casesByHash[update.caseHash];
     if (current == null) return _IngestOutcome.retryLater;
-    if (update.timestamp.isBefore(current.createdAt) ||
+    final packetDelta = update.timestamp
+        .toUtc()
+        .difference(message.timestamp.toUtc())
+        .abs();
+    if (packetDelta > packetTimestampTolerance ||
+        update.timestamp.isBefore(current.createdAt) ||
         update.timestamp.isAfter(_now().toUtc().add(maximumFutureSkew)) ||
         !_isAuthorized(member, update, current)) {
       return _IngestOutcome.permanent;
     }
     final applied = await _repository.applyIncomingUpdate(update);
-    if (applied != null && applied.teamId == _loadedTeamId) {
-      _casesByHash[update.caseHash] = applied;
-    }
+    _applyWriteResult(applied);
     return _IngestOutcome.accepted;
   }
 
@@ -337,21 +340,35 @@ class RescueCaseController extends ChangeNotifier {
         .toString();
   }
 
-  void _rememberProcessed(String messageId) {
-    _retryCounts.remove(messageId);
-    _processedMessageIds.add(messageId);
-    if (_processedMessageIds.length > 4096) {
+  String? _processingKey(String messageId) {
+    final teamId = roster.activeRoster?.teamId;
+    return teamId == null ? null : '$teamId|$messageId';
+  }
+
+  void _rememberProcessed(String processingKey) {
+    _retryCounts.remove(processingKey);
+    _processedMessageIds.add(processingKey);
+    if (_processedMessageIds.length > maximumProcessedMessageIds) {
       _processedMessageIds.remove(_processedMessageIds.first);
     }
   }
 
-  void _recordRetry(String messageId) {
-    final count = (_retryCounts[messageId] ?? 0) + 1;
-    if (count >= 16) {
-      _rememberProcessed(messageId);
-      return;
+  void _recordRetry(String? processingKey) {
+    if (processingKey == null) return;
+    _retryCounts[processingKey] = (_retryCounts[processingKey] ?? 0) + 1;
+    if (_retryCounts.length > maximumProcessedMessageIds) {
+      _retryCounts.remove(_retryCounts.keys.first);
     }
-    _retryCounts[messageId] = count;
+  }
+
+  void _applyWriteResult(RescueCaseWriteResult result) {
+    for (final caseHash in result.prunedCaseHashes) {
+      _casesByHash.remove(caseHash);
+    }
+    final rescueCase = result.rescueCase;
+    if (rescueCase != null && rescueCase.teamId == _loadedTeamId) {
+      _casesByHash[rescueCase.caseHash] = rescueCase;
+    }
   }
 
   static int _compareCases(RescueCase first, RescueCase second) {

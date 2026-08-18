@@ -647,6 +647,7 @@
   "rescueRosterCreate": "LISTE ERSTELLEN",
   "rescueRosterTeamName": "Teamname",
   "rescueRosterCallsign": "Rufname der Teamleitung",
+  "rescueRosterUtf8TooLarge": "Verwende höchstens {maximum} UTF-8-Bytes.",
   "rescueRosterAddMember": "NAHES MITGLIED HINZUFÜGEN",
   "rescueRosterNoEligiblePeers": "Keine nahe HearthBit-Identität mit Signaturschlüssel kann hinzugefügt werden.",
   "rescueRosterNearbyIdentity": "Nahe Identität",

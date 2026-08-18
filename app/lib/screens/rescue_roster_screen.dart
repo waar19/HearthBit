@@ -8,6 +8,8 @@ import '../controllers/rescue_roster_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../models/rescue_roster_models.dart';
+import '../services/rescue_roster_codec.dart';
+import '../utils/utf8_text.dart';
 import '../widgets/sensitive_screen.dart';
 import 'optical_send_screen.dart';
 
@@ -31,40 +33,64 @@ class _RescueRosterScreenState extends State<RescueRosterScreen> {
     final callsign = TextEditingController();
     final values = await showDialog<List<String>>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(context.l10n.rescueRosterCreate),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: team,
-              maxLength: 80,
-              decoration: InputDecoration(
-                labelText: context.l10n.rescueRosterTeamName,
-              ),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final teamTooLarge =
+              utf8ByteLength(team.text.trim()) >
+              RescueRosterCodec.maximumTeamNameBytes;
+          final callsignTooLarge =
+              utf8ByteLength(callsign.text.trim()) >
+              RescueRosterCodec.maximumCallsignBytes;
+          return AlertDialog(
+            title: Text(context.l10n.rescueRosterCreate),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: team,
+                  maxLength: 80,
+                  onChanged: (_) => setDialogState(() {}),
+                  decoration: InputDecoration(
+                    labelText: context.l10n.rescueRosterTeamName,
+                    errorText: teamTooLarge
+                        ? context.l10n.rescueRosterUtf8TooLarge(
+                            RescueRosterCodec.maximumTeamNameBytes,
+                          )
+                        : null,
+                  ),
+                ),
+                TextField(
+                  controller: callsign,
+                  maxLength: 63,
+                  onChanged: (_) => setDialogState(() {}),
+                  decoration: InputDecoration(
+                    labelText: context.l10n.rescueRosterCallsign,
+                    errorText: callsignTooLarge
+                        ? context.l10n.rescueRosterUtf8TooLarge(
+                            RescueRosterCodec.maximumCallsignBytes,
+                          )
+                        : null,
+                  ),
+                ),
+              ],
             ),
-            TextField(
-              controller: callsign,
-              maxLength: 63,
-              decoration: InputDecoration(
-                labelText: context.l10n.rescueRosterCallsign,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(context.l10n.actionCancel),
               ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(context.l10n.actionCancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, [
-              team.text.trim(),
-              callsign.text.trim(),
-            ]),
-            child: Text(context.l10n.actionSave),
-          ),
-        ],
+              FilledButton(
+                onPressed: teamTooLarge || callsignTooLarge
+                    ? null
+                    : () => Navigator.pop(dialogContext, [
+                        team.text.trim(),
+                        callsign.text.trim(),
+                      ]),
+                child: Text(context.l10n.actionSave),
+              ),
+            ],
+          );
+        },
       ),
     );
     team.dispose();
@@ -260,8 +286,16 @@ class _RescueRosterScreenState extends State<RescueRosterScreen> {
               TextField(
                 controller: callsign,
                 maxLength: 63,
+                onChanged: (_) => setDialogState(() {}),
                 decoration: InputDecoration(
                   labelText: context.l10n.rescueRosterMemberCallsign,
+                  errorText:
+                      utf8ByteLength(callsign.text.trim()) >
+                          RescueRosterCodec.maximumCallsignBytes
+                      ? context.l10n.rescueRosterUtf8TooLarge(
+                          RescueRosterCodec.maximumCallsignBytes,
+                        )
+                      : null,
                 ),
               ),
               DropdownButtonFormField<RescueRosterRole>(
@@ -292,14 +326,18 @@ class _RescueRosterScreenState extends State<RescueRosterScreen> {
               child: Text(context.l10n.actionCancel),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(
-                dialogContext,
-                _NewRosterMemberInput(
-                  peer: selectedPeer,
-                  callsign: callsign.text.trim(),
-                  role: selectedRole,
-                ),
-              ),
+              onPressed:
+                  utf8ByteLength(callsign.text.trim()) >
+                      RescueRosterCodec.maximumCallsignBytes
+                  ? null
+                  : () => Navigator.pop(
+                      dialogContext,
+                      _NewRosterMemberInput(
+                        peer: selectedPeer,
+                        callsign: callsign.text.trim(),
+                        role: selectedRole,
+                      ),
+                    ),
               child: Text(context.l10n.rescueRosterAddMember),
             ),
           ],

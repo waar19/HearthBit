@@ -67,9 +67,11 @@ class _UiRepository extends RescueCaseRepository {
   Future<bool> stageLocalUpdate(RescueCaseUpdate update) async => true;
 
   @override
-  Future<RescueCase> commitLocalUpdate(RescueCaseUpdate update) async {
+  Future<RescueCaseWriteResult> commitLocalUpdate(
+    RescueCaseUpdate update,
+  ) async {
     rescueCase = RescueCaseTransition.resolve(rescueCase, update)!;
-    return rescueCase;
+    return RescueCaseWriteResult(inserted: true, rescueCase: rescueCase);
   }
 
   @override

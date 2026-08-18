@@ -171,10 +171,10 @@ void main() {
     mesh.dispose();
   });
 
-  test('reintenta el anuncio si el roster aún no está listo', () async {
+  test('reintenta el anuncio aunque no haya roster activo', () async {
     final now = DateTime.utc(2026, 8, 18, 12);
     final mesh = _Mesh();
-    final roster = _Roster(mesh: mesh, current: null)..loading = true;
+    final roster = _Roster(mesh: mesh, current: null)..loading = false;
     final controller = AuthorityAnnouncementController(
       mesh: mesh,
       roster: roster,
@@ -191,7 +191,38 @@ void main() {
     await _settle();
     expect(controller.announcements, isEmpty);
 
-    roster.loading = false;
+    roster.activate(_roster());
+    await _settle();
+    expect(controller.announcements, hasLength(1));
+
+    controller.dispose();
+    roster.dispose();
+    mesh.dispose();
+  });
+
+  test('reprocesa anuncio de A recibido mientras B está activo', () async {
+    final now = DateTime.utc(2026, 8, 18, 12);
+    final mesh = _Mesh();
+    final roster = _Roster(
+      mesh: mesh,
+      current: _roster(teamId: _otherTeam),
+    );
+    final controller = AuthorityAnnouncementController(
+      mesh: mesh,
+      roster: roster,
+      now: () => now,
+    );
+    await controller.initialize();
+    mesh.emit(
+      _message(
+        id: 'team-a-under-b',
+        sender: _authority,
+        announcement: _announcement(issuedAt: now),
+      ),
+    );
+    await _settle();
+    expect(controller.announcements, isEmpty);
+
     roster.activate(_roster());
     await _settle();
     expect(controller.announcements, hasLength(1));
@@ -241,30 +272,31 @@ AuthorityAnnouncement _announcement({
   callsign: 'Autoridad',
 );
 
-RescueTeamRoster _roster({Uint8List? authorityKey}) => RescueTeamRoster(
-  teamId: _team,
-  name: 'Equipo',
-  createdAt: DateTime.utc(2026),
-  leaderPeerId: '7777777777777777',
-  members: [
-    RescueRosterMember(
-      peerId: '7777777777777777',
-      callsign: 'Líder',
-      role: RescueRosterRole.leader,
-      signingPublicKey: Uint8List(32),
-    ),
-    RescueRosterMember(
-      peerId: _authority,
-      callsign: 'Autoridad',
-      role: RescueRosterRole.authority,
-      signingPublicKey: authorityKey ?? Uint8List(32),
-    ),
-    RescueRosterMember(
-      peerId: _responder,
-      callsign: 'Rescatista',
-      role: RescueRosterRole.responder,
-      signingPublicKey: Uint8List(32),
-    ),
-  ],
-  signature: Uint8List(64),
-);
+RescueTeamRoster _roster({Uint8List? authorityKey, String teamId = _team}) =>
+    RescueTeamRoster(
+      teamId: teamId,
+      name: 'Equipo',
+      createdAt: DateTime.utc(2026),
+      leaderPeerId: '7777777777777777',
+      members: [
+        RescueRosterMember(
+          peerId: '7777777777777777',
+          callsign: 'Líder',
+          role: RescueRosterRole.leader,
+          signingPublicKey: Uint8List(32),
+        ),
+        RescueRosterMember(
+          peerId: _authority,
+          callsign: 'Autoridad',
+          role: RescueRosterRole.authority,
+          signingPublicKey: authorityKey ?? Uint8List(32),
+        ),
+        RescueRosterMember(
+          peerId: _responder,
+          callsign: 'Rescatista',
+          role: RescueRosterRole.responder,
+          signingPublicKey: Uint8List(32),
+        ),
+      ],
+      signature: Uint8List(64),
+    );

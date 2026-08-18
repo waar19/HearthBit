@@ -109,8 +109,11 @@ abstract final class RescueDatabaseSchema {
     );
   }
 
-  /// Los casos v3 no tenían equipo y no pueden migrarse sin mezclar incidentes.
-  /// Se eliminan de forma explícita; el roster y sus pines sí se conservan.
+  /// La apertura de sqflite ejecuta `onUpgrade` en una transacción.
+  ///
+  /// Los casos v3 no tenían equipo. Si existe un roster activo, se atribuyen a
+  /// ese equipo. De lo contrario, las tablas se conservan con prefijo
+  /// `legacy_` para recuperación explícita y nunca se mezclan automáticamente.
   static Future<void> migrateToV4(DatabaseExecutor database) async {
     await database.execute('''
       CREATE TABLE IF NOT EXISTS rescue_roster_versions (
@@ -124,8 +127,67 @@ abstract final class RescueDatabaseSchema {
       ON CONFLICT(team_id) DO UPDATE SET max_created_at =
         MAX(max_created_at, excluded.max_created_at)
     ''');
-    await database.execute('DROP TABLE IF EXISTS rescue_case_events');
-    await database.execute('DROP TABLE IF EXISTS rescue_cases');
+    final caseColumns = await database.rawQuery(
+      'PRAGMA table_info(rescue_cases)',
+    );
+    final alreadyScoped = caseColumns.any(
+      (column) => column['name'] == 'team_id',
+    );
+    if (caseColumns.isEmpty || alreadyScoped) {
+      await createCaseTables(database);
+      return;
+    }
+    await database.execute(
+      'ALTER TABLE rescue_case_events RENAME TO legacy_rescue_case_events_v3',
+    );
+    await database.execute(
+      'ALTER TABLE rescue_cases RENAME TO legacy_rescue_cases_v3',
+    );
+    await database.execute('DROP INDEX IF EXISTS rescue_cases_priority_idx');
+    await database.execute('DROP INDEX IF EXISTS rescue_case_events_case_idx');
     await createCaseTables(database);
+    final activeTeams = await database.query(
+      'rescue_teams',
+      columns: ['team_id'],
+      where: 'active = 1',
+      limit: 1,
+    );
+    if (activeTeams.isEmpty) return;
+    final teamId = activeTeams.single['team_id']! as String;
+    await database.rawInsert(
+      '''
+      INSERT INTO rescue_cases(
+        team_id, case_hash, canonical_hash, victim_peer_id, victim, message,
+        triage, latitude, longitude, state, assignee_peer_id, created_at,
+        updated_at, last_actor_peer_id
+      )
+      SELECT ?, case_hash, NULL, victim_peer_id, victim, message, triage,
+        latitude, longitude, state, assignee_peer_id, created_at, updated_at,
+        last_actor_peer_id
+      FROM legacy_rescue_cases_v3
+      ''',
+      [teamId],
+    );
+    await database.rawInsert(
+      '''
+      INSERT INTO rescue_case_events(
+        event_id, team_id, case_hash, previous_state, state, actor_peer_id,
+        assignee_peer_id, created_at, applied
+      )
+      SELECT event_id, ?, case_hash,
+        CASE state
+          WHEN 'A' THEN 'N'
+          WHEN 'E' THEN 'A'
+          WHEN 'T' THEN 'E'
+          WHEN 'C' THEN 'T'
+          ELSE 'N'
+        END,
+        state, actor_peer_id, assignee_peer_id, created_at, applied
+      FROM legacy_rescue_case_events_v3
+      ''',
+      [teamId],
+    );
+    await database.execute('DROP TABLE legacy_rescue_case_events_v3');
+    await database.execute('DROP TABLE legacy_rescue_cases_v3');
   }
 }

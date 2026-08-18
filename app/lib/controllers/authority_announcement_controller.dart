@@ -135,7 +135,9 @@ class AuthorityAnnouncementController extends ChangeNotifier {
                 : first.id.compareTo(second.id);
           });
         for (final message in messages) {
-          if (_processedMessageIds.contains(message.id) ||
+          final processingKey = _processingKey(message.id);
+          if ((processingKey != null &&
+                  _processedMessageIds.contains(processingKey)) ||
               message.isPrivate ||
               message.external ||
               message.channel != channel ||
@@ -143,8 +145,8 @@ class AuthorityAnnouncementController extends ChangeNotifier {
             continue;
           }
           final outcome = _ingest(message);
-          if (outcome != _IngestOutcome.retryLater) {
-            _processedMessageIds.add(message.id);
+          if (outcome != _IngestOutcome.retryLater && processingKey != null) {
+            _processedMessageIds.add(processingKey);
             if (_processedMessageIds.length > maximumProcessedMessageIds) {
               _processedMessageIds.remove(_processedMessageIds.first);
             }
@@ -164,9 +166,7 @@ class AuthorityAnnouncementController extends ChangeNotifier {
   _IngestOutcome _ingest(MeshMessage message) {
     final activeRoster = roster.activeRoster;
     if (activeRoster == null) {
-      return roster.loading
-          ? _IngestOutcome.retryLater
-          : _IngestOutcome.permanent;
+      return _IngestOutcome.retryLater;
     }
     final senderPeerId = message.senderPeerId.trim().toLowerCase();
     final member = _memberByPeerId(senderPeerId);
@@ -200,6 +200,11 @@ class AuthorityAnnouncementController extends ChangeNotifier {
       }
     }
     _scheduleExpiry();
+  }
+
+  String? _processingKey(String messageId) {
+    final teamId = roster.activeRoster?.teamId;
+    return teamId == null ? null : '$teamId|$messageId';
   }
 
   RescueRosterMember? _memberByPeerId(String peerId) {

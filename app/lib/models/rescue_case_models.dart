@@ -185,8 +185,10 @@ abstract final class RescueCaseUpdateCodec {
 }
 
 abstract final class RescueCaseTransition {
-  /// Las asignaciones que observaron `new` compiten por el menor peer ID.
-  /// El timestamp no interviene, por lo que un reloj manipulado no gana.
+  static const Duration assignmentConflictWindow = Duration(seconds: 30);
+
+  /// Solo las asignaciones que observaron `new` dentro de la misma ventana
+  /// compiten por el menor peer ID. Fuera de ella, `assigned` es final.
   static RescueCase? resolve(RescueCase current, RescueCaseUpdate update) {
     if (current.teamId != update.teamId ||
         current.caseHash != update.caseHash ||
@@ -197,7 +199,12 @@ abstract final class RescueCaseTransition {
         update.state == RescueCaseState.assigned &&
         current.state == RescueCaseState.assigned) {
       final currentAssignee = current.assigneePeerId;
-      if (currentAssignee == null ||
+      final assignmentDelta = update.timestamp
+          .toUtc()
+          .difference(current.updatedAt.toUtc())
+          .abs();
+      if (assignmentDelta > assignmentConflictWindow ||
+          currentAssignee == null ||
           update.assigneePeerId!.compareTo(currentAssignee) >= 0) {
         return null;
       }

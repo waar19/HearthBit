@@ -1651,6 +1651,58 @@ class RunnerTests: XCTestCase {
     )
   }
 
+  func testRescueRosterBatchRejectsActiveSigningPinConflictAtomically() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore()
+    let active = makePeerPinMaterial()
+    let originalRosterMember = makePeerPinMaterial()
+    _ = try store.validateAndPin(
+      peerID: active.peerID,
+      noisePublicKey: active.noise,
+      signingPublicKey: active.signing
+    )
+    try store.importRescueRosterPins([
+      IOSRescueRosterPin(
+        peerID: originalRosterMember.peerID,
+        signingPublicKey: originalRosterMember.signing
+      ),
+    ])
+    let persisted = backend.data
+    let counters = store.operationalCounters()
+    let valid = makePeerPinMaterial()
+    let conflictingSigning = Curve25519.Signing.PrivateKey()
+      .publicKey.rawRepresentation
+
+    XCTAssertThrowsError(
+      try store.importRescueRosterPins([
+        IOSRescueRosterPin(
+          peerID: valid.peerID,
+          signingPublicKey: valid.signing
+        ),
+        IOSRescueRosterPin(
+          peerID: active.peerID,
+          signingPublicKey: conflictingSigning
+        ),
+      ])
+    )
+
+    XCTAssertEqual(backend.data, persisted)
+    XCTAssertEqual(store.pin(for: active.peerID)?.signingPublicKey, active.signing)
+    XCTAssertNil(store.rescueSigningKey(for: valid.peerID))
+    XCTAssertEqual(
+      store.rescueSigningKey(for: originalRosterMember.peerID),
+      originalRosterMember.signing
+    )
+    XCTAssertEqual(
+      store.operationalCounters()["trustStoreEvictions"],
+      counters["trustStoreEvictions"]
+    )
+    XCTAssertEqual(
+      store.operationalCounters()["trustConflicts"],
+      (counters["trustConflicts"] ?? 0) + 1
+    )
+  }
+
   func testPeerPinCapacityEvictsDeterministicUnprotectedBinding() throws {
     let backend = TestSecurePinBackend()
     let store = backend.makeStore(maximumPins: 2)

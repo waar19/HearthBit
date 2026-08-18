@@ -301,7 +301,7 @@ final class IOSPeerIdentityPinStore {
     guard values.count <= Self.defaultMaximumPins else {
       throw IOSMeshError.invalidPayload
     }
-    var replacement: [String: Data] = [:]
+    var candidates: [String: Data] = [:]
     var signingKeys = Set<Data>()
     for value in values {
       let normalized = value.peerID.lowercased()
@@ -313,18 +313,26 @@ final class IOSPeerIdentityPinStore {
       else {
         throw IOSMeshError.invalidPayload
       }
-      // Una rotación autorizada retira la identidad del roster persistido.
-      // Ignorar aquí ese miembro mantiene el arranque disponible, pero la
-      // verificación nativa queda cerrada hasta importar un roster actualizado.
-      if let identity = pins[normalized],
-         identity.retired == true || identity.signingPublicKey != value.signingPublicKey {
-        continue
-      }
       guard
-        replacement[normalized] == nil,
+        candidates[normalized] == nil,
         signingKeys.insert(value.signingPublicKey).inserted
       else { throw IOSMeshError.invalidPayload }
-      replacement[normalized] = value.signingPublicKey
+      candidates[normalized] = value.signingPublicKey
+    }
+    var replacement: [String: Data] = [:]
+    for (normalized, signingPublicKey) in candidates {
+      // Una rotación autorizada puede dejar una identidad retirada en un
+      // roster Dart desactualizado. Solo esa identidad retirada se omite.
+      if let identity = pins[normalized] {
+        if identity.retired == true {
+          continue
+        }
+        if identity.signingPublicKey != signingPublicKey {
+          incrementTrustConflict()
+          throw IOSMeshError.invalidPayload
+        }
+      }
+      replacement[normalized] = signingPublicKey
     }
     let previous = rescueRosterPins
     rescueRosterPins = replacement

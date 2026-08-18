@@ -2071,6 +2071,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get rescueRosterCallsign => 'リーダーのコールサイン';
 
   @override
+  String rescueRosterUtf8TooLarge(int maximum) {
+    return '$maximum UTF-8 バイト以内で入力してください。';
+  }
+
+  @override
   String get rescueRosterAddMember => '近くのメンバーを追加';
 
   @override

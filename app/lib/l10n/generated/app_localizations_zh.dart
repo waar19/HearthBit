@@ -2033,6 +2033,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get rescueRosterCallsign => '队长呼号';
 
   @override
+  String rescueRosterUtf8TooLarge(int maximum) {
+    return '请输入不超过 $maximum 个 UTF-8 字节。';
+  }
+
+  @override
   String get rescueRosterAddMember => '添加附近成员';
 
   @override

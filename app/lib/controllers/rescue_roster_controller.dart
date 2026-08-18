@@ -7,6 +7,7 @@ import '../models/rescue_roster_models.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/rescue_roster_codec.dart';
 import '../services/rescue_roster_repository.dart';
+import '../utils/utf8_text.dart';
 import 'mesh_controller.dart';
 
 class RescueRosterController extends ChangeNotifier {
@@ -62,6 +63,8 @@ class RescueRosterController extends ChangeNotifier {
     required String leaderCallsign,
     Iterable<RescueRosterMember> members = const [],
   }) async {
+    validateTeamName(teamName);
+    validateCallsign(leaderCallsign);
     final localKey = mesh.signingPublicKey;
     if (mesh.peerId.isEmpty || localKey?.length != 32) {
       throw StateError('Local signing identity is not available');
@@ -118,6 +121,7 @@ class RescueRosterController extends ChangeNotifier {
     required RescueRosterRole role,
     required Uint8List signingPublicKey,
   }) {
+    validateCallsign(callsign);
     if (role == RescueRosterRole.leader) {
       throw const FormatException('A rescue roster can have only one leader');
     }
@@ -174,6 +178,22 @@ class RescueRosterController extends ChangeNotifier {
       if (member.peerId == normalized) return member;
     }
     return null;
+  }
+
+  static void validateTeamName(String value) {
+    final clean = value.trim();
+    if (clean.isEmpty ||
+        utf8ByteLength(clean) > RescueRosterCodec.maximumTeamNameBytes) {
+      throw const FormatException('Invalid rescue team name');
+    }
+  }
+
+  static void validateCallsign(String value) {
+    final clean = value.trim();
+    if (clean.isEmpty ||
+        utf8ByteLength(clean) > RescueRosterCodec.maximumCallsignBytes) {
+      throw const FormatException('Invalid rescue callsign');
+    }
   }
 
   Future<void> clearRoster() async {

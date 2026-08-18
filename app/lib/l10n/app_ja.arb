@@ -647,6 +647,7 @@
   "rescueRosterCreate": "名簿を作成",
   "rescueRosterTeamName": "チーム名",
   "rescueRosterCallsign": "リーダーのコールサイン",
+  "rescueRosterUtf8TooLarge": "{maximum} UTF-8 バイト以内で入力してください。",
   "rescueRosterAddMember": "近くのメンバーを追加",
   "rescueRosterNoEligiblePeers": "追加できる署名鍵付きの近くのHearthBit IDがありません。",
   "rescueRosterNearbyIdentity": "近くのID",

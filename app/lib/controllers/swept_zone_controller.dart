@@ -27,6 +27,7 @@ class SweptZoneController extends ChangeNotifier {
   static const double maximumAcceptedAccuracyMeters = 50;
   static const double minimumPointDistanceMeters = 5;
   static const Duration maximumFutureSkew = Duration(minutes: 5);
+  static const int maximumProcessedMessageIds = 1000;
 
   final MeshController mesh;
   final RescueRosterController roster;
@@ -274,7 +275,9 @@ class SweptZoneController extends ChangeNotifier {
             return timeOrder != 0 ? timeOrder : first.id.compareTo(second.id);
           });
         for (final message in messages) {
-          if (_processedMessageIds.contains(message.id) ||
+          final processingKey = _processingKey(message.id);
+          if ((processingKey != null &&
+                  _processedMessageIds.contains(processingKey)) ||
               message.isPrivate ||
               message.external ||
               message.channel != channel ||
@@ -288,8 +291,11 @@ class SweptZoneController extends ChangeNotifier {
               outcome = await _ingestIncoming(message, zone);
             }
           }
-          if (outcome != _IngestOutcome.retryLater) {
-            _processedMessageIds.add(message.id);
+          if (outcome != _IngestOutcome.retryLater && processingKey != null) {
+            _processedMessageIds.add(processingKey);
+            if (_processedMessageIds.length > maximumProcessedMessageIds) {
+              _processedMessageIds.remove(_processedMessageIds.first);
+            }
           }
         }
       } while (_processingRequested);
@@ -308,9 +314,7 @@ class SweptZoneController extends ChangeNotifier {
   ) async {
     final activeRoster = roster.activeRoster;
     if (activeRoster == null) {
-      return roster.loading
-          ? _IngestOutcome.retryLater
-          : _IngestOutcome.permanent;
+      return _IngestOutcome.retryLater;
     }
     final sender = message.senderPeerId.trim().toLowerCase();
     if (zone.teamId != activeRoster.teamId ||
@@ -343,6 +347,11 @@ class SweptZoneController extends ChangeNotifier {
       activeRoster.teamId == _recordingTeamId &&
       member.peerId == _recordingActorPeerId &&
       member.callsign == _recordingCallsign;
+
+  String? _processingKey(String messageId) {
+    final teamId = roster.activeRoster?.teamId;
+    return teamId == null ? null : '$teamId|$messageId';
+  }
 
   void _cancelForRosterChange() {
     _clearRecording();

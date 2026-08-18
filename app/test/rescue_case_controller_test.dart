@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as path;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:hearth_bit/controllers/mesh_controller.dart';
 import 'package:hearth_bit/controllers/rescue_case_controller.dart';
@@ -92,18 +95,46 @@ class _Repository extends RescueCaseRepository {
   Future<void> discardStaleLocalUpdates() async => staged.clear();
 
   @override
-  Future<bool> insertSos(RescueCase rescueCase) async {
-    if (stored.containsKey(rescueCase.caseHash)) return false;
+  Future<RescueCaseWriteResult> insertSos(RescueCase rescueCase) async {
+    if (stored.containsKey(rescueCase.caseHash)) {
+      return const RescueCaseWriteResult(inserted: false, rescueCase: null);
+    }
     stored[rescueCase.caseHash] = rescueCase;
-    return true;
+    final pruned = <String>{};
+    final teamCases =
+        stored.values.where((item) => item.teamId == rescueCase.teamId).toList()
+          ..sort((first, second) {
+            final updated = second.updatedAt.compareTo(first.updatedAt);
+            return updated != 0
+                ? updated
+                : first.caseHash.compareTo(second.caseHash);
+          });
+    for (final removed in teamCases.skip(
+      RescueCaseRepository.maximumCasesPerTeam,
+    )) {
+      stored.remove(removed.caseHash);
+      pruned.add(removed.caseHash);
+    }
+    return RescueCaseWriteResult(
+      inserted: true,
+      rescueCase: pruned.contains(rescueCase.caseHash) ? null : rescueCase,
+      prunedCaseHashes: pruned,
+    );
   }
 
   @override
-  Future<RescueCase?> applyIncomingUpdate(RescueCaseUpdate update) async {
-    if (!events.add(update.eventId)) return null;
+  Future<RescueCaseWriteResult> applyIncomingUpdate(
+    RescueCaseUpdate update,
+  ) async {
+    if (events.contains(update.eventId)) {
+      return const RescueCaseWriteResult(inserted: false, rescueCase: null);
+    }
     final next = RescueCaseTransition.resolve(stored[update.caseHash]!, update);
-    if (next != null) stored[next.caseHash] = next;
-    return next;
+    if (next != null) {
+      events.add(update.eventId);
+      stored[next.caseHash] = next;
+    }
+    return RescueCaseWriteResult(inserted: next != null, rescueCase: next);
   }
 
   @override
@@ -111,12 +142,17 @@ class _Repository extends RescueCaseRepository {
       staged.add(update.eventId);
 
   @override
-  Future<RescueCase> commitLocalUpdate(RescueCaseUpdate update) async {
+  Future<RescueCaseWriteResult> commitLocalUpdate(
+    RescueCaseUpdate update,
+  ) async {
     expect(staged.remove(update.eventId), isTrue);
     events.add(update.eventId);
     final next = RescueCaseTransition.resolve(stored[update.caseHash]!, update);
     if (next != null) stored[next.caseHash] = next;
-    return next ?? stored[update.caseHash]!;
+    return RescueCaseWriteResult(
+      inserted: next != null,
+      rescueCase: next ?? stored[update.caseHash]!,
+    );
   }
 
   @override
@@ -136,6 +172,8 @@ void main() {
   late Uint8List localKey;
   late Uint8List keyA;
   late Uint8List keyB;
+
+  setUpAll(sqfliteFfiInit);
 
   setUp(() async {
     localKey = Uint8List.fromList(List<int>.filled(32, 1));
@@ -261,6 +299,33 @@ void main() {
 
     expect(controller.cases.single.state, RescueCaseState.attended);
     expect(controller.cases.single.assigneePeerId, _remoteA);
+  });
+
+  test('asignación menor 31 segundos después no roba el caso', () async {
+    mesh.emit(_sos('sos'));
+    mesh.emit(_updateMessage(_remoteB, keyB, 2000));
+    mesh.emit(_updateMessage(_remoteA, keyA, 33001));
+    await _pump();
+
+    expect(controller.cases.single.state, RescueCaseState.assigned);
+    expect(controller.cases.single.assigneePeerId, _remoteB);
+    expect(repository.events, hasLength(1));
+  });
+
+  test('rechaza timestamp payload distinto al paquete firmado', () async {
+    mesh.emit(_sos('sos'));
+    mesh.emit(
+      _updateMessage(
+        _remoteA,
+        keyA,
+        2000,
+        packetTimestamp: DateTime.fromMillisecondsSinceEpoch(4000, isUtc: true),
+      ),
+    );
+    await _pump();
+
+    expect(controller.cases.single.state, RescueCaseState.newCase);
+    expect(repository.events, isEmpty);
   });
 
   test('asignarme persiste y usa el canal MESSAGE firmado normal', () async {
@@ -437,6 +502,131 @@ void main() {
 
     expect(controller.cases.single.state, RescueCaseState.assigned);
   });
+
+  test(
+    'reprocesa update recibido sin roster cuando después se activa',
+    () async {
+      final active = roster.roster;
+      roster.roster = null;
+      roster.loading = false;
+      roster.notifyListeners();
+      mesh.emit(_updateMessage(_remoteA, keyA, 2000));
+      await _pump();
+
+      roster.roster = active;
+      roster.notifyListeners();
+      mesh.emit(_sos('sos'));
+      await _pump();
+
+      expect(controller.cases.single.state, RescueCaseState.assigned);
+    },
+  );
+
+  test('update de A recibido bajo B se procesa al volver a A', () async {
+    final rosterA = roster.roster!;
+    mesh.emit(_sos('sos'));
+    await _pump();
+    roster.roster = _rosterForTeam(
+      teamId: 'f' * 32,
+      localKey: localKey,
+      remoteKey: keyA,
+    );
+    roster.notifyListeners();
+    await _pump();
+
+    mesh.emit(_updateMessage(_remoteA, keyA, 2000));
+    await _pump();
+    expect(controller.cases, isEmpty);
+
+    roster.roster = rosterA;
+    roster.notifyListeners();
+    await _pump();
+    expect(controller.cases.single.state, RescueCaseState.assigned);
+  });
+
+  test('controller y repositorio retienen los mismos 2000 casos', () async {
+    for (
+      var index = 0;
+      index <= RescueCaseRepository.maximumCasesPerTeam;
+      index++
+    ) {
+      mesh.storedMessages.add(_sos('capacity-$index'));
+    }
+    mesh.notifyListeners();
+    await _pump(10);
+
+    expect(
+      controller.cases,
+      hasLength(RescueCaseRepository.maximumCasesPerTeam),
+    );
+    expect(
+      repository.stored,
+      hasLength(RescueCaseRepository.maximumCasesPerTeam),
+    );
+    expect(
+      controller.cases.map((item) => item.caseHash).toSet(),
+      repository.stored.keys.toSet(),
+    );
+  });
+
+  test('base de datos y controller conservan los mismos 2000 hashes', () async {
+    final temporaryDirectory = await Directory.systemTemp.createTemp(
+      'hearth_bit_case_controller_retention_',
+    );
+    final databasePath = path.join(temporaryDirectory.path, 'rescue.db');
+    final realMesh = _Mesh()
+      ..peerId = _local
+      ..signingPublicKey = localKey;
+    final realRoster = _Roster(mesh: realMesh, roster: roster.roster);
+    final realRepository = RescueCaseRepository(
+      databaseFactory: databaseFactoryFfi,
+      databasePath: databasePath,
+      now: () => DateTime.fromMillisecondsSinceEpoch(10000, isUtc: true),
+    );
+    final realController = RescueCaseController(
+      mesh: realMesh,
+      roster: realRoster,
+      repository: realRepository,
+      now: () => DateTime.fromMillisecondsSinceEpoch(10000, isUtc: true),
+    );
+    await realController.initialize();
+    for (
+      var index = 0;
+      index <= RescueCaseRepository.maximumCasesPerTeam;
+      index++
+    ) {
+      realMesh.storedMessages.add(_sos('db-capacity-$index'));
+    }
+    realMesh.notifyListeners();
+    for (
+      var attempt = 0;
+      attempt < 3000 &&
+          realController.cases.length <
+              RescueCaseRepository.maximumCasesPerTeam;
+      attempt++
+    ) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    await _pump(10);
+
+    final persisted = await realRepository.loadCases(teamId: _team);
+    expect(
+      realController.cases,
+      hasLength(RescueCaseRepository.maximumCasesPerTeam),
+    );
+    expect(persisted, hasLength(RescueCaseRepository.maximumCasesPerTeam));
+    expect(
+      realController.cases.map((item) => item.caseHash).toSet(),
+      persisted.map((item) => item.caseHash).toSet(),
+    );
+
+    await realRepository.close();
+    realController.dispose();
+    realRoster.dispose();
+    realMesh.dispose();
+    await databaseFactoryFfi.deleteDatabase(databasePath);
+    await temporaryDirectory.delete(recursive: true);
+  });
 }
 
 RescueRosterMember _member(
@@ -480,6 +670,7 @@ MeshMessage _updateMessage(
   bool isPrivate = false,
   bool external = false,
   String channel = RescueCaseController.channel,
+  DateTime? packetTimestamp,
 }) {
   final update = RescueCaseUpdate(
     teamId: _team,
@@ -500,14 +691,30 @@ MeshMessage _updateMessage(
     senderPeerId: actor,
     isPrivate: isPrivate,
     isMine: false,
-    timestamp: update.timestamp,
+    timestamp: packetTimestamp ?? update.timestamp,
     channel: channel,
     external: external,
   );
 }
 
-Future<void> _pump() async {
-  await Future<void>.delayed(Duration.zero);
-  await Future<void>.delayed(Duration.zero);
-  await Future<void>.delayed(Duration.zero);
+RescueTeamRoster _rosterForTeam({
+  required String teamId,
+  required Uint8List localKey,
+  required Uint8List remoteKey,
+}) => RescueTeamRoster(
+  teamId: teamId,
+  name: 'Other',
+  createdAt: DateTime.fromMillisecondsSinceEpoch(2),
+  leaderPeerId: _local,
+  members: [
+    _member(_local, localKey, RescueRosterRole.leader),
+    _member(_remoteA, remoteKey, RescueRosterRole.responder),
+  ],
+  signature: Uint8List(64),
+);
+
+Future<void> _pump([int turns = 3]) async {
+  for (var index = 0; index < turns; index++) {
+    await Future<void>.delayed(Duration.zero);
+  }
 }

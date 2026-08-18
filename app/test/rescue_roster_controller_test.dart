@@ -71,6 +71,41 @@ class _Repository extends RescueRosterRepository {
 }
 
 void main() {
+  test('valida límites UTF-8 antes de codificar el roster', () {
+    expect(
+      () => RescueRosterController.validateTeamName('😀' * 20),
+      returnsNormally,
+    );
+    expect(
+      () => RescueRosterController.validateTeamName('😀' * 21),
+      throwsFormatException,
+    );
+    expect(
+      () => RescueRosterController.validateCallsign('😀' * 15),
+      returnsNormally,
+    );
+    expect(
+      () => RescueRosterController.validateCallsign('😀' * 16),
+      throwsFormatException,
+    );
+    expect(
+      () => RescueRosterController.validateTeamName('a' * 80),
+      returnsNormally,
+    );
+    expect(
+      () => RescueRosterController.validateTeamName('a' * 81),
+      throwsFormatException,
+    );
+    expect(
+      () => RescueRosterController.validateCallsign('a' * 63),
+      returnsNormally,
+    );
+    expect(
+      () => RescueRosterController.validateCallsign('a' * 64),
+      throwsFormatException,
+    );
+  });
+
   test('crea, exporta e importa roster y exige ID más clave', () async {
     final algorithm = Ed25519();
     final keyPair = await algorithm.newKeyPair();

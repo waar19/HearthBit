@@ -647,6 +647,7 @@
   "rescueRosterCreate": "CREAR ROSTER",
   "rescueRosterTeamName": "Nombre del equipo",
   "rescueRosterCallsign": "Indicativo del líder",
+  "rescueRosterUtf8TooLarge": "Usa como máximo {maximum} bytes UTF-8.",
   "rescueRosterAddMember": "AÑADIR MIEMBRO CERCANO",
   "rescueRosterNoEligiblePeers": "No hay una identidad HearthBit cercana con clave de firma disponible para añadir.",
   "rescueRosterNearbyIdentity": "Identidad cercana",

@@ -647,6 +647,7 @@
   "rescueRosterCreate": "创建名册",
   "rescueRosterTeamName": "队伍名称",
   "rescueRosterCallsign": "队长呼号",
+  "rescueRosterUtf8TooLarge": "请输入不超过 {maximum} 个 UTF-8 字节。",
   "rescueRosterAddMember": "添加附近成员",
   "rescueRosterNoEligiblePeers": "附近没有可添加且带签名公钥的 HearthBit 身份。",
   "rescueRosterNearbyIdentity": "附近身份",
