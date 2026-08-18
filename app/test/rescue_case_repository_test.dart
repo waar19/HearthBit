@@ -35,7 +35,7 @@ void main() {
     await temporaryDirectory.delete(recursive: true);
   });
 
-  test('migra v1 a v2 sin borrar el roster', () async {
+  test('migra v1 a v3 sin borrar el roster', () async {
     final legacy = await databaseFactoryFfi.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
@@ -60,7 +60,7 @@ void main() {
     expect((await migrated.query('rescue_teams')).single['name'], 'Equipo');
     expect(
       (await migrated.rawQuery('PRAGMA user_version')).single['user_version'],
-      2,
+      3,
     );
     await migrated.close();
   });

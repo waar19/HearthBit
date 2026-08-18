@@ -2185,4 +2185,72 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get rescueTriageOther => 'その他';
+
+  @override
+  String get mapFilterActive => '対応中';
+
+  @override
+  String get mapFilterUnassigned => '未割り当て';
+
+  @override
+  String get mapFilterAssigned => '割り当て済み';
+
+  @override
+  String get mapFilterClosed => '完了';
+
+  @override
+  String mapOperationalCases(int count) {
+    return '運用中の案件 $count 件';
+  }
+
+  @override
+  String get mapCasesEmpty => 'このフィルターに一致する案件はありません。';
+
+  @override
+  String mapClusterTooltip(int count, String priority) {
+    return 'SOS 案件 $count 件・最高優先度：$priority';
+  }
+
+  @override
+  String get mapPriorityLow => '低優先度';
+
+  @override
+  String get mapPriorityMedium => '中優先度';
+
+  @override
+  String get mapPriorityHigh => '高優先度';
+
+  @override
+  String get mapPriorityCritical => '緊急優先度';
+
+  @override
+  String get mapCaseNoCoordinates => 'この案件には座標がありません';
+
+  @override
+  String get mapZoneConsent => 'この操作が画面上で有効な間だけ、捜索済み経路を記録します。';
+
+  @override
+  String get mapZoneStart => '経路を記録';
+
+  @override
+  String mapZoneRecording(int count, int maximum) {
+    return '捜索済み経路を記録中・$count/$maximum ポイント';
+  }
+
+  @override
+  String get mapZoneVisibleOnly => 'キャンセル、共有、またはこの地図を離れると位置記録は停止します。';
+
+  @override
+  String get mapZoneFinish => '経路を終了して共有';
+
+  @override
+  String get mapZonePublished => '捜索済み経路を確認済みチームと共有しました。';
+
+  @override
+  String get mapZoneLocationRequired => '経路の記録には位置情報の許可とサービスが必要です。';
+
+  @override
+  String mapZoneError(String error) {
+    return '捜索済み経路を記録または共有できませんでした：$error';
+  }
 }

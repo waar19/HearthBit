@@ -7,16 +7,28 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../controllers/mesh_controller.dart';
+import '../controllers/rescue_case_controller.dart';
+import '../controllers/swept_zone_controller.dart';
 import '../l10n/l10n.dart';
-import '../models/mesh_models.dart';
+import '../models/rescue_case_models.dart';
+import '../models/swept_zone_models.dart';
 import '../services/offline_tile_cache.dart';
 import '../services/peer_location_tracker.dart';
-import '../services/rescue_export_service.dart';
+import '../services/rescue_case_clusterer.dart';
+
+enum MapCaseFilter { active, unassigned, assigned, closed }
 
 class MapScreen extends StatefulWidget {
-  const MapScreen({required this.controller, super.key});
+  const MapScreen({
+    required this.controller,
+    required this.rescueCases,
+    required this.sweptZones,
+    super.key,
+  });
 
   final MeshController controller;
+  final RescueCaseController rescueCases;
+  final SweptZoneController sweptZones;
 
   @override
   State<MapScreen> createState() => _MapScreenState();
@@ -29,9 +41,12 @@ class _MapScreenState extends State<MapScreen> {
   final MapTileSource _tileSource = MapTileSource.fromEnvironment();
   OfflineTileCache? _tileCache;
   OfflineTileProvider? _tileProvider;
+  StreamSubscription<Position>? _positionSubscription;
   Position? _localPosition;
   String? _initializationError;
   Object? _lastTileError;
+  MapCaseFilter _filter = MapCaseFilter.active;
+  double _zoom = 14;
   bool _downloading = false;
   int _downloaded = 0;
   int _downloadTotal = 0;
@@ -59,17 +74,19 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  Future<bool> _ensureLocationPermission() async {
+    if (!await Geolocator.isLocationServiceEnabled()) return false;
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    return permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse;
+  }
+
   Future<void> _refreshLocalPosition({bool moveMap = false}) async {
     try {
-      if (!await Geolocator.isLocationServiceEnabled()) return;
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission != LocationPermission.always &&
-          permission != LocationPermission.whileInUse) {
-        return;
-      }
+      if (!await _ensureLocationPermission()) return;
       final position =
           await Geolocator.getLastKnownPosition() ??
           await Geolocator.getCurrentPosition(
@@ -84,30 +101,49 @@ class _MapScreenState extends State<MapScreen> {
         _mapController.move(LatLng(position.latitude, position.longitude), 14);
       }
     } catch (_) {
-      // The map remains useful with peer markers and cached tiles.
+      // Cached tiles, rescue cases, and team zones remain usable without GPS.
     }
   }
 
   LatLng? get _initialCenter {
     final local = _localPosition;
     if (local != null) return LatLng(local.latitude, local.longitude);
+    for (final rescueCase in widget.rescueCases.cases) {
+      if (rescueCase.latitude != null && rescueCase.longitude != null) {
+        return LatLng(rescueCase.latitude!, rescueCase.longitude!);
+      }
+    }
+    for (final zone in widget.sweptZones.zones) {
+      if (zone.points.isNotEmpty) {
+        return LatLng(zone.points.first.latitude, zone.points.first.longitude);
+      }
+    }
     final peer = widget.controller.peerLocations.latestLocations.firstOrNull;
     return peer == null ? null : LatLng(peer.latitude, peer.longitude);
   }
 
-  List<RescueIncident> get _incidents => RescueIncidentList.fromMessages(
-    widget.controller.messages,
-    originLatitude: _localPosition?.latitude,
-    originLongitude: _localPosition?.longitude,
-  );
+  List<RescueCase> get _filteredCases => widget.rescueCases.cases
+      .where(
+        (rescueCase) => switch (_filter) {
+          MapCaseFilter.active => rescueCase.state != RescueCaseState.closed,
+          MapCaseFilter.unassigned =>
+            rescueCase.state == RescueCaseState.newCase &&
+                rescueCase.assigneePeerId == null,
+          MapCaseFilter.assigned =>
+            rescueCase.state == RescueCaseState.assigned ||
+                rescueCase.state == RescueCaseState.enRoute ||
+                rescueCase.state == RescueCaseState.attended,
+          MapCaseFilter.closed => rescueCase.state == RescueCaseState.closed,
+        },
+      )
+      .toList(growable: false);
 
   Future<void> _downloadVisibleArea() async {
     final cache = _tileCache;
     if (cache == null || _downloading) return;
     try {
-      final camera = _mapController.camera;
-      final bounds = camera.visibleBounds;
-      final currentZoom = camera.zoom.floor().clamp(
+      final bounds = _mapController.camera.visibleBounds;
+      final currentZoom = _mapController.camera.zoom.floor().clamp(
         _planner.minimumZoom,
         _planner.maximumZoom,
       );
@@ -139,59 +175,98 @@ class _MapScreenState extends State<MapScreen> {
           });
         },
       );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.mapDownloadComplete(tiles.length))),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.mapDownloadComplete(tiles.length)),
+          ),
+        );
+      }
     } on TileDownloadLimitException catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.mapDownloadTooLarge(error.maximum)),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.mapDownloadTooLarge(error.maximum)),
+          ),
+        );
+      }
     } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.mapDownloadError('$error'))),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.mapDownloadError('$error'))),
+        );
+      }
     } finally {
       if (mounted) setState(() => _downloading = false);
     }
   }
 
-  Future<void> _shareCsv() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(context.l10n.locationExportConfirmTitle),
-        content: Text(context.l10n.locationExportConfirmBody),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(context.l10n.actionCancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(context.l10n.locationExportConfirmAction),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
+  Future<void> _startRecording() async {
     try {
-      final renderBox = context.findRenderObject() as RenderBox?;
-      await RescueExportService.share(
-        incidents: _incidents,
-        anchor: renderBox,
-        subject: context.l10n.rescueExportSubject,
-      );
+      if (!await _ensureLocationPermission()) {
+        if (!mounted) return;
+        throw StateError(context.l10n.mapZoneLocationRequired);
+      }
+      widget.sweptZones.startRecording();
+      await _positionSubscription?.cancel();
+      _positionSubscription =
+          Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              distanceFilter: 3,
+            ),
+          ).listen(
+            (position) {
+              widget.sweptZones.addRecordedPoint(
+                latitude: position.latitude,
+                longitude: position.longitude,
+                accuracyMeters: position.accuracy,
+                recordedAt: position.timestamp,
+              );
+              if (widget.sweptZones.draftPoints.length >=
+                  SweptZoneCodec.maximumPoints) {
+                unawaited(_positionSubscription?.cancel());
+                _positionSubscription = null;
+              }
+            },
+            onError: (Object error) {
+              widget.sweptZones.cancelRecording();
+              _positionSubscription = null;
+              if (mounted) _showZoneError(error);
+            },
+          );
     } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.rescueExportError('$error'))),
-      );
+      if (mounted) _showZoneError(error);
     }
+  }
+
+  Future<void> _finishRecording() async {
+    _positionSubscription?.pause();
+    try {
+      await widget.sweptZones.finishAndPublish();
+      await _positionSubscription?.cancel();
+      _positionSubscription = null;
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.l10n.mapZonePublished)));
+      }
+    } catch (error) {
+      _positionSubscription?.resume();
+      if (mounted) _showZoneError(error);
+    }
+  }
+
+  Future<void> _cancelRecording() async {
+    await _positionSubscription?.cancel();
+    _positionSubscription = null;
+    widget.sweptZones.cancelRecording();
+  }
+
+  void _showZoneError(Object error) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.l10n.mapZoneError('$error'))),
+    );
   }
 
   Future<void> _openExternalUrl(Uri uri) async {
@@ -205,6 +280,8 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   void dispose() {
+    _positionSubscription?.cancel();
+    if (widget.sweptZones.isRecording) widget.sweptZones.cancelRecording();
     _mapController.dispose();
     final cache = _tileCache;
     if (cache != null) unawaited(cache.close());
@@ -214,7 +291,11 @@ class _MapScreenState extends State<MapScreen> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: widget.controller,
+      animation: Listenable.merge([
+        widget.controller,
+        widget.rescueCases,
+        widget.sweptZones,
+      ]),
       builder: (context, _) => Scaffold(
         appBar: AppBar(
           title: Text(context.l10n.mapTitle),
@@ -230,15 +311,11 @@ class _MapScreenState extends State<MapScreen> {
                 onPressed: _downloading ? null : _downloadVisibleArea,
                 icon: const Icon(Icons.download_for_offline_outlined),
               ),
-            IconButton(
-              tooltip: context.l10n.rescueExportCsv,
-              onPressed: _incidents.isEmpty ? null : _shareCsv,
-              icon: const Icon(Icons.ios_share),
-            ),
           ],
         ),
         body: Column(
           children: [
+            _buildFilters(context),
             Expanded(flex: 3, child: _buildMap(context)),
             if (_downloading)
               LinearProgressIndicator(
@@ -247,39 +324,44 @@ class _MapScreenState extends State<MapScreen> {
                     : _downloaded / _downloadTotal,
               ),
             if (_downloading)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Text(
-                  context.l10n.mapDownloading(_downloaded, _downloadTotal),
-                ),
-              ),
-            if (_tileSource.isPublicOpenStreetMap)
-              Material(
-                color: Theme.of(context).colorScheme.surfaceContainer,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.offline_pin_outlined, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          context.l10n.mapPassiveCacheInfo,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () =>
-                            _openExternalUrl(Uri.parse(osmTilePolicyUrl)),
-                        child: Text(context.l10n.mapTilePolicyAction),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            Expanded(flex: 2, child: _buildIncidentList(context)),
+              Text(context.l10n.mapDownloading(_downloaded, _downloadTotal)),
+            _buildRecordingControls(context),
+            if (_tileSource.isPublicOpenStreetMap) _buildTilePolicy(context),
+            Expanded(flex: 2, child: _buildCaseList(context)),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFilters(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: SegmentedButton<MapCaseFilter>(
+        showSelectedIcon: false,
+        segments: [
+          ButtonSegment(
+            value: MapCaseFilter.active,
+            label: Text(context.l10n.mapFilterActive),
+          ),
+          ButtonSegment(
+            value: MapCaseFilter.unassigned,
+            label: Text(context.l10n.mapFilterUnassigned),
+          ),
+          ButtonSegment(
+            value: MapCaseFilter.assigned,
+            label: Text(context.l10n.mapFilterAssigned),
+          ),
+          ButtonSegment(
+            value: MapCaseFilter.closed,
+            label: Text(context.l10n.mapFilterClosed),
+          ),
+        ],
+        selected: {_filter},
+        onSelectionChanged: (selection) {
+          setState(() => _filter = selection.single);
+        },
       ),
     );
   }
@@ -288,13 +370,7 @@ class _MapScreenState extends State<MapScreen> {
     final provider = _tileProvider;
     if (_initializationError != null) {
       return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            context.l10n.mapCacheError(_initializationError!),
-            textAlign: TextAlign.center,
-          ),
-        ),
+        child: Text(context.l10n.mapCacheError(_initializationError!)),
       );
     }
     if (provider == null) {
@@ -305,83 +381,29 @@ class _MapScreenState extends State<MapScreen> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.location_off_outlined,
-                size: 56,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                context.l10n.mapNoLocationTitle,
-                style: Theme.of(context).textTheme.titleLarge,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(context.l10n.mapNoLocationBody, textAlign: TextAlign.center),
-            ],
+          child: Text(
+            context.l10n.mapNoLocationBody,
+            textAlign: TextAlign.center,
           ),
         ),
       );
     }
-    final markers = <Marker>[
-      if (_localPosition case final position?)
-        Marker(
-          point: LatLng(position.latitude, position.longitude),
-          width: 48,
-          height: 48,
-          child: Tooltip(
-            message: context.l10n.mapYouAreHere,
-            child: const Icon(Icons.my_location, color: Colors.blue, size: 34),
-          ),
-        ),
-      ...widget.controller.peerLocations.latestLocations.map(
-        (location) => Marker(
-          point: LatLng(location.latitude, location.longitude),
-          width: 52,
-          height: 52,
-          child: Tooltip(
-            message: _peerName(location.peerId),
-            child: Icon(
-              location.source == PeerLocationSource.live
-                  ? Icons.near_me
-                  : Icons.location_on,
-              color: location.source == PeerLocationSource.live
-                  ? Colors.purple
-                  : Colors.red,
-              size: 40,
-            ),
-          ),
-        ),
-      ),
-    ];
-    final trails = widget.controller.peerLocations.latestLocations
-        .map(
-          (location) =>
-              widget.controller.peerLocations.trailFor(location.peerId),
-        )
-        .where((trail) => trail.length > 1)
-        .map(
-          (trail) => Polyline(
-            points: trail
-                .map((point) => LatLng(point.latitude, point.longitude))
-                .toList(growable: false),
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
-            strokeWidth: 3,
-          ),
-        )
-        .toList(growable: false);
+    final clusters = RescueCaseClusterer.cluster(_filteredCases, zoom: _zoom);
     return Stack(
       children: [
         FlutterMap(
           mapController: _mapController,
           options: MapOptions(
             initialCenter: initialCenter,
-            initialZoom: 14,
+            initialZoom: _zoom,
             minZoom: 2,
             maxZoom: _planner.maximumZoom.toDouble(),
+            onMapEvent: (event) {
+              final nextZoom = event.camera.zoom;
+              if ((nextZoom - _zoom).abs() >= 0.01 && mounted) {
+                setState(() => _zoom = nextZoom);
+              }
+            },
           ),
           children: [
             TileLayer(
@@ -392,8 +414,8 @@ class _MapScreenState extends State<MapScreen> {
               errorTileCallback: (_, error, _) => _handleTileError(error),
               evictErrorTileStrategy: EvictErrorTileStrategy.notVisible,
             ),
-            if (trails.isNotEmpty) PolylineLayer(polylines: trails),
-            MarkerLayer(markers: markers),
+            PolylineLayer(polylines: _zonePolylines(context)),
+            MarkerLayer(markers: _markers(context, clusters)),
             RichAttributionWidget(
               attributions: [
                 TextSourceAttribution(
@@ -404,91 +426,325 @@ class _MapScreenState extends State<MapScreen> {
             ),
           ],
         ),
-        if (_lastTileError != null)
-          Positioned(
-            top: 8,
-            left: 8,
-            right: 8,
-            child: Material(
-              color: Theme.of(context).colorScheme.errorContainer,
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: Row(
-                  children: [
-                    const Icon(Icons.map_outlined),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _lastTileError is TileAccessBlockedException
-                            ? context.l10n.mapTileBlockedHint
-                            : context.l10n.mapOfflineHint,
-                        textAlign: TextAlign.left,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: MaterialLocalizations.of(
-                        context,
-                      ).closeButtonTooltip,
-                      onPressed: () => setState(() => _lastTileError = null),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+        if (_lastTileError != null) _buildTileError(context),
       ],
     );
   }
 
-  Widget _buildIncidentList(BuildContext context) {
-    final incidents = _incidents;
+  List<Marker> _markers(
+    BuildContext context,
+    List<RescueCaseCluster> clusters,
+  ) => [
+    if (_localPosition case final position?)
+      Marker(
+        point: LatLng(position.latitude, position.longitude),
+        width: 44,
+        height: 44,
+        child: Tooltip(
+          message: context.l10n.mapYouAreHere,
+          child: const Icon(Icons.my_location, color: Colors.blue, size: 32),
+        ),
+      ),
+    ...widget.controller.peerLocations.latestLocations.map(
+      (location) => Marker(
+        point: LatLng(location.latitude, location.longitude),
+        width: 44,
+        height: 44,
+        child: Tooltip(
+          message: _peerName(location.peerId),
+          child: Icon(
+            location.source == PeerLocationSource.live
+                ? Icons.near_me
+                : Icons.location_on,
+            color: location.source == PeerLocationSource.live
+                ? Colors.purple
+                : Colors.red,
+            size: 34,
+          ),
+        ),
+      ),
+    ),
+    ...clusters.map((cluster) => _clusterMarker(context, cluster)),
+  ];
+
+  Marker _clusterMarker(BuildContext context, RescueCaseCluster cluster) {
+    final priorityColor = _priorityColor(cluster.maximumPriority);
+    if (cluster.isCluster) {
+      return Marker(
+        point: LatLng(cluster.latitude, cluster.longitude),
+        width: 58,
+        height: 58,
+        child: Tooltip(
+          message: context.l10n.mapClusterTooltip(
+            cluster.cases.length,
+            _priorityLabel(context, cluster.maximumPriority),
+          ),
+          child: Semantics(
+            button: true,
+            label: context.l10n.mapClusterTooltip(
+              cluster.cases.length,
+              _priorityLabel(context, cluster.maximumPriority),
+            ),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: () => _mapController.move(
+                LatLng(cluster.latitude, cluster.longitude),
+                (_zoom + 2)
+                    .clamp(2, _planner.maximumZoom.toDouble())
+                    .toDouble(),
+              ),
+              child: CircleAvatar(
+                backgroundColor: priorityColor,
+                foregroundColor: Colors.white,
+                child: Text(
+                  '${cluster.cases.length}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    final rescueCase = cluster.cases.single;
+    return Marker(
+      point: LatLng(cluster.latitude, cluster.longitude),
+      width: 52,
+      height: 52,
+      child: Tooltip(
+        message:
+            '${rescueCase.victim} · ${_caseStateLabel(context, rescueCase.state)} · '
+            '${_priorityLabel(context, cluster.maximumPriority)}',
+        child: Container(
+          decoration: BoxDecoration(
+            color: _stateColor(rescueCase.state),
+            shape: BoxShape.circle,
+            border: Border.all(color: priorityColor, width: 4),
+          ),
+          child: Icon(
+            _priorityIcon(cluster.maximumPriority),
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Polyline> _zonePolylines(BuildContext context) {
+    final polylines = <Polyline>[
+      ...widget.controller.peerLocations.latestLocations
+          .map(
+            (location) =>
+                widget.controller.peerLocations.trailFor(location.peerId),
+          )
+          .where((trail) => trail.length > 1)
+          .map(
+            (trail) => Polyline(
+              points: trail
+                  .map((point) => LatLng(point.latitude, point.longitude))
+                  .toList(growable: false),
+              color: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: 0.5),
+              strokeWidth: 2,
+            ),
+          ),
+      ...widget.sweptZones.zones.map(
+        (zone) => Polyline(
+          points: zone.points
+              .map((point) => LatLng(point.latitude, point.longitude))
+              .toList(growable: false),
+          color: zone.actorPeerId == widget.controller.peerId.toLowerCase()
+              ? Colors.teal
+              : _actorColor(zone.actorPeerId),
+          strokeWidth: 5,
+        ),
+      ),
+    ];
+    if (widget.sweptZones.draftPoints.length > 1) {
+      polylines.add(
+        Polyline(
+          points: widget.sweptZones.draftPoints
+              .map((point) => LatLng(point.latitude, point.longitude))
+              .toList(growable: false),
+          color: Colors.orange,
+          strokeWidth: 6,
+        ),
+      );
+    }
+    return polylines;
+  }
+
+  Widget _buildRecordingControls(BuildContext context) {
+    final zones = widget.sweptZones;
+    if (!zones.isRecording) {
+      return Material(
+        color: Theme.of(context).colorScheme.surfaceContainer,
+        child: ListTile(
+          dense: true,
+          leading: const Icon(Icons.route_outlined),
+          title: Text(context.l10n.mapZoneConsent),
+          trailing: FilledButton.icon(
+            onPressed: zones.localMember == null ? null : _startRecording,
+            icon: const Icon(Icons.fiber_manual_record),
+            label: Text(context.l10n.mapZoneStart),
+          ),
+        ),
+      );
+    }
+    return Material(
+      color: Theme.of(context).colorScheme.tertiaryContainer,
+      child: ListTile(
+        leading: const Icon(Icons.location_searching),
+        title: Text(
+          context.l10n.mapZoneRecording(
+            zones.draftPoints.length,
+            SweptZoneCodec.maximumPoints,
+          ),
+        ),
+        subtitle: Text(context.l10n.mapZoneVisibleOnly),
+        trailing: Wrap(
+          children: [
+            IconButton(
+              tooltip: context.l10n.actionCancel,
+              onPressed: zones.publishing ? null : _cancelRecording,
+              icon: const Icon(Icons.close),
+            ),
+            IconButton.filled(
+              tooltip: context.l10n.mapZoneFinish,
+              onPressed:
+                  zones.publishing ||
+                      zones.draftPoints.length < SweptZoneCodec.minimumPoints
+                  ? null
+                  : _finishRecording,
+              icon: zones.publishing
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.publish),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTilePolicy(BuildContext context) {
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 4, 8, 4),
+        child: Row(
+          children: [
+            const Icon(Icons.offline_pin_outlined, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                context.l10n.mapPassiveCacheInfo,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            TextButton(
+              onPressed: () => _openExternalUrl(Uri.parse(osmTilePolicyUrl)),
+              child: Text(context.l10n.mapTilePolicyAction),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTileError(BuildContext context) {
+    return Positioned(
+      top: 8,
+      left: 8,
+      right: 8,
+      child: Material(
+        color: Theme.of(context).colorScheme.errorContainer,
+        borderRadius: BorderRadius.circular(8),
+        child: ListTile(
+          dense: true,
+          leading: const Icon(Icons.map_outlined),
+          title: Text(
+            _lastTileError is TileAccessBlockedException
+                ? context.l10n.mapTileBlockedHint
+                : context.l10n.mapOfflineHint,
+          ),
+          trailing: IconButton(
+            tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+            onPressed: () => setState(() => _lastTileError = null),
+            icon: const Icon(Icons.close),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCaseList(BuildContext context) {
+    final cases = _filteredCases;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
           child: Text(
-            context.l10n.rescueListTitle,
-            style: Theme.of(context).textTheme.titleLarge,
+            context.l10n.mapOperationalCases(cases.length),
+            style: Theme.of(context).textTheme.titleMedium,
           ),
         ),
         Expanded(
-          child: incidents.isEmpty
-              ? Center(child: Text(context.l10n.rescueListEmpty))
+          child: widget.rescueCases.loading
+              ? const Center(child: CircularProgressIndicator())
+              : widget.rescueCases.lastError != null
+              ? Center(
+                  child: Text(
+                    context.l10n.rescueOperationsError(
+                      widget.rescueCases.lastError!,
+                    ),
+                  ),
+                )
+              : cases.isEmpty
+              ? Center(child: Text(context.l10n.mapCasesEmpty))
               : ListView.builder(
-                  itemCount: incidents.length,
+                  itemCount: cases.length,
                   itemBuilder: (context, index) {
-                    final incident = incidents[index];
-                    final color = _incidentColor(incident);
+                    final rescueCase = cases[index];
+                    final priority = RescueCaseClusterer.priorityForTriage(
+                      rescueCase.triage,
+                    );
+                    final hasCoordinates =
+                        rescueCase.latitude != null &&
+                        rescueCase.longitude != null;
                     return ListTile(
                       leading: Icon(
-                        incident.kind == RescueIncidentKind.sos
-                            ? Icons.crisis_alert
-                            : Icons.health_and_safety,
-                        color: color,
+                        _priorityIcon(priority),
+                        color: _stateColor(rescueCase.state),
                       ),
-                      title: Text(incident.sender),
+                      title: Text(rescueCase.victim),
                       subtitle: Text(
-                        '${incident.message}\n'
-                        '${incident.triage == null ? '' : '${_incidentTriage(context, incident.triage!)}\n'}'
-                        '${_incidentDistance(context, incident)} · '
-                        '${_formatTime(context, incident.timestamp)}',
+                        '${_caseStateLabel(context, rescueCase.state)} · '
+                        '${_priorityLabel(context, priority)}\n'
+                        '${rescueCase.message}',
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       isThreeLine: true,
-                      trailing:
-                          incident.latitude == null ||
-                              incident.longitude == null
-                          ? null
-                          : IconButton(
-                              tooltip: context.l10n.mapShowOnMap,
-                              onPressed: () => _mapController.move(
-                                LatLng(incident.latitude!, incident.longitude!),
-                                15,
-                              ),
-                              icon: const Icon(Icons.center_focus_strong),
-                            ),
+                      trailing: IconButton(
+                        tooltip: hasCoordinates
+                            ? context.l10n.mapShowOnMap
+                            : context.l10n.mapCaseNoCoordinates,
+                        onPressed: hasCoordinates
+                            ? () => _mapController.move(
+                                LatLng(
+                                  rescueCase.latitude!,
+                                  rescueCase.longitude!,
+                                ),
+                                16,
+                              )
+                            : null,
+                        icon: const Icon(Icons.center_focus_strong),
+                      ),
                     );
                   },
                 ),
@@ -502,61 +758,65 @@ class _MapScreenState extends State<MapScreen> {
       widget.controller.peerById(peerId)?.nickname ??
       (peerId.length > 8 ? peerId.substring(0, 8) : peerId);
 
-  Color _incidentColor(RescueIncident incident) {
-    return switch (incident.kind) {
-      RescueIncidentKind.sos => Colors.red,
-      RescueIncidentKind.checkIn => switch (incident.checkInStatus) {
-        CheckInStatus.ok => Colors.green,
-        CheckInStatus.needsHelp => Colors.orange,
-        CheckInStatus.injured => Colors.red,
-        null => Colors.grey,
-      },
+  String _caseStateLabel(BuildContext context, RescueCaseState state) {
+    return switch (state) {
+      RescueCaseState.newCase => context.l10n.rescueCaseStateNew,
+      RescueCaseState.assigned => context.l10n.rescueCaseStateAssigned,
+      RescueCaseState.enRoute => context.l10n.rescueCaseStateEnRoute,
+      RescueCaseState.attended => context.l10n.rescueCaseStateAttended,
+      RescueCaseState.closed => context.l10n.rescueCaseStateClosed,
     };
   }
 
-  String _incidentDistance(BuildContext context, RescueIncident incident) {
-    final distance = incident.distanceMeters;
-    if (distance == null) return context.l10n.rescueDistanceUnknown;
-    if (distance < 1000) {
-      return context.l10n.rescueDistanceMeters(distance.round());
+  String _priorityLabel(BuildContext context, RescuePriority priority) {
+    return switch (priority) {
+      RescuePriority.low => context.l10n.mapPriorityLow,
+      RescuePriority.medium => context.l10n.mapPriorityMedium,
+      RescuePriority.high => context.l10n.mapPriorityHigh,
+      RescuePriority.critical => context.l10n.mapPriorityCritical,
+    };
+  }
+
+  static Color _stateColor(RescueCaseState state) {
+    return switch (state) {
+      RescueCaseState.newCase => Colors.red,
+      RescueCaseState.assigned => Colors.deepOrange,
+      RescueCaseState.enRoute => Colors.blue,
+      RescueCaseState.attended => Colors.green,
+      RescueCaseState.closed => Colors.grey,
+    };
+  }
+
+  static Color _priorityColor(RescuePriority priority) {
+    return switch (priority) {
+      RescuePriority.low => Colors.blueGrey,
+      RescuePriority.medium => Colors.amber.shade800,
+      RescuePriority.high => Colors.deepOrange,
+      RescuePriority.critical => Colors.red.shade900,
+    };
+  }
+
+  static IconData _priorityIcon(RescuePriority priority) {
+    return switch (priority) {
+      RescuePriority.low => Icons.sos_outlined,
+      RescuePriority.medium => Icons.warning_amber,
+      RescuePriority.high => Icons.crisis_alert,
+      RescuePriority.critical => Icons.emergency,
+    };
+  }
+
+  static Color _actorColor(String actorPeerId) {
+    const colors = [
+      Colors.indigo,
+      Colors.purple,
+      Colors.cyan,
+      Colors.pink,
+      Colors.lightGreen,
+    ];
+    var hash = 0;
+    for (final codeUnit in actorPeerId.codeUnits) {
+      hash = ((hash * 31) + codeUnit) & 0x7fffffff;
     }
-    return context.l10n.rescueDistanceKilometers(
-      (distance / 1000).toStringAsFixed(1),
-    );
-  }
-
-  String _incidentTriage(BuildContext context, SosTriage triage) {
-    final injured =
-        triage.injuredCount?.toString() ??
-        switch (triage.injuryStatus) {
-          SosInjuryStatus.unknown => context.l10n.sosTriageUnknown,
-          SosInjuryStatus.none => context.l10n.sosTriageNo,
-          SosInjuryStatus.injured => context.l10n.sosTriageYes,
-        };
-    final trapped = switch (triage.trappedStatus) {
-      SosTrappedStatus.unknown => context.l10n.sosTriageUnknown,
-      SosTrappedStatus.no => context.l10n.sosTriageNo,
-      SosTrappedStatus.yes => context.l10n.sosTriageYes,
-    };
-    final need = switch (triage.primaryNeed) {
-      SosPrimaryNeed.medical => context.l10n.sosTriageMedical,
-      SosPrimaryNeed.water => context.l10n.sosTriageWater,
-      SosPrimaryNeed.extraction => context.l10n.sosTriageExtraction,
-      SosPrimaryNeed.shelter => context.l10n.sosTriageShelter,
-      SosPrimaryNeed.other => context.l10n.sosTriageOther,
-    };
-    return context.l10n.sosTriageSummary(
-      triage.peopleCount?.toString() ?? context.l10n.sosTriageUnknown,
-      injured,
-      trapped,
-      need,
-    );
-  }
-
-  String _formatTime(BuildContext context, DateTime timestamp) {
-    final local = timestamp.toLocal();
-    final material = MaterialLocalizations.of(context);
-    return '${material.formatShortDate(local)} '
-        '${material.formatTimeOfDay(TimeOfDay.fromDateTime(local))}';
+    return colors[hash % colors.length];
   }
 }

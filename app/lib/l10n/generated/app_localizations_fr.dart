@@ -2277,4 +2277,76 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get rescueTriageOther => 'Autre';
+
+  @override
+  String get mapFilterActive => 'Actifs';
+
+  @override
+  String get mapFilterUnassigned => 'Non assignés';
+
+  @override
+  String get mapFilterAssigned => 'Assignés';
+
+  @override
+  String get mapFilterClosed => 'Clôturés';
+
+  @override
+  String mapOperationalCases(int count) {
+    return '$count cas opérationnels';
+  }
+
+  @override
+  String get mapCasesEmpty => 'Aucun cas ne correspond à ce filtre.';
+
+  @override
+  String mapClusterTooltip(int count, String priority) {
+    return '$count cas SOS · priorité maximale : $priority';
+  }
+
+  @override
+  String get mapPriorityLow => 'Priorité faible';
+
+  @override
+  String get mapPriorityMedium => 'Priorité moyenne';
+
+  @override
+  String get mapPriorityHigh => 'Priorité élevée';
+
+  @override
+  String get mapPriorityCritical => 'Priorité critique';
+
+  @override
+  String get mapCaseNoCoordinates => 'Ce cas n’a pas de coordonnées';
+
+  @override
+  String get mapZoneConsent =>
+      'Enregistrez un itinéraire balayé uniquement tant que ce contrôle reste visiblement actif.';
+
+  @override
+  String get mapZoneStart => 'ENREGISTRER LE PARCOURS';
+
+  @override
+  String mapZoneRecording(int count, int maximum) {
+    return 'Enregistrement de la zone balayée · $count/$maximum points';
+  }
+
+  @override
+  String get mapZoneVisibleOnly =>
+      'L’enregistrement de la position s’arrête à l’annulation, à la publication ou en quittant cette carte.';
+
+  @override
+  String get mapZoneFinish => 'Terminer et partager le parcours';
+
+  @override
+  String get mapZonePublished =>
+      'Parcours balayé partagé avec l’équipe vérifiée.';
+
+  @override
+  String get mapZoneLocationRequired =>
+      'L’autorisation et les services de localisation sont requis pour enregistrer un parcours.';
+
+  @override
+  String mapZoneError(String error) {
+    return 'Impossible d’enregistrer ou de partager le parcours balayé : $error';
+  }
 }

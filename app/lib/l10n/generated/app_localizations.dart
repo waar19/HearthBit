@@ -4001,6 +4001,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Other'**
   String get rescueTriageOther;
+
+  /// No description provided for @mapFilterActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get mapFilterActive;
+
+  /// No description provided for @mapFilterUnassigned.
+  ///
+  /// In en, this message translates to:
+  /// **'Unassigned'**
+  String get mapFilterUnassigned;
+
+  /// No description provided for @mapFilterAssigned.
+  ///
+  /// In en, this message translates to:
+  /// **'Assigned'**
+  String get mapFilterAssigned;
+
+  /// No description provided for @mapFilterClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed'**
+  String get mapFilterClosed;
+
+  /// No description provided for @mapOperationalCases.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} operational cases'**
+  String mapOperationalCases(int count);
+
+  /// No description provided for @mapCasesEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No cases match this filter.'**
+  String get mapCasesEmpty;
+
+  /// No description provided for @mapClusterTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} SOS cases · maximum priority: {priority}'**
+  String mapClusterTooltip(int count, String priority);
+
+  /// No description provided for @mapPriorityLow.
+  ///
+  /// In en, this message translates to:
+  /// **'Low priority'**
+  String get mapPriorityLow;
+
+  /// No description provided for @mapPriorityMedium.
+  ///
+  /// In en, this message translates to:
+  /// **'Medium priority'**
+  String get mapPriorityMedium;
+
+  /// No description provided for @mapPriorityHigh.
+  ///
+  /// In en, this message translates to:
+  /// **'High priority'**
+  String get mapPriorityHigh;
+
+  /// No description provided for @mapPriorityCritical.
+  ///
+  /// In en, this message translates to:
+  /// **'Critical priority'**
+  String get mapPriorityCritical;
+
+  /// No description provided for @mapCaseNoCoordinates.
+  ///
+  /// In en, this message translates to:
+  /// **'This case has no coordinates'**
+  String get mapCaseNoCoordinates;
+
+  /// No description provided for @mapZoneConsent.
+  ///
+  /// In en, this message translates to:
+  /// **'Record a swept route only while this control remains visibly active.'**
+  String get mapZoneConsent;
+
+  /// No description provided for @mapZoneStart.
+  ///
+  /// In en, this message translates to:
+  /// **'RECORD ROUTE'**
+  String get mapZoneStart;
+
+  /// No description provided for @mapZoneRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording swept route · {count}/{maximum} points'**
+  String mapZoneRecording(int count, int maximum);
+
+  /// No description provided for @mapZoneVisibleOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Location recording stops when you cancel, publish, or leave this map.'**
+  String get mapZoneVisibleOnly;
+
+  /// No description provided for @mapZoneFinish.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish and share route'**
+  String get mapZoneFinish;
+
+  /// No description provided for @mapZonePublished.
+  ///
+  /// In en, this message translates to:
+  /// **'Swept route shared with the verified team.'**
+  String get mapZonePublished;
+
+  /// No description provided for @mapZoneLocationRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Location permission and services are required to record a route.'**
+  String get mapZoneLocationRequired;
+
+  /// No description provided for @mapZoneError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not record or share the swept route: {error}'**
+  String mapZoneError(String error);
 }
 
 class _AppLocalizationsDelegate

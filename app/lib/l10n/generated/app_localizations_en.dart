@@ -2261,4 +2261,75 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get rescueTriageOther => 'Other';
+
+  @override
+  String get mapFilterActive => 'Active';
+
+  @override
+  String get mapFilterUnassigned => 'Unassigned';
+
+  @override
+  String get mapFilterAssigned => 'Assigned';
+
+  @override
+  String get mapFilterClosed => 'Closed';
+
+  @override
+  String mapOperationalCases(int count) {
+    return '$count operational cases';
+  }
+
+  @override
+  String get mapCasesEmpty => 'No cases match this filter.';
+
+  @override
+  String mapClusterTooltip(int count, String priority) {
+    return '$count SOS cases · maximum priority: $priority';
+  }
+
+  @override
+  String get mapPriorityLow => 'Low priority';
+
+  @override
+  String get mapPriorityMedium => 'Medium priority';
+
+  @override
+  String get mapPriorityHigh => 'High priority';
+
+  @override
+  String get mapPriorityCritical => 'Critical priority';
+
+  @override
+  String get mapCaseNoCoordinates => 'This case has no coordinates';
+
+  @override
+  String get mapZoneConsent =>
+      'Record a swept route only while this control remains visibly active.';
+
+  @override
+  String get mapZoneStart => 'RECORD ROUTE';
+
+  @override
+  String mapZoneRecording(int count, int maximum) {
+    return 'Recording swept route · $count/$maximum points';
+  }
+
+  @override
+  String get mapZoneVisibleOnly =>
+      'Location recording stops when you cancel, publish, or leave this map.';
+
+  @override
+  String get mapZoneFinish => 'Finish and share route';
+
+  @override
+  String get mapZonePublished => 'Swept route shared with the verified team.';
+
+  @override
+  String get mapZoneLocationRequired =>
+      'Location permission and services are required to record a route.';
+
+  @override
+  String mapZoneError(String error) {
+    return 'Could not record or share the swept route: $error';
+  }
 }

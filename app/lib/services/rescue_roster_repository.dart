@@ -25,16 +25,20 @@ class RescueRosterRepository {
         path.join(await factory.getDatabasesPath(), 'hearth_bit_rescue.db');
     return _database ??= await SecureDatabase.open(
       databasePath: resolvedPath,
-      version: 2,
+      version: 3,
       testFactory: databaseFactory,
       onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
       onCreate: (database, version) async {
         await RescueDatabaseSchema.createRosterTables(database);
         await RescueDatabaseSchema.createCaseTables(database);
+        await RescueDatabaseSchema.createSweptZoneTables(database);
       },
       onUpgrade: (database, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           await RescueDatabaseSchema.createCaseTables(database);
+        }
+        if (oldVersion < 3) {
+          await RescueDatabaseSchema.createSweptZoneTables(database);
         }
       },
     );

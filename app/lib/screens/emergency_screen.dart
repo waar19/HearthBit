@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../controllers/mesh_controller.dart';
 import '../controllers/emergency_gateway_controller.dart';
 import '../controllers/family_controller.dart';
+import '../controllers/mesh_controller.dart';
+import '../controllers/rescue_case_controller.dart';
+import '../controllers/swept_zone_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../services/app_preferences.dart';
@@ -22,6 +24,8 @@ class EmergencyScreen extends StatelessWidget {
     required this.preferences,
     required this.gateway,
     required this.family,
+    this.rescueCases,
+    this.sweptZones,
     this.emergencyHoldDuration = const Duration(seconds: 2),
     super.key,
   });
@@ -30,6 +34,8 @@ class EmergencyScreen extends StatelessWidget {
   final AppPreferences preferences;
   final EmergencyGatewayController gateway;
   final FamilyController family;
+  final RescueCaseController? rescueCases;
+  final SweptZoneController? sweptZones;
   final Duration emergencyHoldDuration;
 
   @override
@@ -236,11 +242,17 @@ class EmergencyScreen extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         FilledButton.tonalIcon(
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => MapScreen(controller: controller),
-            ),
-          ),
+          onPressed: rescueCases == null || sweptZones == null
+              ? null
+              : () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => MapScreen(
+                      controller: controller,
+                      rescueCases: rescueCases!,
+                      sweptZones: sweptZones!,
+                    ),
+                  ),
+                ),
           icon: const Icon(Icons.map_outlined),
           label: Text(context.l10n.mapOpenRescue),
         ),

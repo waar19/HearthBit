@@ -2279,4 +2279,76 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get rescueTriageOther => 'Otro';
+
+  @override
+  String get mapFilterActive => 'Activos';
+
+  @override
+  String get mapFilterUnassigned => 'Sin asignar';
+
+  @override
+  String get mapFilterAssigned => 'Asignados';
+
+  @override
+  String get mapFilterClosed => 'Cerrados';
+
+  @override
+  String mapOperationalCases(int count) {
+    return '$count casos operativos';
+  }
+
+  @override
+  String get mapCasesEmpty => 'Ningún caso coincide con este filtro.';
+
+  @override
+  String mapClusterTooltip(int count, String priority) {
+    return '$count casos SOS · prioridad máxima: $priority';
+  }
+
+  @override
+  String get mapPriorityLow => 'Prioridad baja';
+
+  @override
+  String get mapPriorityMedium => 'Prioridad media';
+
+  @override
+  String get mapPriorityHigh => 'Prioridad alta';
+
+  @override
+  String get mapPriorityCritical => 'Prioridad crítica';
+
+  @override
+  String get mapCaseNoCoordinates => 'Este caso no tiene coordenadas';
+
+  @override
+  String get mapZoneConsent =>
+      'Registra una ruta barrida solo mientras este control permanezca activo y visible.';
+
+  @override
+  String get mapZoneStart => 'REGISTRAR RECORRIDO';
+
+  @override
+  String mapZoneRecording(int count, int maximum) {
+    return 'Registrando zona barrida · $count/$maximum puntos';
+  }
+
+  @override
+  String get mapZoneVisibleOnly =>
+      'El registro de ubicación se detiene al cancelar, publicar o salir de este mapa.';
+
+  @override
+  String get mapZoneFinish => 'Finalizar y compartir recorrido';
+
+  @override
+  String get mapZonePublished =>
+      'Recorrido barrido compartido con el equipo verificado.';
+
+  @override
+  String get mapZoneLocationRequired =>
+      'Se requieren el permiso y el servicio de ubicación para registrar un recorrido.';
+
+  @override
+  String mapZoneError(String error) {
+    return 'No se pudo registrar o compartir el recorrido barrido: $error';
+  }
 }

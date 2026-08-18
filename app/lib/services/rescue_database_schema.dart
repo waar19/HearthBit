@@ -74,4 +74,24 @@ abstract final class RescueDatabaseSchema {
       'ON rescue_case_events(case_hash, created_at)',
     );
   }
+
+  static Future<void> createSweptZoneTables(DatabaseExecutor database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS swept_zones (
+        zone_id TEXT PRIMARY KEY,
+        version INTEGER NOT NULL,
+        team_id TEXT NOT NULL,
+        actor_peer_id TEXT NOT NULL,
+        callsign TEXT NOT NULL,
+        started_at INTEGER NOT NULL,
+        ended_at INTEGER NOT NULL,
+        payload TEXT NOT NULL,
+        received_at INTEGER NOT NULL
+      )
+    ''');
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS swept_zones_team_time_idx '
+      'ON swept_zones(team_id, ended_at DESC)',
+    );
+  }
 }

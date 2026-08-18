@@ -8,8 +8,9 @@ import 'controllers/emergency_gateway_controller.dart';
 import 'controllers/family_controller.dart';
 import 'controllers/lan_gateway_controller.dart';
 import 'controllers/rescue_case_controller.dart';
-import 'controllers/transfer_controller.dart';
 import 'controllers/rescue_roster_controller.dart';
+import 'controllers/swept_zone_controller.dart';
+import 'controllers/transfer_controller.dart';
 import 'l10n/l10n.dart';
 import 'screens/home_screen.dart';
 import 'screens/onboarding_screen.dart';
@@ -141,6 +142,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
   late final FamilyController _family;
   late final RescueRosterController _rescueRoster;
   late final RescueCaseController _rescueCases;
+  late final SweptZoneController _sweptZones;
   late final LanGatewayController _lanGateway;
   late final TransportDiagnostics _transportDiagnostics;
   late final Future<void> _initialization;
@@ -173,6 +175,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
       mesh: _controller,
       roster: _rescueRoster,
     );
+    _sweptZones = SweptZoneController(mesh: _controller, roster: _rescueRoster);
     _lanGateway = LanGatewayController();
     _initialization = _initialize();
   }
@@ -189,12 +192,14 @@ class _HearthBitAppState extends State<HearthBitApp> {
     await _family.initialize();
     await _rescueRoster.initialize();
     await _rescueCases.initialize();
+    await _sweptZones.initialize();
   }
 
   @override
   void dispose() {
     _gateway.dispose();
     _family.dispose();
+    _sweptZones.dispose();
     _rescueCases.dispose();
     _rescueRoster.dispose();
     _lanGateway.dispose();
@@ -214,6 +219,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
         _lanGateway,
         _rescueRoster,
         _rescueCases,
+        _sweptZones,
       ]),
       builder: (context, _) => MaterialApp(
         onGenerateTitle: (context) => context.l10n.appTitle,
@@ -277,6 +283,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
               family: _family,
               rescueRoster: _rescueRoster,
               rescueCases: _rescueCases,
+              sweptZones: _sweptZones,
               lanGateway: _lanGateway,
             );
           },

@@ -2145,4 +2145,72 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get rescueTriageOther => '其他';
+
+  @override
+  String get mapFilterActive => '进行中';
+
+  @override
+  String get mapFilterUnassigned => '未分配';
+
+  @override
+  String get mapFilterAssigned => '已分配';
+
+  @override
+  String get mapFilterClosed => '已关闭';
+
+  @override
+  String mapOperationalCases(int count) {
+    return '$count 个行动案件';
+  }
+
+  @override
+  String get mapCasesEmpty => '没有符合此筛选条件的案件。';
+
+  @override
+  String mapClusterTooltip(int count, String priority) {
+    return '$count 个 SOS 案件 · 最高优先级：$priority';
+  }
+
+  @override
+  String get mapPriorityLow => '低优先级';
+
+  @override
+  String get mapPriorityMedium => '中优先级';
+
+  @override
+  String get mapPriorityHigh => '高优先级';
+
+  @override
+  String get mapPriorityCritical => '紧急优先级';
+
+  @override
+  String get mapCaseNoCoordinates => '此案件没有坐标';
+
+  @override
+  String get mapZoneConsent => '仅在此控件保持可见且启用时记录已搜索路线。';
+
+  @override
+  String get mapZoneStart => '记录路线';
+
+  @override
+  String mapZoneRecording(int count, int maximum) {
+    return '正在记录已搜索区域 · $count/$maximum 个点';
+  }
+
+  @override
+  String get mapZoneVisibleOnly => '取消、发布或离开此地图时，位置记录会停止。';
+
+  @override
+  String get mapZoneFinish => '完成并分享路线';
+
+  @override
+  String get mapZonePublished => '已搜索路线已与验证团队共享。';
+
+  @override
+  String get mapZoneLocationRequired => '记录路线需要位置权限并开启位置服务。';
+
+  @override
+  String mapZoneError(String error) {
+    return '无法记录或分享已搜索路线：$error';
+  }
 }

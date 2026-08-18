@@ -2277,4 +2277,76 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get rescueTriageOther => 'Sonstiges';
+
+  @override
+  String get mapFilterActive => 'Aktiv';
+
+  @override
+  String get mapFilterUnassigned => 'Nicht zugewiesen';
+
+  @override
+  String get mapFilterAssigned => 'Zugewiesen';
+
+  @override
+  String get mapFilterClosed => 'Geschlossen';
+
+  @override
+  String mapOperationalCases(int count) {
+    return '$count Einsatzfälle';
+  }
+
+  @override
+  String get mapCasesEmpty => 'Keine Fälle entsprechen diesem Filter.';
+
+  @override
+  String mapClusterTooltip(int count, String priority) {
+    return '$count SOS-Fälle · höchste Priorität: $priority';
+  }
+
+  @override
+  String get mapPriorityLow => 'Niedrige Priorität';
+
+  @override
+  String get mapPriorityMedium => 'Mittlere Priorität';
+
+  @override
+  String get mapPriorityHigh => 'Hohe Priorität';
+
+  @override
+  String get mapPriorityCritical => 'Kritische Priorität';
+
+  @override
+  String get mapCaseNoCoordinates => 'Dieser Fall hat keine Koordinaten';
+
+  @override
+  String get mapZoneConsent =>
+      'Eine abgesuchte Route wird nur aufgezeichnet, solange dieses Steuerelement sichtbar aktiv ist.';
+
+  @override
+  String get mapZoneStart => 'ROUTE AUFZEICHNEN';
+
+  @override
+  String mapZoneRecording(int count, int maximum) {
+    return 'Abgesuchte Route wird aufgezeichnet · $count/$maximum Punkte';
+  }
+
+  @override
+  String get mapZoneVisibleOnly =>
+      'Die Standortaufzeichnung endet beim Abbrechen, Veröffentlichen oder Verlassen der Karte.';
+
+  @override
+  String get mapZoneFinish => 'Route abschließen und teilen';
+
+  @override
+  String get mapZonePublished =>
+      'Abgesuchte Route wurde mit dem verifizierten Team geteilt.';
+
+  @override
+  String get mapZoneLocationRequired =>
+      'Standortberechtigung und Standortdienste sind für die Aufzeichnung erforderlich.';
+
+  @override
+  String mapZoneError(String error) {
+    return 'Abgesuchte Route konnte nicht aufgezeichnet oder geteilt werden: $error';
+  }
 }

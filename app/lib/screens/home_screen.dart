@@ -11,6 +11,7 @@ import '../controllers/lan_gateway_controller.dart';
 import '../controllers/mesh_controller.dart';
 import '../controllers/rescue_case_controller.dart';
 import '../controllers/rescue_roster_controller.dart';
+import '../controllers/swept_zone_controller.dart';
 import '../controllers/transfer_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
@@ -64,6 +65,7 @@ class HomeScreen extends StatefulWidget {
     required this.family,
     this.rescueRoster,
     this.rescueCases,
+    this.sweptZones,
     this.lanGateway,
     this.emergencyOpens,
     this.consumeInitialEmergencyOpen,
@@ -77,6 +79,7 @@ class HomeScreen extends StatefulWidget {
   final FamilyController family;
   final RescueRosterController? rescueRoster;
   final RescueCaseController? rescueCases;
+  final SweptZoneController? sweptZones;
   final LanGatewayController? lanGateway;
   final Stream<void>? emergencyOpens;
   final Future<bool> Function()? consumeInitialEmergencyOpen;
@@ -324,11 +327,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             actions: [
               IconButton(
                 tooltip: context.l10n.mapOpen,
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => MapScreen(controller: controller),
-                  ),
-                ),
+                onPressed:
+                    widget.rescueCases == null || widget.sweptZones == null
+                    ? null
+                    : () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => MapScreen(
+                            controller: controller,
+                            rescueCases: widget.rescueCases!,
+                            sweptZones: widget.sweptZones!,
+                          ),
+                        ),
+                      ),
                 icon: const Icon(Icons.map_outlined),
               ),
               IconButton(
@@ -457,6 +467,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         preferences: widget.preferences,
                         gateway: widget.gateway,
                         family: widget.family,
+                        rescueCases: widget.rescueCases,
+                        sweptZones: widget.sweptZones,
                       ),
                       PublicChatTab(
                         controller: controller,
