@@ -14,6 +14,7 @@ import 'screens/onboarding_screen.dart';
 import 'services/app_preferences.dart';
 import 'services/diagnostics_log.dart';
 import 'services/mesh_platform_service.dart';
+import 'services/transport_diagnostics.dart';
 
 void main() {
   runZonedGuarded(
@@ -137,15 +138,24 @@ class _HearthBitAppState extends State<HearthBitApp> {
   late final EmergencyGatewayController _gateway;
   late final FamilyController _family;
   late final LanGatewayController _lanGateway;
+  late final TransportDiagnostics _transportDiagnostics;
   late final Future<void> _initialization;
 
   @override
   void initState() {
     super.initState();
     final platform = MeshPlatformService();
+    _transportDiagnostics = TransportDiagnostics.instance;
     _preferences = AppPreferences();
-    _controller = MeshController(platform: platform, preferences: _preferences);
-    _transfers = TransferController(platform);
+    _controller = MeshController(
+      platform: platform,
+      preferences: _preferences,
+      transportDiagnostics: _transportDiagnostics,
+    );
+    _transfers = TransferController(
+      platform,
+      transportDiagnostics: _transportDiagnostics,
+    );
     _gateway = EmergencyGatewayController(
       mesh: _controller,
       preferences: _preferences,
@@ -158,6 +168,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
   Future<void> _initialize() async {
     // SQLCipher serializa parte de su arranque nativo. Abrir varias bases en
     // paralelo puede dejar una conexión a medio cerrar tras un kill/reinicio.
+    await _transportDiagnostics.initialize();
     await _preferences.initialize();
     await _controller.initialize();
     await _transfers.initialize();

@@ -12,7 +12,7 @@ from .identity import (
     validate_announcement,
     verify_packet_signature,
 )
-from .link import RelayLink
+from .link import LinkKind, RelayLink
 from .protocol import (
     EMERGENCY_ACK_RETENTION_SECONDS,
     EPHEMERAL_MESSAGE_TYPES,
@@ -154,6 +154,10 @@ class RelayCore:
         apply_rate_limit: bool,
         allow_reassembly: bool,
     ) -> RelayResult:
+        if packet.is_drill and source_id.startswith(
+            ("mqtt:", "matrix:", "reticulum:")
+        ):
+            return RelayResult(False, "drill-bridge-forbidden")
         identity_reason, can_store = await self._authenticate(packet, source_id)
         if identity_reason is not None:
             return RelayResult(False, identity_reason)
@@ -208,6 +212,11 @@ class RelayCore:
                     link
                     for link_id, link in self._links.items()
                     if link_id != source_id
+                    and (
+                        not packet.is_drill
+                        or link.capabilities.kind
+                        not in {LinkKind.MQTT, LinkKind.MATRIX, LinkKind.RETICULUM}
+                    )
                 ]
 
         sent = 0
@@ -486,7 +495,7 @@ def _relay_policy(packet: Packet) -> str | None:
 
 
 def _packet_priority(packet: Packet) -> int:
-    if packet.message_type != TYPE_MESSAGE:
+    if packet.message_type != TYPE_MESSAGE or packet.is_drill:
         return 0
     if packet.payload.startswith(b"SOS|") or b"[HB-CHECKIN|" in packet.payload:
         return 100

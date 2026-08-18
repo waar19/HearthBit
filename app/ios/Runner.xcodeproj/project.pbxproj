@@ -24,6 +24,11 @@
 		ECC000092026081500000005 /* HearthBitMultipeerTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECC000102026081500000005 /* HearthBitMultipeerTransport.swift */; };
 		ECC000112026081500000006 /* HearthBitMultipeerFileTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECC000122026081500000006 /* HearthBitMultipeerFileTransport.swift */; };
 		ECC000132026081500000007 /* HearthBitFileImportBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECC000142026081500000007 /* HearthBitFileImportBridge.swift */; };
+		ECF100012026081600000001 /* IOSMeshPolicies.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECF100022026081600000002 /* IOSMeshPolicies.swift */; };
+		ECF100032026081600000003 /* IOSMeshProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECF100042026081600000004 /* IOSMeshProtocol.swift */; };
+		ECF100052026081600000005 /* IOSMeshSecurity.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECF100062026081600000006 /* IOSMeshSecurity.swift */; };
+		ECF100072026081600000007 /* IOSMeshPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECF100082026081600000008 /* IOSMeshPersistence.swift */; };
+		ECF100092026081600000009 /* IOSMeshTransferSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECF100102026081600000010 /* IOSMeshTransferSupport.swift */; };
 		ECD100012026081300000001 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = ECD100022026081300000002 /* InfoPlist.strings */; };
 /* End PBXBuildFile section */
 
@@ -80,6 +85,11 @@
 		ECC000102026081500000005 /* HearthBitMultipeerTransport.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HearthBitMultipeerTransport.swift; sourceTree = "<group>"; };
 		ECC000122026081500000006 /* HearthBitMultipeerFileTransport.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HearthBitMultipeerFileTransport.swift; sourceTree = "<group>"; };
 		ECC000142026081500000007 /* HearthBitFileImportBridge.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HearthBitFileImportBridge.swift; sourceTree = "<group>"; };
+		ECF100022026081600000002 /* IOSMeshPolicies.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IOSMeshPolicies.swift; sourceTree = "<group>"; };
+		ECF100042026081600000004 /* IOSMeshProtocol.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IOSMeshProtocol.swift; sourceTree = "<group>"; };
+		ECF100062026081600000006 /* IOSMeshSecurity.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IOSMeshSecurity.swift; sourceTree = "<group>"; };
+		ECF100082026081600000008 /* IOSMeshPersistence.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IOSMeshPersistence.swift; sourceTree = "<group>"; };
+		ECF100102026081600000010 /* IOSMeshTransferSupport.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IOSMeshTransferSupport.swift; sourceTree = "<group>"; };
 		ECD100032026081300000003 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		ECD100042026081300000004 /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		ECD100052026081300000005 /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/InfoPlist.strings; sourceTree = "<group>"; };
@@ -181,6 +191,11 @@
 				ECC000102026081500000005 /* HearthBitMultipeerTransport.swift */,
 				ECC000122026081500000006 /* HearthBitMultipeerFileTransport.swift */,
 				ECC000142026081500000007 /* HearthBitFileImportBridge.swift */,
+				ECF100022026081600000002 /* IOSMeshPolicies.swift */,
+				ECF100042026081600000004 /* IOSMeshProtocol.swift */,
+				ECF100062026081600000006 /* IOSMeshSecurity.swift */,
+				ECF100082026081600000008 /* IOSMeshPersistence.swift */,
+				ECF100102026081600000010 /* IOSMeshTransferSupport.swift */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
@@ -422,6 +437,11 @@
 				ECC000092026081500000005 /* HearthBitMultipeerTransport.swift in Sources */,
 				ECC000112026081500000006 /* HearthBitMultipeerFileTransport.swift in Sources */,
 				ECC000132026081500000007 /* HearthBitFileImportBridge.swift in Sources */,
+				ECF100012026081600000001 /* IOSMeshPolicies.swift in Sources */,
+				ECF100032026081600000003 /* IOSMeshProtocol.swift in Sources */,
+				ECF100052026081600000005 /* IOSMeshSecurity.swift in Sources */,
+				ECF100072026081600000007 /* IOSMeshPersistence.swift in Sources */,
+				ECF100092026081600000009 /* IOSMeshTransferSupport.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 			);

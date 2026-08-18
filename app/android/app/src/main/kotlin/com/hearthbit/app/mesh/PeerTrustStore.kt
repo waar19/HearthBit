@@ -8,6 +8,7 @@ internal interface PeerTrustStorage {
     fun getString(key: String): String?
     fun contains(key: String): Boolean
     fun putString(key: String, value: String): Boolean
+    fun replaceString(oldKey: String, newKey: String, value: String): Boolean
     fun keys(): Set<String>
     fun clear(): Boolean
 }
@@ -22,9 +23,9 @@ internal sealed interface PeerTrustLookup {
  * Pins the first valid ANNOUNCE (TOFU) across process restarts.
  *
  * A normal Noise transport rekey keeps both static identity keys and is
- * accepted. There is currently no wire message proving an identity-key
- * rotation with the previously pinned Ed25519 key, so changed keys are
- * rejected. The existing panic wipe is the explicit local re-pairing path.
+ * accepted. Identity changes are accepted only through KEY_ROTATION, signed
+ * by the previously pinned Ed25519 key; conflicting ANNOUNCE packets remain
+ * rejected.
  */
 internal class PeerTrustStore private constructor(
     private val storage: PeerTrustStorage,
@@ -44,6 +45,8 @@ internal class PeerTrustStore private constructor(
         if (!peerId.matches(PEER_ID_PATTERN) ||
             announced.noisePublicKey.size != PUBLIC_KEY_SIZE ||
             announced.signingPublicKey.size != PUBLIC_KEY_SIZE ||
+            announced.noisePublicKey.all { it == 0.toByte() } ||
+            announced.signingPublicKey.all { it == 0.toByte() } ||
             MeshProtocol.hex(MeshProtocol.peerIdFromNoiseKey(announced.noisePublicKey)) != peerId
         ) {
             return PeerIdentityDecision.REJECT_INVALID_IDENTITY
@@ -74,9 +77,68 @@ internal class PeerTrustStore private constructor(
             authenticatedRotation = authenticatedRotation,
         )
         if (decision.accepted) {
-            check(storage.putString(storageKey, encode(announced, decision)))
+            check(storage.putString(storageKey, encode(announced, decision, 0L)))
         }
         return decision
+    }
+
+    @Synchronized
+    fun rotate(
+        oldPeerId: String,
+        replacement: PeerIdentityKeys,
+        sequence: Long,
+    ): PeerIdentityDecision {
+        if (!oldPeerId.matches(PEER_ID_PATTERN) ||
+            replacement.noisePublicKey.size != PUBLIC_KEY_SIZE ||
+            replacement.signingPublicKey.size != PUBLIC_KEY_SIZE ||
+            replacement.noisePublicKey.all { it == 0.toByte() } ||
+            replacement.signingPublicKey.all { it == 0.toByte() } ||
+            sequence <= 0L
+        ) {
+            return PeerIdentityDecision.REJECT_INVALID_IDENTITY
+        }
+        val oldStorageKey = key(oldPeerId)
+        val oldStored = runCatching { storage.getString(oldStorageKey) }.getOrNull()
+            ?: return PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION
+        val oldRecord = decode(oldStored)
+            ?: return PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION
+        if (sequence <= oldRecord.lastRotationSequence) return PeerIdentityDecision.REJECT_REPLAY
+
+        val newPeerId = MeshProtocol.hex(MeshProtocol.peerIdFromNoiseKey(replacement.noisePublicKey))
+        if (newPeerId == oldPeerId) return PeerIdentityDecision.REJECT_INVALID_IDENTITY
+        val newStorageKey = key(newPeerId)
+        if (runCatching { storage.contains(newStorageKey) }.getOrDefault(true)) {
+            return PeerIdentityDecision.REJECT_COLLISION
+        }
+        val collidesWithAnotherPeer = runCatching {
+            storage.keys()
+                .asSequence()
+                .filter { it.startsWith(KEY_PREFIX) && it != oldStorageKey }
+                .mapNotNull { storage.getString(it)?.let(::decode) }
+                .any { record ->
+                    MessageDigest.isEqual(
+                        record.keys.signingPublicKey,
+                        replacement.signingPublicKey,
+                    ) || MessageDigest.isEqual(
+                        record.keys.noisePublicKey,
+                        replacement.noisePublicKey,
+                    )
+                }
+        }.getOrDefault(true)
+        if (collidesWithAnotherPeer) return PeerIdentityDecision.REJECT_COLLISION
+        val encoded = encode(
+            replacement,
+            PeerIdentityDecision.ACCEPT_AUTHENTICATED_ROTATION,
+            sequence,
+        )
+        return if (runCatching {
+                storage.replaceString(oldStorageKey, newStorageKey, encoded)
+            }.getOrDefault(false)
+        ) {
+            PeerIdentityDecision.ACCEPT_AUTHENTICATED_ROTATION
+        } else {
+            PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION
+        }
     }
 
     @Synchronized
@@ -103,7 +165,11 @@ internal class PeerTrustStore private constructor(
 
     private fun trustEntryCount(): Int = storage.keys().count { it.startsWith(KEY_PREFIX) }
 
-    private fun encode(keys: PeerIdentityKeys, decision: PeerIdentityDecision): String {
+    private fun encode(
+        keys: PeerIdentityKeys,
+        decision: PeerIdentityDecision,
+        lastRotationSequence: Long,
+    ): String {
         val noise = Base64.getEncoder().encodeToString(keys.noisePublicKey)
         val signing = Base64.getEncoder().encodeToString(keys.signingPublicKey)
         val noiseFingerprint = fingerprint(keys.noisePublicKey)
@@ -115,6 +181,8 @@ internal class PeerTrustStore private constructor(
             PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION,
             PeerIdentityDecision.REJECT_INVALID_IDENTITY,
             PeerIdentityDecision.REJECT_CAPACITY,
+            PeerIdentityDecision.REJECT_REPLAY,
+            PeerIdentityDecision.REJECT_COLLISION,
             -> error("Rejected trust state")
         }
         return listOf(
@@ -124,19 +192,27 @@ internal class PeerTrustStore private constructor(
             signing,
             noiseFingerprint,
             signingFingerprint,
+            lastRotationSequence.toString(),
         ).joinToString(SEPARATOR)
     }
 
     private fun decode(value: String): Record? = runCatching {
         val fields = value.split(SEPARATOR)
-        if (fields.size != FIELD_COUNT || fields[0] != FORMAT_VERSION) return null
+        val legacy = fields.size == LEGACY_FIELD_COUNT && fields[0] == LEGACY_FORMAT_VERSION
+        val current = fields.size == FIELD_COUNT && fields[0] == FORMAT_VERSION
+        if (!legacy && !current) {
+            return null
+        }
         val noise = Base64.getDecoder().decode(fields[2])
         val signing = Base64.getDecoder().decode(fields[3])
         if (noise.size != PUBLIC_KEY_SIZE || signing.size != PUBLIC_KEY_SIZE) return null
         if (fields[4] != fingerprint(noise) || fields[5] != fingerprint(signing)) return null
+        val sequence = fields.getOrNull(6)?.toLongOrNull() ?: 0L
+        if (sequence < 0L) return null
         Record(
             keys = PeerIdentityKeys(signingPublicKey = signing, noisePublicKey = noise),
             trustState = fields[1],
+            lastRotationSequence = sequence,
         )
     }.getOrNull()
 
@@ -148,13 +224,16 @@ internal class PeerTrustStore private constructor(
     private data class Record(
         val keys: PeerIdentityKeys,
         val trustState: String,
+        val lastRotationSequence: Long,
     )
 
     private companion object {
         const val PREFERENCES = "hearthbit_peer_trust"
-        const val FORMAT_VERSION = "1"
+        const val FORMAT_VERSION = "2"
+        const val LEGACY_FORMAT_VERSION = "1"
         const val SEPARATOR = ":"
-        const val FIELD_COUNT = 6
+        const val LEGACY_FIELD_COUNT = 6
+        const val FIELD_COUNT = 7
         const val PUBLIC_KEY_SIZE = 32
         const val MAX_TRUSTED_PEERS = 4_096
         const val KEY_PREFIX = "peer_"
@@ -168,6 +247,8 @@ private class SecurePeerTrustStorage(
     override fun getString(key: String): String? = store.getString(key)
     override fun contains(key: String): Boolean = store.contains(key)
     override fun putString(key: String, value: String): Boolean = store.putString(key, value)
+    override fun replaceString(oldKey: String, newKey: String, value: String): Boolean =
+        store.replaceString(oldKey, newKey, value)
     override fun keys(): Set<String> = store.keys()
     override fun clear(): Boolean = store.clear()
 }

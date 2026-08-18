@@ -23,6 +23,11 @@ class ConformanceFixtureTest {
         assertEquals(7, v1.ttl.toInt())
         assertArrayEquals("abc".toByteArray(), v1.payload)
 
+        val drill = requireNotNull(MeshProtocol.decode(fixtures.bytes("packet.v1.drill_message")))
+        assertTrue(drill.isDrill)
+        assertTrue(MeshProtocol.isDrillPublicPacket(drill))
+        assertFalse(MeshProtocol.isEmergencyPublicPacket(drill))
+
         val v2 = requireNotNull(MeshProtocol.decode(fixtures.bytes("packet.v2.route_signed")))
         assertEquals(2, v2.version.toInt())
         assertEquals(2, v2.route.size)
@@ -153,6 +158,28 @@ class ConformanceFixtureTest {
             ByteArray(32) { it.toByte() },
             MeshProtocol.decodeEmergencyAcknowledgement(
                 fixtures.bytes("extension.emergency_ack.v1"),
+            ),
+        )
+        val rotation = requireNotNull(
+            KeyRotationProtocol.decode(fixtures.bytes("extension.key_rotation.v1")),
+        )
+        assertArrayEquals(
+            byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8),
+            rotation.oldPeerId,
+        )
+        assertEquals(1_700_000_000_000L, rotation.timestamp)
+        assertEquals(1L, rotation.sequence)
+        assertEquals(64, rotation.authorizationSignature.size)
+        assertNull(
+            KeyRotationProtocol.decode(
+                fixtures.bytes("extension.key_rotation.v1").copyOfRange(1, 153),
+            ),
+        )
+        assertNull(
+            KeyRotationProtocol.decode(
+                fixtures.bytes("extension.key_rotation.v1").copyOf().also {
+                    it.fill(0.toByte(), 9, 41)
+                },
             ),
         )
         assertArrayEquals(

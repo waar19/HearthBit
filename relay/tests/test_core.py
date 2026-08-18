@@ -27,6 +27,7 @@ from hearthbit_relay.link import (
 )
 from hearthbit_relay.protocol import (
     EMERGENCY_ACK_RETENTION_SECONDS,
+    FLAG_DRILL,
     TYPE_ANNOUNCE,
     TYPE_EMERGENCY_ACK,
     TYPE_FRAGMENT,
@@ -42,11 +43,16 @@ from hearthbit_relay.store import PacketStore
 
 
 class MemoryLink(InMemoryRelayLink):
-    def __init__(self, link_id: str) -> None:
+    def __init__(
+        self,
+        link_id: str,
+        *,
+        kind: LinkKind = LinkKind.IN_MEMORY,
+    ) -> None:
         super().__init__(
             LinkCapabilities(
                 id=link_id,
-                kind=LinkKind.IN_MEMORY,
+                kind=kind,
                 mtu=2048,
                 broadcast=True,
                 unicast=True,
@@ -84,6 +90,7 @@ def signed_message(
     timestamp_ms: int,
     version: int = 1,
     route=(),
+    extra_flags: int = 0,
 ) -> bytes:
     unsigned = decode_packet(
         encode_packet(
@@ -94,6 +101,8 @@ def signed_message(
             sender_id=identity.peer_id,
             payload=payload,
             route=route,
+            signature=b"\x00" * 64 if extra_flags & FLAG_DRILL else None,
+            extra_flags=extra_flags,
         )
     )
     return encode_packet(
@@ -105,6 +114,7 @@ def signed_message(
         payload=payload,
         route=route,
         signature=identity.sign(canonical_packet_bytes(unsigned)),
+        extra_flags=extra_flags,
         pad=True,
     )
 
@@ -203,6 +213,45 @@ async def test_relay_deduplicates_decrements_ttl_and_replays_store(tmp_path) -> 
     replayed = await core.register_link(later_peer)
     assert replayed == 1
     assert later_peer.sent == live_peer.sent
+    store.close()
+
+
+async def test_drill_stays_off_internet_bridges(tmp_path) -> None:
+    config = relay_config()
+    store = PacketStore(config.store)
+    core = RelayCore(
+        config,
+        store,
+        announcement_clock_ms=_announcement_clock_ms,
+    )
+    source = MemoryLink("source")
+    mesh_peer = MemoryLink("mesh")
+    mqtt = MemoryLink("mqtt:sink", kind=LinkKind.MQTT)
+    await core.register_link(source)
+    await core.register_link(mesh_peer)
+    await core.register_link(mqtt)
+    remote = RelayIdentity.load_or_create(tmp_path / "remote-drill.json")
+    await core.inbound(
+        source.id,
+        remote.build_announcement(nickname="Remote", timestamp_ms=100),
+    )
+    mesh_peer.sent.clear()
+    mqtt.sent.clear()
+    raw = signed_message(
+        remote,
+        payload=b"SIMULACRO\n[HB-DRILL|1|CHECKIN|OK|1700000000000]",
+        timestamp_ms=123,
+        extra_flags=FLAG_DRILL,
+    )
+
+    outbound = await core.inbound(source.id, raw)
+    assert outbound.accepted and outbound.forwarded == 1
+    assert len(mesh_peer.sent) == 1
+    assert mqtt.sent == []
+
+    inbound = await core.inbound("mqtt:source", raw)
+    assert not inbound.accepted
+    assert inbound.reason == "drill-bridge-forbidden"
     store.close()
 
 

@@ -75,7 +75,7 @@ void main() {
     expect(message.isCheckIn, isFalse);
   });
 
-  test('canal o marcador drill aíslan incluso contenido hostil o futuro', () {
+  test('solo el canal derivado del flag firmado identifica simulacro', () {
     final timestamp = DateTime.fromMillisecondsSinceEpoch(1_700_000_000_000);
     final hostile = MeshMessage(
       id: 'drill-hostile',
@@ -95,13 +95,13 @@ void main() {
       isPrivate: false,
       isMine: false,
       timestamp: timestamp,
-      channel: 'sos',
+      channel: null,
     );
 
     expect(hostile.isDrill, isTrue);
     expect(hostile.isSos, isFalse);
     expect(hostile.drill, isNull);
-    expect(future.isDrill, isTrue);
+    expect(future.isDrill, isFalse);
     expect(future.isSos, isFalse);
     expect(future.drill, isNull);
   });
@@ -196,31 +196,19 @@ void main() {
     expect(invalid.isValid, isFalse);
   });
 
-  test('gateway excluye todo simulacro aunque parezca SOS o check-in', () {
+  test('gateway excluye simulacros del canal derivado del flag firmado', () {
     final timestamp = DateTime.fromMillisecondsSinceEpoch(1_700_000_000_000);
-    for (final message in [
-      MeshMessage(
-        id: 'drill-channel',
-        sender: 'Ana',
-        content: 'SOS|Práctica||',
-        senderPeerId: 'peer-a',
-        isPrivate: false,
-        isMine: false,
-        timestamp: timestamp,
-        channel: 'drill',
-      ),
-      MeshMessage(
-        id: 'drill-marker',
-        sender: 'Ana',
-        content: 'Practice\n[HB-DRILL|1|CHECKIN|OK|1700000000000]',
-        senderPeerId: 'peer-a',
-        isPrivate: false,
-        isMine: false,
-        timestamp: timestamp,
-        channel: 'checkin',
-      ),
-    ]) {
-      expect(EmergencyGatewayController.isEmergencyEligible(message), isFalse);
-    }
+    final message = MeshMessage(
+      id: 'drill-channel',
+      sender: 'Ana',
+      content: 'SOS|Práctica||',
+      senderPeerId: 'peer-a',
+      isPrivate: false,
+      isMine: false,
+      timestamp: timestamp,
+      channel: 'drill',
+    );
+
+    expect(EmergencyGatewayController.isEmergencyEligible(message), isFalse);
   });
 }

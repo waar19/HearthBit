@@ -1233,6 +1233,47 @@ class RunnerTests: XCTestCase {
     XCTAssertEqual(store.pin(for: identity.peerID)?.noisePublicKey, identity.noise)
   }
 
+  func testPeerPinRotationMigratesAtomicallyAndRetiresOldID() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore()
+    let old = makePeerPinMaterial()
+    _ = try store.validateAndPin(
+      peerID: old.peerID,
+      noisePublicKey: old.noise,
+      signingPublicKey: old.signing
+    )
+    let newNoise = Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation
+    let newSigning = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+    let newID = IOSMeshProtocol.peerID(newNoise).hex
+
+    XCTAssertNotNil(
+      try store.rotate(
+        oldPeerID: old.peerID,
+        noisePublicKey: newNoise,
+        signingPublicKey: newSigning,
+        sequence: 4
+      )
+    )
+    XCTAssertNil(store.pin(for: old.peerID))
+    XCTAssertEqual(store.pin(for: newID)?.lastRotationSequence, 4)
+    XCTAssertNil(
+      try store.rotate(
+        oldPeerID: newID,
+        noisePublicKey: Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation,
+        signingPublicKey: Curve25519.Signing.PrivateKey().publicKey.rawRepresentation,
+        sequence: 4
+      )
+    )
+    XCTAssertEqual(
+      try store.validateAndPin(
+        peerID: old.peerID,
+        noisePublicKey: old.noise,
+        signingPublicKey: old.signing
+      ),
+      .conflict(noiseChanged: true, signingChanged: true)
+    )
+  }
+
   func testPeerPinsRestoreFromSecurePersistence() throws {
     let backend = TestSecurePinBackend()
     let identity = makePeerPinMaterial()
@@ -1371,6 +1412,16 @@ final class ConformanceFixtureTests: XCTestCase {
     XCTAssertEqual(v1.type, IOSMeshProtocol.message)
     XCTAssertEqual(v1.ttl, 7)
     XCTAssertEqual(v1.payload, Data("abc".utf8))
+
+    let drillBytes = fixtures.bytes("packet.v1.drill_message")
+    let drill = try XCTUnwrap(IOSMeshProtocol.decode(drillBytes))
+    XCTAssertTrue(drill.isDrill)
+    XCTAssertTrue(IOSMeshProtocol.isDrill(drill))
+    XCTAssertFalse(IOSMeshProtocol.isEmergency(drill))
+    var unflaggedDrill = drillBytes
+    unflaggedDrill[11] = 0x02
+    XCTAssertNil(IOSMeshProtocol.decode(unflaggedDrill))
+    XCTAssertNil(IOSMeshProtocol.decode(Data(drillBytes.dropLast(64))))
 
     let v2 = try XCTUnwrap(IOSMeshProtocol.decode(fixtures.bytes("packet.v2.route_signed")))
     XCTAssertEqual(v2.version, 2)
@@ -1574,6 +1625,22 @@ final class ConformanceFixtureTests: XCTestCase {
         fixtures.bytes("extension.emergency_ack.v1")
       ),
       Data((0..<32).map(UInt8.init))
+    )
+    let rotation = try XCTUnwrap(
+      IOSMeshProtocol.decodeKeyRotation(fixtures.bytes("extension.key_rotation.v1"))
+    )
+    XCTAssertEqual(IOSMeshProtocol.keyRotation, 0x2C)
+    XCTAssertEqual(rotation.oldPeerID.hexString, "0102030405060708")
+    XCTAssertEqual(rotation.timestamp, 1_700_000_000_000)
+    XCTAssertEqual(rotation.sequence, 1)
+    XCTAssertEqual(rotation.authorizationSignature.count, 64)
+    var malformedRotation = fixtures.bytes("extension.key_rotation.v1")
+    malformedRotation.replaceSubrange(9..<41, with: Data(repeating: 0, count: 32))
+    XCTAssertNil(IOSMeshProtocol.decodeKeyRotation(malformedRotation))
+    XCTAssertNil(
+      IOSMeshProtocol.decodeKeyRotation(
+        Data(fixtures.bytes("extension.key_rotation.v1").dropFirst())
+      )
     )
     XCTAssertEqual(fixtures.bytes("extension.hbt_capability.canonical"), Data([1]))
     XCTAssertEqual(fixtures.bytes("extension.legacy_0x24.hbt_alias"), Data([1]))

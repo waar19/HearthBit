@@ -745,6 +745,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnosticsStatus => '状态';
 
   @override
+  String get diagnosticsIdentityRotation => '最近一次身份轮换';
+
+  @override
   String get diagnosticsNearbyDevices => '附近设备';
 
   @override
@@ -791,6 +794,23 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get diagnosticsDisabled => '未活跃';
+
+  @override
+  String get diagnosticsTransportOutcomesSection => '传输结果';
+
+  @override
+  String diagnosticsTransportOutcome(int success, int failure) {
+    return '成功 $success 次 · 失败 $failure 次';
+  }
+
+  @override
+  String get diagnosticsTransportAudio => '音频';
+
+  @override
+  String get diagnosticsTransportQr => '二维码';
+
+  @override
+  String get diagnosticsTransportExternal => '外部分享';
 
   @override
   String get openLinkError => '无法打开链接';

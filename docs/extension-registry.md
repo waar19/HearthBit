@@ -9,7 +9,7 @@ Este registro gobierna extensiones de HearthBit sobre el perfil de
 La fuente BitChat fijada es
 `vendor/bitchat-android@5156f7de89ec9f6a3429630d90f709b68f6fd7fd`.
 Ese commit no registra Courier `0x04`, los tipos exteriores `0x23`–`0x28`,
-`0x2A`–`0x2B` ni el tipo Noise interior `0x30`. `0x29` sí está asignado por
+`0x2A`–`0x2C` ni el tipo Noise interior `0x30`. `0x29` sí está asignado por
 upstream a `VOICE_FRAME`; Bitle asigna `0x24` a `PREKEY_BUNDLE`. Las entradas
 propias de este documento pertenecen a HearthBit/Bitle y **MUST NOT**
 presentarse como compatibilidad upstream.
@@ -66,6 +66,7 @@ recepción. Un alias legacy **MUST NOT** usarse para emitir.
 | exterior | `0x28` | `EMERGENCY_CAPABILITY` | HearthBit | no | nunca |
 | exterior | `0x2A` | `HBT_CAPABILITY` | HearthBit | no | nunca |
 | exterior | `0x2B` | `EMERGENCY_ACK` | HearthBit | sí | dirigido y acotado |
+| exterior | `0x2C` | `KEY_ROTATION` | HearthBit | sí | nunca |
 | Noise interior | `0x30` | `HBT_TRANSFER_FRAME` | HearthBit | no para la sesión | nunca |
 
 “Crítica” significa que interpretar mal la entrada puede modificar
@@ -332,7 +333,55 @@ timestamp dentro de ±48 horas antes de informar el acuse. La recepción
 temporal de `LEGACY_EMERGENCY_ACK 0x29` aplica exactamente estas validaciones;
 ningún emisor **MUST** producir `0x29`.
 
-## 11. `HBT_TRANSFER_FRAME` Noise interior `0x30`
+## 11. `KEY_ROTATION` exterior `0x2C`
+
+`KEY_ROTATION` migra una identidad TOFU ya fijada a un nuevo par de claves.
+No crea confianza inicial: `senderId` y `oldPeerId` **MUST** ser el peer ID
+antiguo y el receptor **MUST** tener fijada previamente su clave Ed25519.
+
+El payload v1 mide exactamente 153 octetos, en orden big-endian:
+
+```text
+version:                UInt8 = 0x01
+oldPeerId:              8 octetos
+newNoiseX25519:         32 octetos
+newSigningEd25519:      32 octetos
+timestamp:              UInt64 Unix ms
+sequence:               UInt64, mayor que cero
+authorizationSignature:64 octetos Ed25519
+```
+
+La autorización interna firma con la clave Ed25519 antigua:
+`ASCII("HearthBitKeyRotationV1") || payload[0..88]`. Además, el paquete
+exterior completo **MUST** estar firmado con esa misma clave antigua. El
+timestamp interior **MUST** ser igual al timestamp exterior y estar dentro de
+±10 minutos. La secuencia **MUST** ser estrictamente mayor que la última
+secuencia aceptada para esa línea de identidad.
+
+Antes de cambiar estado, el receptor valida ambas firmas, tamaños y parsers de
+clave, el enlace `oldPeerId == senderId`, que el nuevo peer ID sea
+`SHA-256(newNoiseX25519)[0..7]`, que sea distinto del anterior y que no esté
+fijado a otro peer. Solo entonces reemplaza atómicamente el pin antiguo por el
+nuevo y persiste la secuencia. Firma inválida, identidad desconocida, reloj
+fuera de ventana, replay/rollback, clave cero o malformada y colisión
+**MUST** rechazarse sin modificar ningún pin.
+
+Un `ANNOUNCE` ordinario nunca autoriza una rotación ni resuelve un conflicto.
+La rotación invalida las sesiones Noise anteriores; el nuevo peer debe emitir
+un `ANNOUNCE` firmado con su nueva clave y negociar una sesión nueva.
+`KEY_ROTATION` puede retransmitirse en vivo respetando TTL, pero **MUST NOT**
+entrar en GCS ni store-forward. Un relay neutral puede parsearlo para límites y
+diagnóstico, pero **MUST NOT** actualizar confianza local.
+
+Para recuperación, el emisor conserva temporalmente la clave antigua y puede
+reemitir una autorización con la misma secuencia y timestamp renovado a nodos
+que aún conservan el pin antiguo. Un nodo que ya migró rechaza ese sender
+antiguo; uno que perdió el anuncio puede aceptarlo. Si se pierde la clave
+antigua o el estado seguro queda corrupto, la recuperación requiere olvido o
+panic wipe explícito y nuevo TOFU; nunca se rota automáticamente al observar
+un conflicto.
+
+## 12. `HBT_TRANSFER_FRAME` Noise interior `0x30`
 
 El plaintext de transporte es:
 
@@ -358,9 +407,9 @@ diferida de un mensaje privado usa Courier, que conserva como ciphertext el
 paquete Noise completo y aplica sus propias restricciones. Los blobs de
 archivo HBT **MUST NOT** entrar en Courier ni en el store-forward de mensajes.
 
-## 12. ExtensionEnvelope futuro
+## 13. ExtensionEnvelope futuro
 
-### 12.1 Objetivo y estado
+### 13.1 Objetivo y estado
 
 Las asignaciones activas de la tabla de la sección 3 **MUST** conservarse.
 `0x24` significa `PREKEY_BUNDLE`, `0x29` permanece `VOICE_FRAME`, y sus aliases
@@ -375,7 +424,7 @@ carrier y su negociación, una implementación **MUST NOT** emitir
 `ExtensionEnvelope` en la red ni reutilizar un tipo upstream. Esta restricción
 evita inventar compatibilidad.
 
-### 12.2 Encoding
+### 13.2 Encoding
 
 El encabezado mide 12 octetos:
 
@@ -409,7 +458,7 @@ consultar además la entrada del registro, autenticación, destinatario, cuota y
 expiración. El flag nunca puede volver almacenable un subtipo registrado como
 “nunca”.
 
-### 12.3 Negociación y tipos desconocidos
+### 13.3 Negociación y tipos desconocidos
 
 Un emisor **MUST NOT** enviar un `ExtensionEnvelope` hasta haber recibido un
 `ANNOUNCE` autenticado y una capacidad autenticada que declare soporte para el
@@ -427,7 +476,7 @@ Para un envelope desconocido:
 - **MUST NOT** almacenarlo salvo que el registro y la negociación autoricen
   explícitamente store-forward.
 
-## 13. Proceso de asignación
+## 14. Proceso de asignación
 
 Toda nueva entrada **MUST** documentar:
 

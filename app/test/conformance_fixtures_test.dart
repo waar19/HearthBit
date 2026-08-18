@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth_bit/services/beacon_control_protocol.dart';
+import 'package:hearth_bit/services/emergency_wire_codec.dart';
+import 'package:hearth_bit/services/key_rotation_protocol.dart';
 import 'package:hearth_bit/services/ranging_control_protocol.dart';
 import 'package:hearth_bit/services/transfer_protocol.dart';
 
@@ -24,6 +26,24 @@ void main() {
     expect(offer.u64(TransferProtocol.tagFileSize), 1048576);
     expect(offer.bytes(TransferProtocol.tagSignature), hasLength(64));
     expect(offer.signedBytes(), fixtures.bytes('hbt.offer.signed_bytes'));
+  });
+
+  test('codec Dart reconoce el flag de simulacro firmado', () {
+    final bytes = fixtures.bytes('packet.v1.drill_message');
+    final frame = EmergencyWireCodec.decode(bytes);
+    expect(frame?.version, 1);
+    expect(frame?.type, EmergencyWireCodec.messageType);
+    expect(frame?.isDrill, isTrue);
+
+    final unflagged = Uint8List.fromList(bytes)
+      ..[11] = bytes[11] & ~EmergencyWireCodec.drillFlag;
+    expect(EmergencyWireCodec.decode(unflagged), isNull);
+    expect(
+      EmergencyWireCodec.decode(
+        Uint8List.fromList(bytes.sublist(0, bytes.length - 64)),
+      ),
+      isNull,
+    );
   });
 
   test('HBT decodifica chunk y rechaza version o truncamiento', () {
@@ -82,6 +102,34 @@ void main() {
     expect(
       fixtures.bytes('extension.legacy_0x24.prekey_candidate'),
       isNot(Uint8List.fromList([1])),
+    );
+  });
+
+  test('KEY_ROTATION comparte formato, secuencia y firma', () {
+    final rotation = KeyRotationProtocol.decode(
+      fixtures.bytes('extension.key_rotation.v1'),
+    );
+    expect(rotation, isNotNull);
+    expect(KeyRotationProtocol.typeId, 0x2c);
+    expect(rotation!.oldPeerIdHex, '0102030405060708');
+    expect(rotation.timestampMilliseconds, 1700000000000);
+    expect(rotation.sequence, 1);
+    expect(rotation.authorizationSignature, hasLength(64));
+    expect(
+      KeyRotationProtocol.authorizationBytes(
+        rotation,
+      ).sublist(0, 'HearthBitKeyRotationV1'.length),
+      'HearthBitKeyRotationV1'.codeUnits,
+    );
+    final malformed = Uint8List.fromList(
+      fixtures.bytes('extension.key_rotation.v1'),
+    )..fillRange(9, 41, 0);
+    expect(KeyRotationProtocol.decode(malformed), isNull);
+    expect(
+      KeyRotationProtocol.decode(
+        fixtures.bytes('extension.key_rotation.v1').sublist(1),
+      ),
+      isNull,
     );
   });
 }

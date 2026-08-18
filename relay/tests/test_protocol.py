@@ -3,11 +3,13 @@ import pytest
 from hearthbit_relay.protocol import (
     EPHEMERAL_MESSAGE_TYPES,
     FLAG_ROUTE,
+    FLAG_DRILL,
     FLAG_RSR,
     TYPE_EMERGENCY_ACK,
     TYPE_FRAGMENT,
     TYPE_GROUP_MESSAGE,
     TYPE_HBT_CAPABILITY,
+    TYPE_KEY_ROTATION,
     TYPE_LEGACY_EMERGENCY_ACK,
     TYPE_LEGACY_HBT_CAPABILITY,
     TYPE_NODE_CAPABILITY,
@@ -90,6 +92,30 @@ def test_v1_ignores_route_flag_like_android_ios_and_vendor() -> None:
     assert decoded.flags & FLAG_ROUTE
     assert decoded.route == ()
     assert decoded.payload == b"mensaje"
+
+
+def test_drill_flag_is_signed_versioned_and_fail_closed() -> None:
+    content = b"SIMULACRO\n[HB-DRILL|1|CHECKIN|HELP|1700000000000]"
+    encoded = encode_packet(
+        message_type=0x02,
+        ttl=7,
+        timestamp_ms=1,
+        sender_id=b"sender01",
+        payload=content,
+        signature=b"\x55" * 64,
+        extra_flags=FLAG_DRILL,
+    )
+    assert decode_packet(encoded).is_drill
+
+    without_flag = bytearray(encoded)
+    without_flag[11] &= ~FLAG_DRILL
+    with pytest.raises(PacketError, match="drill marker"):
+        decode_packet(bytes(without_flag))
+
+    unsigned = bytearray(encoded[:-64])
+    unsigned[11] &= ~0x02
+    with pytest.raises(PacketError, match="drill"):
+        decode_packet(bytes(unsigned))
 
 
 def test_v2_rejects_truncated_route() -> None:
@@ -218,11 +244,13 @@ def test_extension_type_codes_do_not_collide_with_upstream_or_firmware() -> None
     assert TYPE_LEGACY_EMERGENCY_ACK == 0x29
     assert TYPE_HBT_CAPABILITY == 0x2A
     assert TYPE_EMERGENCY_ACK == 0x2B
+    assert TYPE_KEY_ROTATION == 0x2C
 
 
 def test_only_legacy_emergency_ack_remains_ephemeral() -> None:
     assert TYPE_LEGACY_EMERGENCY_ACK in EPHEMERAL_MESSAGE_TYPES
     assert TYPE_EMERGENCY_ACK not in EPHEMERAL_MESSAGE_TYPES
+    assert TYPE_KEY_ROTATION in EPHEMERAL_MESSAGE_TYPES
 
 
 @pytest.mark.parametrize(

@@ -67,6 +67,13 @@ internal class KeystoreSecureStore private constructor(
 
     fun remove(key: String): Boolean = preferences.edit().remove(key).commit()
 
+    @Synchronized
+    fun replaceString(oldKey: String, newKey: String, value: String): Boolean =
+        preferences.edit()
+            .putString(oldKey, encrypt(oldKey, Value.string("retired-by-key-rotation")))
+            .putString(newKey, encrypt(newKey, Value.string(value)))
+            .commit()
+
     fun clear(): Boolean = preferences.edit().clear().commit()
 
     @Synchronized
@@ -86,14 +93,15 @@ internal class KeystoreSecureStore private constructor(
 
     @Synchronized
     private fun put(key: String, value: Value): Boolean {
+        return preferences.edit().putString(key, encrypt(key, value)).commit()
+    }
+
+    private fun encrypt(key: String, value: Value): String {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, secretKey)
         cipher.updateAAD(aad(key))
         val encrypted = cipher.iv + cipher.doFinal(encode(value))
-        return preferences.edit().putString(
-            key,
-            Base64.encodeToString(encrypted, Base64.NO_WRAP),
-        ).commit()
+        return Base64.encodeToString(encrypted, Base64.NO_WRAP)
     }
 
     private fun aad(key: String): ByteArray = "$namespace:$key".toByteArray(Charsets.UTF_8)

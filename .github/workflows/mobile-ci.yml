@@ -31,6 +31,33 @@ jobs:
         working-directory: relay
       - run: python tests/conformance/generate_firmware_header.py --check
 
+  rust-core:
+    name: Validar núcleo Rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      # ubuntu-latest incluye el toolchain Rust; evitamos una acción flotante.
+      - run: cargo generate-lockfile --manifest-path core/hearthbit-core/Cargo.toml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hearthbit-core-cargo-lock
+          path: core/hearthbit-core/Cargo.lock
+          if-no-files-found: error
+          retention-days: 1
+      - run: cargo fmt --manifest-path core/hearthbit-core/Cargo.toml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hearthbit-core-formatted
+          path: |
+            core/hearthbit-core/src
+            core/hearthbit-core/tests
+          if-no-files-found: error
+          retention-days: 1
+      - run: cargo clippy --locked --manifest-path core/hearthbit-core/Cargo.toml --all-targets -- -D warnings
+      - run: cargo test --locked --manifest-path core/hearthbit-core/Cargo.toml
+
   flutter:
     name: Analizar y probar Flutter
     runs-on: ubuntu-latest

@@ -58,6 +58,22 @@ void main() {
     expect(transport.timestamp, 1234);
   });
 
+  test('parsea diagnóstico tipado de rotación de identidad', () {
+    final event = MeshNativeEvent.parse({
+      'type': 'keyRotation',
+      'status': 'accepted',
+      'oldPeerId': '0102030405060708',
+      'newPeerId': '1112131415161718',
+      'sequence': 9,
+      'timestamp': 1700000000000,
+    });
+    expect(event, isA<MeshKeyRotationEvent>());
+    final rotation = event as MeshKeyRotationEvent;
+    expect(rotation.status, 'accepted');
+    expect(rotation.sequence, 9);
+    expect(rotation.newPeerId, '1112131415161718');
+  });
+
   test('conserva eventos desconocidos para compatibilidad futura', () {
     final event = MeshNativeEvent.parse({
       'type': 'futureCapability',

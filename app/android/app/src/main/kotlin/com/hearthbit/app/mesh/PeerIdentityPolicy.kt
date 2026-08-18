@@ -14,6 +14,8 @@ internal enum class PeerIdentityDecision {
     REJECT_UNAUTHENTICATED_ROTATION,
     REJECT_INVALID_IDENTITY,
     REJECT_CAPACITY,
+    REJECT_REPLAY,
+    REJECT_COLLISION,
     ;
 
     val accepted: Boolean

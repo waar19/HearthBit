@@ -38,6 +38,15 @@ class _DrillPlatform extends MeshPlatformService {
   }
 
   @override
+  Future<EmergencyTransmission> sendDrill({
+    required String messageId,
+    required String content,
+  }) async {
+    publicMessages.add((content: content, channel: 'drill'));
+    return EmergencyTransmission(messageId: messageId);
+  }
+
+  @override
   Future<String> sendSos({
     required String content,
     double? latitude,

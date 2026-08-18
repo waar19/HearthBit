@@ -8,11 +8,13 @@ import pytest
 
 from hearthbit_relay.protocol import (
     FragmentReassembler,
+    FLAG_DRILL,
     PacketError,
     TYPE_BEACON_CONTROL,
     TYPE_EMERGENCY_ACK,
     TYPE_EMERGENCY_CAPABILITY,
     TYPE_HBT_CAPABILITY,
+    TYPE_KEY_ROTATION,
     TYPE_LEGACY_HBT_CAPABILITY,
     TYPE_RANGING_CONTROL,
     canonical_packet_bytes,
@@ -20,8 +22,10 @@ from hearthbit_relay.protocol import (
     decode_extension_envelope,
     decode_fragment_payload,
     decode_gcs,
+    decode_key_rotation,
     decode_packet,
     decode_sync_request,
+    is_drill_public_packet,
     relay_fingerprint,
 )
 
@@ -46,6 +50,11 @@ def test_manifest_pins_the_profile_source() -> None:
 def test_packet_frames_v1_v2_compression_and_negative_inputs() -> None:
     v1 = decode_packet(fixture("packet.v1.message"))
     assert (v1.version, v1.message_type, v1.ttl, v1.payload) == (1, 2, 7, b"abc")
+
+    drill = decode_packet(fixture("packet.v1.drill_message"))
+    assert drill.flags & FLAG_DRILL
+    assert drill.is_drill
+    assert is_drill_public_packet(drill)
 
     v2 = decode_packet(fixture("packet.v2.route_signed"))
     assert v2.version == 2
@@ -166,3 +175,19 @@ def test_legacy_type_0x24_requires_exact_hbt_shape() -> None:
     assert TYPE_LEGACY_HBT_CAPABILITY == 0x24
     assert fixture("extension.legacy_0x24.hbt_alias") == b"\x01"
     assert fixture("extension.legacy_0x24.prekey_candidate") != b"\x01"
+
+
+def test_key_rotation_is_parsed_without_changing_relay_trust() -> None:
+    rotation = decode_key_rotation(fixture("extension.key_rotation.v1"))
+    assert TYPE_KEY_ROTATION == 0x2C
+    assert rotation.old_peer_id.hex() == "0102030405060708"
+    assert rotation.timestamp_ms == 1_700_000_000_000
+    assert rotation.sequence == 1
+    assert len(rotation.authorization_signature) == 64
+    assert rotation.authorization_bytes.startswith(b"HearthBitKeyRotationV1")
+    with pytest.raises(PacketError, match="key rotation"):
+        decode_key_rotation(fixture("extension.key_rotation.v1")[1:])
+    malformed = bytearray(fixture("extension.key_rotation.v1"))
+    malformed[9:41] = bytes(32)
+    with pytest.raises(PacketError, match="key rotation"):
+        decode_key_rotation(bytes(malformed))

@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parent
 OUTPUT = ROOT.parents[1] / "firmware" / "anchor-node" / "main" / "conformance_vectors.h"
 PACKET_IDS = (
     "packet.v1.message",
+    "packet.v1.drill_message",
     "packet.v2.route_signed",
     "packet.v1.raw_deflate",
     "packet.v1.zlib_read",

@@ -14,6 +14,7 @@ FLAG_SIGNATURE = 0x02
 FLAG_COMPRESSED = 0x04
 FLAG_ROUTE = 0x08
 FLAG_RSR = 0x10
+FLAG_DRILL = 0x20
 
 TYPE_ANNOUNCE = 0x01
 TYPE_MESSAGE = 0x02
@@ -32,6 +33,7 @@ TYPE_EMERGENCY_CAPABILITY = 0x28
 TYPE_LEGACY_EMERGENCY_ACK = 0x29
 TYPE_HBT_CAPABILITY = 0x2A
 TYPE_EMERGENCY_ACK = 0x2B
+TYPE_KEY_ROTATION = 0x2C
 EMERGENCY_ACK_RETENTION_SECONDS = 48 * 60 * 60
 
 # Backward-compatible alias for callers that imported the old semantic name.
@@ -48,6 +50,7 @@ EPHEMERAL_MESSAGE_TYPES = frozenset(
         TYPE_RANGING_CONTROL,
         TYPE_EMERGENCY_CAPABILITY,
         TYPE_LEGACY_EMERGENCY_ACK,
+        TYPE_KEY_ROTATION,
     }
 )
 
@@ -90,6 +93,10 @@ class Packet:
     @property
     def is_directed(self) -> bool:
         return self.recipient_id is not None
+
+    @property
+    def is_drill(self) -> bool:
+        return bool(self.flags & FLAG_DRILL)
 
     def forwarded_bytes(self) -> bytes:
         if self.ttl <= 1:
@@ -167,6 +174,16 @@ def decode_packet(data: bytes, *, max_size: int = MAX_PACKET_SIZE) -> Packet:
         payload = _decompress_exact(payload[size_bytes:], original_size)
     signature = data[payload_end:wire_length] if signature_len else None
     _validate_padding(data[wire_length:])
+    _validate_drill_shape(
+        version=version,
+        message_type=message_type,
+        flags=flags,
+        recipient_id=recipient_id,
+        route=route,
+        payload=payload,
+        signature=signature,
+        require_signature=True,
+    )
 
     return Packet(
         version=version,
@@ -223,6 +240,15 @@ def encode_packet(
     flags |= FLAG_RECIPIENT if recipient_id is not None else 0
     flags |= FLAG_SIGNATURE if signature is not None else 0
     flags |= FLAG_ROUTE if route else 0
+    _validate_drill_shape(
+        version=version,
+        message_type=message_type,
+        flags=flags,
+        recipient_id=recipient_id,
+        route=tuple(route),
+        payload=payload,
+        signature=signature,
+    )
     header = HEADER_V1 if version == 1 else HEADER_V2
     frame = bytearray(
         header.pack(
@@ -288,6 +314,82 @@ def canonical_packet_bytes(packet: Packet) -> bytes:
         extra_flags=packet.flags & ~(FLAG_SIGNATURE | FLAG_RSR | FLAG_COMPRESSED),
         pad=True,
     )
+
+
+def is_drill_public_packet(packet: Packet) -> bool:
+    return (
+        packet.message_type == TYPE_MESSAGE
+        and packet.is_drill
+        and _is_drill_payload(packet.payload)
+    )
+
+
+def _validate_drill_shape(
+    *,
+    version: int,
+    message_type: int,
+    flags: int,
+    recipient_id: bytes | None,
+    route: tuple[bytes, ...],
+    payload: bytes,
+    signature: bytes | None,
+    require_signature: bool = False,
+) -> None:
+    marked_message = message_type == TYPE_MESSAGE and b"[HB-DRILL|" in payload
+    if not flags & FLAG_DRILL:
+        if marked_message:
+            raise PacketError("drill marker requires signed drill flag")
+        return
+    if (
+        version != VERSION
+        or message_type not in (TYPE_ANNOUNCE, TYPE_MESSAGE)
+        or (require_signature and signature is None)
+        or recipient_id is not None
+        or route
+        or flags & FLAG_COMPRESSED
+    ):
+        raise PacketError("invalid drill flag combination")
+    if message_type == TYPE_ANNOUNCE:
+        if not _announcement_has_emergency_marker(payload):
+            raise PacketError("drill ANNOUNCE requires emergency preannounce")
+    elif not _is_drill_payload(payload):
+        raise PacketError("invalid drill MESSAGE payload")
+
+
+def _is_drill_payload(payload: bytes) -> bool:
+    marker = b"[HB-DRILL|1|CHECKIN|"
+    marker_at = payload.rfind(marker)
+    if (
+        marker_at <= 0
+        or not payload.endswith(b"]")
+        or payload.startswith(b"SOS|")
+        or b"[HB-CHECKIN|" in payload
+    ):
+        return False
+    fields = payload[marker_at + len(marker) : -1].split(b"|")
+    return (
+        len(fields) == 2
+        and fields[0] in {b"OK", b"HELP", b"INJURED"}
+        and fields[1].isdigit()
+        and int(fields[1]) > 0
+    )
+
+
+def _announcement_has_emergency_marker(payload: bytes) -> bool:
+    offset = 0
+    while offset < len(payload):
+        if offset + 2 > len(payload):
+            return False
+        field_type = payload[offset]
+        length = payload[offset + 1]
+        offset += 2
+        end = offset + length
+        if end > len(payload):
+            return False
+        if field_type == 0xF1:
+            return length == 1 and payload[offset] == 0x01
+        offset = end
+    return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -505,6 +607,47 @@ class ExtensionEnvelope:
     version: int
     flags: int
     payload: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class KeyRotation:
+    old_peer_id: bytes
+    new_noise_public_key: bytes
+    new_signing_public_key: bytes
+    timestamp_ms: int
+    sequence: int
+    authorization_signature: bytes
+
+    @property
+    def authorization_bytes(self) -> bytes:
+        return b"HearthBitKeyRotationV1" + bytes((1,)) + self.old_peer_id + (
+            self.new_noise_public_key
+            + self.new_signing_public_key
+            + self.timestamp_ms.to_bytes(8, "big")
+            + self.sequence.to_bytes(8, "big")
+        )
+
+
+def decode_key_rotation(data: bytes) -> KeyRotation:
+    """Parse KEY_ROTATION without mutating relay-local trust."""
+    if len(data) != 153 or data[0] != 1:
+        raise PacketError("invalid key rotation payload")
+    old_peer_id = data[1:9]
+    noise = data[9:41]
+    signing = data[41:73]
+    timestamp_ms = int.from_bytes(data[73:81], "big")
+    sequence = int.from_bytes(data[81:89], "big")
+    signature = data[89:153]
+    if not sequence or not any(noise) or not any(signing):
+        raise PacketError("invalid key rotation fields")
+    return KeyRotation(
+        old_peer_id,
+        noise,
+        signing,
+        timestamp_ms,
+        sequence,
+        signature,
+    )
 
 
 def decode_extension_envelope(data: bytes) -> ExtensionEnvelope:

@@ -264,6 +264,12 @@ class MeshPlatformService {
     });
   }
 
+  Future<void> injectEmergencyAudioFrame(Uint8List frame) {
+    return _methods.invokeMethod<void>('injectEmergencyAudioFrame', {
+      'frame': frame,
+    });
+  }
+
   Future<String> sendPublic(String content, {String? channel}) async {
     return (await _methods.invokeMethod<String>('sendPublic', {
       'content': content,
@@ -333,6 +339,21 @@ class MeshPlatformService {
         messageId: await sendPublic(content, channel: channel),
       );
     }
+  }
+
+  Future<EmergencyTransmission> sendDrill({
+    required String messageId,
+    required String content,
+  }) async {
+    final result = await _methods.invokeMapMethod<Object?, Object?>(
+      'sendDrill',
+      {'messageId': messageId, 'content': content},
+    );
+    return EmergencyTransmission(
+      messageId: result?['messageId'] as String? ?? messageId,
+      announcementFrame: result?['announcementFrame'] as Uint8List?,
+      messageFrame: result?['messageFrame'] as Uint8List?,
+    );
   }
 
   Future<String?> retryEmergency(String canonicalHash) async {
@@ -546,6 +567,24 @@ class MeshPlatformService {
     return (await _methods.invokeMethod<Uint8List>('signPayload', {
       'data': data,
     }))!;
+  }
+
+  /// Rota la identidad local únicamente tras una acción explícita de usuario.
+  ///
+  /// El nativo firma y emite KEY_ROTATION con la clave anterior, activa las
+  /// claves nuevas en almacenamiento seguro y reinicia las sesiones Noise.
+  /// Esta API no se invoca automáticamente ante conflictos.
+  Future<Map<Object?, Object?>> rotateLocalIdentity() async {
+    final result = await _methods.invokeMapMethod<Object?, Object?>(
+      'rotateLocalIdentity',
+    );
+    if (result?['status'] != 'local' ||
+        result?['oldPeerId'] is! String ||
+        result?['newPeerId'] is! String ||
+        result?['sequence'] is! num) {
+      throw StateError('Native identity rotation did not complete');
+    }
+    return result!;
   }
 
   Future<bool> verifyPeerSignature(

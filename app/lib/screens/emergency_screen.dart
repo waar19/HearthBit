@@ -85,6 +85,18 @@ class EmergencyScreen extends StatelessWidget {
             label: Text(context.l10n.sosQrOpen),
           ),
         ],
+        if (drillMode && controller.latestDrillQr != null) ...[
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => SosQrScreen(bundle: controller.latestDrillQr!),
+              ),
+            ),
+            icon: const Icon(Icons.science_outlined),
+            label: Text('${context.l10n.drillBadge} · QR'),
+          ),
+        ],
         const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: () => Navigator.of(context).push(

@@ -1,46 +1,38 @@
 import 'dart:async';
-import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:record/record.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../controllers/mesh_controller.dart';
 import '../controllers/emergency_gateway_controller.dart';
 import '../controllers/family_controller.dart';
 import '../controllers/lan_gateway_controller.dart';
+import '../controllers/mesh_controller.dart';
 import '../controllers/transfer_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../models/transfer_models.dart';
-import '../models/voice_note.dart';
 import '../services/apk_share_service.dart';
 import '../services/app_preferences.dart';
 import '../services/diagnostics_export_service.dart';
 import '../services/diagnostics_log.dart';
 import '../services/emergency_shortcut_service.dart';
 import '../services/invite_share_service.dart';
-import '../services/photo_profile.dart';
+import '../services/photo_send_preparation.dart';
 import '../services/privacy_data_eraser.dart';
 import '../services/secure_database.dart';
-import '../services/voice_note_audio_controller.dart';
-import '../utils/message_chronology.dart';
-import '../widgets/empty_state.dart';
-import '../widgets/list_section_title.dart';
-import '../widgets/message_composer.dart';
+import '../services/transport_diagnostics.dart';
+import '../utils/scroll_to_bottom.dart';
 import '../widgets/nickname_dialog.dart';
-import '../widgets/sensitive_screen.dart';
-import '../widgets/voice_waveform.dart';
-import 'emergency_screen.dart';
 import 'diagnostics_screen.dart';
+import 'emergency_screen.dart';
 import 'family_screen.dart';
-import 'mesh_health_card.dart';
+import 'home/mesh_status_banner.dart';
+import 'home/peers_tab.dart';
+import 'home/photo_compress_dialog.dart';
+import 'home/private_chat_sheet.dart';
+import 'home/public_chat_tab.dart';
 import 'map_screen.dart';
 import 'optical_receive_screen.dart';
 import 'optical_send_screen.dart';
@@ -56,8 +48,6 @@ enum _AppMenuAction {
   about,
   panicWipe,
 }
-
-enum _PeerTransferAction { file, sealed, apk }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -156,7 +146,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _appInForeground = state == AppLifecycleState.resumed;
     _syncGenericPresenceScan();
-    // Al volver de Ajustes (batería/ubicación) se refresca el estado real.
     if (state == AppLifecycleState.resumed) {
       widget.controller.refreshPowerStatus();
     }
@@ -169,6 +158,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             record.state == TransferState.offered,
       )
       .length;
+
+  Future<PreparedPhotoSend?> _pickPreparedPhoto() async {
+    final file = await openFile();
+    if (file == null || !mounted) return null;
+    return preparePhotoForSend(
+      path: file.path,
+      name: file.name,
+      askCompress: (size) => showPhotoCompressDialog(context, size),
+    );
+  }
 
   Future<void> _sendFileTo(MeshPeer peer) async {
     if (!peer.supportsTransfers) {
@@ -183,30 +182,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
       return;
     }
-    final file = await openFile();
-    if (file == null || !mounted) return;
-    var path = file.path;
-    var name = file.name;
-    if (PhotoEmergencyProfile.isPhoto(name)) {
-      final size = await File(path).length();
-      if (size > PhotoEmergencyProfile.compressThresholdBytes && mounted) {
-        final compress = await _askCompressPhoto(size);
-        if (compress == null || !mounted) return;
-        if (compress) {
-          final compressed = await PhotoEmergencyProfile.compress(path);
-          if (compressed != null) {
-            path = compressed;
-            name = p.basename(compressed);
-          }
-        }
-      }
-    }
-    if (!mounted) return;
+    final prepared = await _pickPreparedPhoto();
+    if (prepared == null || !mounted) return;
     try {
       await widget.transfers.sendFile(
         peer: peer,
-        filePath: path,
-        fileName: name,
+        filePath: prepared.path,
+        fileName: prepared.name,
       );
       if (!mounted) return;
       setState(() => _tab = 2);
@@ -246,30 +228,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _startOpticalSend() async {
-    final file = await openFile();
-    if (file == null || !mounted) return;
-    var path = file.path;
-    var name = file.name;
-    if (PhotoEmergencyProfile.isPhoto(name)) {
-      final size = await File(path).length();
-      if (size > PhotoEmergencyProfile.compressThresholdBytes && mounted) {
-        final compress = await _askCompressPhoto(size);
-        if (compress == null || !mounted) return;
-        if (compress) {
-          final compressed = await PhotoEmergencyProfile.compress(path);
-          if (compressed != null) {
-            path = compressed;
-            name = p.basename(compressed);
-          }
-        }
-      }
-    }
-    if (!mounted) return;
+    final prepared = await _pickPreparedPhoto();
+    if (prepared == null || !mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => OpticalSendScreen(
-          filePath: path,
-          fileName: name,
+          filePath: prepared.path,
+          fileName: prepared.name,
           senderPeerId: widget.controller.peerId,
         ),
       ),
@@ -310,26 +275,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  Future<bool?> _askCompressPhoto(int size) {
-    return showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(context.l10n.photoProfileTitle),
-        content: Text(
-          context.l10n.photoProfileBody(
-            (size / (1024 * 1024)).toStringAsFixed(1),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(context.l10n.actionSendOriginal),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(context.l10n.actionCompress),
-          ),
-        ],
+  void _openRadarForPeer(MeshPeer peer) {
+    unawaited(
+      _openRadar(
+        peerId: peer.id,
+        nickname: peer.nickname,
+        consentExpiresAt: peer.radarAllowedUntil!,
+        consentSource: peer.radarConsentSource ?? 'temporary',
       ),
     );
   }
@@ -452,7 +404,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           body: SafeArea(
             child: Column(
               children: [
-                _StatusBanner(controller: controller),
+                MeshStatusBanner(controller: controller),
                 if (controller.lastError != null)
                   MaterialBanner(
                     content: Text(controller.lastError!),
@@ -474,8 +426,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         gateway: widget.gateway,
                         family: widget.family,
                       ),
-                      _buildChat(controller),
-                      _buildPeers(controller),
+                      PublicChatTab(
+                        controller: controller,
+                        messageController: _messageController,
+                        scrollController: _scrollController,
+                        onSend: () async {
+                          final text = _messageController.text;
+                          _messageController.clear();
+                          await controller.sendPublic(text);
+                          _scrollToBottom();
+                        },
+                      ),
+                      PeersTab(
+                        controller: controller,
+                        lanGateway: widget.lanGateway,
+                        onShareInvite: _shareInvite,
+                        onOpenPrivateChat: (peer) =>
+                            _openPrivateChat(controller, peer),
+                        onOpenRadar: _openRadarForPeer,
+                        onUnavailableAction: _showUnavailablePeerAction,
+                        onSendFile: _sendFileTo,
+                        onSendSealed: _sendSealedFileTo,
+                        onSendApk: _sendApkTo,
+                      ),
                       TransfersTab(
                         transfers: widget.transfers,
                         onSendOptical: _startOpticalSend,
@@ -561,396 +534,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildChat(MeshController controller) {
-    final publicMessages = controller.messages
-        .where((message) => !message.isPrivate)
-        .toList(growable: false);
-    final timeline = _messageTimelineEntries(publicMessages);
-    return Column(
-      children: [
-        Expanded(
-          child: publicMessages.isEmpty
-              ? EmptyState(
-                  icon: Icons.bluetooth_searching,
-                  title: context.l10n.emptyChatTitle,
-                  description: context.l10n.emptyChatBody,
-                )
-              : ListView.builder(
-                  controller: _scrollController,
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: const EdgeInsets.all(12),
-                  itemCount: timeline.length,
-                  itemBuilder: (context, index) => _buildMessageTimelineEntry(
-                    context,
-                    timeline[index],
-                    compactSos: true,
-                  ),
-                ),
-        ),
-        MessageComposer(
-          controller: _messageController,
-          enabled: controller.canSend,
-          hint: context.l10n.composerPublicHint,
-          onSend: () async {
-            final text = _messageController.text;
-            _messageController.clear();
-            await controller.sendPublic(text);
-            _scrollToBottom();
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPeers(MeshController controller) {
-    final conversations = controller.conversations;
-    final conversationIds = conversations
-        .map((conversation) => conversation.peer.id)
-        .toSet();
-    final newNearbyPeers = controller.peers
-        .where((peer) => !conversationIds.contains(peer.id))
-        .toList(growable: false);
-    final genericPresences = controller.genericPresences;
-    if (conversations.isEmpty &&
-        newNearbyPeers.isEmpty &&
-        genericPresences.isEmpty) {
-      return Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            child: MeshHealthCard(
-              controller: controller,
-              lanGateway: widget.lanGateway,
-            ),
-          ),
-          Expanded(
-            child: EmptyState(
-              icon: Icons.portable_wifi_off,
-              title: context.l10n.emptyPeersTitle,
-              description: context.l10n.emptyPeersBody,
-              action: Builder(
-                builder: (buttonContext) => FilledButton.icon(
-                  onPressed: () => _shareInvite(buttonContext),
-                  icon: const Icon(Icons.ios_share),
-                  label: Text(context.l10n.shareInviteButton),
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        MeshHealthCard(controller: controller, lanGateway: widget.lanGateway),
-        const SizedBox(height: 8),
-        if (conversations.isNotEmpty) ...[
-          ListSectionTitle(title: context.l10n.recentChatsTitle),
-          ...conversations.map((conversation) {
-            final peer = conversation.peer;
-            final message = conversation.lastMessage;
-            final chatAvailable = controller.canChatWithPeer(peer);
-            return Card(
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: chatAvailable
-                    ? () => _openPrivateChat(controller, peer)
-                    : null,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Column(
-                    children: [
-                      ListTile(
-                        leading: CircleAvatar(
-                          child: Text(_avatarLetter(peer.nickname)),
-                        ),
-                        title: Text(peer.nickname),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              message.content,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            _peerCapabilityBadges(peer),
-                          ],
-                        ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(_formatConversationTime(message.timestamp)),
-                            const SizedBox(height: 4),
-                            Text(
-                              conversation.isOnline
-                                  ? context.l10n.peerOnline
-                                  : context.l10n.peerOffline,
-                              style: Theme.of(context).textTheme.labelSmall
-                                  ?.copyWith(
-                                    color: conversation.isOnline
-                                        ? Theme.of(context).colorScheme.primary
-                                        : null,
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (chatAvailable)
-                        _peerControls(
-                          controller,
-                          peer,
-                          online: conversation.isOnline,
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }),
-        ],
-        if (newNearbyPeers.isNotEmpty) ...[
-          ListSectionTitle(title: context.l10n.nearbyPeopleTitle),
-          ...newNearbyPeers.map((peer) {
-            final chatAvailable = controller.canChatWithPeer(peer);
-            return Card(
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: CircleAvatar(
-                      child: Text(_avatarLetter(peer.nickname)),
-                    ),
-                    title: Text(peer.nickname),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${peer.id.substring(0, 8)} · '
-                          '${chatAvailable ? (peer.secure ? context.l10n.peerSecure : context.l10n.peerTapToEncrypt) : context.l10n.externalPresenceNoChat}',
-                        ),
-                        _peerCapabilityBadges(peer),
-                      ],
-                    ),
-                    onTap: chatAvailable
-                        ? () => _openPrivateChat(controller, peer)
-                        : null,
-                  ),
-                  if (chatAvailable)
-                    _peerControls(controller, peer, online: true),
-                ],
-              ),
-            );
-          }),
-        ],
-        if (genericPresences.isNotEmpty) ...[
-          ListSectionTitle(title: context.l10n.genericPresenceSectionTitle),
-          Card(
-            child: ExpansionTile(
-              leading: const CircleAvatar(child: Icon(Icons.sensors)),
-              title: Text(
-                context.l10n.genericPresenceSummary(
-                  genericPresences.length,
-                  genericPresences
-                      .map((presence) => presence.rssi)
-                      .reduce(
-                        (first, second) => first > second ? first : second,
-                      ),
-                ),
-              ),
-              subtitle: Text(context.l10n.genericPresenceExpand),
-              children: genericPresences
-                  .map(
-                    (presence) => ListTile(
-                      leading: const Icon(Icons.bluetooth),
-                      title: Text(context.l10n.genericPresenceNoChat),
-                      subtitle: Text(
-                        context.l10n.genericPresenceSignal(presence.rssi),
-                      ),
-                      enabled: false,
-                    ),
-                  )
-                  .toList(growable: false),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _peerCapabilityBadges(MeshPeer peer) {
-    final badges = <({IconData icon, String label})>[
-      if (peer.role == MeshNodeRole.infraRelay)
-        (icon: Icons.router_outlined, label: context.l10n.peerRoleInfraRelay),
-      if (peer.role == MeshNodeRole.infraDataAnchor)
-        (
-          icon: Icons.inventory_2_outlined,
-          label: context.l10n.peerRoleStorageAnchor,
-        ),
-      if (peer.hasLongRangeTrunk)
-        (
-          icon: Icons.settings_input_antenna,
-          label: context.l10n.peerLongRangeTrunkActive,
-        ),
-    ];
-    if (badges.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: LayoutBuilder(
-        builder: (context, constraints) => Wrap(
-          spacing: 4,
-          runSpacing: 4,
-          children: badges
-              .map(
-                (badge) => ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: constraints.maxWidth),
-                  child: Chip(
-                    avatar: Icon(badge.icon, size: 16),
-                    label: Text(
-                      badge.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-              )
-              .toList(growable: false),
-        ),
-      ),
-    );
-  }
-
-  Widget _peerControls(
-    MeshController controller,
-    MeshPeer peer, {
-    required bool online,
-  }) {
-    final secure = online && peer.secure;
-    final radarAvailable = online && peer.radarAllowed;
-    final radarStatus = !online
-        ? context.l10n.peerOffline
-        : peer.radarAllowed
-        ? context.l10n.tooltipRadar
-        : context.l10n.radarConsentRequired;
-    final colors = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Wrap(
-        alignment: WrapAlignment.end,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          IconButton(
-            tooltip: radarStatus,
-            color: radarAvailable ? colors.primary : colors.outline,
-            onPressed: radarAvailable
-                ? () => _openRadar(
-                    peerId: peer.id,
-                    nickname: peer.nickname,
-                    consentExpiresAt: peer.radarAllowedUntil!,
-                    consentSource: peer.radarConsentSource ?? 'temporary',
-                  )
-                : () => _showUnavailablePeerAction(radarStatus),
-            icon: const Icon(Icons.radar),
-          ),
-          _peerTransferButton(peer, online: online),
-          Tooltip(
-            message: secure
-                ? context.l10n.peerSecure
-                : context.l10n.peerTapToEncrypt,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Icon(
-                secure ? Icons.lock : Icons.lock_open,
-                color: secure ? colors.primary : colors.outline,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showUnavailablePeerAction(String message) {
     final messenger = ScaffoldMessenger.of(context);
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  Widget _peerTransferButton(MeshPeer peer, {required bool online}) {
-    final liveTransferEnabled = canOfferFileToPeer(peer, isOnline: online);
-    final sealedEnabled = peer.hearthbitVerified;
-    final tooltip = liveTransferEnabled
-        ? context.l10n.tooltipSendFile
-        : sealedEnabled
-        ? context.l10n.sealedTransferSend
-        : !online
-        ? context.l10n.peerOffline
-        : context.l10n.peerDoesNotSupportTransfers;
-    return PopupMenuButton<_PeerTransferAction>(
-      tooltip: tooltip,
-      enabled: liveTransferEnabled || sealedEnabled,
-      icon: const Icon(Icons.attach_file),
-      onSelected: (action) {
-        switch (action) {
-          case _PeerTransferAction.file:
-            _sendFileTo(peer);
-          case _PeerTransferAction.sealed:
-            _sendSealedFileTo(peer);
-          case _PeerTransferAction.apk:
-            _sendApkTo(peer);
-        }
-      },
-      itemBuilder: (context) => [
-        PopupMenuItem(
-          value: _PeerTransferAction.file,
-          enabled: liveTransferEnabled,
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.description_outlined),
-            title: Text(context.l10n.tooltipSendFile),
-          ),
-        ),
-        PopupMenuItem(
-          value: _PeerTransferAction.sealed,
-          enabled: peer.hearthbitVerified,
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.lock_outline),
-            title: Text(context.l10n.sealedTransferSend),
-          ),
-        ),
-        if (ApkShareService.isSupportedPlatform)
-          PopupMenuItem(
-            value: _PeerTransferAction.apk,
-            enabled: liveTransferEnabled,
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.android),
-              title: Text(context.l10n.sendApkToPeer),
-            ),
-          ),
-      ],
-    );
-  }
-
-  String _avatarLetter(String nickname) =>
-      nickname.isEmpty ? '?' : nickname.characters.first.toUpperCase();
-
-  String _formatConversationTime(DateTime timestamp) {
-    final local = timestamp.toLocal();
-    final now = DateTime.now();
-    if (local.year == now.year &&
-        local.month == now.month &&
-        local.day == now.day) {
-      return MaterialLocalizations.of(
-        context,
-      ).formatTimeOfDay(TimeOfDay.fromDateTime(local));
-    }
-    return MaterialLocalizations.of(context).formatShortDate(local);
   }
 
   Future<void> _openPrivateChat(
@@ -960,7 +548,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => _PrivateChatSheet(
+      builder: (context) => PrivateChatSheet(
         controller: controller,
         transfers: widget.transfers,
         peer: peer,
@@ -1446,6 +1034,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       await widget.lanGateway?.panicWipe();
       await controller.panicWipe();
       await DiagnosticsLog.instance.clear();
+      await TransportDiagnostics.instance.clear();
       await PrivacyDataEraser.clearResidualFiles();
       await SecureDatabaseKeyStore.destroy();
       await widget.preferences.panicWipe();
@@ -1478,1045 +1067,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _scrollToBottom({bool animate = true}) {
-    if (_scrollScheduled) return;
-    _scrollScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollScheduled = false;
-      if (!mounted) return;
-      if (_scrollController.hasClients) {
-        final target = _scrollController.position.maxScrollExtent;
-        if (animate) {
-          _scrollController.animateTo(
-            target,
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOut,
-          );
-        } else {
-          _scrollController.jumpTo(target);
-        }
-      }
-    });
-  }
-}
-
-class _PrivateChatSheet extends StatefulWidget {
-  const _PrivateChatSheet({
-    required this.controller,
-    required this.transfers,
-    required this.peer,
-    required this.onOpenRadar,
-  });
-
-  final MeshController controller;
-  final TransferController transfers;
-  final MeshPeer peer;
-  final Future<void> Function(MeshPeer peer) onOpenRadar;
-
-  @override
-  State<_PrivateChatSheet> createState() => _PrivateChatSheetState();
-}
-
-class _PrivateChatSheetState extends State<_PrivateChatSheet> {
-  late final TextEditingController _textController;
-  final ScrollController _scrollController = ScrollController();
-  final AudioRecorder _audioRecorder = AudioRecorder();
-  final VoiceNoteAudioController _voiceAudio = VoiceNoteAudioController();
-  final List<double> _recordingWaveform = [];
-  var _privateMessageCount = 0;
-  var _scrollScheduled = false;
-  var _recording = false;
-  var _sending = false;
-  String? _sendError;
-  DateTime? _recordingStarted;
-  Duration _recordingElapsed = Duration.zero;
-  Timer? _recordingLimitTimer;
-  Timer? _recordingUiTimer;
-  StreamSubscription<Amplitude>? _amplitudeSubscription;
-
-  @override
-  void initState() {
-    super.initState();
-    _textController = TextEditingController();
-    _privateMessageCount = _countPrivateMessages();
-    widget.controller.addListener(_handleControllerUpdate);
-    widget.transfers.addListener(_handleTransferUpdate);
-    _scrollToBottom(animate: false);
-  }
-
-  @override
-  void didUpdateWidget(covariant _PrivateChatSheet oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller) {
-      oldWidget.controller.removeListener(_handleControllerUpdate);
-      widget.controller.addListener(_handleControllerUpdate);
-      _privateMessageCount = _countPrivateMessages();
-      _scrollToBottom(animate: false);
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.controller.removeListener(_handleControllerUpdate);
-    widget.transfers.removeListener(_handleTransferUpdate);
-    _recordingLimitTimer?.cancel();
-    _recordingUiTimer?.cancel();
-    unawaited(_amplitudeSubscription?.cancel());
-    _audioRecorder.dispose();
-    _voiceAudio.dispose();
-    _textController.dispose();
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  int _countPrivateMessages() => widget.controller.messages
-      .where(
-        (message) =>
-            message.isPrivate && message.senderPeerId == widget.peer.id,
-      )
-      .length;
-
-  void _handleControllerUpdate() {
-    final count = _countPrivateMessages();
-    if (!mounted) return;
-    final hasNewMessage = count > _privateMessageCount;
-    setState(() => _privateMessageCount = count);
-    if (hasNewMessage) _scrollToBottom();
-  }
-
-  void _handleTransferUpdate() {
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _toggleVoiceRecording(MeshPeer peer) async {
-    if (_recording) {
-      await _stopVoiceRecording();
-      return;
-    }
-    if (!peer.supportsTransfers) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.l10n.voiceUnsupported)));
-      return;
-    }
-    if (!await _audioRecorder.hasPermission()) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.voiceMicrophoneRequired),
-          action: SnackBarAction(
-            label: context.l10n.actionOpenSettings,
-            onPressed: Geolocator.openAppSettings,
-          ),
-        ),
-      );
-      return;
-    }
-    await _voiceAudio.stop();
-    final directory = await getTemporaryDirectory();
-    final path = p.join(
-      directory.path,
-      'hearthbit_voice_${DateTime.now().millisecondsSinceEpoch}.m4a',
-    );
-    await _audioRecorder.start(
-      const RecordConfig(
-        encoder: AudioEncoder.aacLc,
-        bitRate: 20000,
-        sampleRate: 16000,
-        numChannels: 1,
-        autoGain: true,
-        echoCancel: true,
-        noiseSuppress: true,
-        audioInterruption: AudioInterruptionMode.pauseResume,
-      ),
-      path: path,
-    );
-    if (!mounted) return;
-    setState(() {
-      _recording = true;
-      _recordingStarted = DateTime.now();
-      _recordingElapsed = Duration.zero;
-      _recordingWaveform.clear();
-      _sendError = null;
-    });
-    await _amplitudeSubscription?.cancel();
-    _amplitudeSubscription = _audioRecorder
-        .onAmplitudeChanged(const Duration(milliseconds: 80))
-        .listen(_recordAmplitude);
-    _recordingUiTimer?.cancel();
-    _recordingUiTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
-      if (!mounted || !_recording || _recordingStarted == null) return;
-      setState(() {
-        _recordingElapsed = DateTime.now().difference(_recordingStarted!);
-      });
-    });
-    _recordingLimitTimer?.cancel();
-    _recordingLimitTimer = Timer(
-      const Duration(seconds: 20),
-      _stopVoiceRecording,
-    );
-  }
-
-  void _recordAmplitude(Amplitude amplitude) {
-    if (!mounted || !_recording) return;
-    final decibels = amplitude.current.clamp(-60.0, 0.0);
-    final linear = ((decibels + 60) / 60).clamp(0.0, 1.0);
-    final normalized = math.sqrt(linear).clamp(0.08, 1.0);
-    setState(() {
-      _recordingWaveform.add(normalized);
-    });
-  }
-
-  Future<void> _stopVoiceRecording() async {
-    if (!_recording) return;
-    _recordingLimitTimer?.cancel();
-    _recordingUiTimer?.cancel();
-    await _amplitudeSubscription?.cancel();
-    _amplitudeSubscription = null;
-    final elapsed = DateTime.now().difference(
-      _recordingStarted ?? DateTime.now(),
-    );
-    final duration = (elapsed.inMilliseconds / 1000).ceil().clamp(1, 20);
-    final waveform = VoiceNoteEnvelope.resample(_recordingWaveform);
-    final path = await _audioRecorder.stop();
-    await _voiceAudio.resetPlaybackSession();
-    if (mounted) {
-      setState(() {
-        _recording = false;
-        _recordingStarted = null;
-        _recordingElapsed = Duration.zero;
-      });
-    }
-    if (path == null || !mounted) return;
-    final peer =
-        widget.controller.peerById(widget.peer.id) ??
-        widget.controller.knownPeerById(widget.peer.id) ??
-        widget.peer;
-    setState(() {
-      _sending = true;
-      _sendError = null;
-    });
-    String? transferId;
-    try {
-      transferId = await widget.transfers.sendFile(
-        peer: peer,
-        filePath: path,
-        fileName: p.basename(path),
-        mimeType: TransferController.voiceNoteMimeType,
-      );
-      final result = await widget.controller.sendPrivate(
-        peer,
-        VoiceNoteEnvelope(
-          transferId: transferId,
-          durationSeconds: duration,
-          waveform: waveform,
-        ).encode(),
-      );
-      if (!result.accepted) {
-        throw StateError(result.error ?? currentL10n.errorUnknown);
-      }
-      _scrollToBottom();
-    } catch (error) {
-      if (transferId != null) {
-        await widget.transfers.cancel(transferId);
-      }
-      if (mounted) {
-        setState(() => _sendError = error.toString());
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _sending = false);
-      }
-    }
-  }
-
-  Future<void> _cancelVoiceRecording() async {
-    if (!_recording) return;
-    _recordingLimitTimer?.cancel();
-    _recordingUiTimer?.cancel();
-    await _amplitudeSubscription?.cancel();
-    _amplitudeSubscription = null;
-    await _audioRecorder.cancel();
-    await _voiceAudio.resetPlaybackSession();
-    if (!mounted) return;
-    setState(() {
-      _recording = false;
-      _recordingStarted = null;
-      _recordingElapsed = Duration.zero;
-      _recordingWaveform.clear();
-    });
-  }
-
-  Future<void> _sendMessage(MeshPeer peer) async {
-    if (_sending) return;
-    final text = _textController.text;
-    if (text.trim().isEmpty) return;
-    setState(() {
-      _sending = true;
-      _sendError = null;
-    });
-    PrivateMessageSendResult result;
-    try {
-      result = await widget.controller.sendPrivate(peer, text);
-    } catch (error) {
-      result = PrivateMessageSendResult.failed(error.toString());
-    }
-    if (!mounted) return;
-    setState(() {
-      _sending = false;
-      if (result.accepted) {
-        _textController.clear();
-      } else {
-        _sendError = result.error ?? context.l10n.errorUnknown;
-      }
-    });
-    if (result.accepted) _scrollToBottom();
-  }
-
-  void _scrollToBottom({bool animate = true}) {
-    if (_scrollScheduled) return;
-    _scrollScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollScheduled = false;
-      if (!mounted || !_scrollController.hasClients) return;
-      final target = _scrollController.position.maxScrollExtent;
-      if (animate) {
-        _scrollController.animateTo(
-          target,
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOut,
-        );
-      } else {
-        _scrollController.jumpTo(target);
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final peer =
-        widget.controller.peerById(widget.peer.id) ??
-        widget.controller.knownPeerById(widget.peer.id) ??
-        widget.peer;
-    final isOnline = widget.controller.isPeerOnline(peer.id);
-    final secure = isOnline && peer.secure;
-    final canUseLivePrivateChannel =
-        isOnline && secure && widget.controller.canSend && !_sending;
-    final canQueueText =
-        peer.role.canChat && widget.controller.canSend && !_sending;
-    final privateMessages = widget.controller.messages
-        .where(
-          (message) =>
-              message.isPrivate && message.senderPeerId == widget.peer.id,
-        )
-        .toList(growable: false);
-    final timeline = _messageTimelineEntries(privateMessages);
-    final mediaQuery = MediaQuery.of(context);
-    final availableHeight =
-        mediaQuery.size.height - mediaQuery.viewInsets.bottom - 32;
-    final sheetHeight = math.min(
-      mediaQuery.size.height * .65,
-      math.max(160, availableHeight),
-    );
-    return SensitiveScreen(
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
-          top: 16,
-          bottom: mediaQuery.viewInsets.bottom + 16,
-        ),
-        child: SizedBox(
-          height: sheetHeight.toDouble(),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Icon(secure ? Icons.lock : Icons.lock_open),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      peer.nickname,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: peer.radarAllowed
-                        ? context.l10n.tooltipRadar
-                        : context.l10n.radarConsentRequired,
-                    onPressed: isOnline && peer.radarAllowed
-                        ? () => widget.onOpenRadar(peer)
-                        : null,
-                    icon: const Icon(Icons.radar),
-                  ),
-                ],
-              ),
-              const Divider(),
-              if (!isOnline || !secure)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Icon(
-                        isOnline
-                            ? Icons.lock_clock_outlined
-                            : Icons.cloud_off_outlined,
-                        size: 18,
-                        color: Theme.of(context).colorScheme.outline,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          isOnline
-                              ? context.l10n.secureChatUnavailableHint
-                              : context.l10n.offlineChatHint,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              Expanded(
-                child: privateMessages.isEmpty
-                    ? Center(
-                        child: Text(
-                          context.l10n.privateChatIntro,
-                          textAlign: TextAlign.center,
-                        ),
-                      )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        keyboardDismissBehavior:
-                            ScrollViewKeyboardDismissBehavior.onDrag,
-                        itemCount: timeline.length,
-                        itemBuilder: (context, index) =>
-                            _buildMessageTimelineEntry(
-                              context,
-                              timeline[index],
-                              transfers: widget.transfers,
-                              voiceAudio: _voiceAudio,
-                            ),
-                      ),
-              ),
-              if (_sendError case final error?)
-                Semantics(
-                  liveRegion: true,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            context.l10n.privateMessageSendError(error),
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              if (_recording)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.errorContainer,
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        tooltip: context.l10n.actionCancel,
-                        onPressed: _cancelVoiceRecording,
-                        icon: const Icon(Icons.delete_outline),
-                      ),
-                      Icon(
-                        Icons.circle,
-                        size: 10,
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        _formatVoiceDuration(_recordingElapsed),
-                        style: const TextStyle(
-                          fontFeatures: [FontFeature.tabularFigures()],
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: VoiceWaveform(
-                          samples: VoiceNoteEnvelope.resample(
-                            _recordingWaveform,
-                            bars: 40,
-                          ),
-                          progress: 1,
-                          activeColor: Theme.of(context).colorScheme.error,
-                          inactiveColor: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                      IconButton.filled(
-                        tooltip: context.l10n.voiceStop,
-                        onPressed: _stopVoiceRecording,
-                        icon: const Icon(Icons.send),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                Row(
-                  children: [
-                    IconButton.filledTonal(
-                      tooltip: context.l10n.voiceRecord,
-                      onPressed:
-                          canUseLivePrivateChannel && peer.supportsTransfers
-                          ? () => _toggleVoiceRecording(peer)
-                          : null,
-                      icon: const Icon(Icons.mic),
-                    ),
-                    Expanded(
-                      child: MessageComposer(
-                        controller: _textController,
-                        enabled: canQueueText,
-                        hint: context.l10n.composerPrivateHint,
-                        onSend: () => _sendMessage(peer),
-                      ),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusBanner extends StatelessWidget {
-  const _StatusBanner({required this.controller});
-
-  final MeshController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final status = controller.status;
-    final displayNickname =
-        controller.nickname.trim().isEmpty ||
-            isDefaultMeshNickname(controller.nickname)
-        ? context.l10n.statusBannerYou
-        : controller.nickname;
-    final (color, accent, icon, label) = switch (status) {
-      MeshConnectionStatus.active => (
-        scheme.surfaceContainerHigh,
-        scheme.primary,
-        Icons.bluetooth_connected,
-        context.l10n.statusActiveLabel(
-          displayNickname,
-          controller.peers.length,
-        ),
-      ),
-      MeshConnectionStatus.degraded => (
-        scheme.tertiaryContainer,
-        scheme.onTertiaryContainer,
-        Icons.bluetooth_searching,
-        context.l10n.statusDegradedLabel(displayNickname),
-      ),
-      MeshConnectionStatus.starting => (
-        scheme.surfaceContainerHighest,
-        scheme.onSurfaceVariant,
-        Icons.bluetooth_searching,
-        context.l10n.statusStarting,
-      ),
-      MeshConnectionStatus.error => (
-        scheme.errorContainer,
-        scheme.onErrorContainer,
-        Icons.bluetooth_disabled,
-        context.l10n.statusError,
-      ),
-      MeshConnectionStatus.stopped => (
-        scheme.surfaceContainerHighest,
-        scheme.onSurfaceVariant,
-        Icons.bluetooth_disabled,
-        context.l10n.statusStopped,
-      ),
-    };
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: color,
-        border: Border(
-          bottom: BorderSide(color: scheme.outlineVariant, width: 1),
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            Icon(icon, color: accent),
-            const SizedBox(width: 10),
-            Expanded(child: Text(label)),
-            if (status == MeshConnectionStatus.starting)
-              const SizedBox.square(
-                dimension: 24,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            else if (status == MeshConnectionStatus.active)
-              FilledButton.tonal(
-                onPressed: controller.stop,
-                child: Text(context.l10n.actionStop),
-              )
-            else if (status == MeshConnectionStatus.degraded)
-              FilledButton.tonal(
-                onPressed: controller.start,
-                child: Text(context.l10n.actionRestart),
-              )
-            else
-              FilledButton.tonal(
-                onPressed: controller.start,
-                child: Text(context.l10n.actionActivate),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({
-    required this.message,
-    this.transfers,
-    this.voiceAudio,
-  });
-
-  final MeshMessage message;
-  final TransferController? transfers;
-  final VoiceNoteAudioController? voiceAudio;
-
-  @override
-  Widget build(BuildContext context) {
-    final alignment = message.isMine
-        ? Alignment.centerRight
-        : Alignment.centerLeft;
-    final color = message.isDrill
-        ? Theme.of(context).colorScheme.tertiaryContainer
-        : message.isSos
-        ? Theme.of(context).colorScheme.errorContainer
-        : message.isMine
-        ? Theme.of(context).colorScheme.primaryContainer
-        : Theme.of(context).colorScheme.surfaceContainerHighest;
-    final status = message.isPending
-        ? context.l10n.privateMessagePending
-        : message.isExpired
-        ? context.l10n.deliveryExpired
-        : message.isMine
-        ? context.l10n.deliveryRelayed
-        : '';
-    final semanticLabel = [
-      if (!message.isMine) message.sender,
-      message.content.replaceFirst('SOS|', 'SOS: '),
-      if (status.isNotEmpty) status,
-      MaterialLocalizations.of(
-        context,
-      ).formatTimeOfDay(TimeOfDay.fromDateTime(message.timestamp.toLocal())),
-    ].join(', ');
-    final textScale = MediaQuery.textScalerOf(context).scale(1);
-    return Semantics(
-      container: true,
-      label: semanticLabel,
-      child: ExcludeSemantics(
-        child: Align(
-          alignment: alignment,
-          child: Container(
-            constraints: BoxConstraints(
-              maxWidth:
-                  MediaQuery.sizeOf(context).width *
-                  (textScale >= 1.5 ? 0.92 : 0.78),
-            ),
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (!message.isMine || message.isPrivate) ...[
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (message.isPrivate) ...[
-                        const Icon(Icons.lock, size: 14),
-                        const SizedBox(width: 4),
-                      ],
-                      if (!message.isMine)
-                        Flexible(
-                          child: Text(
-                            message.sender,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                ],
-                if (message.isVoiceNote)
-                  _VoiceNoteContent(
-                    message: message,
-                    transfers: transfers,
-                    voiceAudio: voiceAudio,
-                  )
-                else if (message.isDrill)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        context.l10n.drillBadge,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        message.drill?.readableMessage ??
-                            context.l10n.drillInvalidMessage,
-                      ),
-                    ],
-                  )
-                else
-                  Text(message.content.replaceFirst('SOS|', 'SOS: ')),
-                const SizedBox(height: 4),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Wrap(
-                    alignment: WrapAlignment.end,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      if (message.isPending) ...[
-                        const Icon(Icons.schedule, size: 13),
-                        const SizedBox(width: 3),
-                        Text(
-                          context.l10n.privateMessagePending,
-                          style: Theme.of(context).textTheme.labelSmall,
-                        ),
-                        const SizedBox(width: 6),
-                      ],
-                      if (message.isExpired) ...[
-                        const Icon(Icons.timer_off_outlined, size: 13),
-                        const SizedBox(width: 3),
-                        Text(
-                          context.l10n.deliveryExpired,
-                          style: Theme.of(context).textTheme.labelSmall,
-                        ),
-                        const SizedBox(width: 6),
-                      ],
-                      if (message.isMine &&
-                          !message.isPending &&
-                          !message.isExpired) ...[
-                        const Icon(Icons.campaign_outlined, size: 13),
-                        const SizedBox(width: 3),
-                        Text(
-                          context.l10n.deliveryRelayed,
-                          style: Theme.of(context).textTheme.labelSmall,
-                        ),
-                        const SizedBox(width: 6),
-                      ],
-                      Text(
-                        MaterialLocalizations.of(context).formatTimeOfDay(
-                          TimeOfDay.fromDateTime(message.timestamp.toLocal()),
-                        ),
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-typedef _MessageTimelineEntry = ({DateTime? day, MeshMessage? message});
-
-List<_MessageTimelineEntry> _messageTimelineEntries(
-  List<MeshMessage> messages,
-) {
-  final entries = <_MessageTimelineEntry>[];
-  DateTime? previousDay;
-  for (final message in messages) {
-    final day = localCalendarDay(message.timestamp);
-    if (previousDay != day) {
-      entries.add((day: day, message: null));
-      previousDay = day;
-    }
-    entries.add((day: null, message: message));
-  }
-  return entries;
-}
-
-Widget _buildMessageTimelineEntry(
-  BuildContext context,
-  _MessageTimelineEntry entry, {
-  TransferController? transfers,
-  VoiceNoteAudioController? voiceAudio,
-  bool compactSos = false,
-}) {
-  final day = entry.day;
-  if (day != null) {
-    return _DateSeparator(label: _formatDayLabel(context, day));
-  }
-  final message = entry.message!;
-  return compactSos && message.isSos
-      ? _CompactSosMessage(message: message)
-      : _MessageBubble(
-          message: message,
-          transfers: transfers,
-          voiceAudio: voiceAudio,
-        );
-}
-
-class _CompactSosMessage extends StatelessWidget {
-  const _CompactSosMessage({required this.message});
-
-  final MeshMessage message;
-
-  @override
-  Widget build(BuildContext context) {
-    final latitude = message.sosLatitude;
-    final longitude = message.sosLongitude;
-    final coordinates = latitude == null || longitude == null
-        ? null
-        : '${latitude.toStringAsFixed(3)}, ${longitude.toStringAsFixed(3)}';
-    final scheme = Theme.of(context).colorScheme;
-    final time = MaterialLocalizations.of(
-      context,
-    ).formatTimeOfDay(TimeOfDay.fromDateTime(message.timestamp.toLocal()));
-    return Semantics(
-      label: '${message.sender}: ${message.sosDescription}',
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: scheme.errorContainer,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: scheme.onErrorContainer),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${message.sender} · ${message.sosDescription}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  if (coordinates != null)
-                    Text(
-                      coordinates,
-                      style: Theme.of(context).textTheme.labelSmall,
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(time, style: Theme.of(context).textTheme.labelSmall),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _VoiceNoteContent extends StatelessWidget {
-  const _VoiceNoteContent({
-    required this.message,
-    required this.transfers,
-    required this.voiceAudio,
-  });
-
-  final MeshMessage message;
-  final TransferController? transfers;
-  final VoiceNoteAudioController? voiceAudio;
-
-  @override
-  Widget build(BuildContext context) {
-    TransferRecord? record;
-    final transferId = message.voiceTransferId;
-    if (transferId != null && transfers != null) {
-      for (final item in transfers!.transfers) {
-        if (item.id == transferId) {
-          record = item;
-          break;
-        }
-      }
-    }
-    final playbackPath = record?.filePath;
-    final localFileAvailable =
-        playbackPath != null && File(playbackPath).existsSync();
-    final ready =
-        localFileAvailable &&
-        (record?.direction == TransferDirection.outgoing ||
-            record?.state == TransferState.completed);
-    final failed =
-        record?.state == TransferState.failed ||
-        record?.state == TransferState.rejected ||
-        record?.state == TransferState.cancelled;
-    final transferKey = transferId ?? message.id;
-    final fallbackDuration = Duration(
-      seconds: message.voiceDurationSeconds ?? 0,
-    );
-    final samples = message.voiceWaveform.isEmpty
-        ? fallbackVoiceWaveform()
-        : message.voiceWaveform;
-    final controller = voiceAudio;
-    final contentWidth = math.min(
-      240.0,
-      MediaQuery.sizeOf(context).width * .66,
-    );
-    return AnimatedBuilder(
-      animation: controller ?? const _NoopListenable(),
-      builder: (context, _) {
-        final active = controller?.isActive(transferKey) ?? false;
-        final playing = controller?.isPlaying(transferKey) ?? false;
-        final progress =
-            controller?.progressFor(transferKey, fallbackDuration) ?? 0;
-        final position = active
-            ? controller?.position ?? Duration.zero
-            : Duration.zero;
-        final playbackError = active ? controller?.error : null;
-        final tooltip = failed && !ready
-            ? (record?.error ?? context.l10n.errorUnknown)
-            : playbackError ??
-                  (playing ? context.l10n.voicePause : context.l10n.voicePlay);
-        return SizedBox(
-          width: contentWidth,
-          child: Row(
-            children: [
-              IconButton.filledTonal(
-                tooltip: tooltip,
-                onPressed: ready && controller != null
-                    ? () => controller.toggle(
-                        transferId: transferKey,
-                        filePath: playbackPath,
-                      )
-                    : null,
-                icon: ready
-                    ? Icon(playing ? Icons.pause : Icons.play_arrow)
-                    : failed
-                    ? Icon(
-                        Icons.error_outline,
-                        color: Theme.of(context).colorScheme.error,
-                      )
-                    : const SizedBox.square(
-                        dimension: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: VoiceWaveform(
-                  samples: samples,
-                  progress: progress,
-                  onSeek: ready && active && controller != null
-                      ? (value) => controller.seek(
-                          transferId: transferKey,
-                          progress: value,
-                          fallbackDuration: fallbackDuration,
-                        )
-                      : null,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                _formatVoiceDuration(
-                  active && position > Duration.zero
-                      ? position
-                      : fallbackDuration,
-                ),
-                style: Theme.of(context).textTheme.labelMedium,
-              ),
-              if (playbackError != null || (failed && ready)) ...[
-                const SizedBox(width: 4),
-                Tooltip(
-                  message:
-                      playbackError ??
-                      record?.error ??
-                      context.l10n.errorUnknown,
-                  child: Icon(
-                    Icons.error_outline,
-                    size: 18,
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _NoopListenable implements Listenable {
-  const _NoopListenable();
-
-  @override
-  void addListener(VoidCallback listener) {}
-
-  @override
-  void removeListener(VoidCallback listener) {}
-}
-
-String _formatVoiceDuration(Duration duration) {
-  final totalSeconds = duration.inSeconds.clamp(0, 5999);
-  final minutes = totalSeconds ~/ 60;
-  final seconds = totalSeconds % 60;
-  return '$minutes:${seconds.toString().padLeft(2, '0')}';
-}
-
-String _formatDayLabel(BuildContext context, DateTime day) {
-  return switch (relativeMessageDay(day)) {
-    RelativeMessageDay.today => context.l10n.dateToday,
-    RelativeMessageDay.yesterday => context.l10n.dateYesterday,
-    RelativeMessageDay.other => MaterialLocalizations.of(
-      context,
-    ).formatMediumDate(day),
-  };
-}
-
-class _DateSeparator extends StatelessWidget {
-  const _DateSeparator({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(label, style: Theme.of(context).textTheme.labelMedium),
-      ),
+    scheduleScrollToBottom(
+      _scrollController,
+      animate: animate,
+      isMounted: () => mounted,
+      markScheduled: () => _scrollScheduled,
+      setScheduled: (value) => _scrollScheduled = value,
     );
   }
 }

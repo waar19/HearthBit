@@ -123,6 +123,31 @@ Los enteros usan orden big-endian.
 9. Payload
 10. Firma Ed25519: 64 bytes, si `flags & 0x02`
 
+### Simulacro autenticado
+
+El bit reservado `flags & 0x20` es `DRILL`. Forma parte de los bytes
+canónicos firmados (a diferencia de TTL y RSR) y solo es válido en paquetes
+v1 públicos `ANNOUNCE` (`0x01`) y `MESSAGE` (`0x02`). Un frame `DRILL` debe:
+
+- llevar firma Ed25519 (`flags & 0x02`), sin destinatario, ruta ni compresión;
+- usar en `ANNOUNCE` el TLV exacto `EMERGENCY_PREANNOUNCE`
+  (`F1 01 01`), únicamente para transportar la prueba de identidad;
+- usar en `MESSAGE` el marcador versionado
+  `[HB-DRILL|1|CHECKIN|<OK|HELP|INJURED>|<unixMillis>]`;
+- no contener `SOS|` ni `[HB-CHECKIN|`.
+
+El `ANNOUNCE` y `MESSAGE` de un bundle QR/audio deben tener el mismo sender ID
+y el mismo valor de `DRILL`. Una firma ausente, un marcador de simulacro sin
+flag, un flag sin marcador, versiones futuras o cualquier mezcla entre
+simulacro y emergencia real se rechazan (`fail closed`). Los frames v1 reales
+sin `0x20` conservan exactamente su semántica anterior.
+
+Un simulacro puede retransmitirse por la malla, QR y audio, pero nunca recibe
+prioridad SOS, consentimiento radar, acuse de emergencia, store-forward de
+emergencia, Wi-Fi Direct/Aware de emergencia, gateway LAN/Internet,
+Matrix/MQTT/Reticulum ni escalado por portadoras. La UI lo publica siempre en
+el canal `drill` con la etiqueta «SIMULACRO — NO ES UNA EMERGENCIA».
+
 Tipos implementados:
 
 - `0x01`: anuncio de identidad TLV
@@ -140,6 +165,7 @@ Tipos implementados:
 - `0x29`: voz BitChat; recepción temporal de acuse de emergencia heredado
 - `0x2A`: capacidad HBT
 - `0x2B`: acuse de emergencia dirigido
+- `0x2C`: rotación autenticada de claves de identidad
 
 HearthBit solo emite `HBT_CAPABILITY` como `0x2A` y `EMERGENCY_ACK` como
 `0x2B`. La recepción heredada en `0x24`/`0x29` exige validar estructura,
@@ -155,6 +181,14 @@ Las firmas se calculan sobre el paquete sin firma y con TTL igual a cero. Así
 los relés pueden reducir TTL sin invalidar la firma. Un anuncio se acepta solo
 si su clave Noise produce el sender ID y su propia clave Ed25519 valida la
 firma.
+
+La rotación `0x2C` es la única excepción controlada al pin TOFU inmutable:
+requiere dos firmas con la clave Ed25519 antigua, secuencia monotónica
+persistida y reemplazo atómico del pin. Después se descartan las sesiones
+Noise antiguas. Un anuncio ordinario con claves distintas se sigue rechazando
+y nunca inicia rotación. El wire format, el flujo de recuperación y la
+política neutral del relay se definen normativamente en
+`docs/extension-registry.md`.
 
 Los chats privados usan `Noise_XX_25519_ChaChaPoly_SHA256`. El payload de
 transporte antepone un nonce UInt32 big-endian al ciphertext. El contenido

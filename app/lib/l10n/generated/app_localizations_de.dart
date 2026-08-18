@@ -790,6 +790,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get diagnosticsStatus => 'Status';
 
   @override
+  String get diagnosticsIdentityRotation => 'Letzte Identitätsrotation';
+
+  @override
   String get diagnosticsNearbyDevices => 'Geräte in der Nähe';
 
   @override
@@ -837,6 +840,23 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get diagnosticsDisabled => 'Inaktiv';
+
+  @override
+  String get diagnosticsTransportOutcomesSection => 'Übertragungsergebnisse';
+
+  @override
+  String diagnosticsTransportOutcome(int success, int failure) {
+    return '$success erfolgreich · $failure fehlgeschlagen';
+  }
+
+  @override
+  String get diagnosticsTransportAudio => 'Audio';
+
+  @override
+  String get diagnosticsTransportQr => 'QR';
+
+  @override
+  String get diagnosticsTransportExternal => 'Externes Teilen';
 
   @override
   String get openLinkError => 'Der Link konnte nicht geöffnet werden';

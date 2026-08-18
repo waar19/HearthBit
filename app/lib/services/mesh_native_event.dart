@@ -47,6 +47,14 @@ sealed class MeshNativeEvent {
         canonicalHash: _string(raw['canonicalHash']),
         peerId: _string(raw['peerId']),
       ),
+      'keyRotation' => MeshKeyRotationEvent(
+        raw,
+        status: _string(raw['status']),
+        oldPeerId: _string(raw['oldPeerId']),
+        newPeerId: _string(raw['newPeerId']),
+        sequence: _int(raw['sequence']),
+        timestamp: _int(raw['timestamp']),
+      ),
       'rescuePing' => MeshRescuePingEvent(
         raw,
         timestamp: _int(raw['timestamp']),
@@ -206,6 +214,23 @@ final class MeshEmergencyAckEvent extends MeshNativeEvent {
 
   final String? canonicalHash;
   final String? peerId;
+}
+
+final class MeshKeyRotationEvent extends MeshNativeEvent {
+  const MeshKeyRotationEvent(
+    super.raw, {
+    required this.status,
+    required this.oldPeerId,
+    required this.newPeerId,
+    required this.sequence,
+    required this.timestamp,
+  });
+
+  final String? status;
+  final String? oldPeerId;
+  final String? newPeerId;
+  final int? sequence;
+  final int? timestamp;
 }
 
 final class MeshRescuePingEvent extends MeshNativeEvent {

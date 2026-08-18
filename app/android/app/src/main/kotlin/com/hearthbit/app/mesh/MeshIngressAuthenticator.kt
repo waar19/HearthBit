@@ -9,6 +9,7 @@ internal enum class MeshIngressDisposition {
 internal data class MeshIngressAuthentication(
     val disposition: MeshIngressDisposition,
     val announcement: MeshProtocol.Announcement? = null,
+    val keyRotation: KeyRotationProtocol.Rotation? = null,
 ) {
     val relayAllowed: Boolean
         get() = disposition != MeshIngressDisposition.REJECT
@@ -89,7 +90,10 @@ internal object AnnouncementClockPolicy {
 internal class MeshIngressAuthenticator(
     private val trustLookup: (String) -> PeerTrustLookup,
     private val validateAndPin: (String, PeerIdentityKeys) -> PeerIdentityDecision,
+    private val rotatePin: (String, PeerIdentityKeys, Long) -> PeerIdentityDecision =
+        { _, _, _ -> PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION },
     private val verifySignature: (MeshProtocol.Packet, ByteArray) -> Boolean,
+    private val verifyBytes: (ByteArray, ByteArray, ByteArray) -> Boolean = { _, _, _ -> false },
     private val nowMs: () -> Long = System::currentTimeMillis,
     private val unknownRateLimiter: UnknownIngressRateLimiter = UnknownIngressRateLimiter(),
 ) {
@@ -128,7 +132,7 @@ internal class MeshIngressAuthenticator(
             }
             if (!AnnouncementClockPolicy.accepts(
                     packet.timestamp,
-                    announcement.emergencyPreannounce,
+                    announcement.emergencyPreannounce && !packet.isDrill,
                     now,
                 ) ||
                 !validateAndPin(senderHex, announcedKeys).accepted
@@ -138,6 +142,36 @@ internal class MeshIngressAuthenticator(
             return MeshIngressAuthentication(
                 disposition = MeshIngressDisposition.ACCEPT,
                 announcement = announcement,
+            )
+        }
+        if (packet.type == MeshProtocol.TYPE_KEY_ROTATION) {
+            val rotation = KeyRotationProtocol.decode(packet.payload) ?: return rejected()
+            if (packet.recipientId != null ||
+                packet.isDrill ||
+                !rotation.oldPeerId.contentEquals(packet.senderId) ||
+                rotation.timestamp != packet.timestamp ||
+                !KeyRotationProtocol.timestampIsCurrent(rotation.timestamp, now)
+            ) {
+                return rejected()
+            }
+            val pinned = (trust as? PeerTrustLookup.Pinned)?.keys ?: return rejected()
+            if (!verifySignature(packet, pinned.signingPublicKey) ||
+                !verifyBytes(
+                    rotation.authorizationBytes(),
+                    rotation.authorizationSignature,
+                    pinned.signingPublicKey,
+                )
+            ) {
+                return rejected()
+            }
+            val newKeys = PeerIdentityKeys(
+                signingPublicKey = rotation.newSigningPublicKey,
+                noisePublicKey = rotation.newNoisePublicKey,
+            )
+            if (!rotatePin(senderHex, newKeys, rotation.sequence).accepted) return rejected()
+            return MeshIngressAuthentication(
+                disposition = MeshIngressDisposition.ACCEPT,
+                keyRotation = rotation,
             )
         }
         if (!requiresPublicSignature(packet.type)) {
@@ -172,6 +206,7 @@ internal class MeshIngressAuthenticator(
         MeshProtocol.TYPE_EMERGENCY_CAPABILITY,
         MeshProtocol.TYPE_LEGACY_EMERGENCY_ACK,
         MeshProtocol.TYPE_EMERGENCY_ACK,
+        MeshProtocol.TYPE_KEY_ROTATION,
         -> true
         else -> false
     }

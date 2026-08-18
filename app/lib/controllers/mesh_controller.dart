@@ -6,6 +6,8 @@ import 'package:geolocator/geolocator.dart';
 
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
+import '../models/pending_beacon_request.dart';
+import '../models/private_message_result.dart';
 import '../services/acoustic_sos.dart';
 import '../services/app_preferences.dart';
 import '../services/beacon_control_protocol.dart';
@@ -15,46 +17,14 @@ import '../services/mesh_platform_service.dart';
 import '../services/message_repository.dart';
 import '../services/optical_protocol.dart';
 import '../services/peer_location_tracker.dart';
+import '../services/transport_diagnostics.dart';
+import '../utils/emergency_backoff.dart';
+import '../utils/emergency_coordinates.dart' as emergency_coordinates;
+import '../utils/emergency_qr_fallback.dart';
+import '../utils/id_generator.dart';
 
-enum PrivateMessageSendDisposition { sent, queued, failed }
-
-class PrivateMessageSendResult {
-  const PrivateMessageSendResult._(this.disposition, {this.error});
-
-  const PrivateMessageSendResult.sent()
-    : this._(PrivateMessageSendDisposition.sent);
-
-  const PrivateMessageSendResult.queued()
-    : this._(PrivateMessageSendDisposition.queued);
-
-  const PrivateMessageSendResult.failed(String error)
-    : this._(PrivateMessageSendDisposition.failed, error: error);
-
-  final PrivateMessageSendDisposition disposition;
-  final String? error;
-
-  bool get accepted => disposition != PrivateMessageSendDisposition.failed;
-}
-
-class PendingBeaconRequest {
-  const PendingBeaconRequest({
-    required this.requestId,
-    required this.peerId,
-    required this.nickname,
-    required this.expiresAt,
-    required this.flags,
-  });
-
-  final String requestId;
-  final String peerId;
-  final String nickname;
-  final DateTime expiresAt;
-  final int flags;
-
-  bool get wantsFlash => flags & BeaconControlFlags.flash != 0;
-  bool get wantsSound => flags & BeaconControlFlags.sound != 0;
-  bool get wantsVibration => flags & BeaconControlFlags.vibrate != 0;
-}
+export '../models/pending_beacon_request.dart';
+export '../models/private_message_result.dart';
 
 class MeshController extends ChangeNotifier {
   MeshController({
@@ -63,9 +33,12 @@ class MeshController extends ChangeNotifier {
     PeerLocationTracker? locationTracker,
     AppPreferences? preferences,
     AcousticSosTransportPort? acousticSos,
+    TransportDiagnostics? transportDiagnostics,
   }) : _platform = platform ?? MeshPlatformService(),
        _repository = repository ?? MessageRepository(),
        _providedAcousticSos = acousticSos,
+       _transportDiagnostics =
+           transportDiagnostics ?? TransportDiagnostics.instance,
        _preferences = preferences,
        _drillModeEnabled = preferences?.drillModeEnabled ?? false,
        _privateMode = preferences?.privacyPrivateMode ?? true,
@@ -92,6 +65,7 @@ class MeshController extends ChangeNotifier {
   final MeshPlatformService _platform;
   final MessageRepository _repository;
   final AcousticSosTransportPort? _providedAcousticSos;
+  final TransportDiagnostics _transportDiagnostics;
   AcousticSosTransportPort? _createdAcousticSos;
   AcousticSosTransportPort get _acousticSos =>
       _providedAcousticSos ?? (_createdAcousticSos ??= AcousticSosTransport());
@@ -120,6 +94,7 @@ class MeshController extends ChangeNotifier {
   Uint8List? signingPublicKey;
   MeshNodeRole localRole = MeshNodeRole.phoneRelay;
   String? lastError;
+  String? lastKeyRotationDiagnostic;
   bool supportsBackgroundRelay = false;
   bool supportsMeshtastic = false;
   String platformName = 'unknown';
@@ -139,6 +114,7 @@ class MeshController extends ChangeNotifier {
   bool localBeaconActive = false;
   DateTime? localBeaconExpiresAt;
   OpticalEmergencyBundle? latestSosQr;
+  OpticalEmergencyBundle? latestDrillQr;
   bool acousticSosListening = false;
   bool acousticSosBroadcasting = false;
 
@@ -828,6 +804,9 @@ class MeshController extends ChangeNotifier {
   Future<void> deactivateDrill() async {
     if (!_drillModeEnabled && _preferences?.drillModeEnabled != true) return;
     _drillModeEnabled = false;
+    latestDrillQr = null;
+    await (_providedAcousticSos ?? _createdAcousticSos)?.stopBroadcast();
+    acousticSosBroadcasting = false;
     await _preferences?.setDrillModeEnabled(false);
     notifyListeners();
   }
@@ -845,7 +824,22 @@ class MeshController extends ChangeNotifier {
       safetyNotice: currentL10n.drillSafetyBanner,
       timestamp: DateTime.now(),
     );
-    await _run(() => _platform.sendPublic(content, channel: 'drill'));
+    final transmission = await _run(
+      () => _platform.sendDrill(
+        messageId: _newEmergencyLocalId(),
+        content: content,
+      ),
+    );
+    if (transmission?.hasQrFrames == true) {
+      latestDrillQr = OpticalEmergencyBundle(
+        announcementFrame: transmission!.announcementFrame!,
+        messageFrame: transmission.messageFrame!,
+        fallbackText: content,
+        isDrill: true,
+      );
+      await _startAcousticSosBroadcast(latestDrillQr!);
+    }
+    notifyListeners();
   }
 
   Future<void> _enforceDrillIsolation() async {
@@ -923,7 +917,7 @@ class MeshController extends ChangeNotifier {
   }
 
   static double coarsenEmergencyCoordinate(double value) =>
-      (value * 1000).round() / 1000;
+      emergency_coordinates.coarsenEmergencyCoordinate(value);
 
   Future<void> updateNickname(String value) async {
     final cleaned = value.trim();
@@ -1017,11 +1011,16 @@ class MeshController extends ChangeNotifier {
     final started =
         await _run<bool>(
           () => _acousticSos.startListening((frame) async {
-            await _run<void>(() => _platform.injectEmergencyLanFrame(frame));
+            await _run<void>(() => _platform.injectEmergencyAudioFrame(frame));
           }),
         ) ??
         false;
     acousticSosListening = started;
+    if (started) {
+      _transportDiagnostics.recordSuccess(DiagnosticTransport.audio);
+    } else {
+      _transportDiagnostics.recordFailure(DiagnosticTransport.audio);
+    }
     notifyListeners();
     return started;
   }
@@ -1254,6 +1253,7 @@ class MeshController extends ChangeNotifier {
           fallbackText: _emergencyQrFallback(delivery.content),
         );
         _emergencyChannelsUsed.add('qr');
+        _transportDiagnostics.recordSuccess(DiagnosticTransport.qr);
         if (rescueMode) await _startAcousticSosBroadcast(latestSosQr!);
       }
       delivery = delivery.copyWith(
@@ -1296,10 +1296,16 @@ class MeshController extends ChangeNotifier {
         sos.announcementFrame,
         sos.messageFrame,
       ]);
-      if (acousticSosBroadcasting) _emergencyChannelsUsed.add('audio');
+      if (acousticSosBroadcasting) {
+        _emergencyChannelsUsed.add('audio');
+        _transportDiagnostics.recordSuccess(DiagnosticTransport.audio);
+      } else {
+        _transportDiagnostics.recordFailure(DiagnosticTransport.audio);
+      }
       notifyListeners();
     } catch (error, stackTrace) {
       acousticSosBroadcasting = false;
+      _transportDiagnostics.recordFailure(DiagnosticTransport.audio);
       DiagnosticsLog.instance.warning(
         'acoustic_sos.broadcast.failed',
         error: error,
@@ -1308,28 +1314,16 @@ class MeshController extends ChangeNotifier {
     }
   }
 
-  Duration _emergencyBackoff(int attempts) {
-    final exponent = min(max(attempts - 1, 0), 5);
-    final seconds = min(
-      15 * (1 << exponent),
-      emergencyMaximumBackoff.inSeconds,
-    );
-    return Duration(seconds: seconds);
-  }
+  Duration _emergencyBackoff(int attempts) => emergencyRetryBackoff(
+    attempts: attempts,
+    maximumBackoff: emergencyMaximumBackoff,
+  );
 
-  String _emergencyQrFallback(String content) {
-    final fields = content.split('|');
-    final description = fields.length > 1 && fields[1].trim().isNotEmpty
-        ? fields[1].trim()
-        : currentL10n.sosDefaultMessage;
-    final coordinates =
-        fields.length > 3 &&
-            fields[2].trim().isNotEmpty &&
-            fields[3].trim().isNotEmpty
-        ? '\nGPS: ${fields[2].trim()}, ${fields[3].trim()}'
-        : '';
-    return 'HEARTHBIT SOS\n$description$coordinates\nID: $peerId';
-  }
+  String _emergencyQrFallback(String content) => emergencyQrFallbackText(
+    content: content,
+    peerId: peerId,
+    defaultMessage: currentL10n.sosDefaultMessage,
+  );
 
   Future<void> _replaceEmergencyDelivery(EmergencyDelivery delivery) async {
     await _repository.updateEmergencyDelivery(delivery);
@@ -1394,13 +1388,7 @@ class MeshController extends ChangeNotifier {
     );
   }
 
-  String _newEmergencyLocalId() {
-    final randomPart = List.generate(
-      8,
-      (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0'),
-    ).join();
-    return 'EMG-${DateTime.now().microsecondsSinceEpoch}-$randomPart';
-  }
+  String _newEmergencyLocalId() => newEmergencyLocalId(_random);
 
   Future<void> panicWipe() async {
     await setRescueMode(false);
@@ -1477,10 +1465,7 @@ class MeshController extends ChangeNotifier {
     }
   }
 
-  String _newPrivateMessageLocalId() {
-    final randomPart = _random.nextInt(0x7fffffff).toRadixString(16);
-    return 'dm-${DateTime.now().microsecondsSinceEpoch}-$randomPart';
-  }
+  String _newPrivateMessageLocalId() => newPrivateMessageLocalId(_random);
 
   MeshMessage _pendingMessage(PendingPrivateMessage pending) {
     return MeshMessage(
@@ -1743,6 +1728,23 @@ class MeshController extends ChangeNotifier {
         if (canonicalHash != null && acknowledgingPeerId != null) {
           unawaited(
             _recordEmergencyAcknowledgement(canonicalHash, acknowledgingPeerId),
+          );
+        }
+      case MeshKeyRotationEvent():
+        final oldPeerId = event.oldPeerId;
+        final newPeerId = event.newPeerId;
+        if (event.status == 'accepted' &&
+            oldPeerId != null &&
+            newPeerId != null &&
+            oldPeerId.length >= 8 &&
+            newPeerId.length >= 8 &&
+            event.sequence != null) {
+          lastKeyRotationDiagnostic =
+              '${oldPeerId.substring(0, 8)}→'
+              '${newPeerId.substring(0, 8)} #${event.sequence}';
+          DiagnosticsLog.instance.info(
+            'mesh.identity.rotation.accepted',
+            data: {'sequence': event.sequence},
           );
         }
       case MeshRescuePingEvent():

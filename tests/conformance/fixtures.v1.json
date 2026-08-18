@@ -6,6 +6,7 @@
   "hexEncoding": "lowercase, whitespace ignored",
   "fixtures": [
     {"id":"packet.v1.message","operation":"packet.decode","blob":"blobs/packet-v1-message.hex","valid":true,"expect":{"version":1,"type":2,"ttl":7,"timestamp":1,"sender":"0102030405060708","payload":"616263"}},
+    {"id":"packet.v1.drill_message","operation":"packet.decode","blob":"blobs/packet-v1-drill-message.hex","valid":true,"expect":{"version":1,"type":2,"ttl":7,"timestamp":1,"sender":"0102030405060708","flags":34,"drill":true,"payload":"53494d554c4143524f0a5b48422d4452494c4c7c317c434845434b494e7c48454c507c313730303030303030303030305d","signatureBytes":64}},
     {"id":"packet.v2.route_signed","operation":"packet.decode","blob":"blobs/packet-v2-route-signed.hex","valid":true,"expect":{"version":2,"type":2,"ttl":7,"timestamp":72623859790382856,"sender":"0102030405060708","recipient":"ffffffffffffffff","payload":"726f7574652d7632","route":["1011121314151617","2021222324252627"],"signatureBytes":64}},
     {"id":"packet.v1.raw_deflate","operation":"packet.decode","blob":"blobs/packet-v1-raw-deflate.hex","valid":true,"expect":{"version":1,"type":1,"payloadPattern":"000102030405","payloadBytes":180,"compression":"raw-deflate"}},
     {"id":"packet.v1.zlib_read","operation":"packet.decode","blob":"blobs/packet-v1-zlib.hex","valid":true,"expect":{"version":1,"type":1,"payloadPattern":"000102030405","payloadBytes":180,"compression":"zlib-read-only"}},
@@ -38,6 +39,7 @@
     {"id":"extension.emergency_capability.v1","operation":"extension.decode","blob":"blobs/extension-emergency-capability.hex","valid":true,"expect":{"type":40,"version":1,"flags":1}},
     {"id":"extension.hbt_capability.canonical","operation":"extension.decode","blob":"blobs/extension-hbt-capability-canonical.hex","valid":true,"expect":{"type":42,"version":1}},
     {"id":"extension.emergency_ack.v1","operation":"extension.decode","blob":"blobs/extension-emergency-ack.hex","valid":true,"expect":{"type":43,"version":1,"hash":"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"}},
+    {"id":"extension.key_rotation.v1","operation":"key-rotation.decode","blob":"blobs/extension-key-rotation.hex","valid":true,"expect":{"type":44,"version":1,"oldPeerId":"0102030405060708","timestamp":1700000000000,"sequence":1,"signatureBytes":64}},
     {"id":"extension.legacy_0x24.hbt_alias","operation":"extension.decode","blob":"blobs/extension-legacy-0x24-hbt.hex","valid":true,"expect":{"type":36,"meaning":"legacy_hbt_capability","version":1}},
     {"id":"extension.legacy_0x24.prekey_candidate","operation":"extension.decode","blob":"blobs/extension-legacy-0x24-prekey.hex","valid":true,"expect":{"type":36,"meaning":"prekey_bundle","legacyHbt":false}},
     {"id":"extension.envelope.hbit","operation":"extension-envelope.decode","blob":"blobs/extension-envelope-hbit.hex","valid":true,"expect":{"namespace":"HBIT","subtype":1,"version":1,"flags":0,"payload":"01"}},

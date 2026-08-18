@@ -11,29 +11,25 @@ import 'package:path_provider/path_provider.dart';
 
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
+import '../models/pending_sealed_import.dart';
 import '../models/transfer_models.dart';
-import '../services/diagnostics_log.dart';
 import '../services/at_rest_file_cipher.dart';
 import '../services/backup_protection.dart';
+import '../services/diagnostics_log.dart';
 import '../services/lan_transport.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/hbt_package.dart';
 import '../services/hbt_share_service.dart';
 import '../services/sealed_transfer_package.dart';
+import '../services/transport_diagnostics.dart';
 import '../services/transfer_crypto.dart';
 import '../services/transfer_platform_service.dart';
 import '../services/transfer_protocol.dart';
 import '../services/transfer_repository.dart';
+import '../utils/hex_encoding.dart';
+import '../utils/mime_guess.dart';
 
-class PendingSealedImport {
-  const PendingSealedImport({
-    required this.packagePath,
-    required this.metadata,
-  });
-
-  final String packagePath;
-  final SealedPackageMetadata metadata;
-}
+export '../models/pending_sealed_import.dart';
 
 /// Orquesta las transferencias de archivos: ofertas firmadas por BLE,
 /// negociación de transporte multicanal y cifrado de extremo a extremo con
@@ -45,11 +41,14 @@ class TransferController extends ChangeNotifier {
     TransferRepository? repository,
     AtRestFileCipher? fileCipher,
     HbtShareService? shareService,
+    TransportDiagnostics? transportDiagnostics,
     this.offerLifetime = defaultOfferLifetime,
   }) : _platform = platform ?? TransferPlatformService(),
        _repository = repository ?? TransferRepository(),
        _fileCipher = fileCipher ?? AtRestFileCipher(),
-       _shareService = shareService ?? HbtShareService();
+       _shareService = shareService ?? HbtShareService(),
+       _transportDiagnostics =
+           transportDiagnostics ?? TransportDiagnostics.instance;
 
   static const int bleChunkSize = 350;
   static const int bleMaxInlineBytes = 256 * 1024;
@@ -87,6 +86,7 @@ class TransferController extends ChangeNotifier {
   final TransferRepository _repository;
   final AtRestFileCipher _fileCipher;
   final HbtShareService _shareService;
+  final TransportDiagnostics _transportDiagnostics;
   final Duration offerLifetime;
 
   final List<TransferRecord> _transfers = [];
@@ -123,7 +123,11 @@ class TransferController extends ChangeNotifier {
           (record.direction == TransferDirection.outgoing ||
               bitmapBytes != null);
       if (!canRestore) {
+        final transport = _diagnosticTransport(record.transport);
         record.state = TransferState.failed;
+        if (transport != null) {
+          _transportDiagnostics.recordFailure(transport);
+        }
         record.error = currentL10n.terrInterrupted;
         await _repository.save(
           record,
@@ -141,7 +145,7 @@ class TransferController extends ChangeNotifier {
         final cipher = await TransferCrypto.deriveCipher(
           localKeyPair: keyPair,
           remotePublicKey: restoredMaterial.remotePublicKey,
-          transferId: _fromHex(record.id),
+          transferId: hexToBytes(record.id),
         );
         final restoredBitmap = ChunkBitmap.fromBytes(
           record.chunkCount,
@@ -166,7 +170,11 @@ class TransferController extends ChangeNotifier {
           resumableIncoming.add(record);
         }
       } catch (_) {
+        final transport = _diagnosticTransport(record.transport);
         record.state = TransferState.failed;
+        if (transport != null) {
+          _transportDiagnostics.recordFailure(transport);
+        }
         record.error = currentL10n.terrInterrupted;
         await _repository.save(
           record,
@@ -215,11 +223,11 @@ class TransferController extends ChangeNotifier {
     if (fileSize == 0 || fileSize > maxFileBytes) {
       throw StateError(currentL10n.terrFileSize);
     }
-    final transferId = _randomBytes(16);
-    final idHex = _hex(transferId);
+    final transferId = randomBytes(_random, 16);
+    final idHex = bytesToHex(transferId);
     final keyPair = await TransferCrypto.generateEphemeralKeyPair();
     final sha256Hex = await TransferCrypto.hashFile(file);
-    final resolvedMimeType = mimeType ?? _guessMime(fileName);
+    final resolvedMimeType = mimeType ?? guessMimeType(fileName);
     final allowsBle = allowsBleTransfer(
       mimeType: resolvedMimeType,
       bytes: fileSize,
@@ -291,7 +299,7 @@ class TransferController extends ChangeNotifier {
       ..setUtf8(TransferProtocol.tagFileName, record.fileName)
       ..setUtf8(TransferProtocol.tagMimeType, record.mimeType)
       ..setU64(TransferProtocol.tagFileSize, fileSize)
-      ..setBytes(TransferProtocol.tagSha256, _fromHex(sha256Hex))
+      ..setBytes(TransferProtocol.tagSha256, hexToBytes(sha256Hex))
       ..setU32(TransferProtocol.tagChunkSize, chunkSize)
       ..setU32(TransferProtocol.tagTransports, transports)
       ..setBytes(
@@ -345,7 +353,7 @@ class TransferController extends ChangeNotifier {
     session.cipher = await TransferCrypto.deriveCipher(
       localKeyPair: keyPair,
       remotePublicKey: session.remoteEphemeral!,
-      transferId: _fromHex(transferId),
+      transferId: hexToBytes(transferId),
     );
     session.bitmap = ChunkBitmap(record.chunkCount);
     record.filePath = await _incomingPath(record, partial: true);
@@ -368,12 +376,12 @@ class TransferController extends ChangeNotifier {
     notifyListeners();
 
     final frame = TransferFrame(TransferProtocol.typeAccept)
-      ..setBytes(TransferProtocol.tagTransferId, _fromHex(transferId))
+      ..setBytes(TransferProtocol.tagTransferId, hexToBytes(transferId))
       ..setBytes(
         TransferProtocol.tagEphemeralKey,
         await TransferCrypto.publicKeyBytes(keyPair),
       )
-      ..setU8(TransferProtocol.tagTransport, _transportId(record.transport!));
+      ..setU8(TransferProtocol.tagTransport, transferWireId(record.transport!));
     await _sendFrame(record.peerId, frame, record);
 
     if (record.transport == TransferTransport.nearby) {
@@ -394,7 +402,7 @@ class TransferController extends ChangeNotifier {
     final record = _find(transferId);
     if (record == null) return;
     final frame = TransferFrame(TransferProtocol.typeReject)
-      ..setBytes(TransferProtocol.tagTransferId, _fromHex(transferId));
+      ..setBytes(TransferProtocol.tagTransferId, hexToBytes(transferId));
     if (reason != null) frame.setUtf8(TransferProtocol.tagReason, reason);
     await _sendFrame(record.peerId, frame, record);
     record.state = TransferState.rejected;
@@ -406,7 +414,7 @@ class TransferController extends ChangeNotifier {
     final record = _find(transferId);
     if (record == null || !record.isActive) return;
     final frame = TransferFrame(TransferProtocol.typeCancel)
-      ..setBytes(TransferProtocol.tagTransferId, _fromHex(transferId));
+      ..setBytes(TransferProtocol.tagTransferId, hexToBytes(transferId));
     try {
       await _sendFrame(record.peerId, frame, record);
     } catch (error, stackTrace) {
@@ -451,7 +459,7 @@ class TransferController extends ChangeNotifier {
           : peerId.substring(0, 8),
       direction: TransferDirection.incoming,
       fileName: fileName,
-      mimeType: _guessMime(fileName),
+      mimeType: guessMimeType(fileName),
       fileSize: fileSize,
       sha256Hex: sha256Hex,
       chunkSize: chunkSize,
@@ -463,6 +471,7 @@ class TransferController extends ChangeNotifier {
     _transfers.insert(0, record);
     _trimTransfersInMemory();
     await _repository.save(record);
+    _transportDiagnostics.recordSuccess(DiagnosticTransport.qr);
     notifyListeners();
   }
 
@@ -495,7 +504,7 @@ class TransferController extends ChangeNotifier {
       throw StateError(currentL10n.terrFileSize);
     }
     final recipient = await _mesh.getSealedTransferRecipient(peer.id);
-    final packageId = _randomBytes(16);
+    final packageId = randomBytes(_random, 16);
     final keyPair = await TransferCrypto.generateEphemeralKeyPair();
     final ephemeralPublic = await TransferCrypto.publicKeyBytes(keyPair);
     final cipher = await TransferCrypto.deriveSealedCipher(
@@ -505,7 +514,7 @@ class TransferController extends ChangeNotifier {
     );
     final temporary = await getTemporaryDirectory();
     final package = File(
-      p.join(temporary.path, 'sealed-${_hex(packageId)}.hbt'),
+      p.join(temporary.path, 'sealed-${bytesToHex(packageId)}.hbt'),
     );
     final sha256 = await TransferCrypto.hashFileBytes(source);
     final safeName = sanitizeFileName(fileName);
@@ -517,7 +526,7 @@ class TransferController extends ChangeNotifier {
       recipientPeerId: recipient.recipientPeerId,
       ephemeralPublicKey: ephemeralPublic,
       fileName: safeName,
-      mimeType: mimeType ?? _guessMime(safeName),
+      mimeType: mimeType ?? guessMimeType(safeName),
       chunkSize: defaultChunkSize,
       sha256: sha256,
       cipher: cipher,
@@ -530,14 +539,14 @@ class TransferController extends ChangeNotifier {
         origin: origin,
       );
       final record = TransferRecord(
-        id: _hex(packageId),
+        id: bytesToHex(packageId),
         peerId: peer.id,
         peerNickname: peer.nickname,
         direction: TransferDirection.outgoing,
         fileName: safeName,
-        mimeType: mimeType ?? _guessMime(safeName),
+        mimeType: mimeType ?? guessMimeType(safeName),
         fileSize: fileSize,
-        sha256Hex: _hex(sha256),
+        sha256Hex: bytesToHex(sha256),
         chunkSize: defaultChunkSize,
         state: TransferState.completed,
         transport: TransferTransport.external,
@@ -547,6 +556,7 @@ class TransferController extends ChangeNotifier {
       _transfers.insert(0, record);
       _trimTransfersInMemory();
       await _repository.save(record);
+      _transportDiagnostics.recordSuccess(DiagnosticTransport.external);
       notifyListeners();
     } finally {
       if (await package.exists()) await package.delete();
@@ -561,7 +571,7 @@ class TransferController extends ChangeNotifier {
         await _importSealedPackage(package);
         return;
       }
-      final transferId = _hex(header.transferId);
+      final transferId = bytesToHex(header.transferId);
       final record = _find(transferId);
       final session = _sessions[transferId];
       if (record == null ||
@@ -605,12 +615,12 @@ class TransferController extends ChangeNotifier {
     if (!validSignature) {
       throw const FormatException('Unknown sender or invalid HBTS signature');
     }
-    if (_find(_hex(metadata.packageId)) != null) {
+    if (_find(bytesToHex(metadata.packageId)) != null) {
       throw const FormatException('Sealed package was already imported');
     }
     final directory = await _transfersDirectory();
     final retained = File(
-      p.join(directory.path, 'pending-${_hex(metadata.packageId)}.hbt'),
+      p.join(directory.path, 'pending-${bytesToHex(metadata.packageId)}.hbt'),
     );
     await package.copy(retained.path);
     final previous = pendingSealedImport;
@@ -642,14 +652,14 @@ class TransferController extends ChangeNotifier {
         packageId: metadata.packageId,
       );
       final record = TransferRecord(
-        id: _hex(metadata.packageId),
+        id: bytesToHex(metadata.packageId),
         peerId: metadata.senderPeerId,
         peerNickname: metadata.senderPeerId.substring(0, 8),
         direction: TransferDirection.incoming,
         fileName: metadata.fileName,
         mimeType: metadata.mimeType,
         fileSize: metadata.fileSize,
-        sha256Hex: _hex(metadata.sha256),
+        sha256Hex: bytesToHex(metadata.sha256),
         chunkSize: metadata.chunkSize,
         state: TransferState.transferring,
         transport: TransferTransport.external,
@@ -671,6 +681,7 @@ class TransferController extends ChangeNotifier {
         ..filePath = finalPath
         ..bytesDone = record.fileSize
         ..state = TransferState.completed;
+      _transportDiagnostics.recordSuccess(DiagnosticTransport.external);
       await _protectCompletedFile(record);
       _transfers.insert(0, record);
       _trimTransfersInMemory();
@@ -740,7 +751,7 @@ class TransferController extends ChangeNotifier {
   Future<void> _handleFrame(String peerId, TransferFrame frame) async {
     final idBytes = frame.bytes(TransferProtocol.tagTransferId);
     if (idBytes == null || idBytes.length != 16) return;
-    final transferId = _hex(idBytes);
+    final transferId = bytesToHex(idBytes);
     switch (frame.type) {
       case TransferProtocol.typeOffer:
         await _handleOffer(peerId, transferId, frame);
@@ -779,7 +790,7 @@ class TransferController extends ChangeNotifier {
             record.peerId == peerId &&
             record.direction == TransferDirection.outgoing) {
           record.bytesDone = record.fileSize;
-          record.state = TransferState.completed;
+          _markCompleted(record);
           await _finishSession(record);
         }
         break;
@@ -854,7 +865,7 @@ class TransferController extends ChangeNotifier {
           frame.utf8Value(TransferProtocol.tagMimeType) ??
           'application/octet-stream',
       fileSize: fileSize,
-      sha256Hex: _hex(sha256),
+      sha256Hex: bytesToHex(sha256),
       chunkSize: chunkSize,
       state: TransferState.offered,
     );
@@ -892,10 +903,10 @@ class TransferController extends ChangeNotifier {
     session.cipher = await TransferCrypto.deriveCipher(
       localKeyPair: session.keyPair!,
       remotePublicKey: ephemeral,
-      transferId: _fromHex(transferId),
+      transferId: hexToBytes(transferId),
     );
     record.state = TransferState.connecting;
-    record.transport = _transportFromId(transport);
+    record.transport = transferFromWireId(transport);
     session.bitmap ??= ChunkBitmap(record.chunkCount);
     await _saveResumeState(record, session, bitmap: session.bitmap);
     notifyListeners();
@@ -998,9 +1009,9 @@ class TransferController extends ChangeNotifier {
       ..error = null;
     await _saveResumeState(record, session, bitmap: bitmap);
     final frame = TransferFrame(TransferProtocol.typeResumeRequest)
-      ..setBytes(TransferProtocol.tagTransferId, _fromHex(record.id))
+      ..setBytes(TransferProtocol.tagTransferId, hexToBytes(record.id))
       ..setBytes(TransferProtocol.tagChunkBitmap, bitmap.toBytes())
-      ..setU8(TransferProtocol.tagTransport, _transportId(transport));
+      ..setU8(TransferProtocol.tagTransport, transferWireId(transport));
     try {
       await _sendFrame(
         record.peerId,
@@ -1035,7 +1046,7 @@ class TransferController extends ChangeNotifier {
         transportId == null) {
       return;
     }
-    final transport = _transportFromId(transportId);
+    final transport = transferFromWireId(transportId);
     final allowed =
         (transport == TransferTransport.lan &&
             session.offeredTransports & TransferProtocol.transportLan != 0) ||
@@ -1177,7 +1188,7 @@ class TransferController extends ChangeNotifier {
       final received = session.bitmap!.count;
       if (received % 8 == 0 || session.bitmap!.isComplete) {
         final ack = TransferFrame(TransferProtocol.typeDataAck)
-          ..setBytes(TransferProtocol.tagTransferId, _fromHex(transferId))
+          ..setBytes(TransferProtocol.tagTransferId, hexToBytes(transferId))
           ..setU32(TransferProtocol.tagReceivedCount, received);
         await _sendFrame(peerId, ack, record);
       }
@@ -1248,7 +1259,7 @@ class TransferController extends ChangeNotifier {
     TransferRecord record,
     _TransferSession session,
   ) async {
-    final token = _randomBytes(16);
+    final token = randomBytes(_random, 16);
     final sender = LanSender(
       transferId: record.id,
       sourceFile: File(record.filePath!),
@@ -1266,7 +1277,7 @@ class TransferController extends ChangeNotifier {
     try {
       final endpoint = await sender.listen();
       final hint = TransferFrame(TransferProtocol.typeTransportHint)
-        ..setBytes(TransferProtocol.tagTransferId, _fromHex(record.id))
+        ..setBytes(TransferProtocol.tagTransferId, hexToBytes(record.id))
         ..setU8(TransferProtocol.tagTransport, TransferProtocol.transportIdLan)
         ..setUtf8(TransferProtocol.tagEndpoint, endpoint)
         ..setBytes(TransferProtocol.tagToken, token);
@@ -1274,13 +1285,14 @@ class TransferController extends ChangeNotifier {
       final delivered = await sender.done.future;
       if (delivered) {
         record.bytesDone = record.fileSize;
-        record.state = TransferState.completed;
+        _markCompleted(record);
         await _finishSession(record);
       }
       // Si no llegó completo, el receptor decide el fallback y este lado
       // recibirá un nuevo ACCEPT o un CANCEL.
     } catch (error, stackTrace) {
       // El receptor pedirá otro transporte si su conexión falló.
+      _transportDiagnostics.recordFailure(DiagnosticTransport.lan);
       DiagnosticsLog.instance.warning(
         'transfer.lan.sender_failed',
         error: error,
@@ -1365,7 +1377,7 @@ class TransferController extends ChangeNotifier {
       final package = File(p.join(temporary.path, 'hbt-${record.id}.hbt'));
       await HbtPackageProtocol.writeExchange(
         container: container,
-        transferId: _fromHex(record.id),
+        transferId: hexToBytes(record.id),
         destination: package,
       );
       session.externalPackagePath = package.path;
@@ -1400,7 +1412,7 @@ class TransferController extends ChangeNotifier {
         final plain = await raf.read(min(record.chunkSize, remaining));
         final encrypted = await session.cipher!.encryptChunk(index, plain);
         final frame = TransferFrame(TransferProtocol.typeDataChunk)
-          ..setBytes(TransferProtocol.tagTransferId, _fromHex(record.id))
+          ..setBytes(TransferProtocol.tagTransferId, hexToBytes(record.id))
           ..setU32(TransferProtocol.tagChunkIndex, index)
           ..setBytes(TransferProtocol.tagChunkData, encrypted);
         await _sendFrame(record.peerId, frame, record);
@@ -1569,12 +1581,16 @@ class TransferController extends ChangeNotifier {
     _TransferSession session,
     String reason,
   ) async {
+    final failedTransport = _diagnosticTransport(record.transport);
+    if (failedTransport != null) {
+      _transportDiagnostics.recordFailure(failedTransport);
+    }
     final tried = session.triedTransports..add(record.transport!);
     final next = _chooseTransport(record, session, excluding: tried);
     if (next == null) {
-      _fail(record, reason);
+      _fail(record, reason, recordTransportFailure: false);
       final frame = TransferFrame(TransferProtocol.typeCancel)
-        ..setBytes(TransferProtocol.tagTransferId, _fromHex(record.id))
+        ..setBytes(TransferProtocol.tagTransferId, hexToBytes(record.id))
         ..setUtf8(TransferProtocol.tagReason, reason);
       try {
         await _sendFrame(record.peerId, frame, record);
@@ -1591,12 +1607,12 @@ class TransferController extends ChangeNotifier {
     record.state = TransferState.connecting;
     notifyListeners();
     final frame = TransferFrame(TransferProtocol.typeAccept)
-      ..setBytes(TransferProtocol.tagTransferId, _fromHex(record.id))
+      ..setBytes(TransferProtocol.tagTransferId, hexToBytes(record.id))
       ..setBytes(
         TransferProtocol.tagEphemeralKey,
         await TransferCrypto.publicKeyBytes(session.keyPair!),
       )
-      ..setU8(TransferProtocol.tagTransport, _transportId(next));
+      ..setU8(TransferProtocol.tagTransport, transferWireId(next));
     await _sendFrame(record.peerId, frame, record);
     if (next == TransferTransport.nearby) {
       await _startNearbyReceive(record, session);
@@ -1622,9 +1638,9 @@ class TransferController extends ChangeNotifier {
     await partial.rename(finalPath);
     record.filePath = finalPath;
     record.bytesDone = record.fileSize;
-    record.state = TransferState.completed;
+    _markCompleted(record);
     final frame = TransferFrame(TransferProtocol.typeComplete)
-      ..setBytes(TransferProtocol.tagTransferId, _fromHex(record.id));
+      ..setBytes(TransferProtocol.tagTransferId, hexToBytes(record.id));
     try {
       await _sendFrame(record.peerId, frame, record);
     } catch (error, stackTrace) {
@@ -1810,11 +1826,20 @@ class TransferController extends ChangeNotifier {
     );
   }
 
-  void _fail(TransferRecord record, String message) {
+  void _fail(
+    TransferRecord record,
+    String message, {
+    bool recordTransportFailure = true,
+  }) {
     if (record.state == TransferState.completed) return;
+    final wasActive = record.isActive;
     record.state = TransferState.failed;
     record.error = message;
     lastError = message;
+    final transport = _diagnosticTransport(record.transport);
+    if (recordTransportFailure && wasActive && transport != null) {
+      _transportDiagnostics.recordFailure(transport);
+    }
     DiagnosticsLog.instance.warning(
       'transfer.failed',
       data: {
@@ -1824,6 +1849,28 @@ class TransferController extends ChangeNotifier {
       },
     );
     unawaited(_finishSession(record));
+  }
+
+  void _markCompleted(TransferRecord record) {
+    if (record.state == TransferState.completed) return;
+    record.state = TransferState.completed;
+    final transport = _diagnosticTransport(record.transport);
+    if (transport != null) {
+      _transportDiagnostics.recordSuccess(transport);
+    }
+  }
+
+  DiagnosticTransport? _diagnosticTransport(TransferTransport? transport) {
+    return switch (transport) {
+      TransferTransport.ble => DiagnosticTransport.ble,
+      TransferTransport.lan => DiagnosticTransport.lan,
+      TransferTransport.wifiAware => DiagnosticTransport.wifiAware,
+      TransferTransport.optical => DiagnosticTransport.qr,
+      TransferTransport.wifiDirect => DiagnosticTransport.wifiDirect,
+      TransferTransport.multipeer => DiagnosticTransport.multipeer,
+      TransferTransport.external => DiagnosticTransport.external,
+      TransferTransport.nearby || null => null,
+    };
   }
 
   Future<void> _finishSession(TransferRecord record) async {
@@ -1911,61 +1958,6 @@ class TransferController extends ChangeNotifier {
       if (record.id == transferId) return record;
     }
     return null;
-  }
-
-  Uint8List _randomBytes(int length) =>
-      Uint8List.fromList(List.generate(length, (_) => _random.nextInt(256)));
-
-  String _hex(List<int> bytes) =>
-      bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-
-  Uint8List _fromHex(String hex) {
-    final output = Uint8List(hex.length ~/ 2);
-    for (var i = 0; i < output.length; i++) {
-      output[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
-    }
-    return output;
-  }
-
-  int _transportId(TransferTransport transport) => switch (transport) {
-    TransferTransport.ble => TransferProtocol.transportIdBle,
-    TransferTransport.lan => TransferProtocol.transportIdLan,
-    TransferTransport.nearby => TransferProtocol.transportIdNearby,
-    TransferTransport.wifiAware => TransferProtocol.transportIdWifiAware,
-    TransferTransport.optical => TransferProtocol.transportIdOptical,
-    TransferTransport.wifiDirect => TransferProtocol.transportIdWifiDirect,
-    TransferTransport.multipeer => TransferProtocol.transportIdMultipeer,
-    TransferTransport.external => TransferProtocol.transportIdExternal,
-  };
-
-  TransferTransport? _transportFromId(int id) => switch (id) {
-    TransferProtocol.transportIdBle => TransferTransport.ble,
-    TransferProtocol.transportIdLan => TransferTransport.lan,
-    TransferProtocol.transportIdNearby => TransferTransport.nearby,
-    TransferProtocol.transportIdWifiAware => TransferTransport.wifiAware,
-    TransferProtocol.transportIdOptical => TransferTransport.optical,
-    TransferProtocol.transportIdWifiDirect => TransferTransport.wifiDirect,
-    TransferProtocol.transportIdMultipeer => TransferTransport.multipeer,
-    TransferProtocol.transportIdExternal => TransferTransport.external,
-    _ => null,
-  };
-
-  String _guessMime(String fileName) {
-    final extension = p.extension(fileName).toLowerCase();
-    return switch (extension) {
-      '.jpg' || '.jpeg' => 'image/jpeg',
-      '.png' => 'image/png',
-      '.gif' => 'image/gif',
-      '.webp' => 'image/webp',
-      '.mp4' => 'video/mp4',
-      '.mp3' => 'audio/mpeg',
-      '.m4a' => 'audio/mp4',
-      '.pdf' => 'application/pdf',
-      '.txt' => 'text/plain',
-      '.zip' => 'application/zip',
-      '.apk' => androidPackageMimeType,
-      _ => 'application/octet-stream',
-    };
   }
 
   @override

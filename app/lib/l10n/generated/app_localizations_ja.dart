@@ -760,6 +760,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get diagnosticsStatus => '状態';
 
   @override
+  String get diagnosticsIdentityRotation => '最新のIDローテーション';
+
+  @override
   String get diagnosticsNearbyDevices => '近くのデバイス';
 
   @override
@@ -806,6 +809,23 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get diagnosticsDisabled => '無効';
+
+  @override
+  String get diagnosticsTransportOutcomesSection => '転送結果';
+
+  @override
+  String diagnosticsTransportOutcome(int success, int failure) {
+    return '成功 $success 件 · 失敗 $failure 件';
+  }
+
+  @override
+  String get diagnosticsTransportAudio => '音声';
+
+  @override
+  String get diagnosticsTransportQr => 'QR';
+
+  @override
+  String get diagnosticsTransportExternal => '外部共有';
 
   @override
   String get openLinkError => 'リンクを開けませんでした';
