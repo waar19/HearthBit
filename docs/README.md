@@ -25,6 +25,7 @@ meaning. When translations disagree, the English license text in
 ## Important technical documents
 
 - [Architecture](architecture.md)
+- [Threat model](threat-model.md)
 - [Protocol](protocol.md)
 - [BitChat core profile](bitchat-core-profile.md)
 - [Extension registry](extension-registry.md)
