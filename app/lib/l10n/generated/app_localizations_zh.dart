@@ -39,6 +39,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get statusStopped => '网状网络已停止';
 
   @override
+  String get statusMeshPermissionsRevoked => '网状网络已暂停：蓝牙或附近设备权限已被撤销。';
+
+  @override
+  String get statusMeshBatteryRestricted => '电池限制可能会暂停后台网状网络。';
+
+  @override
+  String get statusMeshSuspended => '网状网络已暂停：消息将排队等待可用出口。';
+
+  @override
   String get actionStop => '停止';
 
   @override
@@ -228,6 +237,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sosQrRelayed => 'SOS 已验证并加入网状网络';
+
+  @override
+  String get sosSentToMesh => 'SOS 已发送到网状网络。';
+
+  @override
+  String get sosQueuedWithoutRoute => 'SOS 已排队，但此手机当前没有可用出口。';
 
   @override
   String get emergencySmsOpen => '通过短信通知可信联系人';
@@ -1230,6 +1245,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onboardingAllowLocation => '允许紧急位置';
+
+  @override
+  String get onboardingAllowMicrophone => '允许麦克风用于救援';
+
+  @override
+  String get onboardingMicrophoneReady => '语音留言和声学救援工具已就绪。';
+
+  @override
+  String get onboardingMicrophoneRequired => '语音留言和声学救援工具需要此权限。';
 
   @override
   String get onboardingFinish => '完成设置';

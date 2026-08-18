@@ -154,6 +154,24 @@ abstract class AppLocalizations {
   /// **'Mesh stopped'**
   String get statusStopped;
 
+  /// No description provided for @statusMeshPermissionsRevoked.
+  ///
+  /// In en, this message translates to:
+  /// **'Mesh suspended: Bluetooth or nearby-device permission was revoked.'**
+  String get statusMeshPermissionsRevoked;
+
+  /// No description provided for @statusMeshBatteryRestricted.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery restrictions may suspend the mesh in the background.'**
+  String get statusMeshBatteryRestricted;
+
+  /// No description provided for @statusMeshSuspended.
+  ///
+  /// In en, this message translates to:
+  /// **'Mesh suspended: messages remain queued until a route is available.'**
+  String get statusMeshSuspended;
+
   /// No description provided for @actionStop.
   ///
   /// In en, this message translates to:
@@ -519,6 +537,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'SOS validated and added to the mesh'**
   String get sosQrRelayed;
+
+  /// No description provided for @sosSentToMesh.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS sent to the mesh.'**
+  String get sosSentToMesh;
+
+  /// No description provided for @sosQueuedWithoutRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS queued, but there is currently no route out of this phone.'**
+  String get sosQueuedWithoutRoute;
 
   /// No description provided for @emergencySmsOpen.
   ///
@@ -2328,6 +2358,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'ALLOW EMERGENCY LOCATION'**
   String get onboardingAllowLocation;
+
+  /// No description provided for @onboardingAllowMicrophone.
+  ///
+  /// In en, this message translates to:
+  /// **'ALLOW MICROPHONE FOR VOICE RESCUE'**
+  String get onboardingAllowMicrophone;
+
+  /// No description provided for @onboardingMicrophoneReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice notes and acoustic rescue tools are ready.'**
+  String get onboardingMicrophoneReady;
+
+  /// No description provided for @onboardingMicrophoneRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Required for voice notes and acoustic rescue tools.'**
+  String get onboardingMicrophoneRequired;
 
   /// No description provided for @onboardingFinish.
   ///

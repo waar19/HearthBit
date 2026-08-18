@@ -39,6 +39,18 @@ class AppLocalizationsFr extends AppLocalizations {
   String get statusStopped => 'Maillage arrêté';
 
   @override
+  String get statusMeshPermissionsRevoked =>
+      'Maillage suspendu : l’autorisation Bluetooth ou appareils à proximité a été retirée.';
+
+  @override
+  String get statusMeshBatteryRestricted =>
+      'Les restrictions de batterie peuvent suspendre le maillage en arrière-plan.';
+
+  @override
+  String get statusMeshSuspended =>
+      'Maillage suspendu : les messages restent en attente jusqu’à ce qu’une voie soit disponible.';
+
+  @override
   String get actionStop => 'ARRÊTER';
 
   @override
@@ -237,6 +249,13 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get sosQrRelayed => 'SOS validé et ajouté au réseau maillé';
+
+  @override
+  String get sosSentToMesh => 'SOS envoyé au réseau maillé.';
+
+  @override
+  String get sosQueuedWithoutRoute =>
+      'SOS mis en attente, mais ce téléphone ne dispose actuellement d’aucune voie de sortie.';
 
   @override
   String get emergencySmsOpen => 'Prévenir un contact de confiance par SMS';
@@ -1301,6 +1320,17 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get onboardingAllowLocation => 'AUTORISER LA POSITION D’URGENCE';
+
+  @override
+  String get onboardingAllowMicrophone => 'AUTORISER LE MICRO POUR LE SECOURS';
+
+  @override
+  String get onboardingMicrophoneReady =>
+      'Les notes vocales et les outils acoustiques de secours sont prêts.';
+
+  @override
+  String get onboardingMicrophoneRequired =>
+      'Nécessaire pour les notes vocales et les outils acoustiques de secours.';
 
   @override
   String get onboardingFinish => 'TERMINER';

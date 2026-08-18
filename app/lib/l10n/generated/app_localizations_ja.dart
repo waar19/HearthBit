@@ -39,6 +39,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String get statusStopped => 'メッシュ停止中';
 
   @override
+  String get statusMeshPermissionsRevoked =>
+      'メッシュ一時停止：Bluetoothまたは付近のデバイスの権限が取り消されました。';
+
+  @override
+  String get statusMeshBatteryRestricted =>
+      'バッテリー制限によりバックグラウンドのメッシュが停止する可能性があります。';
+
+  @override
+  String get statusMeshSuspended => 'メッシュ一時停止：送信経路が見つかるまでメッセージは待機します。';
+
+  @override
   String get actionStop => '停止';
 
   @override
@@ -231,6 +242,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get sosQrRelayed => 'SOSを検証してメッシュに追加しました';
+
+  @override
+  String get sosSentToMesh => 'SOSをメッシュに送信しました。';
+
+  @override
+  String get sosQueuedWithoutRoute => 'SOSを待機キューに保存しましたが、この端末には現在送信経路がありません。';
 
   @override
   String get emergencySmsOpen => '信頼できる連絡先へSMSで知らせる';
@@ -1255,6 +1272,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onboardingAllowLocation => '緊急位置情報を許可';
+
+  @override
+  String get onboardingAllowMicrophone => '救助用マイクを許可';
+
+  @override
+  String get onboardingMicrophoneReady => '音声メモと音響救助ツールを使用できます。';
+
+  @override
+  String get onboardingMicrophoneRequired => '音声メモと音響救助ツールに必要です。';
 
   @override
   String get onboardingFinish => '設定を完了';

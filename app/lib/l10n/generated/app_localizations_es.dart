@@ -39,6 +39,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get statusStopped => 'Malla detenida';
 
   @override
+  String get statusMeshPermissionsRevoked =>
+      'Malla suspendida: se revocó el permiso de Bluetooth o dispositivos cercanos.';
+
+  @override
+  String get statusMeshBatteryRestricted =>
+      'Las restricciones de batería pueden suspender la malla en segundo plano.';
+
+  @override
+  String get statusMeshSuspended =>
+      'Malla suspendida: los mensajes seguirán en cola hasta encontrar una salida.';
+
+  @override
   String get actionStop => 'DETENER';
 
   @override
@@ -237,6 +249,13 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get sosQrRelayed => 'SOS validado y añadido a la malla';
+
+  @override
+  String get sosSentToMesh => 'SOS enviado a la malla.';
+
+  @override
+  String get sosQueuedWithoutRoute =>
+      'SOS en cola, pero este teléfono no tiene una salida disponible.';
 
   @override
   String get emergencySmsOpen => 'Avisar por SMS a un contacto de confianza';
@@ -1304,6 +1323,17 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get onboardingAllowLocation => 'PERMITIR UBICACIÓN DE EMERGENCIA';
+
+  @override
+  String get onboardingAllowMicrophone => 'PERMITIR MICRÓFONO PARA RESCATE';
+
+  @override
+  String get onboardingMicrophoneReady =>
+      'Las notas de voz y herramientas acústicas están listas.';
+
+  @override
+  String get onboardingMicrophoneRequired =>
+      'Necesario para notas de voz y herramientas acústicas de rescate.';
 
   @override
   String get onboardingFinish => 'FINALIZAR CONFIGURACIÓN';

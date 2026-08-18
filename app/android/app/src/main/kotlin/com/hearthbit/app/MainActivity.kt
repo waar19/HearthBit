@@ -447,6 +447,7 @@ class MainActivity : FlutterActivity() {
                         mapOf(
                             "ignoringBatteryOptimizations" to
                                 (power?.isIgnoringBatteryOptimizations(packageName) == true),
+                            "meshPermissionsGranted" to meshPermissionsGranted(),
                             "lowPowerMode" to (power?.isPowerSaveMode == true),
                             "backgroundLocation" to backgroundLocationGranted(),
                             "batteryLevel" to batteryLevel,
@@ -855,7 +856,19 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun requestMeshPermissions(result: MethodChannel.Result) {
-        val permissions = buildList {
+        val permissions = requiredMeshPermissions().filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (permissions.isEmpty()) {
+            result.success(true)
+            return
+        }
+        permissionResult = result
+        requestPermissions(permissions.toTypedArray(), PERMISSION_REQUEST)
+    }
+
+    private fun requiredMeshPermissions(): List<String> =
+        buildList {
             if (Build.VERSION.SDK_INT >= 31) {
                 add(Manifest.permission.BLUETOOTH_SCAN)
                 add(Manifest.permission.BLUETOOTH_CONNECT)
@@ -874,16 +887,12 @@ class MainActivity : FlutterActivity() {
             if (Build.VERSION.SDK_INT >= 36) {
                 add(Manifest.permission.RANGING)
             }
-        }.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
-        if (permissions.isEmpty()) {
-            result.success(true)
-            return
+
+    private fun meshPermissionsGranted(): Boolean =
+        requiredMeshPermissions().all {
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
         }
-        permissionResult = result
-        requestPermissions(permissions.toTypedArray(), PERMISSION_REQUEST)
-    }
 
     private fun runMethod(result: MethodChannel.Result, block: () -> Any?) {
         runCatching(block)

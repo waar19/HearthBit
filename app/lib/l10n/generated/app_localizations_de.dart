@@ -39,6 +39,18 @@ class AppLocalizationsDe extends AppLocalizations {
   String get statusStopped => 'Mesh gestoppt';
 
   @override
+  String get statusMeshPermissionsRevoked =>
+      'Mesh angehalten: Bluetooth- oder Geräteberechtigung wurde entzogen.';
+
+  @override
+  String get statusMeshBatteryRestricted =>
+      'Akkueinschränkungen können das Mesh im Hintergrund anhalten.';
+
+  @override
+  String get statusMeshSuspended =>
+      'Mesh angehalten: Nachrichten bleiben in der Warteschlange, bis ein Weg verfügbar ist.';
+
+  @override
   String get actionStop => 'STOPPEN';
 
   @override
@@ -237,6 +249,13 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get sosQrRelayed => 'SOS geprüft und zum Mesh hinzugefügt';
+
+  @override
+  String get sosSentToMesh => 'SOS an das Mesh gesendet.';
+
+  @override
+  String get sosQueuedWithoutRoute =>
+      'SOS gespeichert, aber dieses Telefon hat derzeit keinen Übertragungsweg.';
 
   @override
   String get emergencySmsOpen => 'Vertrauensperson per SMS benachrichtigen';
@@ -1302,6 +1321,17 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get onboardingAllowLocation => 'NOTFALLSTANDORT ERLAUBEN';
+
+  @override
+  String get onboardingAllowMicrophone => 'MIKROFON FÜR RETTUNG ERLAUBEN';
+
+  @override
+  String get onboardingMicrophoneReady =>
+      'Sprachnachrichten und akustische Rettungsfunktionen sind bereit.';
+
+  @override
+  String get onboardingMicrophoneRequired =>
+      'Erforderlich für Sprachnachrichten und akustische Rettungsfunktionen.';
 
   @override
   String get onboardingFinish => 'EINRICHTUNG ABSCHLIESSEN';

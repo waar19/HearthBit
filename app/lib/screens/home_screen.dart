@@ -147,8 +147,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _appInForeground = state == AppLifecycleState.resumed;
     _syncGenericPresenceScan();
     if (state == AppLifecycleState.resumed) {
-      widget.controller.refreshPowerStatus();
+      unawaited(_refreshMeshHealth());
     }
+  }
+
+  Future<void> _refreshMeshHealth() async {
+    await widget.controller.refreshPowerStatus();
+    await widget.controller.refreshDiagnostics();
   }
 
   int get _pendingOffers => widget.transfers.transfers

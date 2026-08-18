@@ -32,7 +32,10 @@ class _FakePlatform extends MeshPlatformService {
   privateMessages = [];
   final List<String> privateChannelRequests = [];
   bool permissionsGranted = true;
+  bool meshPermissionsGranted = true;
+  bool ignoringBatteryOptimizations = false;
   bool backgroundLocation = true;
+  String? diagnosticStatus;
   Object? startError;
   Object? privateMessageError;
   Completer<String>? privateMessageGate;
@@ -181,7 +184,8 @@ class _FakePlatform extends MeshPlatformService {
 
   @override
   Future<Map<Object?, Object?>> getPowerStatus() async => {
-    'ignoringBatteryOptimizations': false,
+    'ignoringBatteryOptimizations': ignoringBatteryOptimizations,
+    'meshPermissionsGranted': meshPermissionsGranted,
     'lowPowerMode': true,
     'backgroundLocation': backgroundLocation,
     'batteryLevel': 14,
@@ -191,6 +195,7 @@ class _FakePlatform extends MeshPlatformService {
 
   @override
   Future<Map<Object?, Object?>> getMeshDiagnostics() async => {
+    if (diagnosticStatus != null) 'meshStatus': diagnosticStatus,
     'platform': 'android',
     'advertising': true,
     'meshScanActive': true,
@@ -502,6 +507,17 @@ void main() {
     expect(controller.scanStarts, 8);
     expect(controller.storeForwardEntries, 3);
     expect(controller.activeTransports, {'ble', 'lan'});
+  });
+
+  test('el diagnóstico al volver detecta una malla suspendida', () async {
+    platform.emit({'type': 'status', 'status': 'active'});
+    await pumpEvents();
+    platform.diagnosticStatus = 'stopped';
+
+    await controller.refreshDiagnostics();
+
+    expect(controller.status, MeshConnectionStatus.stopped);
+    expect(controller.canSend, isFalse);
   });
 
   test('un evento inválido no cancela los eventos posteriores', () async {
@@ -1008,6 +1024,61 @@ void main() {
     expect(controller.status, MeshConnectionStatus.error);
     expect(platform.startCalls, 0);
     expect(controller.canSend, isFalse);
+    expect(controller.meshPermissionsGranted, isFalse);
+  });
+
+  test('un SOS sin salida queda persistido y se informa como en cola', () async {
+    platform.permissionsGranted = false;
+
+    final result = await controller.activateEmergency(
+      description: 'Ayuda',
+      locationPrecision: SosLocationPrecision.none,
+    );
+
+    expect(result, EmergencyActivationResult.queuedWithoutRoute);
+    expect(controller.emergencyDeliveries, hasLength(1));
+    expect(repository.emergencyOutbox, hasLength(1));
+    expect(controller.rescueMode, isFalse);
+  });
+
+  test('expone la causa que interrumpe una malla solicitada', () async {
+    final preferences = AppPreferences();
+    await preferences.initialize();
+    await preferences.setMeshDesiredActive(true);
+    final healthPlatform = _FakePlatform()
+      ..meshPermissionsGranted = false
+      ..ignoringBatteryOptimizations = false;
+    final healthController = MeshController(
+      platform: healthPlatform,
+      repository: _FakeRepository(),
+      preferences: preferences,
+    );
+    addTearDown(() {
+      healthController.dispose();
+      preferences.dispose();
+    });
+
+    await healthController.initialize();
+    expect(
+      healthController.meshInterruptionReason,
+      MeshInterruptionReason.permissionsRevoked,
+    );
+
+    healthPlatform.meshPermissionsGranted = true;
+    await healthController.refreshPowerStatus();
+    expect(
+      healthController.meshInterruptionReason,
+      MeshInterruptionReason.batteryRestricted,
+    );
+
+    healthPlatform.ignoringBatteryOptimizations = true;
+    await healthController.refreshPowerStatus();
+    healthPlatform.emit({'type': 'status', 'status': 'stopped'});
+    await pumpEvents();
+    expect(
+      healthController.meshInterruptionReason,
+      MeshInterruptionReason.unavailable,
+    );
   });
 
   test(

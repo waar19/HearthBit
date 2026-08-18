@@ -38,6 +38,7 @@ class EmergencyTransmission {
 class NativeRescueState {
   const NativeRescueState({
     required this.active,
+    this.available = true,
     this.description,
     this.startedAt,
     this.lastPingAt,
@@ -71,6 +72,7 @@ class NativeRescueState {
   }
 
   final bool active;
+  final bool available;
   final String? description;
   final DateTime? startedAt;
   final DateTime? lastPingAt;
@@ -174,7 +176,7 @@ class MeshPlatformService {
         await _methods.invokeMapMethod<Object?, Object?>('getRescueModeState'),
       );
     } catch (_) {
-      return const NativeRescueState(active: false);
+      return const NativeRescueState(active: false, available: false);
     }
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:record/record.dart';
 
 import '../controllers/mesh_controller.dart';
 import '../l10n/l10n.dart';
@@ -8,11 +9,13 @@ class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({
     required this.controller,
     required this.onFinished,
+    this.requestMicrophonePermission,
     super.key,
   });
 
   final MeshController controller;
   final Future<void> Function() onFinished;
+  final Future<bool> Function()? requestMicrophonePermission;
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -24,6 +27,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   var _page = 0;
   var _busy = false;
   var _prepared = false;
+  var _microphoneGranted = false;
 
   @override
   void dispose() {
@@ -64,17 +68,30 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
     if (!_prepared) {
       await widget.controller.ensureAlwaysLocation();
+      final microphoneGranted = await _requestMicrophonePermission();
       if (!widget.controller.ignoringBatteryOptimizations) {
         await widget.controller.requestDisableBatteryOptimizations();
       }
       if (!mounted) return;
       setState(() {
+        _microphoneGranted = microphoneGranted;
         _prepared = true;
         _busy = false;
       });
       return;
     }
     await widget.onFinished();
+  }
+
+  Future<bool> _requestMicrophonePermission() async {
+    final request = widget.requestMicrophonePermission;
+    if (request != null) return request();
+    final recorder = AudioRecorder();
+    try {
+      return await recorder.hasPermission();
+    } finally {
+      await recorder.dispose();
+    }
   }
 
   @override
@@ -137,7 +154,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             border: const OutlineInputBorder(),
                           ),
                         ),
-                        _PermissionChecklist(controller: widget.controller),
+                        _PermissionChecklist(
+                          controller: widget.controller,
+                          microphoneGranted: _microphoneGranted,
+                        ),
                       ],
                     ),
                   ),
@@ -207,9 +227,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 }
 
 class _PermissionChecklist extends StatelessWidget {
-  const _PermissionChecklist({required this.controller});
+  const _PermissionChecklist({
+    required this.controller,
+    required this.microphoneGranted,
+  });
 
   final MeshController controller;
+  final bool microphoneGranted;
 
   @override
   Widget build(BuildContext context) {
@@ -235,6 +259,13 @@ class _PermissionChecklist extends StatelessWidget {
           detail: controller.ignoringBatteryOptimizations
               ? context.l10n.adaptivePowerNormal
               : context.l10n.powerSaverAndroid,
+        ),
+        _PermissionStatus(
+          granted: microphoneGranted,
+          title: context.l10n.onboardingAllowMicrophone,
+          detail: microphoneGranted
+              ? context.l10n.onboardingMicrophoneReady
+              : context.l10n.onboardingMicrophoneRequired,
         ),
       ],
     );

@@ -116,13 +116,14 @@ class _EmergencyActionController extends MeshController {
   SosLocationPrecision? lastLocationPrecision;
 
   @override
-  Future<void> activateEmergency({
+  Future<EmergencyActivationResult> activateEmergency({
     String? description,
     SosLocationPrecision locationPrecision = SosLocationPrecision.approximate,
   }) async {
     emergencyActivations += 1;
     lastLocationPrecision = locationPrecision;
     await testPlatform.sendSos(content: description ?? 'real emergency');
+    return EmergencyActivationResult.sentToMesh;
   }
 }
 

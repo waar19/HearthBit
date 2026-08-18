@@ -420,7 +420,31 @@ class EmergencyScreen extends StatelessWidget {
     if (!context.mounted) return;
     final precision = await _chooseSosLocationPrecision(context);
     if (precision == null) return;
-    await controller.activateEmergency(locationPrecision: precision);
+    final result = await controller.activateEmergency(
+      locationPrecision: precision,
+    );
+    if (!context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          duration: result == EmergencyActivationResult.queuedWithoutRoute
+              ? const Duration(seconds: 8)
+              : const Duration(seconds: 4),
+          content: Text(
+            switch (result) {
+              EmergencyActivationResult.sentToMesh =>
+                context.l10n.sosSentToMesh,
+              EmergencyActivationResult.queuedWithoutRoute =>
+                context.l10n.sosQueuedWithoutRoute,
+              EmergencyActivationResult.failed =>
+                controller.lastError ??
+                    context.l10n.errorEmergencyMeshUnavailable,
+            },
+          ),
+        ),
+      );
   }
 
   Future<SosLocationPrecision?> _chooseSosLocationPrecision(

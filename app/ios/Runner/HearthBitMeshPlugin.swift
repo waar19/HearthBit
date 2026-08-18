@@ -866,6 +866,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         result([
           // iOS no tiene equivalente a Doze configurable por app.
           "ignoringBatteryOptimizations": true,
+          "meshPermissionsGranted": CBManager.authorization == .allowedAlways,
           "lowPowerMode": ProcessInfo.processInfo.isLowPowerModeEnabled,
           "backgroundLocation": locationAuthorization() == .authorizedAlways,
           "batteryLevel": batteryLevel,
