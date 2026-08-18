@@ -16,18 +16,24 @@ class RescueRosterController extends ChangeNotifier {
     RescueRosterRepository? repository,
     RescueRosterCodec? codec,
     Random? secureRandom,
+    DateTime Function()? now,
   }) : _platform = platform ?? MeshPlatformService(),
        _repository = repository ?? RescueRosterRepository(),
        _codec = codec ?? const RescueRosterCodec(),
-       _random = secureRandom ?? Random.secure();
+       _random = secureRandom ?? Random.secure(),
+       _now = now ?? DateTime.now;
+
+  static const Duration maximumFutureSkew = Duration(minutes: 5);
 
   final MeshController mesh;
   final MeshPlatformService _platform;
   final RescueRosterRepository _repository;
   final RescueRosterCodec _codec;
   final Random _random;
+  final DateTime Function() _now;
   RescueTeamRoster? _activeRoster;
   bool _disposed = false;
+  bool loading = true;
 
   RescueTeamRoster? get activeRoster => _activeRoster;
   List<RescueRosterMember> get members =>
@@ -42,9 +48,13 @@ class RescueRosterController extends ChangeNotifier {
   }
 
   Future<void> initialize() async {
-    _activeRoster = await _repository.loadActiveRoster();
-    await _platform.importRescueRosterPins(members);
-    if (!_disposed) notifyListeners();
+    try {
+      _activeRoster = await _repository.loadActiveRoster();
+      await _platform.importRescueRosterPins(members);
+    } finally {
+      loading = false;
+      if (!_disposed) notifyListeners();
+    }
   }
 
   Future<RescueTeamRoster> createRoster({
@@ -65,7 +75,7 @@ class RescueRosterController extends ChangeNotifier {
     final unsigned = RescueTeamRoster(
       teamId: _randomHex(16),
       name: teamName.trim(),
-      createdAt: DateTime.now(),
+      createdAt: _now().toUtc(),
       leaderPeerId: mesh.peerId.toLowerCase(),
       members: [
         RescueRosterMember(
@@ -93,6 +103,11 @@ class RescueRosterController extends ChangeNotifier {
             signature: signature,
           ),
     );
+    if (roster.createdAt.toUtc().isAfter(
+      _now().toUtc().add(maximumFutureSkew),
+    )) {
+      throw const FormatException('Rescue roster timestamp is too far ahead');
+    }
     await _activate(roster);
     return roster;
   }
@@ -153,12 +168,21 @@ class RescueRosterController extends ChangeNotifier {
     return null;
   }
 
+  RescueRosterMember? memberByPeerId(String peerId) {
+    final normalized = peerId.trim().toLowerCase();
+    for (final member in members) {
+      if (member.peerId == normalized) return member;
+    }
+    return null;
+  }
+
   Future<void> clearRoster() async {
     final previous = _activeRoster;
     await _platform.importRescueRosterPins(const []);
     try {
       await _repository.clear();
       _activeRoster = null;
+      loading = false;
       if (!_disposed) notifyListeners();
     } catch (_) {
       await _platform.importRescueRosterPins(
@@ -190,10 +214,16 @@ class RescueRosterController extends ChangeNotifier {
     if (roster == null || !canEdit) {
       throw StateError('Only the roster leader can change its members');
     }
+    final maximumSeen = await _repository.maximumCreatedAt(roster.teamId);
+    final now = _now().toUtc().millisecondsSinceEpoch;
+    final createdAt = DateTime.fromMillisecondsSinceEpoch(
+      now > (maximumSeen ?? 0) ? now : maximumSeen! + 1,
+      isUtc: true,
+    );
     final unsigned = RescueTeamRoster(
       teamId: roster.teamId,
       name: roster.name,
-      createdAt: DateTime.now(),
+      createdAt: createdAt,
       leaderPeerId: roster.leaderPeerId,
       members: updatedMembers,
       signature: Uint8List(0),

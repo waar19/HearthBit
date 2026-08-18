@@ -25,7 +25,7 @@ class RescueRosterRepository {
         path.join(await factory.getDatabasesPath(), 'hearth_bit_rescue.db');
     return _database ??= await SecureDatabase.open(
       databasePath: resolvedPath,
-      version: 3,
+      version: RescueDatabaseSchema.version,
       testFactory: databaseFactory,
       onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
       onCreate: (database, version) async {
@@ -39,6 +39,9 @@ class RescueRosterRepository {
         }
         if (oldVersion < 3) {
           await RescueDatabaseSchema.createSweptZoneTables(database);
+        }
+        if (oldVersion < 4) {
+          await RescueDatabaseSchema.migrateToV4(database);
         }
       },
     );
@@ -104,11 +107,23 @@ class RescueRosterRepository {
     }
     final database = await _db;
     await database.transaction((transaction) async {
+      final versions = await transaction.query(
+        'rescue_roster_versions',
+        columns: ['max_created_at'],
+        where: 'team_id = ?',
+        whereArgs: [roster.teamId],
+        limit: 1,
+      );
+      final createdAt = roster.createdAt.toUtc().millisecondsSinceEpoch;
+      if (versions.isNotEmpty &&
+          createdAt <= (versions.single['max_created_at']! as num).toInt()) {
+        throw StateError('Rescue roster is not newer than the trusted version');
+      }
       await transaction.delete('rescue_teams');
       await transaction.insert('rescue_teams', {
         'team_id': roster.teamId,
         'name': roster.name,
-        'created_at': roster.createdAt.millisecondsSinceEpoch,
+        'created_at': createdAt,
         'leader_peer_id': roster.leaderPeerId,
         'signature': roster.signature,
         'active': 1,
@@ -124,7 +139,24 @@ class RescueRosterRepository {
           'signing_public_key': member.signingPublicKey,
         });
       }
+      await transaction.insert('rescue_roster_versions', {
+        'team_id': roster.teamId,
+        'max_created_at': createdAt,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     });
+  }
+
+  Future<int?> maximumCreatedAt(String teamId) async {
+    final rows = await (await _db).query(
+      'rescue_roster_versions',
+      columns: ['max_created_at'],
+      where: 'team_id = ?',
+      whereArgs: [teamId],
+      limit: 1,
+    );
+    return rows.isEmpty
+        ? null
+        : (rows.single['max_created_at']! as num).toInt();
   }
 
   Future<void> clear() async {

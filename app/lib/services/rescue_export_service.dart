@@ -23,8 +23,14 @@ enum RescueExportFormat {
 }
 
 abstract final class RescueExportPolicy {
-  static Iterable<RescueCase> operationalCases(Iterable<RescueCase> cases) =>
-      cases.where((rescueCase) => rescueCase.state != RescueCaseState.closed);
+  static Iterable<RescueCase> operationalCases(
+    Iterable<RescueCase> cases, {
+    required String teamId,
+  }) => cases.where(
+    (rescueCase) =>
+        rescueCase.teamId == teamId &&
+        rescueCase.state != RescueCaseState.closed,
+  );
 }
 
 enum RescueIncidentKind { sos, checkIn }
@@ -237,12 +243,16 @@ class RescueCsv {
 }
 
 abstract final class RescueOperationalCsv {
-  static String build(Iterable<RescueCase> cases) {
-    final sorted = cases.toList(growable: false)
-      ..sort((first, second) => first.caseHash.compareTo(second.caseHash));
+  static String build(Iterable<RescueCase> cases, {required String teamId}) {
+    final sorted =
+        cases
+            .where((rescueCase) => rescueCase.teamId == teamId)
+            .toList(growable: false)
+          ..sort((first, second) => first.caseHash.compareTo(second.caseHash));
     final rows = <List<String>>[
       [
         'case_hash',
+        'team_id',
         'state',
         'priority',
         'victim',
@@ -256,6 +266,7 @@ abstract final class RescueOperationalCsv {
       ...sorted.map(
         (rescueCase) => [
           rescueCase.caseHash,
+          rescueCase.teamId,
           rescueCase.state.name,
           RescueCaseClusterer.priorityForTriage(rescueCase.triage).name,
           rescueCase.victim,
@@ -286,13 +297,18 @@ abstract final class RescueGeoJson {
   static const int version = 1;
 
   static String build({
+    required String teamId,
     required Iterable<RescueCase> cases,
     required Iterable<SweptZone> zones,
   }) {
-    final sortedCases = cases.toList(growable: false)
-      ..sort((first, second) => first.caseHash.compareTo(second.caseHash));
-    final sortedZones = zones.toList(growable: false)
-      ..sort((first, second) => first.zoneId.compareTo(second.zoneId));
+    final sortedCases =
+        cases
+            .where((rescueCase) => rescueCase.teamId == teamId)
+            .toList(growable: false)
+          ..sort((first, second) => first.caseHash.compareTo(second.caseHash));
+    final sortedZones =
+        zones.where((zone) => zone.teamId == teamId).toList(growable: false)
+          ..sort((first, second) => first.zoneId.compareTo(second.zoneId));
     final features = <Map<String, Object?>>[
       ...sortedCases.map(_caseFeature),
       ...sortedZones.map(_zoneFeature).whereType<Map<String, Object?>>(),
@@ -322,6 +338,7 @@ abstract final class RescueGeoJson {
         'version': version,
         'featureType': 'rescueCase',
         'caseHash': rescueCase.caseHash,
+        'teamId': rescueCase.teamId,
         'state': rescueCase.state.name,
         'priority': RescueCaseClusterer.priorityForTriage(
           rescueCase.triage,
@@ -411,6 +428,7 @@ class RescueExportService {
 
   static Future<ShareResult> shareOperational({
     required RescueExportFormat format,
+    required String teamId,
     required Iterable<RescueCase> cases,
     required Iterable<SweptZone> zones,
     required RenderBox? anchor,
@@ -425,8 +443,12 @@ class RescueExportService {
       p.join(directory.path, 'hearthbit-rescue-$timestamp.${format.extension}'),
     );
     final content = switch (format) {
-      RescueExportFormat.csv => RescueOperationalCsv.build(cases),
+      RescueExportFormat.csv => RescueOperationalCsv.build(
+        cases,
+        teamId: teamId,
+      ),
       RescueExportFormat.geoJson => RescueGeoJson.build(
+        teamId: teamId,
         cases: cases,
         zones: zones,
       ),

@@ -30,7 +30,7 @@ class SweptZoneRepository {
         path.join(await factory.getDatabasesPath(), 'hearth_bit_rescue.db');
     return _database ??= await SecureDatabase.open(
       databasePath: resolvedPath,
-      version: 3,
+      version: RescueDatabaseSchema.version,
       testFactory: databaseFactory,
       onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
       onCreate: (database, version) async {
@@ -44,6 +44,9 @@ class SweptZoneRepository {
         }
         if (oldVersion < 3) {
           await RescueDatabaseSchema.createSweptZoneTables(database);
+        }
+        if (oldVersion < 4) {
+          await RescueDatabaseSchema.migrateToV4(database);
         }
       },
     );

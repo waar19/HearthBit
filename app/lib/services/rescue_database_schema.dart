@@ -1,6 +1,8 @@
 import 'package:sqflite_sqlcipher/sqflite.dart';
 
 abstract final class RescueDatabaseSchema {
+  static const int version = 4;
+
   static Future<void> createRosterTables(DatabaseExecutor database) async {
     await database.execute('''
       CREATE TABLE IF NOT EXISTS rescue_teams (
@@ -34,12 +36,20 @@ abstract final class RescueDatabaseSchema {
       'CREATE INDEX IF NOT EXISTS rescue_members_peer_idx '
       'ON rescue_members(peer_id)',
     );
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS rescue_roster_versions (
+        team_id TEXT PRIMARY KEY,
+        max_created_at INTEGER NOT NULL
+      )
+    ''');
   }
 
   static Future<void> createCaseTables(DatabaseExecutor database) async {
     await database.execute('''
       CREATE TABLE IF NOT EXISTS rescue_cases (
-        case_hash TEXT PRIMARY KEY,
+        team_id TEXT NOT NULL,
+        case_hash TEXT NOT NULL,
+        canonical_hash TEXT,
         victim_peer_id TEXT NOT NULL,
         victim TEXT NOT NULL,
         message TEXT NOT NULL,
@@ -50,28 +60,32 @@ abstract final class RescueDatabaseSchema {
         assignee_peer_id TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
-        last_actor_peer_id TEXT NOT NULL
+        last_actor_peer_id TEXT NOT NULL,
+        PRIMARY KEY(team_id, case_hash)
       )
     ''');
     await database.execute(
       'CREATE INDEX IF NOT EXISTS rescue_cases_priority_idx '
-      'ON rescue_cases(state, updated_at)',
+      'ON rescue_cases(team_id, state, updated_at)',
     );
     await database.execute('''
       CREATE TABLE IF NOT EXISTS rescue_case_events (
         event_id TEXT PRIMARY KEY,
+        team_id TEXT NOT NULL,
         case_hash TEXT NOT NULL,
+        previous_state TEXT NOT NULL,
         state TEXT NOT NULL,
         actor_peer_id TEXT NOT NULL,
         assignee_peer_id TEXT,
         created_at INTEGER NOT NULL,
         applied INTEGER NOT NULL CHECK(applied IN (0, 1)),
-        FOREIGN KEY(case_hash) REFERENCES rescue_cases(case_hash) ON DELETE CASCADE
+        FOREIGN KEY(team_id, case_hash)
+          REFERENCES rescue_cases(team_id, case_hash) ON DELETE CASCADE
       )
     ''');
     await database.execute(
       'CREATE INDEX IF NOT EXISTS rescue_case_events_case_idx '
-      'ON rescue_case_events(case_hash, created_at)',
+      'ON rescue_case_events(team_id, case_hash, created_at)',
     );
   }
 
@@ -93,5 +107,25 @@ abstract final class RescueDatabaseSchema {
       'CREATE INDEX IF NOT EXISTS swept_zones_team_time_idx '
       'ON swept_zones(team_id, ended_at DESC)',
     );
+  }
+
+  /// Los casos v3 no tenían equipo y no pueden migrarse sin mezclar incidentes.
+  /// Se eliminan de forma explícita; el roster y sus pines sí se conservan.
+  static Future<void> migrateToV4(DatabaseExecutor database) async {
+    await database.execute('''
+      CREATE TABLE IF NOT EXISTS rescue_roster_versions (
+        team_id TEXT PRIMARY KEY,
+        max_created_at INTEGER NOT NULL
+      )
+    ''');
+    await database.execute('''
+      INSERT INTO rescue_roster_versions(team_id, max_created_at)
+      SELECT team_id, MAX(created_at) FROM rescue_teams GROUP BY team_id
+      ON CONFLICT(team_id) DO UPDATE SET max_created_at =
+        MAX(max_created_at, excluded.max_created_at)
+    ''');
+    await database.execute('DROP TABLE IF EXISTS rescue_case_events');
+    await database.execute('DROP TABLE IF EXISTS rescue_cases');
+    await createCaseTables(database);
   }
 }

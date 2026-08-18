@@ -46,6 +46,30 @@ void main() {
     await repository.clear();
     expect(await repository.loadActiveRoster(), isNull);
   });
+
+  test(
+    'rechaza replay del mismo equipo tras remover, limpiar y reiniciar',
+    () async {
+      final original = _sameTeamRoster(createdAt: 1000, includeResponder: true);
+      final removed = _sameTeamRoster(createdAt: 2000, includeResponder: false);
+      await repository.saveActiveRoster(original);
+      await repository.saveActiveRoster(removed);
+
+      await expectLater(
+        repository.saveActiveRoster(original),
+        throwsStateError,
+      );
+      await repository.clear();
+      await repository.close();
+      repository = RescueRosterRepository(
+        databaseFactory: databaseFactoryFfi,
+        databasePath: databasePath,
+      );
+
+      await expectLater(repository.saveActiveRoster(removed), throwsStateError);
+      expect(await repository.loadActiveRoster(), isNull);
+    },
+  );
 }
 
 RescueTeamRoster _roster(String name, int seed) {
@@ -66,5 +90,34 @@ RescueTeamRoster _roster(String name, int seed) {
       ),
     ],
     signature: Uint8List.fromList(List.filled(64, seed)),
+  );
+}
+
+RescueTeamRoster _sameTeamRoster({
+  required int createdAt,
+  required bool includeResponder,
+}) {
+  final leader = RescueRosterMember(
+    peerId: '0011223344556677',
+    callsign: 'Líder',
+    role: RescueRosterRole.leader,
+    signingPublicKey: Uint8List.fromList(List<int>.filled(32, 1)),
+  );
+  return RescueTeamRoster(
+    teamId: '0' * 32,
+    name: 'Equipo',
+    createdAt: DateTime.fromMillisecondsSinceEpoch(createdAt),
+    leaderPeerId: leader.peerId,
+    members: [
+      leader,
+      if (includeResponder)
+        RescueRosterMember(
+          peerId: '8899aabbccddeeff',
+          callsign: 'Bravo',
+          role: RescueRosterRole.responder,
+          signingPublicKey: Uint8List.fromList(List<int>.filled(32, 2)),
+        ),
+    ],
+    signature: Uint8List.fromList(List<int>.filled(64, createdAt ~/ 1000)),
   );
 }

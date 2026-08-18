@@ -5,10 +5,13 @@ void main() {
   const hash =
       '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
   const actor = '0011223344556677';
+  const team = '00112233445566778899aabbccddeeff';
 
   test('codifica y decodifica una actualización compacta versionada', () {
     final update = RescueCaseUpdate(
+      teamId: team,
       caseHash: hash,
+      previousState: RescueCaseState.newCase,
       state: RescueCaseState.assigned,
       actorPeerId: actor,
       assigneePeerId: actor,
@@ -21,14 +24,14 @@ void main() {
     final encoded = RescueCaseUpdateCodec.encode(update);
     final decoded = RescueCaseUpdateCodec.tryDecode(encoded);
 
-    expect(encoded, '[HB-CASE|1|$hash|A|$actor|$actor|1700000000000]');
+    expect(encoded, '[HB-CASE|2|$team|$hash|N|A|$actor|$actor|1700000000000]');
     expect(decoded?.eventId, update.eventId);
   });
 
   test('rechaza versión, hash, actor, estado y timestamp malformados', () {
-    final valid = '[HB-CASE|1|$hash|A|$actor|$actor|1700000000000]';
+    final valid = '[HB-CASE|2|$team|$hash|N|A|$actor|$actor|1700000000000]';
     expect(
-      RescueCaseUpdateCodec.tryDecode(valid.replaceFirst('|1|', '|2|')),
+      RescueCaseUpdateCodec.tryDecode(valid.replaceFirst('|2|', '|1|')),
       isNull,
     );
     expect(
@@ -51,7 +54,7 @@ void main() {
     );
     expect(
       RescueCaseUpdateCodec.tryDecode(
-        '[HB-CASE|1|$hash|N|$actor|$actor|1700000000000]',
+        '[HB-CASE|2|$team|$hash|N|N|$actor|$actor|1700000000000]',
       ),
       isNull,
     );

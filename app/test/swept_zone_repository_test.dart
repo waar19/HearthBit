@@ -36,7 +36,7 @@ void main() {
     await temporaryDirectory.delete(recursive: true);
   });
 
-  test('migra v2 a v3 y conserva las tablas operativas', () async {
+  test('migra v2 a v4 y conserva las tablas operativas', () async {
     final legacy = await databaseFactoryFfi.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
@@ -59,7 +59,7 @@ void main() {
     expect(tables.map((row) => row['name']), contains('swept_zones'));
     expect(
       (await migrated.rawQuery('PRAGMA user_version')).single['user_version'],
-      3,
+      4,
     );
     await migrated.close();
   });

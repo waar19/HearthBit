@@ -12,6 +12,7 @@ import 'package:hearth_bit/services/rescue_case_repository.dart';
 
 const _hash =
     '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+const _team = '00000000000000000000000000000000';
 const _victim = '8899aabbccddeeff';
 const _local = '0011223344556677';
 const _remoteA = '1111222233334444';
@@ -21,6 +22,7 @@ class _Mesh extends MeshController {
   final List<MeshMessage> storedMessages = [];
   final List<MeshPeer> livePeers = [];
   final List<({String content, String? channel})> sent = [];
+  Future<void> Function()? beforeSendReturns;
 
   @override
   List<MeshMessage> get messages => List.unmodifiable(storedMessages);
@@ -31,6 +33,7 @@ class _Mesh extends MeshController {
   @override
   Future<String?> sendPublic(String content, {String? channel}) async {
     sent.add((content: content, channel: channel));
+    await beforeSendReturns?.call();
     return 'sent-${sent.length}';
   }
 
@@ -43,13 +46,14 @@ class _Mesh extends MeshController {
 class _Roster extends RescueRosterController {
   _Roster({required super.mesh, required this.roster});
 
-  final RescueTeamRoster roster;
+  RescueTeamRoster? roster;
 
   @override
-  RescueTeamRoster get activeRoster => roster;
+  RescueTeamRoster? get activeRoster => roster;
 
   @override
-  List<RescueRosterMember> get members => roster.members;
+  List<RescueRosterMember> get members =>
+      roster?.members ?? const <RescueRosterMember>[];
 
   @override
   RescueRosterMember? verifiedMember({
@@ -81,7 +85,8 @@ class _Repository extends RescueCaseRepository {
   final Set<String> staged = {};
 
   @override
-  Future<List<RescueCase>> loadCases() async => stored.values.toList();
+  Future<List<RescueCase>> loadCases({required String teamId}) async =>
+      stored.values.where((item) => item.teamId == teamId).toList();
 
   @override
   Future<void> discardStaleLocalUpdates() async => staged.clear();
@@ -94,13 +99,11 @@ class _Repository extends RescueCaseRepository {
   }
 
   @override
-  Future<bool> applyIncomingUpdate({
-    required RescueCase rescueCase,
-    required RescueCaseUpdate update,
-  }) async {
-    if (!events.add(update.eventId)) return false;
-    stored[rescueCase.caseHash] = rescueCase;
-    return true;
+  Future<RescueCase?> applyIncomingUpdate(RescueCaseUpdate update) async {
+    if (!events.add(update.eventId)) return null;
+    final next = RescueCaseTransition.resolve(stored[update.caseHash]!, update);
+    if (next != null) stored[next.caseHash] = next;
+    return next;
   }
 
   @override
@@ -108,13 +111,12 @@ class _Repository extends RescueCaseRepository {
       staged.add(update.eventId);
 
   @override
-  Future<void> commitLocalUpdate({
-    required RescueCase rescueCase,
-    required RescueCaseUpdate update,
-  }) async {
+  Future<RescueCase> commitLocalUpdate(RescueCaseUpdate update) async {
     expect(staged.remove(update.eventId), isTrue);
     events.add(update.eventId);
-    stored[rescueCase.caseHash] = rescueCase;
+    final next = RescueCaseTransition.resolve(stored[update.caseHash]!, update);
+    if (next != null) stored[next.caseHash] = next;
+    return next ?? stored[update.caseHash]!;
   }
 
   @override
@@ -145,7 +147,7 @@ void main() {
     roster = _Roster(
       mesh: mesh,
       roster: RescueTeamRoster(
-        teamId: '0' * 32,
+        teamId: _team,
         name: 'Team',
         createdAt: DateTime.fromMillisecondsSinceEpoch(1),
         leaderPeerId: _local,
@@ -172,16 +174,39 @@ void main() {
     mesh.dispose();
   });
 
-  test('deduplica retransmisiones SOS por canonicalHash', () async {
-    mesh.emit(_sos('sos-1'));
-    mesh.emit(_sos('sos-2'));
-    await _pump();
+  test(
+    'identidad estable ignora canonical mutable y separa remitentes',
+    () async {
+      final first = RescueCaseController.stableCaseHash(
+        senderPeerId: _victim,
+        messageId: 'interop-id',
+      );
+      final retry = RescueCaseController.stableCaseHash(
+        senderPeerId: _victim,
+        messageId: 'interop-id',
+      );
+      final other = RescueCaseController.stableCaseHash(
+        senderPeerId: _remoteA,
+        messageId: 'interop-id',
+      );
+      final anotherMessage = RescueCaseController.stableCaseHash(
+        senderPeerId: _victim,
+        messageId: 'other-id',
+      );
+      expect(first, retry);
+      expect(first, isNot(other));
+      expect(first, isNot(anotherMessage));
 
-    expect(controller.cases, hasLength(1));
-    expect(controller.cases.single.caseHash, _hash);
-  });
+      mesh.emit(_sos('interop-id', canonicalHash: _hash));
+      await _pump();
 
-  test('rechaza actor fuera del roster y clave viva distinta', () async {
+      expect(controller.cases, hasLength(1));
+      expect(controller.cases.single.caseHash, first);
+      expect(controller.cases.single.canonicalHash, _hash);
+    },
+  );
+
+  test('autoriza por roster aunque el peer ya no esté visible', () async {
     mesh.emit(_sos('sos'));
     mesh.livePeers.add(_peer(_remoteA, keyB));
     mesh.emit(_updateMessage(_remoteA, keyA, 2000));
@@ -197,8 +222,9 @@ void main() {
     );
     await _pump();
 
-    expect(controller.cases.single.state, RescueCaseState.newCase);
-    expect(repository.events, isEmpty);
+    expect(controller.cases.single.state, RescueCaseState.assigned);
+    expect(controller.cases.single.assigneePeerId, _remoteA);
+    expect(repository.events, hasLength(1));
   });
 
   test('resuelve concurrencia y nunca regresa atendido', () async {
@@ -210,23 +236,38 @@ void main() {
     mesh.emit(_updateMessage(_remoteB, keyB, 2000));
     await _pump();
 
-    expect(controller.cases.single.assigneePeerId, _remoteB);
+    expect(controller.cases.single.assigneePeerId, _remoteA);
 
     mesh.emit(
-      _updateMessage(_remoteB, keyB, 3000, state: RescueCaseState.attended),
+      _updateMessage(
+        _remoteA,
+        keyA,
+        3000,
+        previousState: RescueCaseState.assigned,
+        state: RescueCaseState.enRoute,
+      ),
+    );
+    mesh.emit(
+      _updateMessage(
+        _remoteA,
+        keyA,
+        3500,
+        previousState: RescueCaseState.enRoute,
+        state: RescueCaseState.attended,
+      ),
     );
     mesh.emit(_updateMessage(_remoteA, keyA, 4000));
     await _pump();
 
     expect(controller.cases.single.state, RescueCaseState.attended);
-    expect(controller.cases.single.assigneePeerId, _remoteB);
+    expect(controller.cases.single.assigneePeerId, _remoteA);
   });
 
   test('asignarme persiste y usa el canal MESSAGE firmado normal', () async {
     mesh.emit(_sos('sos'));
     await _pump();
 
-    await controller.assignToMe(_hash);
+    await controller.assignToMe(controller.cases.single.caseHash);
 
     expect(controller.cases.single.state, RescueCaseState.assigned);
     expect(controller.cases.single.assigneePeerId, _local);
@@ -235,6 +276,166 @@ void main() {
       RescueCaseUpdateCodec.tryDecode(mesh.sent.single.content),
       isNotNull,
     );
+  });
+
+  test('rechaza saltos, avance ajeno y cierre ajeno', () async {
+    mesh.emit(_sos('sos'));
+    mesh.emit(_updateMessage(_remoteA, keyA, 2000));
+    await _pump();
+
+    mesh.emit(
+      _updateMessage(
+        _remoteA,
+        keyA,
+        3000,
+        previousState: RescueCaseState.enRoute,
+        state: RescueCaseState.attended,
+      ),
+    );
+    mesh.emit(
+      _updateMessage(
+        _remoteB,
+        keyB,
+        3100,
+        previousState: RescueCaseState.assigned,
+        state: RescueCaseState.enRoute,
+        assignee: _remoteA,
+      ),
+    );
+    await _pump();
+    expect(controller.cases.single.state, RescueCaseState.assigned);
+
+    mesh.emit(
+      _updateMessage(
+        _remoteA,
+        keyA,
+        4000,
+        previousState: RescueCaseState.assigned,
+        state: RescueCaseState.enRoute,
+      ),
+    );
+    mesh.emit(
+      _updateMessage(
+        _remoteA,
+        keyA,
+        5000,
+        previousState: RescueCaseState.enRoute,
+        state: RescueCaseState.attended,
+      ),
+    );
+    await _pump();
+    mesh.emit(
+      _updateMessage(
+        _remoteB,
+        keyB,
+        6000,
+        previousState: RescueCaseState.attended,
+        state: RescueCaseState.closed,
+        assignee: _remoteA,
+      ),
+    );
+    await _pump();
+    expect(controller.cases.single.state, RescueCaseState.attended);
+  });
+
+  test('ignora updates privados, externos y de otro canal', () async {
+    mesh.emit(_sos('sos'));
+    mesh.emit(_updateMessage(_remoteA, keyA, 2000, isPrivate: true));
+    mesh.emit(_updateMessage(_remoteA, keyA, 2100, external: true));
+    mesh.emit(_updateMessage(_remoteA, keyA, 2200, channel: 'other'));
+    await _pump();
+
+    expect(controller.cases.single.state, RescueCaseState.newCase);
+    expect(repository.events, isEmpty);
+  });
+
+  test('rechaza updates anteriores al caso o demasiado futuros', () async {
+    mesh.emit(_sos('sos'));
+    mesh.emit(_updateMessage(_remoteA, keyA, 500));
+    mesh.emit(
+      _updateMessage(
+        _remoteA,
+        keyA,
+        DateTime.now()
+            .toUtc()
+            .add(const Duration(minutes: 6))
+            .millisecondsSinceEpoch,
+      ),
+    );
+    await _pump();
+
+    expect(controller.cases.single.state, RescueCaseState.newCase);
+  });
+
+  test('commit local no pisa un avance remoto intercalado', () async {
+    mesh.emit(_sos('sos'));
+    await _pump();
+    final caseHash = controller.cases.single.caseHash;
+    mesh.beforeSendReturns = () async {
+      final current = repository.stored[caseHash]!;
+      repository.stored[caseHash] = current.copyWith(
+        state: RescueCaseState.enRoute,
+        assigneePeerId: _remoteA,
+        updatedAt: DateTime.fromMillisecondsSinceEpoch(3000),
+        lastActorPeerId: _remoteA,
+      );
+    };
+
+    await controller.assignToMe(caseHash);
+
+    expect(controller.cases.single.state, RescueCaseState.enRoute);
+    expect(controller.cases.single.assigneePeerId, _remoteA);
+  });
+
+  test(
+    'cambiar de equipo oculta casos y carga solo el equipo activo',
+    () async {
+      mesh.emit(_sos('sos'));
+      await _pump();
+      expect(controller.cases, hasLength(1));
+
+      roster.roster = RescueTeamRoster(
+        teamId: 'f' * 32,
+        name: 'Other',
+        createdAt: DateTime.fromMillisecondsSinceEpoch(2),
+        leaderPeerId: _local,
+        members: [_member(_local, localKey, RescueRosterRole.leader)],
+        signature: Uint8List.fromList(List<int>.filled(64, 2)),
+      );
+      roster.notifyListeners();
+      await _pump();
+
+      expect(controller.cases, isEmpty);
+    },
+  );
+
+  test('reprocesa SOS cuando el roster termina de inicializar', () async {
+    final active = roster.roster;
+    roster.roster = null;
+    roster.loading = true;
+    roster.notifyListeners();
+    await _pump();
+    mesh.emit(_sos('late-roster'));
+    await _pump();
+    expect(controller.cases, isEmpty);
+
+    roster.roster = active;
+    roster.loading = false;
+    roster.notifyListeners();
+    await _pump();
+
+    expect(controller.cases, hasLength(1));
+  });
+
+  test('reprocesa update que llegó antes de su SOS', () async {
+    mesh.emit(_updateMessage(_remoteA, keyA, 2000));
+    await _pump();
+    expect(controller.cases, isEmpty);
+
+    mesh.emit(_sos('sos'));
+    await _pump();
+
+    expect(controller.cases.single.state, RescueCaseState.assigned);
   });
 }
 
@@ -257,7 +458,7 @@ MeshPeer _peer(String peerId, Uint8List key) => MeshPeer(
   signingPublicKey: key,
 );
 
-MeshMessage _sos(String id) => MeshMessage(
+MeshMessage _sos(String id, {String canonicalHash = _hash}) => MeshMessage(
   id: id,
   sender: 'Victim',
   content: 'SOS|Help|4.7|-74.1',
@@ -266,20 +467,30 @@ MeshMessage _sos(String id) => MeshMessage(
   isMine: false,
   timestamp: DateTime.fromMillisecondsSinceEpoch(1000),
   channel: 'sos',
-  canonicalHash: _hash,
+  canonicalHash: canonicalHash,
 );
 
 MeshMessage _updateMessage(
   String actor,
   Uint8List key,
   int timestamp, {
+  RescueCaseState previousState = RescueCaseState.newCase,
   RescueCaseState state = RescueCaseState.assigned,
+  String? assignee,
+  bool isPrivate = false,
+  bool external = false,
+  String channel = RescueCaseController.channel,
 }) {
   final update = RescueCaseUpdate(
-    caseHash: _hash,
+    teamId: _team,
+    caseHash: RescueCaseController.stableCaseHash(
+      senderPeerId: _victim,
+      messageId: 'sos',
+    ),
+    previousState: previousState,
     state: state,
     actorPeerId: actor,
-    assigneePeerId: actor,
+    assigneePeerId: assignee ?? actor,
     timestamp: DateTime.fromMillisecondsSinceEpoch(timestamp, isUtc: true),
   );
   return MeshMessage(
@@ -287,10 +498,11 @@ MeshMessage _updateMessage(
     sender: actor.substring(0, 4),
     content: RescueCaseUpdateCodec.encode(update),
     senderPeerId: actor,
-    isPrivate: false,
+    isPrivate: isPrivate,
     isMine: false,
     timestamp: update.timestamp,
-    channel: RescueCaseController.channel,
+    channel: channel,
+    external: external,
   );
 }
 

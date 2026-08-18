@@ -188,10 +188,12 @@ void main() {
     );
 
     final encoded = RescueGeoJson.build(
+      teamId: _repeat('2', 32),
       cases: [second, first],
       zones: [invalidZone, validZone],
     );
     final repeated = RescueGeoJson.build(
+      teamId: _repeat('2', 32),
       cases: [first, second],
       zones: [validZone, invalidZone],
     );
@@ -248,9 +250,13 @@ void main() {
       assigneePeerId: active.assigneePeerId,
     );
 
-    expect(RescueExportPolicy.operationalCases([closed, active]), [
-      same(active),
-    ]);
+    expect(
+      RescueExportPolicy.operationalCases([
+        closed,
+        active,
+      ], teamId: active.teamId),
+      [same(active)],
+    );
   });
 }
 
@@ -260,6 +266,7 @@ RescueCase _case({
   required double longitude,
   required DateTime now,
 }) => RescueCase(
+  teamId: _repeat('2', 32),
   caseHash: hash,
   victimPeerId: _repeat('0', 16),
   victim: 'Víctima',

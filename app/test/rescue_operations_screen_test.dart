@@ -60,17 +60,16 @@ class _UiRepository extends RescueCaseRepository {
   Future<void> discardStaleLocalUpdates() async {}
 
   @override
-  Future<List<RescueCase>> loadCases() async => [rescueCase];
+  Future<List<RescueCase>> loadCases({required String teamId}) async =>
+      rescueCase.teamId == teamId ? [rescueCase] : [];
 
   @override
   Future<bool> stageLocalUpdate(RescueCaseUpdate update) async => true;
 
   @override
-  Future<void> commitLocalUpdate({
-    required RescueCase rescueCase,
-    required RescueCaseUpdate update,
-  }) async {
-    this.rescueCase = rescueCase;
+  Future<RescueCase> commitLocalUpdate(RescueCaseUpdate update) async {
+    rescueCase = RescueCaseTransition.resolve(rescueCase, update)!;
+    return rescueCase;
   }
 
   @override
@@ -97,6 +96,7 @@ void main() {
     );
     final repository = _UiRepository(
       RescueCase(
+        teamId: '0' * 32,
         caseHash: _hash,
         victimPeerId: '8899aabbccddeeff',
         victim: 'Victim',

@@ -309,15 +309,21 @@ final class IOSPeerIdentityPinStore {
         normalized == value.peerID,
         normalized.range(of: "^[0-9a-f]{16}$", options: .regularExpression) != nil,
         value.signingPublicKey.count == 32,
-        value.signingPublicKey.contains(where: { $0 != 0 }),
-        replacement[normalized] == nil,
-        signingKeys.insert(value.signingPublicKey).inserted,
-        pins[normalized].map({
-          $0.retired != true && $0.signingPublicKey == value.signingPublicKey
-        }) ?? true
+        value.signingPublicKey.contains(where: { $0 != 0 })
       else {
         throw IOSMeshError.invalidPayload
       }
+      // Una rotación autorizada retira la identidad del roster persistido.
+      // Ignorar aquí ese miembro mantiene el arranque disponible, pero la
+      // verificación nativa queda cerrada hasta importar un roster actualizado.
+      if let identity = pins[normalized],
+         identity.retired == true || identity.signingPublicKey != value.signingPublicKey {
+        continue
+      }
+      guard
+        replacement[normalized] == nil,
+        signingKeys.insert(value.signingPublicKey).inserted
+      else { throw IOSMeshError.invalidPayload }
       replacement[normalized] = value.signingPublicKey
     }
     let previous = rescueRosterPins
@@ -375,14 +381,19 @@ final class IOSPeerIdentityPinStore {
     )
     var retiredPin = oldPin
     retiredPin.retired = true
+    let previousRosterPins = rescueRosterPins
     pins[oldID] = retiredPin
     pins[newID] = replacement
+    // El certificado de rotación vincula identidades, pero no autoriza cambiar
+    // un roster de equipo firmado. Se retira el pin antiguo y se exige re-roster.
+    rescueRosterPins.removeValue(forKey: oldID)
     do {
       try persist()
       return replacement
     } catch {
       pins.removeValue(forKey: newID)
       pins[oldID] = oldPin
+      rescueRosterPins = previousRosterPins
       failure = error
       throw error
     }
@@ -488,12 +499,18 @@ final class IOSPeerIdentityPinStore {
         normalized.range(of: "^[0-9a-f]{16}$", options: .regularExpression) != nil,
         pin.signingPublicKey.count == 32,
         pin.signingPublicKey.contains(where: { $0 != 0 }),
-        output[normalized] == nil,
-        signingKeys.insert(pin.signingPublicKey).inserted,
-        pins[normalized].map({
-          $0.retired != true && $0.signingPublicKey == pin.signingPublicKey
-        }) ?? true
+        output[normalized] == nil
       else {
+        throw IOSSecureStorageError.corruptValue(
+          service: Self.service,
+          account: Self.account
+        )
+      }
+      if let identity = pins[normalized],
+         identity.retired == true || identity.signingPublicKey != pin.signingPublicKey {
+        continue
+      }
+      guard signingKeys.insert(pin.signingPublicKey).inserted else {
         throw IOSSecureStorageError.corruptValue(
           service: Self.service,
           account: Self.account

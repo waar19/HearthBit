@@ -9,11 +9,20 @@ import 'secure_database.dart';
 DatabaseFactory _defaultDatabaseFactory() => databaseFactory;
 
 class RescueCaseRepository {
-  RescueCaseRepository({this.databaseFactory, this.databasePath})
-    : assert(databasePath == null || databasePath.isNotEmpty);
+  RescueCaseRepository({
+    this.databaseFactory,
+    this.databasePath,
+    DateTime Function()? now,
+  }) : _now = now ?? DateTime.now,
+       assert(databasePath == null || databasePath.isNotEmpty);
+
+  static const Duration closedRetention = Duration(days: 30);
+  static const Duration maximumRetention = Duration(days: 180);
+  static const int maximumCasesPerTeam = 2000;
 
   final DatabaseFactory? databaseFactory;
   final String? databasePath;
+  final DateTime Function() _now;
   Database? _database;
 
   Future<Database> get _db async {
@@ -23,7 +32,7 @@ class RescueCaseRepository {
         path.join(await factory.getDatabasesPath(), 'hearth_bit_rescue.db');
     return _database ??= await SecureDatabase.open(
       databasePath: resolvedPath,
-      version: 3,
+      version: RescueDatabaseSchema.version,
       testFactory: databaseFactory,
       onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
       onCreate: (database, version) async {
@@ -38,16 +47,37 @@ class RescueCaseRepository {
         if (oldVersion < 3) {
           await RescueDatabaseSchema.createSweptZoneTables(database);
         }
+        if (oldVersion < 4) {
+          await RescueDatabaseSchema.migrateToV4(database);
+        }
       },
     );
   }
 
-  Future<List<RescueCase>> loadCases() async {
-    final rows = await (await _db).query(
+  Future<List<RescueCase>> loadCases({required String teamId}) async {
+    final database = await _db;
+    await _prune(database, teamId);
+    final rows = await database.query(
       'rescue_cases',
+      where: 'team_id = ?',
+      whereArgs: [teamId],
       orderBy: 'updated_at DESC, case_hash ASC',
+      limit: maximumCasesPerTeam,
     );
     return rows.map(_fromRow).toList(growable: false);
+  }
+
+  Future<RescueCase?> loadCase({
+    required String teamId,
+    required String caseHash,
+  }) async {
+    final rows = await (await _db).query(
+      'rescue_cases',
+      where: 'team_id = ? AND case_hash = ?',
+      whereArgs: [teamId, caseHash],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : _fromRow(rows.single);
   }
 
   Future<bool> insertSos(RescueCase rescueCase) async {
@@ -57,21 +87,18 @@ class RescueCaseRepository {
       final existing = await transaction.query(
         'rescue_cases',
         columns: ['case_hash'],
-        where: 'case_hash = ?',
-        whereArgs: [rescueCase.caseHash],
+        where: 'team_id = ? AND case_hash = ?',
+        whereArgs: [rescueCase.teamId, rescueCase.caseHash],
         limit: 1,
       );
       if (existing.isNotEmpty) return false;
       await transaction.insert('rescue_cases', _toRow(rescueCase));
+      await _prune(transaction, rescueCase.teamId);
       return true;
     });
   }
 
-  Future<bool> applyIncomingUpdate({
-    required RescueCase rescueCase,
-    required RescueCaseUpdate update,
-  }) async {
-    _validateCase(rescueCase);
+  Future<RescueCase?> applyIncomingUpdate(RescueCaseUpdate update) async {
     RescueCaseUpdateCodec.encode(update);
     final database = await _db;
     return database.transaction((transaction) async {
@@ -82,13 +109,22 @@ class RescueCaseRepository {
         whereArgs: [update.eventId],
         limit: 1,
       );
-      if (existing.isNotEmpty) return false;
+      if (existing.isNotEmpty) return null;
+      final current = await _loadCaseFrom(
+        transaction,
+        teamId: update.teamId,
+        caseHash: update.caseHash,
+      );
+      if (current == null) return null;
+      final next = RescueCaseTransition.resolve(current, update);
+      if (next == null) return null;
       await transaction.insert(
         'rescue_case_events',
         _eventRow(update, applied: true),
       );
-      await _upsertCase(transaction, rescueCase);
-      return true;
+      await _replaceCase(transaction, next);
+      await _prune(transaction, update.teamId);
+      return next;
     });
   }
 
@@ -112,14 +148,10 @@ class RescueCaseRepository {
     });
   }
 
-  Future<void> commitLocalUpdate({
-    required RescueCase rescueCase,
-    required RescueCaseUpdate update,
-  }) async {
-    _validateCase(rescueCase);
+  Future<RescueCase> commitLocalUpdate(RescueCaseUpdate update) async {
     RescueCaseUpdateCodec.encode(update);
     final database = await _db;
-    await database.transaction((transaction) async {
+    return database.transaction((transaction) async {
       final changed = await transaction.update(
         'rescue_case_events',
         {'applied': 1},
@@ -129,7 +161,18 @@ class RescueCaseRepository {
       if (changed != 1) {
         throw StateError('Staged rescue case update was not found');
       }
-      await _upsertCase(transaction, rescueCase);
+      final current = await _loadCaseFrom(
+        transaction,
+        teamId: update.teamId,
+        caseHash: update.caseHash,
+      );
+      if (current == null) {
+        throw StateError('Rescue case was removed before local commit');
+      }
+      final next = RescueCaseTransition.resolve(current, update);
+      if (next != null) await _replaceCase(transaction, next);
+      await _prune(transaction, update.teamId);
+      return next ?? current;
     });
   }
 
@@ -145,11 +188,14 @@ class RescueCaseRepository {
     await (await _db).delete('rescue_case_events', where: 'applied = 0');
   }
 
-  Future<int> eventCount({required String caseHash}) async {
+  Future<int> eventCount({
+    required String teamId,
+    required String caseHash,
+  }) async {
     final result = await (await _db).rawQuery(
       'SELECT COUNT(*) AS count FROM rescue_case_events '
-      'WHERE case_hash = ? AND applied = 1',
-      [caseHash],
+      'WHERE team_id = ? AND case_hash = ? AND applied = 1',
+      [teamId, caseHash],
     );
     return (result.single['count']! as num).toInt();
   }
@@ -160,19 +206,32 @@ class RescueCaseRepository {
     await database?.close();
   }
 
-  static Future<void> _upsertCase(
+  static Future<RescueCase?> _loadCaseFrom(
+    DatabaseExecutor database, {
+    required String teamId,
+    required String caseHash,
+  }) async {
+    final rows = await database.query(
+      'rescue_cases',
+      where: 'team_id = ? AND case_hash = ?',
+      whereArgs: [teamId, caseHash],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : _fromRow(rows.single);
+  }
+
+  static Future<void> _replaceCase(
     DatabaseExecutor database,
     RescueCase rescueCase,
   ) async {
+    _validateCase(rescueCase);
     final updated = await database.update(
       'rescue_cases',
       _toRow(rescueCase),
-      where: 'case_hash = ?',
-      whereArgs: [rescueCase.caseHash],
+      where: 'team_id = ? AND case_hash = ?',
+      whereArgs: [rescueCase.teamId, rescueCase.caseHash],
     );
-    if (updated == 0) {
-      await database.insert('rescue_cases', _toRow(rescueCase));
-    }
+    if (updated != 1) throw StateError('Rescue case changed unexpectedly');
   }
 
   static Map<String, Object?> _eventRow(
@@ -180,7 +239,9 @@ class RescueCaseRepository {
     required bool applied,
   }) => {
     'event_id': update.eventId,
+    'team_id': update.teamId,
     'case_hash': update.caseHash,
+    'previous_state': update.previousState.wireCode,
     'state': update.state.wireCode,
     'actor_peer_id': update.actorPeerId,
     'assignee_peer_id': update.assigneePeerId,
@@ -189,7 +250,9 @@ class RescueCaseRepository {
   };
 
   static Map<String, Object?> _toRow(RescueCase rescueCase) => {
+    'team_id': rescueCase.teamId,
     'case_hash': rescueCase.caseHash,
+    'canonical_hash': rescueCase.canonicalHash,
     'victim_peer_id': rescueCase.victimPeerId,
     'victim': rescueCase.victim,
     'message': rescueCase.message,
@@ -214,7 +277,9 @@ class RescueCaseRepository {
       throw StateError('Stored rescue case triage is invalid');
     }
     return RescueCase(
+      teamId: row['team_id']! as String,
       caseHash: row['case_hash']! as String,
+      canonicalHash: row['canonical_hash'] as String?,
       victimPeerId: row['victim_peer_id']! as String,
       victim: row['victim']! as String,
       message: row['message']! as String,
@@ -236,7 +301,10 @@ class RescueCaseRepository {
   }
 
   static void _validateCase(RescueCase rescueCase) {
-    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(rescueCase.caseHash) ||
+    if (!RegExp(r'^[0-9a-f]{32}$').hasMatch(rescueCase.teamId) ||
+        !RegExp(r'^[0-9a-f]{64}$').hasMatch(rescueCase.caseHash) ||
+        (rescueCase.canonicalHash != null &&
+            !RegExp(r'^[0-9a-f]{64}$').hasMatch(rescueCase.canonicalHash!)) ||
         rescueCase.victimPeerId.isEmpty ||
         rescueCase.victim.isEmpty ||
         rescueCase.message.isEmpty ||
@@ -244,5 +312,33 @@ class RescueCaseRepository {
         rescueCase.updatedAt.isBefore(rescueCase.createdAt)) {
       throw const FormatException('Invalid rescue case');
     }
+  }
+
+  Future<void> _prune(DatabaseExecutor database, String teamId) async {
+    final now = _now().toUtc();
+    await database.delete(
+      'rescue_cases',
+      where: 'team_id = ? AND state = ? AND updated_at < ?',
+      whereArgs: [
+        teamId,
+        RescueCaseState.closed.wireCode,
+        now.subtract(closedRetention).millisecondsSinceEpoch,
+      ],
+    );
+    await database.delete(
+      'rescue_cases',
+      where: 'team_id = ? AND updated_at < ?',
+      whereArgs: [
+        teamId,
+        now.subtract(maximumRetention).millisecondsSinceEpoch,
+      ],
+    );
+    await database.rawDelete(
+      'DELETE FROM rescue_cases WHERE team_id = ? AND case_hash NOT IN ('
+      'SELECT case_hash FROM rescue_cases WHERE team_id = ? '
+      'ORDER BY CASE WHEN state = ? THEN 1 ELSE 0 END ASC, '
+      'updated_at DESC, case_hash ASC LIMIT ?)',
+      [teamId, teamId, RescueCaseState.closed.wireCode, maximumCasesPerTeam],
+    );
   }
 }

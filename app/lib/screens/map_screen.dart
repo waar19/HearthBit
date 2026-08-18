@@ -320,10 +320,16 @@ class _MapScreenState extends State<MapScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
+    final teamId = widget.rescueCases.activeTeamId;
+    if (teamId == null) return;
     try {
       await RescueExportService.shareOperational(
         format: format,
-        cases: RescueExportPolicy.operationalCases(widget.rescueCases.cases),
+        teamId: teamId,
+        cases: RescueExportPolicy.operationalCases(
+          widget.rescueCases.cases,
+          teamId: teamId,
+        ),
         zones: widget.sweptZones.zones,
         anchor: anchor,
         subject: context.l10n.mapExportSubject,

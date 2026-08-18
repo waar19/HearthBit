@@ -50,6 +50,7 @@ RescueCase _case(
   double longitude, {
   SosTriage? triage,
 }) => RescueCase(
+  teamId: '0' * 32,
   caseHash: hash,
   victimPeerId: '0011223344556677',
   victim: 'Persona',

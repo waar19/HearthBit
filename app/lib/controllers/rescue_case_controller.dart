@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/mesh_models.dart';
@@ -13,21 +16,29 @@ class RescueCaseController extends ChangeNotifier {
     required this.mesh,
     required this.roster,
     RescueCaseRepository? repository,
-  }) : _repository = repository ?? RescueCaseRepository();
+    DateTime Function()? now,
+  }) : _repository = repository ?? RescueCaseRepository(),
+       _now = now ?? DateTime.now;
 
   static const String channel = 'rescue-case';
+  static const Duration maximumFutureSkew = Duration(minutes: 5);
+  static const String _caseHashDomain = 'hearthbit.rescue-case.v1';
 
   final MeshController mesh;
   final RescueRosterController roster;
   final RescueCaseRepository _repository;
+  final DateTime Function() _now;
   final Map<String, RescueCase> _casesByHash = {};
   final Set<String> _processedMessageIds = {};
+  final Map<String, int> _retryCounts = {};
 
   bool _processing = false;
   bool _processingRequested = false;
   bool _disposed = false;
+  String? _loadedTeamId;
   bool loading = true;
   String? lastError;
+  String? get activeTeamId => roster.activeRoster?.teamId;
 
   List<RescueCase> get cases {
     final result = _casesByHash.values.toList(growable: false);
@@ -43,15 +54,9 @@ class RescueCaseController extends ChangeNotifier {
   Future<void> initialize() async {
     try {
       await _repository.discardStaleLocalUpdates();
-      _casesByHash
-        ..clear()
-        ..addEntries(
-          (await _repository.loadCases()).map(
-            (rescueCase) => MapEntry(rescueCase.caseHash, rescueCase),
-          ),
-        );
       mesh.addListener(_handleDependencyChanged);
       roster.addListener(_handleDependencyChanged);
+      await _reloadForActiveTeam();
       loading = false;
       await _processMessages();
     } catch (error) {
@@ -113,19 +118,21 @@ class RescueCaseController extends ChangeNotifier {
       throw StateError('Rescue case or local responder is unavailable');
     }
     final update = RescueCaseUpdate(
+      teamId: rescueCase.teamId,
       caseHash: caseHash,
+      previousState: rescueCase.state,
       state: state,
       actorPeerId: member.peerId,
       assigneePeerId: assigneePeerId,
-      timestamp: DateTime.now().toUtc(),
+      timestamp: _now().toUtc(),
     );
-    if (!_isAuthorized(member, update) ||
+    if (!_isAuthorized(member, update, rescueCase) ||
         (state == RescueCaseState.assigned
             ? !canAssignToMe(rescueCase)
             : !canAdvanceTo(rescueCase, state))) {
       throw StateError('Rescue case transition is not authorized');
     }
-    final next = _resolve(rescueCase, update);
+    final next = RescueCaseTransition.resolve(rescueCase, update);
     if (next == null) throw StateError('Rescue case update is stale');
     final staged = await _repository.stageLocalUpdate(update);
     if (!staged) return;
@@ -137,8 +144,10 @@ class RescueCaseController extends ChangeNotifier {
       if (messageId == null || messageId.isEmpty) {
         throw StateError('Rescue case update was not transmitted');
       }
-      await _repository.commitLocalUpdate(rescueCase: next, update: update);
-      _casesByHash[caseHash] = next;
+      final committed = await _repository.commitLocalUpdate(update);
+      if (committed.teamId == _loadedTeamId) {
+        _casesByHash[caseHash] = committed;
+      }
       lastError = null;
       if (!_disposed) notifyListeners();
     } catch (error) {
@@ -153,6 +162,18 @@ class RescueCaseController extends ChangeNotifier {
     unawaited(_processMessages());
   }
 
+  Future<void> _reloadForActiveTeam() async {
+    final teamId = roster.activeRoster?.teamId;
+    if (teamId == _loadedTeamId) return;
+    _loadedTeamId = teamId;
+    _casesByHash.clear();
+    if (teamId != null) {
+      for (final rescueCase in await _repository.loadCases(teamId: teamId)) {
+        _casesByHash[rescueCase.caseHash] = rescueCase;
+      }
+    }
+  }
+
   Future<void> _processMessages() async {
     if (_processing) {
       _processingRequested = true;
@@ -162,6 +183,7 @@ class RescueCaseController extends ChangeNotifier {
     try {
       do {
         _processingRequested = false;
+        await _reloadForActiveTeam();
         final messages = mesh.messages.toList(growable: false)
           ..sort((first, second) {
             final timestampOrder = first.timestamp.compareTo(second.timestamp);
@@ -172,18 +194,30 @@ class RescueCaseController extends ChangeNotifier {
         for (final message in messages) {
           if (_processedMessageIds.contains(message.id)) continue;
           if (message.isSos) {
-            await _ingestSos(message);
-            _processedMessageIds.add(message.id);
+            final outcome = await _ingestSos(message);
+            if (outcome != _IngestOutcome.retryLater) {
+              _rememberProcessed(message.id);
+            } else {
+              _recordRetry(message.id);
+            }
             continue;
           }
-          if (!message.content.startsWith(RescueCaseUpdateCodec.marker)) {
+          if (message.isPrivate ||
+              message.external ||
+              message.channel != channel ||
+              !message.content.startsWith(RescueCaseUpdateCodec.marker)) {
             continue;
           }
           final update = RescueCaseUpdateCodec.tryDecode(message.content);
+          var outcome = _IngestOutcome.permanent;
           if (update != null && !message.isMine) {
-            await _ingestUpdate(message, update);
+            outcome = await _ingestUpdate(message, update);
           }
-          _processedMessageIds.add(message.id);
+          if (outcome != _IngestOutcome.retryLater) {
+            _rememberProcessed(message.id);
+          } else {
+            _recordRetry(message.id);
+          }
         }
       } while (_processingRequested);
       lastError = null;
@@ -195,12 +229,31 @@ class RescueCaseController extends ChangeNotifier {
     }
   }
 
-  Future<void> _ingestSos(MeshMessage message) async {
-    final hash = message.canonicalHash?.toLowerCase();
-    if (hash == null || !RegExp(r'^[0-9a-f]{64}$').hasMatch(hash)) return;
+  Future<_IngestOutcome> _ingestSos(MeshMessage message) async {
+    if (message.isPrivate || message.external || message.channel != 'sos') {
+      return _IngestOutcome.permanent;
+    }
+    final activeRoster = roster.activeRoster;
+    if (activeRoster == null) {
+      return roster.loading
+          ? _IngestOutcome.retryLater
+          : _IngestOutcome.permanent;
+    }
+    final sender = message.senderPeerId.trim().toLowerCase();
+    if (!RegExp(r'^[0-9a-f]{16}$').hasMatch(sender) || message.id.isEmpty) {
+      return _IngestOutcome.permanent;
+    }
+    final hash = stableCaseHash(senderPeerId: sender, messageId: message.id);
+    final canonicalHash = message.canonicalHash?.toLowerCase();
     final rescueCase = RescueCase(
+      teamId: activeRoster.teamId,
       caseHash: hash,
-      victimPeerId: message.senderPeerId.toLowerCase(),
+      canonicalHash:
+          canonicalHash != null &&
+              RegExp(r'^[0-9a-f]{64}$').hasMatch(canonicalHash)
+          ? canonicalHash
+          : null,
+      victimPeerId: sender,
       victim: message.sender.trim().isEmpty
           ? message.senderPeerId
           : message.sender,
@@ -213,80 +266,92 @@ class RescueCaseController extends ChangeNotifier {
       state: RescueCaseState.newCase,
       createdAt: message.timestamp,
       updatedAt: message.timestamp,
-      lastActorPeerId: message.senderPeerId.toLowerCase(),
+      lastActorPeerId: sender,
     );
     final inserted = await _repository.insertSos(rescueCase);
     if (inserted) _casesByHash[hash] = rescueCase;
+    return _IngestOutcome.accepted;
   }
 
-  Future<void> _ingestUpdate(
+  Future<_IngestOutcome> _ingestUpdate(
     MeshMessage message,
     RescueCaseUpdate update,
   ) async {
-    final senderPeerId = message.senderPeerId.toLowerCase();
-    if (update.actorPeerId != senderPeerId) return;
-    final livePeer = _livePeer(senderPeerId);
-    if (livePeer == null) return;
-    final member = roster.verifiedMember(
-      peerId: senderPeerId,
-      signingPublicKey: livePeer.signingPublicKey,
-    );
-    if (member == null || !_isAuthorized(member, update)) return;
-    final current = _casesByHash[update.caseHash];
-    if (current == null || update.timestamp.isBefore(current.createdAt)) return;
-    final next = _resolve(current, update);
-    if (next == null) return;
-    final inserted = await _repository.applyIncomingUpdate(
-      rescueCase: next,
-      update: update,
-    );
-    if (inserted) _casesByHash[update.caseHash] = next;
-  }
-
-  MeshPeer? _livePeer(String peerId) {
-    for (final peer in mesh.peers) {
-      if (peer.id.toLowerCase() == peerId && peer.signingPublicKey != null) {
-        return peer;
-      }
+    final activeRoster = roster.activeRoster;
+    if (activeRoster == null) {
+      return roster.loading
+          ? _IngestOutcome.retryLater
+          : _IngestOutcome.permanent;
     }
-    return null;
+    final senderPeerId = message.senderPeerId.toLowerCase();
+    if (update.teamId != activeRoster.teamId ||
+        update.actorPeerId != senderPeerId) {
+      return _IngestOutcome.permanent;
+    }
+    final member = roster.memberByPeerId(senderPeerId);
+    if (member == null) return _IngestOutcome.permanent;
+    final current = _casesByHash[update.caseHash];
+    if (current == null) return _IngestOutcome.retryLater;
+    if (update.timestamp.isBefore(current.createdAt) ||
+        update.timestamp.isAfter(_now().toUtc().add(maximumFutureSkew)) ||
+        !_isAuthorized(member, update, current)) {
+      return _IngestOutcome.permanent;
+    }
+    final applied = await _repository.applyIncomingUpdate(update);
+    if (applied != null && applied.teamId == _loadedTeamId) {
+      _casesByHash[update.caseHash] = applied;
+    }
+    return _IngestOutcome.accepted;
   }
 
   static bool _isAuthorized(
     RescueRosterMember member,
     RescueCaseUpdate update,
+    RescueCase current,
   ) {
     return switch (update.state) {
       RescueCaseState.newCase => false,
-      RescueCaseState.assigned => update.assigneePeerId == update.actorPeerId,
+      RescueCaseState.assigned =>
+        update.previousState == RescueCaseState.newCase &&
+            update.assigneePeerId == update.actorPeerId,
       RescueCaseState.enRoute ||
       RescueCaseState.attended ||
       RescueCaseState.closed =>
-        update.assigneePeerId != null &&
+        update.previousState.rank + 1 == update.state.rank &&
+            update.assigneePeerId == current.assigneePeerId &&
             (update.actorPeerId == update.assigneePeerId ||
                 member.role == RescueRosterRole.leader),
     };
   }
 
-  static RescueCase? _resolve(RescueCase current, RescueCaseUpdate update) {
-    if (update.state.rank < current.state.rank) return null;
-    if (update.state.rank == current.state.rank) {
-      final timestampOrder = update.timestamp.compareTo(current.updatedAt);
-      if (timestampOrder < 0) return null;
-      if (timestampOrder == 0) {
-        final incoming =
-            '${update.actorPeerId}|${update.assigneePeerId ?? '-'}';
-        final existing =
-            '${current.lastActorPeerId}|${current.assigneePeerId ?? '-'}';
-        if (incoming.compareTo(existing) <= 0) return null;
-      }
+  static String stableCaseHash({
+    required String senderPeerId,
+    required String messageId,
+  }) {
+    final sender = senderPeerId.trim().toLowerCase();
+    if (!RegExp(r'^[0-9a-f]{16}$').hasMatch(sender) || messageId.isEmpty) {
+      throw const FormatException('Invalid stable rescue case identity');
     }
-    return current.copyWith(
-      state: update.state,
-      assigneePeerId: update.assigneePeerId,
-      updatedAt: update.timestamp.toLocal(),
-      lastActorPeerId: update.actorPeerId,
-    );
+    return sha256
+        .convert(utf8.encode('$_caseHashDomain\u0000$sender\u0000$messageId'))
+        .toString();
+  }
+
+  void _rememberProcessed(String messageId) {
+    _retryCounts.remove(messageId);
+    _processedMessageIds.add(messageId);
+    if (_processedMessageIds.length > 4096) {
+      _processedMessageIds.remove(_processedMessageIds.first);
+    }
+  }
+
+  void _recordRetry(String messageId) {
+    final count = (_retryCounts[messageId] ?? 0) + 1;
+    if (count >= 16) {
+      _rememberProcessed(messageId);
+      return;
+    }
+    _retryCounts[messageId] = count;
   }
 
   static int _compareCases(RescueCase first, RescueCase second) {
@@ -328,3 +393,5 @@ class RescueCaseController extends ChangeNotifier {
     super.dispose();
   }
 }
+
+enum _IngestOutcome { accepted, permanent, retryLater }

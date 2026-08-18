@@ -43,14 +43,23 @@ class _Platform extends MeshPlatformService {
 
 class _Repository extends RescueRosterRepository {
   RescueTeamRoster? stored;
+  final Map<String, int> maximums = {};
 
   @override
   Future<RescueTeamRoster?> loadActiveRoster() async => stored;
 
   @override
   Future<void> saveActiveRoster(RescueTeamRoster roster) async {
+    final timestamp = roster.createdAt.millisecondsSinceEpoch;
+    if (timestamp <= (maximums[roster.teamId] ?? 0)) {
+      throw StateError('stale roster');
+    }
+    maximums[roster.teamId] = timestamp;
     stored = roster;
   }
+
+  @override
+  Future<int?> maximumCreatedAt(String teamId) async => maximums[teamId];
 
   @override
   Future<void> clear() async {
@@ -123,8 +132,8 @@ void main() {
     expect(controller.members, hasLength(1));
 
     await controller.clearRoster();
-    await controller.importRoster(exported);
-    expect(controller.activeRoster?.name, 'Equipo Norte');
+    await expectLater(controller.importRoster(exported), throwsStateError);
+    expect(controller.activeRoster, isNull);
 
     controller.dispose();
     mesh.dispose();

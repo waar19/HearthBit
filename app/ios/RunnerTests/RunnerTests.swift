@@ -1866,6 +1866,47 @@ class RunnerTests: XCTestCase {
     )
   }
 
+  func testPeerPinRotationRemovesRetiredRosterPinAndRestoresCleanly() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore()
+    let old = makePeerPinMaterial()
+    _ = try store.validateAndPin(
+      peerID: old.peerID,
+      noisePublicKey: old.noise,
+      signingPublicKey: old.signing
+    )
+    try store.importRescueRosterPins([
+      IOSRescueRosterPin(peerID: old.peerID, signingPublicKey: old.signing),
+    ])
+    let newNoise = Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation
+    let newSigning = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+    let newID = IOSMeshProtocol.peerID(newNoise).hex
+
+    XCTAssertNotNil(
+      try store.rotate(
+        oldPeerID: old.peerID,
+        noisePublicKey: newNoise,
+        signingPublicKey: newSigning,
+        sequence: 1
+      )
+    )
+    XCTAssertNil(store.rescueSigningKey(for: old.peerID))
+    XCTAssertFalse(store.rescueProtectedPeerIDs.contains(old.peerID))
+    XCTAssertNotNil(store.pin(for: newID))
+
+    let restored = backend.makeStore()
+    XCTAssertNil(restored.failure)
+    XCTAssertNil(restored.rescueSigningKey(for: old.peerID))
+    XCTAssertNotNil(restored.pin(for: newID))
+
+    // Un roster Dart aún no actualizado no debe bloquear el arranque ni
+    // reactivar la identidad retirada.
+    try restored.importRescueRosterPins([
+      IOSRescueRosterPin(peerID: old.peerID, signingPublicKey: old.signing),
+    ])
+    XCTAssertNil(restored.rescueSigningKey(for: old.peerID))
+  }
+
   func testPeerPinsRestoreFromSecurePersistence() throws {
     let backend = TestSecurePinBackend()
     let identity = makePeerPinMaterial()

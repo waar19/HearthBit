@@ -26,6 +26,7 @@ void main() {
     repository = RescueCaseRepository(
       databaseFactory: databaseFactoryFfi,
       databasePath: databasePath,
+      now: () => DateTime.utc(2026, 8, 18),
     );
   });
 
@@ -35,7 +36,7 @@ void main() {
     await temporaryDirectory.delete(recursive: true);
   });
 
-  test('migra v1 a v3 sin borrar el roster', () async {
+  test('migra v1 a v4 sin borrar el roster', () async {
     final legacy = await databaseFactoryFfi.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
@@ -54,13 +55,13 @@ void main() {
     });
     await legacy.close();
 
-    expect(await repository.loadCases(), isEmpty);
+    expect(await repository.loadCases(teamId: '0' * 32), isEmpty);
 
     final migrated = await databaseFactoryFfi.openDatabase(databasePath);
     expect((await migrated.query('rescue_teams')).single['name'], 'Equipo');
     expect(
       (await migrated.rawQuery('PRAGMA user_version')).single['user_version'],
-      3,
+      4,
     );
     await migrated.close();
   });
@@ -71,48 +72,94 @@ void main() {
     expect(await repository.insertSos(rescueCase), isFalse);
 
     final update = RescueCaseUpdate(
+      teamId: rescueCase.teamId,
       caseHash: rescueCase.caseHash,
+      previousState: RescueCaseState.newCase,
       state: RescueCaseState.assigned,
       actorPeerId: '0011223344556677',
       assigneePeerId: '0011223344556677',
-      timestamp: DateTime.fromMillisecondsSinceEpoch(2000, isUtc: true),
+      timestamp: DateTime.utc(2026, 8, 17, 1),
     );
-    final assigned = rescueCase.copyWith(
-      state: RescueCaseState.assigned,
-      assigneePeerId: update.assigneePeerId,
-      updatedAt: update.timestamp,
-      lastActorPeerId: update.actorPeerId,
-    );
-
+    expect(await repository.applyIncomingUpdate(update), isNotNull);
+    expect(await repository.applyIncomingUpdate(update), isNull);
     expect(
-      await repository.applyIncomingUpdate(
-        rescueCase: assigned,
-        update: update,
+      await repository.eventCount(
+        teamId: rescueCase.teamId,
+        caseHash: rescueCase.caseHash,
       ),
-      isTrue,
+      1,
     );
     expect(
-      await repository.applyIncomingUpdate(
-        rescueCase: assigned,
-        update: update,
-      ),
-      isFalse,
-    );
-    expect(await repository.eventCount(caseHash: rescueCase.caseHash), 1);
-    expect(
-      (await repository.loadCases()).single.state,
+      (await repository.loadCases(teamId: rescueCase.teamId)).single.state,
       RescueCaseState.assigned,
     );
   });
+
+  test(
+    'retención elimina cerrados antiguos y acota spam activo por equipo',
+    () async {
+      final oldClosed = _case().copyWith(
+        state: RescueCaseState.closed,
+        assigneePeerId: '0011223344556677',
+        updatedAt: DateTime.utc(2026, 7, 1),
+      );
+      final validOldClosed = RescueCase(
+        teamId: oldClosed.teamId,
+        caseHash: oldClosed.caseHash,
+        victimPeerId: oldClosed.victimPeerId,
+        victim: oldClosed.victim,
+        message: oldClosed.message,
+        state: oldClosed.state,
+        assigneePeerId: oldClosed.assigneePeerId,
+        createdAt: DateTime.utc(2026, 6, 30),
+        updatedAt: oldClosed.updatedAt,
+        lastActorPeerId: oldClosed.lastActorPeerId,
+      );
+      expect(await repository.insertSos(validOldClosed), isTrue);
+
+      for (
+        var index = 0;
+        index <= RescueCaseRepository.maximumCasesPerTeam;
+        index++
+      ) {
+        final createdAt = DateTime.utc(
+          2026,
+          8,
+          17,
+        ).add(Duration(milliseconds: index));
+        await repository.insertSos(
+          RescueCase(
+            teamId: '0' * 32,
+            caseHash: index.toRadixString(16).padLeft(64, '0'),
+            victimPeerId: '8899aabbccddeeff',
+            victim: 'Victim',
+            message: 'Help',
+            state: RescueCaseState.newCase,
+            createdAt: createdAt,
+            updatedAt: createdAt,
+            lastActorPeerId: '8899aabbccddeeff',
+          ),
+        );
+      }
+
+      final retained = await repository.loadCases(teamId: '0' * 32);
+      expect(retained, hasLength(RescueCaseRepository.maximumCasesPerTeam));
+      expect(
+        retained.any((item) => item.state == RescueCaseState.closed),
+        isFalse,
+      );
+    },
+  );
 }
 
 RescueCase _case() => RescueCase(
+  teamId: '0' * 32,
   caseHash: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
   victimPeerId: '8899aabbccddeeff',
   victim: 'Victim',
   message: 'Help',
   state: RescueCaseState.newCase,
-  createdAt: DateTime.fromMillisecondsSinceEpoch(1000),
-  updatedAt: DateTime.fromMillisecondsSinceEpoch(1000),
+  createdAt: DateTime.utc(2026, 8, 17),
+  updatedAt: DateTime.utc(2026, 8, 17),
   lastActorPeerId: '8899aabbccddeeff',
 );
