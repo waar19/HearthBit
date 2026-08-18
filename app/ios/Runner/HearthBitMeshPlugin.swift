@@ -28,10 +28,22 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let candidate: CBPeripheral
   }
 
+  private struct PendingRelay {
+    let packet: IOSMeshPacket
+    let source: UUID?
+    let emergency: Bool
+    let sequence: UInt64
+    let token: UUID
+    let workItem: DispatchWorkItem
+    var sourceKeys: Set<String>
+  }
+
   private static let serviceUUID = CBUUID(string: "F47B5E2D-4A9E-4C5A-9B3F-8E1D2C3A4B5C")
   private static let characteristicUUID = CBUUID(string: "A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D")
   private static let maximumPendingBLEFrames = 256
   private static let emergencyBLEFrameReserve = 64
+  private static let maximumPendingRelays = 1024
+  private static let maximumSeenFingerprints = 8192
   private static let reconnectDelays: [TimeInterval] = [1, 2, 4, 8, 16, 30]
   private static let reconnectCooldown: TimeInterval = 120
   private static let linkLossScanBurst: TimeInterval = 15
@@ -85,6 +97,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var pendingFrames: [String: [Data]] = [:]
   private var pendingCourier: [String: [IOSMeshPacket]] = [:]
   private var seen: [String: Date] = [:]
+  private var pendingRelays: [String: PendingRelay] = [:]
+  private var pendingRelaySequence: UInt64 = 0
   private var syncPackets: [String: IOSMeshPacket] = [:]
   private var syncResponseTimes: [UUID: [Date]] = [:]
   private var lastSyncRequestBySource: [UUID: Date] = [:]
@@ -1093,6 +1107,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     }
     // Reinicio real: liberar recursos previos permite reintentar tras un fallo.
     if running { stopInternal(notify: false) }
+    clearPendingRelays()
     running = true
     UIDevice.current.isBatteryMonitoringEnabled = true
     refreshPowerState(emitEvent: false)
@@ -1154,13 +1169,17 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func stop() {
-    guard running else { return }
+    guard running else {
+      clearPendingRelays()
+      return
+    }
     stopInternal(notify: true)
   }
 
   private func stopInternal(notify: Bool) {
     stopLocalBeacon()
     running = false
+    clearPendingRelays()
     multipeerTransport.stop()
     stopRadar()
     stopRadarReportTimer()
@@ -1275,6 +1294,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   }
 
   private func enterPresenceOnlyMode() {
+    clearPendingRelays()
     radarPeerID = nil
     radarTimer?.invalidate()
     radarTimer = nil
@@ -2923,6 +2943,14 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     else { return }
     let senderID = packet.senderID.hex
     if senderID == identity.peerIDHex { return }
+    if var pendingRelay = pendingRelays[fingerprint] {
+      pendingRelay.sourceKeys = IOSRelayDampingPolicy.sourceKeys(
+        afterObserving: IOSRelayDampingPolicy.sourceKey(source),
+        in: pendingRelay.sourceKeys
+      )
+      pendingRelays[fingerprint] = pendingRelay
+      return
+    }
     let pinnedIdentity = peerIdentityPins.pin(for: senderID)
     if pinnedIdentity == nil {
       let rateLimitKey = source?.uuidString ?? senderID
@@ -2955,10 +2983,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       }
     }
     if seen[fingerprint] != nil { return }
-    seen[fingerprint] = Date()
-    if seen.count > 2000 {
-      seen = seen.filter { Date().timeIntervalSince($0.value) < 3600 }
-    }
+    rememberSeenFingerprint(fingerprint)
     let forUs = packet.recipientID == nil ||
       packet.recipientID == identity.peerID ||
       packet.recipientID == Data(repeating: 0xff, count: 8)
@@ -2988,8 +3013,87 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     ) {
       var relayed = packet
       relayed.ttl -= 1
-      broadcast(relayed, excluding: source)
+      let emergency =
+        IOSMeshProtocol.isEmergency(packet) ||
+        effectiveType == IOSMeshProtocol.emergencyAck ||
+        effectiveType == IOSMeshProtocol.legacyEmergencyAck ||
+        effectiveType == IOSMeshProtocol.beaconControl
+      scheduleRelay(
+        relayed,
+        fingerprint: fingerprint,
+        source: source,
+        emergency: emergency
+      )
     }
+  }
+
+  private func rememberSeenFingerprint(_ fingerprint: String) {
+    let now = Date()
+    seen[fingerprint] = now
+    guard seen.count > Self.maximumSeenFingerprints else { return }
+    seen = seen.filter { now.timeIntervalSince($0.value) < 3600 }
+    guard seen.count > Self.maximumSeenFingerprints else { return }
+    let overflow = seen.count - Self.maximumSeenFingerprints
+    for entry in seen.sorted(by: { $0.value < $1.value }).prefix(overflow) {
+      seen.removeValue(forKey: entry.key)
+    }
+  }
+
+  private func scheduleRelay(
+    _ packet: IOSMeshPacket,
+    fingerprint: String,
+    source: UUID?,
+    emergency: Bool
+  ) {
+    while pendingRelays.count >= Self.maximumPendingRelays,
+          let oldest = pendingRelays.min(by: {
+            $0.value.sequence < $1.value.sequence
+          }) {
+      pendingRelays.removeValue(forKey: oldest.key)?.workItem.cancel()
+    }
+    pendingRelaySequence &+= 1
+    let token = UUID()
+    let workItem = DispatchWorkItem { [weak self] in
+      guard
+        let self,
+        self.pendingRelays[fingerprint]?.token == token,
+        let pending = self.pendingRelays.removeValue(forKey: fingerprint),
+        self.running,
+        self.localRole.relaysPackets,
+        IOSRelayDampingPolicy.shouldRelay(
+          additionalCopies: IOSRelayDampingPolicy.additionalCopies(
+            sourceKeys: pending.sourceKeys
+          ),
+          emergency: pending.emergency
+        )
+      else { return }
+      self.broadcast(pending.packet, excluding: pending.source)
+    }
+    pendingRelays[fingerprint] = PendingRelay(
+      packet: packet,
+      source: source,
+      emergency: emergency,
+      sequence: pendingRelaySequence,
+      token: token,
+      workItem: workItem,
+      sourceKeys: [IOSRelayDampingPolicy.sourceKey(source)]
+    )
+    let delay = IOSRelayDampingPolicy.jitterMilliseconds(
+      fingerprint: fingerprint,
+      salt: identity.peerID,
+      emergency: emergency
+    )
+    DispatchQueue.main.asyncAfter(
+      deadline: .now() + .milliseconds(delay),
+      execute: workItem
+    )
+  }
+
+  private func clearPendingRelays() {
+    let workItems = pendingRelays.values.map(\.workItem)
+    pendingRelays.removeAll()
+    pendingRelaySequence = 0
+    workItems.forEach { $0.cancel() }
   }
 
   private func validateAnnouncementIdentity(

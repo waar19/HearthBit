@@ -77,7 +77,7 @@ internal class MeshEngine(
     private val seen = Collections.synchronizedMap(
         object : LinkedHashMap<String, Long>(512, 0.75f, true) {
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean =
-                size > 2_000
+                size > 8_192
         },
     )
     private val peers = ConcurrentHashMap<String, MeshPeer>()
@@ -219,6 +219,14 @@ internal class MeshEngine(
     private val addressToPeer = ConcurrentHashMap<String, String>()
     private val hearthbitProvenAddresses = ConcurrentHashMap.newKeySet<String>()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val relayDamping = RelayDampingCoordinator(
+        localSalt = { identity.peerIdHex },
+        scheduler = RelayDampingScheduler { delayMs, task ->
+            val runnable = Runnable { task() }
+            mainHandler.postDelayed(runnable, delayMs)
+            RelayDampingCancellation { mainHandler.removeCallbacks(runnable) }
+        },
+    )
 
     private var gattServer: BluetoothGattServer? = null
     private var serverCharacteristic: BluetoothGattCharacteristic? = null
@@ -648,6 +656,7 @@ internal class MeshEngine(
         keepAliveRunnable = null
         emergencyRebroadcastRunnable?.let(mainHandler::removeCallbacks)
         emergencyRebroadcastRunnable = null
+        relayDamping.clear()
         handshakeCleanupRunnable?.let(mainHandler::removeCallbacks)
         handshakeCleanupRunnable = null
         genericPresenceTracker.clear()
@@ -2187,14 +2196,8 @@ internal class MeshEngine(
             return
         }
         val fingerprint = MeshProtocol.relayFingerprint(bytes) ?: return
+        relayDamping.observeDuplicate(fingerprint, sourceAddress)
         if (seen.put(fingerprint, System.currentTimeMillis()) != null) return
-
-        val isForUs = packet.recipientId == null ||
-            packet.recipientId.contentEquals(identity.peerId) ||
-            packet.recipientId.contentEquals(MeshProtocol.broadcastRecipient)
-        if (isForUs && authentication.localProcessingAllowed) {
-            process(packet, senderHex, sourceAddress, authentication)
-        }
 
         val addressedToLocalNode = packet.recipientId?.contentEquals(identity.peerId) == true
         val hasDirectedRecipient = packet.recipientId != null &&
@@ -2213,7 +2216,23 @@ internal class MeshEngine(
             )
         ) {
             val relayed = packet.copy(ttl = ((packet.ttl.toInt() and 0xFF) - 1).toByte())
-            broadcastBytes(MeshProtocol.encodeForBle(relayed), sourceAddress)
+            val relayedBytes = MeshProtocol.encodeForBle(relayed)
+            relayDamping.schedule(
+                fingerprint = fingerprint,
+                emergency = EmergencyLanPolicy.isOpenEmergencyLanPacket(packet),
+                initialSource = sourceAddress,
+            ) {
+                if (running) {
+                    broadcastBytes(relayedBytes, sourceAddress)
+                }
+            }
+        }
+
+        val isForUs = packet.recipientId == null ||
+            packet.recipientId.contentEquals(identity.peerId) ||
+            packet.recipientId.contentEquals(MeshProtocol.broadcastRecipient)
+        if (isForUs && authentication.localProcessingAllowed) {
+            process(packet, senderHex, sourceAddress, authentication)
         }
     }
 

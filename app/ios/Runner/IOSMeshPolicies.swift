@@ -404,6 +404,72 @@ enum IOSMeshRelayPolicy {
     }
   }
 }
+
+enum IOSRelayDampingPolicy {
+  struct Settings: Equatable {
+    let minimumJitterMilliseconds: Int
+    let maximumJitterMilliseconds: Int
+    let suppressionAdditionalCopies: Int
+  }
+
+  static let normal = Settings(
+    minimumJitterMilliseconds: 180,
+    maximumJitterMilliseconds: 420,
+    suppressionAdditionalCopies: 2
+  )
+  static let emergency = Settings(
+    minimumJitterMilliseconds: 80,
+    maximumJitterMilliseconds: 160,
+    suppressionAdditionalCopies: 3
+  )
+
+  static func settings(emergency: Bool) -> Settings {
+    emergency ? self.emergency : normal
+  }
+
+  static func jitterMilliseconds(
+    fingerprint: String,
+    salt: Data,
+    emergency: Bool
+  ) -> Int {
+    let settings = settings(emergency: emergency)
+    var material = Data(fingerprint.utf8)
+    material.append(0)
+    material.append(salt)
+    let digest = SHA256.hash(data: material)
+    let value = digest.prefix(8).reduce(UInt64(0)) {
+      ($0 << 8) | UInt64($1)
+    }
+    let width = UInt64(
+      settings.maximumJitterMilliseconds -
+        settings.minimumJitterMilliseconds +
+        1
+    )
+    return settings.minimumJitterMilliseconds + Int(value % width)
+  }
+
+  static func shouldRelay(additionalCopies: Int, emergency: Bool) -> Bool {
+    additionalCopies < settings(emergency: emergency).suppressionAdditionalCopies
+  }
+
+  static func sourceKey(_ source: UUID?) -> String {
+    source?.uuidString ?? "source:nil"
+  }
+
+  static func sourceKeys(
+    afterObserving sourceKey: String,
+    in existing: Set<String>
+  ) -> Set<String> {
+    var updated = existing
+    updated.insert(sourceKey)
+    return updated
+  }
+
+  static func additionalCopies(sourceKeys: Set<String>) -> Int {
+    max(0, sourceKeys.count - 1)
+  }
+}
+
 enum IOSEmergencySMSPolicy {
   static func normalizeRecipient(_ value: String) -> String? {
     let normalized = String(value.trimmingCharacters(in: .whitespacesAndNewlines).filter {

@@ -1006,6 +1006,164 @@ class RunnerTests: XCTestCase {
     XCTAssertNil(IOSEmergencySMSPolicy.normalizeRecipient("+1234567890123456"))
   }
 
+  func testRelayDampingUsesAndroidJitterWindows() {
+    XCTAssertEqual(
+      IOSRelayDampingPolicy.normal,
+      IOSRelayDampingPolicy.Settings(
+        minimumJitterMilliseconds: 180,
+        maximumJitterMilliseconds: 420,
+        suppressionAdditionalCopies: 2
+      )
+    )
+    XCTAssertEqual(
+      IOSRelayDampingPolicy.emergency,
+      IOSRelayDampingPolicy.Settings(
+        minimumJitterMilliseconds: 80,
+        maximumJitterMilliseconds: 160,
+        suppressionAdditionalCopies: 3
+      )
+    )
+
+    let salt = Data((0..<8).map(UInt8.init))
+    for index in 0..<256 {
+      let suffix = String(index, radix: 16)
+      let fingerprint = String(repeating: "0", count: 24 - suffix.count) + suffix
+      let normal = IOSRelayDampingPolicy.jitterMilliseconds(
+        fingerprint: fingerprint,
+        salt: salt,
+        emergency: false
+      )
+      let emergency = IOSRelayDampingPolicy.jitterMilliseconds(
+        fingerprint: fingerprint,
+        salt: salt,
+        emergency: true
+      )
+      XCTAssertTrue((180...420).contains(normal))
+      XCTAssertTrue((80...160).contains(emergency))
+    }
+  }
+
+  func testRelayDampingJitterIsDeterministicForFingerprintAndLocalPeer() {
+    let fingerprint = "d2960f980cd5983d2feadf81"
+    let salt = Data((0..<8).map(UInt8.init))
+
+    XCTAssertEqual(
+      IOSRelayDampingPolicy.jitterMilliseconds(
+        fingerprint: fingerprint,
+        salt: salt,
+        emergency: false
+      ),
+      345
+    )
+    XCTAssertEqual(
+      IOSRelayDampingPolicy.jitterMilliseconds(
+        fingerprint: fingerprint,
+        salt: salt,
+        emergency: true
+      ),
+      106
+    )
+    XCTAssertEqual(
+      IOSRelayDampingPolicy.jitterMilliseconds(
+        fingerprint: fingerprint,
+        salt: Data((1...8).map(UInt8.init)),
+        emergency: false
+      ),
+      273
+    )
+    XCTAssertNotEqual(
+      IOSRelayDampingPolicy.jitterMilliseconds(
+        fingerprint: fingerprint,
+        salt: salt,
+        emergency: false
+      ),
+      IOSRelayDampingPolicy.jitterMilliseconds(
+        fingerprint: "988b3fd49212d7fea7a0494c",
+        salt: salt,
+        emergency: false
+      )
+    )
+  }
+
+  func testRelayDampingSuppressesAtNormalAndEmergencyThresholds() {
+    XCTAssertTrue(
+      IOSRelayDampingPolicy.shouldRelay(additionalCopies: 1, emergency: false)
+    )
+    XCTAssertFalse(
+      IOSRelayDampingPolicy.shouldRelay(additionalCopies: 2, emergency: false)
+    )
+    XCTAssertTrue(
+      IOSRelayDampingPolicy.shouldRelay(additionalCopies: 2, emergency: true)
+    )
+    XCTAssertFalse(
+      IOSRelayDampingPolicy.shouldRelay(additionalCopies: 3, emergency: true)
+    )
+  }
+
+  func testRelayDampingCountsRepeatedSourceOnlyOnce() {
+    let source = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    let sourceKey = IOSRelayDampingPolicy.sourceKey(source)
+    var sourceKeys: Set<String> = [sourceKey]
+
+    for _ in 0..<20 {
+      sourceKeys = IOSRelayDampingPolicy.sourceKeys(
+        afterObserving: sourceKey,
+        in: sourceKeys
+      )
+    }
+
+    XCTAssertEqual(sourceKeys, [sourceKey])
+    XCTAssertEqual(
+      IOSRelayDampingPolicy.additionalCopies(sourceKeys: sourceKeys),
+      0
+    )
+    XCTAssertEqual(
+      IOSRelayDampingPolicy.sourceKey(nil),
+      IOSRelayDampingPolicy.sourceKey(nil)
+    )
+  }
+
+  func testRelayDampingCountsOnlyDistinctSourcesAsAdditionalCopies() {
+    let sources = (1...4).map {
+      UUID(uuidString: "00000000-0000-0000-0000-00000000000\($0)")!
+    }
+    var sourceKeys: Set<String> = [IOSRelayDampingPolicy.sourceKey(sources[0])]
+
+    for source in [sources[1], sources[1], sources[2]] {
+      sourceKeys = IOSRelayDampingPolicy.sourceKeys(
+        afterObserving: IOSRelayDampingPolicy.sourceKey(source),
+        in: sourceKeys
+      )
+    }
+    let twoAdditional = IOSRelayDampingPolicy.additionalCopies(sourceKeys: sourceKeys)
+    XCTAssertEqual(twoAdditional, 2)
+    XCTAssertFalse(
+      IOSRelayDampingPolicy.shouldRelay(
+        additionalCopies: twoAdditional,
+        emergency: false
+      )
+    )
+    XCTAssertTrue(
+      IOSRelayDampingPolicy.shouldRelay(
+        additionalCopies: twoAdditional,
+        emergency: true
+      )
+    )
+
+    sourceKeys = IOSRelayDampingPolicy.sourceKeys(
+      afterObserving: IOSRelayDampingPolicy.sourceKey(sources[3]),
+      in: sourceKeys
+    )
+    XCTAssertFalse(
+      IOSRelayDampingPolicy.shouldRelay(
+        additionalCopies: IOSRelayDampingPolicy.additionalCopies(
+          sourceKeys: sourceKeys
+        ),
+        emergency: true
+      )
+    )
+  }
+
   func testBeaconControlRelaysExactlyOnceOnlyToAnotherDirectedRecipient() {
     XCTAssertTrue(
       IOSMeshRelayPolicy.shouldRelay(
