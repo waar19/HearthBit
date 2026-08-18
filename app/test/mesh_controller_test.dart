@@ -215,6 +215,16 @@ class _FakePlatform extends MeshPlatformService {
     'activeScans': 1,
     'scanStarts': 8,
     'storeForwardEntries': 3,
+    'operationalCounters': {
+      'openSosRateLimitedKnown': 2,
+      'openSosRateLimitedUnknown': 7,
+      'relayDampingSuppressed': 3,
+      'relayDampingScheduled': 11,
+      'relayDampingExpired': 9,
+      'trustStoreEvictions': 1,
+      'trustConflicts': 4,
+      'peerId': 'must-not-be-parsed',
+    },
     'transports': ['ble', 'lan', 'ble'],
   };
 
@@ -513,6 +523,14 @@ void main() {
     expect(controller.activeBleScans, 1);
     expect(controller.scanStarts, 8);
     expect(controller.storeForwardEntries, 3);
+    expect(controller.operationalCounters.openSosRateLimitedKnown, 2);
+    expect(controller.operationalCounters.openSosRateLimitedUnknown, 7);
+    expect(controller.operationalCounters.relayDampingSuppressed, 3);
+    expect(controller.operationalCounters.relayDampingScheduled, 11);
+    expect(controller.operationalCounters.relayDampingExpired, 9);
+    expect(controller.operationalCounters.trustStoreEvictions, 1);
+    expect(controller.operationalCounters.trustConflicts, 4);
+    expect(controller.operationalCounters.toJson(), isNot(contains('peerId')));
     expect(controller.activeTransports, {'ble', 'lan'});
   });
 

@@ -901,6 +901,30 @@ class AppLocalizationsDe extends AppLocalizations {
   String get diagnosticsStoreForward => 'Zwischenspeicher-Warteschlange';
 
   @override
+  String get diagnosticsOperationalCountersSection => 'Betriebszähler';
+
+  @override
+  String get diagnosticsOpenSosLimitedKnown => 'Bekannte SOS ratebegrenzt';
+
+  @override
+  String get diagnosticsOpenSosLimitedUnknown => 'Unbekannte SOS ratebegrenzt';
+
+  @override
+  String get diagnosticsRelaySuppressed => 'Durch Dämpfung unterdrückte Relays';
+
+  @override
+  String get diagnosticsRelayScheduled => 'Geplante Relays';
+
+  @override
+  String get diagnosticsRelayExpired => 'Abgeschlossene Relay-Timer';
+
+  @override
+  String get diagnosticsTrustEvictions => 'Verdrängte Vertrauens-Pins';
+
+  @override
+  String get diagnosticsTrustConflicts => 'Vertrauenskonflikte';
+
+  @override
   String get diagnosticsTransportsSection => 'Aktive Übertragungswege';
 
   @override

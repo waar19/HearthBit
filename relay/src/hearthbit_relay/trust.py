@@ -24,6 +24,10 @@ class TrustConflictError(TrustStoreError):
     """Raised when an ANNOUNCE conflicts with pinned public keys."""
 
 
+class TrustCapacityError(TrustStoreError):
+    """Raised when no additional peer identity can be pinned."""
+
+
 @dataclass(frozen=True, slots=True)
 class TrustedPeer:
     sender_id: bytes
@@ -77,7 +81,7 @@ class TrustStore:
                     return True
                 return False
             if len(self._peers) >= MAX_TRUSTED_PEERS:
-                raise TrustStoreError("trusted peer capacity reached")
+                raise TrustCapacityError("trusted peer capacity reached")
             updated = dict(self._peers)
             updated[peer.sender_id] = peer
             self._write(updated)

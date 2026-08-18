@@ -24,11 +24,13 @@ class DiagnosticsExportService {
   Future<ShareResult> share({
     required RenderBox? anchor,
     required String subject,
+    Map<String, int> operationalCounters = const {},
   }) async {
     _log.info(
       'diagnostics.transport.outcomes',
       data: _transportDiagnostics.exportData(),
     );
+    includeOperationalCounters(operationalCounters);
     final file = await _log.createExportFile();
     final origin = anchor == null || !anchor.hasSize
         ? const Rect.fromLTWH(0, 0, 1, 1)
@@ -41,5 +43,9 @@ class DiagnosticsExportService {
         sharePositionOrigin: origin,
       ),
     );
+  }
+
+  void includeOperationalCounters(Map<String, int> counters) {
+    _log.info('diagnostics.operational_counters', data: counters);
   }
 }

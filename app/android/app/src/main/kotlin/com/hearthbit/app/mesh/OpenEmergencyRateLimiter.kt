@@ -14,6 +14,8 @@ internal class OpenEmergencyRateLimiter(
 
     private var knownWindow: Window? = null
     private var unknownWindow: Window? = null
+    private var knownRateLimited = 0L
+    private var unknownRateLimited = 0L
 
     init {
         require(knownMaximumPackets > 0)
@@ -37,10 +39,24 @@ internal class OpenEmergencyRateLimiter(
             }
             return true
         }
-        if (current.packets >= maximum) return false
+        if (current.packets >= maximum) {
+            if (knownRelationship) {
+                knownRateLimited += 1
+            } else {
+                unknownRateLimited += 1
+            }
+            return false
+        }
         current.packets += 1
         return true
     }
+
+    /** Contadores acumulados durante la vida de esta instancia. */
+    @Synchronized
+    fun operationalCounters(): Map<String, Long> = mapOf(
+        "openSosRateLimitedKnown" to knownRateLimited,
+        "openSosRateLimitedUnknown" to unknownRateLimited,
+    )
 
     @Synchronized
     fun clear() {
@@ -48,7 +64,12 @@ internal class OpenEmergencyRateLimiter(
         unknownWindow = null
     }
 
-    fun reset() = clear()
+    @Synchronized
+    fun reset() {
+        clear()
+        knownRateLimited = 0L
+        unknownRateLimited = 0L
+    }
 
     companion object {
         const val DEFAULT_KNOWN_MAXIMUM_PACKETS = 600

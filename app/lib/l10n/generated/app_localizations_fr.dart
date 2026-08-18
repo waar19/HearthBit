@@ -899,6 +899,31 @@ class AppLocalizationsFr extends AppLocalizations {
   String get diagnosticsStoreForward => 'File de stockage et retransmission';
 
   @override
+  String get diagnosticsOperationalCountersSection => 'Compteurs opérationnels';
+
+  @override
+  String get diagnosticsOpenSosLimitedKnown => 'SOS connus limités par débit';
+
+  @override
+  String get diagnosticsOpenSosLimitedUnknown =>
+      'SOS inconnus limités par débit';
+
+  @override
+  String get diagnosticsRelaySuppressed => 'Relais supprimés par amortissement';
+
+  @override
+  String get diagnosticsRelayScheduled => 'Relais planifiés';
+
+  @override
+  String get diagnosticsRelayExpired => 'Temporisateurs de relais terminés';
+
+  @override
+  String get diagnosticsTrustEvictions => 'Épingles de confiance évincées';
+
+  @override
+  String get diagnosticsTrustConflicts => 'Conflits de confiance';
+
+  @override
   String get diagnosticsTransportsSection => 'Transports actifs';
 
   @override

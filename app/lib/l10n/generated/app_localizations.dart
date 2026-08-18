@@ -1644,6 +1644,54 @@ abstract class AppLocalizations {
   /// **'Store-and-forward queue'**
   String get diagnosticsStoreForward;
 
+  /// No description provided for @diagnosticsOperationalCountersSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Operational counters'**
+  String get diagnosticsOperationalCountersSection;
+
+  /// No description provided for @diagnosticsOpenSosLimitedKnown.
+  ///
+  /// In en, this message translates to:
+  /// **'Known SOS rate-limited'**
+  String get diagnosticsOpenSosLimitedKnown;
+
+  /// No description provided for @diagnosticsOpenSosLimitedUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown SOS rate-limited'**
+  String get diagnosticsOpenSosLimitedUnknown;
+
+  /// No description provided for @diagnosticsRelaySuppressed.
+  ///
+  /// In en, this message translates to:
+  /// **'Relays suppressed by damping'**
+  String get diagnosticsRelaySuppressed;
+
+  /// No description provided for @diagnosticsRelayScheduled.
+  ///
+  /// In en, this message translates to:
+  /// **'Relays scheduled'**
+  String get diagnosticsRelayScheduled;
+
+  /// No description provided for @diagnosticsRelayExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Relay timers completed'**
+  String get diagnosticsRelayExpired;
+
+  /// No description provided for @diagnosticsTrustEvictions.
+  ///
+  /// In en, this message translates to:
+  /// **'Trust pins evicted'**
+  String get diagnosticsTrustEvictions;
+
+  /// No description provided for @diagnosticsTrustConflicts.
+  ///
+  /// In en, this message translates to:
+  /// **'Trust conflicts'**
+  String get diagnosticsTrustConflicts;
+
   /// No description provided for @diagnosticsTransportsSection.
   ///
   /// In en, this message translates to:

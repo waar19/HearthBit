@@ -58,6 +58,8 @@ class PeerTrustStoreTest {
             storage.swapOperations.single(),
         )
         assertEquals(2, storage.putCalls)
+        assertEquals(1L, store.operationalCounters()["trustStoreEvictions"])
+        assertEquals(0L, store.operationalCounters()["trustConflicts"])
     }
 
     @Test
@@ -271,6 +273,7 @@ class PeerTrustStoreTest {
             ),
         )
         assertEquals(PeerTrustLookup.Unknown, store.lookup(peerId(rescuer)))
+        assertEquals(1L, store.operationalCounters()["trustConflicts"])
     }
 
     private fun keys(seed: Int): PeerIdentityKeys = PeerIdentityKeys(

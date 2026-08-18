@@ -496,6 +496,8 @@ final class IOSOpenEmergencyRateLimiter {
   private let window: TimeInterval
   private var knownFrames: [TimeInterval] = []
   private var unknownFrames: [TimeInterval] = []
+  private var knownRateLimited: UInt64 = 0
+  private var unknownRateLimited: UInt64 = 0
   private let lock = NSLock()
 
   init(
@@ -519,25 +521,48 @@ final class IOSOpenEmergencyRateLimiter {
     defer { lock.unlock() }
 
     if knownRelationship {
-      return Self.record(
+      let allowed = Self.record(
         now: now,
         window: window,
         maximumFrames: knownMaximumFrames,
         frames: &knownFrames
       )
+      if !allowed { knownRateLimited &+= 1 }
+      return allowed
     }
-    return Self.record(
+    let allowed = Self.record(
       now: now,
       window: window,
       maximumFrames: unknownMaximumFrames,
       frames: &unknownFrames
     )
+    if !allowed { unknownRateLimited &+= 1 }
+    return allowed
+  }
+
+  /// Counters are process-lifetime unless `reset()` is explicitly invoked.
+  func operationalCounters() -> [String: UInt64] {
+    lock.lock()
+    defer { lock.unlock() }
+    return [
+      "openSosRateLimitedKnown": knownRateLimited,
+      "openSosRateLimitedUnknown": unknownRateLimited,
+    ]
   }
 
   func clear() {
     lock.lock()
     knownFrames.removeAll(keepingCapacity: true)
     unknownFrames.removeAll(keepingCapacity: true)
+    lock.unlock()
+  }
+
+  func reset() {
+    lock.lock()
+    knownFrames.removeAll(keepingCapacity: true)
+    unknownFrames.removeAll(keepingCapacity: true)
+    knownRateLimited = 0
+    unknownRateLimited = 0
     lock.unlock()
   }
 
@@ -672,6 +697,36 @@ enum IOSRelayDampingPolicy {
 
   static func additionalCopies(sourceKeys: Set<String>) -> Int {
     max(0, sourceKeys.count - 1)
+  }
+}
+
+final class IOSRelayOperationalCounters {
+  private let lock = NSLock()
+  private var scheduled: UInt64 = 0
+  private var expired: UInt64 = 0
+  private var suppressed: UInt64 = 0
+
+  func recordScheduled() {
+    lock.lock()
+    scheduled &+= 1
+    lock.unlock()
+  }
+
+  func recordExpiration(suppressed wasSuppressed: Bool) {
+    lock.lock()
+    expired &+= 1
+    if wasSuppressed { suppressed &+= 1 }
+    lock.unlock()
+  }
+
+  func snapshot() -> [String: UInt64] {
+    lock.lock()
+    defer { lock.unlock() }
+    return [
+      "relayDampingSuppressed": suppressed,
+      "relayDampingScheduled": scheduled,
+      "relayDampingExpired": expired,
+    ]
   }
 }
 

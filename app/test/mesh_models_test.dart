@@ -2,6 +2,24 @@ import 'package:hearth_bit/models/mesh_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('operational counters accept only aggregate contract fields', () {
+    final counters = MeshOperationalCounters.fromNative({
+      'openSosRateLimitedKnown': 4,
+      'openSosRateLimitedUnknown': -2,
+      'relayDampingSuppressed': 3.9,
+      'relayDampingScheduled': 8,
+      'relayDampingExpired': 7,
+      'trustStoreEvictions': 2,
+      'trustConflicts': 1,
+      'senderId': 'sensitive',
+    });
+
+    expect(counters.openSosRateLimitedKnown, 4);
+    expect(counters.openSosRateLimitedUnknown, 0);
+    expect(counters.relayDampingSuppressed, 3);
+    expect(counters.toJson(), isNot(contains('senderId')));
+  });
+
   group('triage SOS T1', () {
     const triage = SosTriage(
       peopleCount: 4,

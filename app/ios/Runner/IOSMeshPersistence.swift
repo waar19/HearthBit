@@ -127,6 +127,9 @@ final class IOSPeerIdentityPinStore {
   private let maximumPins: Int
   private var pins: [String: IOSPeerIdentityPin] = [:]
   private var rescueRosterPins: [String: Data] = [:]
+  private let countersLock = NSLock()
+  private var trustStoreEvictions: UInt64 = 0
+  private var trustConflicts: UInt64 = 0
   private(set) var failure: Error?
 
   convenience init(defaults: UserDefaults = .standard) {
@@ -200,15 +203,18 @@ final class IOSPeerIdentityPinStore {
     }
     if let expectedSigningKey = rescueRosterPins[normalized],
        expectedSigningKey != signingPublicKey {
+      incrementTrustConflict()
       return .conflict(noiseChanged: false, signingChanged: true)
     }
     if let existing = pins[normalized] {
       if existing.retired == true {
+        incrementTrustConflict()
         return .conflict(noiseChanged: true, signingChanged: true)
       }
       let noiseChanged = existing.noisePublicKey != noisePublicKey
       let signingChanged = existing.signingPublicKey != signingPublicKey
       if noiseChanged || signingChanged {
+        incrementTrustConflict()
         return .conflict(
           noiseChanged: noiseChanged,
           signingChanged: signingChanged
@@ -223,6 +229,7 @@ final class IOSPeerIdentityPinStore {
       )
     }
     let previousPins = pins
+    var evicted = false
     guard pins.count <= maximumPins else {
       throw IOSSecureStorageError.logicalTransactionFailed(
         "Peer identity pin capacity exceeded"
@@ -242,6 +249,7 @@ final class IOSPeerIdentityPinStore {
         )
       }
       pins.removeValue(forKey: eviction)
+      evicted = true
     }
 
     let pin = IOSPeerIdentityPin(
@@ -259,7 +267,33 @@ final class IOSPeerIdentityPinStore {
       failure = error
       throw error
     }
+    if evicted { incrementTrustStoreEviction() }
     return .firstBinding
+  }
+
+  func operationalCounters() -> [String: UInt64] {
+    countersLock.lock()
+    defer { countersLock.unlock() }
+    return [
+      "trustStoreEvictions": trustStoreEvictions,
+      "trustConflicts": trustConflicts,
+    ]
+  }
+
+  func recordObservedConflict() {
+    incrementTrustConflict()
+  }
+
+  private func incrementTrustStoreEviction() {
+    countersLock.lock()
+    trustStoreEvictions &+= 1
+    countersLock.unlock()
+  }
+
+  private func incrementTrustConflict() {
+    countersLock.lock()
+    trustConflicts &+= 1
+    countersLock.unlock()
   }
 
   func importRescueRosterPins(_ values: [IOSRescueRosterPin]) throws {

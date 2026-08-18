@@ -53,6 +53,53 @@ enum MeshPowerProfile {
       this != MeshPowerProfile.performance && this != MeshPowerProfile.balanced;
 }
 
+class MeshOperationalCounters {
+  const MeshOperationalCounters({
+    this.openSosRateLimitedKnown = 0,
+    this.openSosRateLimitedUnknown = 0,
+    this.relayDampingSuppressed = 0,
+    this.relayDampingScheduled = 0,
+    this.relayDampingExpired = 0,
+    this.trustStoreEvictions = 0,
+    this.trustConflicts = 0,
+  });
+
+  final int openSosRateLimitedKnown;
+  final int openSosRateLimitedUnknown;
+  final int relayDampingSuppressed;
+  final int relayDampingScheduled;
+  final int relayDampingExpired;
+  final int trustStoreEvictions;
+  final int trustConflicts;
+
+  factory MeshOperationalCounters.fromNative(Map<Object?, Object?> value) {
+    int counter(String key) {
+      final parsed = (value[key] as num?)?.toInt() ?? 0;
+      return parsed < 0 ? 0 : parsed;
+    }
+
+    return MeshOperationalCounters(
+      openSosRateLimitedKnown: counter('openSosRateLimitedKnown'),
+      openSosRateLimitedUnknown: counter('openSosRateLimitedUnknown'),
+      relayDampingSuppressed: counter('relayDampingSuppressed'),
+      relayDampingScheduled: counter('relayDampingScheduled'),
+      relayDampingExpired: counter('relayDampingExpired'),
+      trustStoreEvictions: counter('trustStoreEvictions'),
+      trustConflicts: counter('trustConflicts'),
+    );
+  }
+
+  Map<String, int> toJson() => {
+    'openSosRateLimitedKnown': openSosRateLimitedKnown,
+    'openSosRateLimitedUnknown': openSosRateLimitedUnknown,
+    'relayDampingSuppressed': relayDampingSuppressed,
+    'relayDampingScheduled': relayDampingScheduled,
+    'relayDampingExpired': relayDampingExpired,
+    'trustStoreEvictions': trustStoreEvictions,
+    'trustConflicts': trustConflicts,
+  };
+}
+
 enum CheckInStatus {
   ok('OK'),
   needsHelp('HELP'),

@@ -895,6 +895,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get diagnosticsStoreForward => 'Store-and-forward queue';
 
   @override
+  String get diagnosticsOperationalCountersSection => 'Operational counters';
+
+  @override
+  String get diagnosticsOpenSosLimitedKnown => 'Known SOS rate-limited';
+
+  @override
+  String get diagnosticsOpenSosLimitedUnknown => 'Unknown SOS rate-limited';
+
+  @override
+  String get diagnosticsRelaySuppressed => 'Relays suppressed by damping';
+
+  @override
+  String get diagnosticsRelayScheduled => 'Relays scheduled';
+
+  @override
+  String get diagnosticsRelayExpired => 'Relay timers completed';
+
+  @override
+  String get diagnosticsTrustEvictions => 'Trust pins evicted';
+
+  @override
+  String get diagnosticsTrustConflicts => 'Trust conflicts';
+
+  @override
   String get diagnosticsTransportsSection => 'Active transports';
 
   @override

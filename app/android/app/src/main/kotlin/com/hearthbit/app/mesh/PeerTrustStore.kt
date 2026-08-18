@@ -37,6 +37,9 @@ internal class PeerTrustStore private constructor(
     private val storage: PeerTrustStorage,
     private val maximumTrustedPeers: Int,
 ) {
+    private var trustStoreEvictions = 0L
+    private var trustConflicts = 0L
+
     constructor(context: Context) : this(
         SecurePeerTrustStorage(KeystoreSecureStore.open(context, PREFERENCES)),
         MAX_TRUSTED_PEERS,
@@ -72,7 +75,7 @@ internal class PeerTrustStore private constructor(
         if (rosterSigningKey != null &&
             !MessageDigest.isEqual(rosterSigningKey, announced.signingPublicKey)
         ) {
-            return PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION
+            return rejectConflict(PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION)
         }
         val storageKey = key(peerId)
         val stored = runCatching { storage.getString(storageKey) }.getOrElse {
@@ -119,6 +122,10 @@ internal class PeerTrustStore private constructor(
                     PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION
                 }
             }
+            if (evictionCandidate != null) trustStoreEvictions += 1
+        }
+        if (decision == PeerIdentityDecision.REJECT_UNAUTHENTICATED_ROTATION) {
+            trustConflicts += 1
         }
         return decision
     }
@@ -149,7 +156,7 @@ internal class PeerTrustStore private constructor(
         if (newPeerId == oldPeerId) return PeerIdentityDecision.REJECT_INVALID_IDENTITY
         val newStorageKey = key(newPeerId)
         if (runCatching { storage.contains(newStorageKey) }.getOrDefault(true)) {
-            return PeerIdentityDecision.REJECT_COLLISION
+            return rejectConflict(PeerIdentityDecision.REJECT_COLLISION)
         }
         val collidesWithAnotherPeer = runCatching {
             storage.keys()
@@ -166,7 +173,9 @@ internal class PeerTrustStore private constructor(
                     )
                 }
         }.getOrDefault(true)
-        if (collidesWithAnotherPeer) return PeerIdentityDecision.REJECT_COLLISION
+        if (collidesWithAnotherPeer) {
+            return rejectConflict(PeerIdentityDecision.REJECT_COLLISION)
+        }
         val encoded = encode(
             replacement,
             PeerIdentityDecision.ACCEPT_AUTHENTICATED_ROTATION,
@@ -241,6 +250,13 @@ internal class PeerTrustStore private constructor(
     @Synchronized
     fun rescueProtectedPeerIds(): Set<String> = rescueRosterPins().keys
 
+    /** Contadores acumulados durante la vida de esta instancia. */
+    @Synchronized
+    fun operationalCounters(): Map<String, Long> = mapOf(
+        "trustStoreEvictions" to trustStoreEvictions,
+        "trustConflicts" to trustConflicts,
+    )
+
     fun clear() {
         check(storage.clear())
     }
@@ -249,6 +265,11 @@ internal class PeerTrustStore private constructor(
         .asSequence()
         .mapNotNull(::decodeBoundPin)
         .count()
+
+    private fun rejectConflict(decision: PeerIdentityDecision): PeerIdentityDecision {
+        trustConflicts += 1
+        return decision
+    }
 
     private fun selectEvictionCandidate(
         validatingStorageKey: String,

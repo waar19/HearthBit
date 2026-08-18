@@ -3,6 +3,11 @@
 La radio BLE no se valida con emuladores. Use teléfonos físicos y desactive
 Wi-Fi y datos móviles durante la prueba.
 
+Para un operativo completo con roster, triage, casos, clusters, zonas,
+anuncios de autoridad y GeoJSON, siga también el
+[piloto P0 para equipo de rescate](rescue-team-pilot.md). Su preflight crea
+manifiesto y reporte en estado `PENDING`/`BLOCKED`; nunca declara evidencia RF.
+
 ## Gates P0 de publicación
 
 Estos casos bloquean la declaración «lista para emergencias reales». Su estado

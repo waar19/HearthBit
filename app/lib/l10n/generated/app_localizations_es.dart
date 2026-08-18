@@ -900,6 +900,33 @@ class AppLocalizationsEs extends AppLocalizations {
   String get diagnosticsStoreForward => 'Cola de guardar y reenviar';
 
   @override
+  String get diagnosticsOperationalCountersSection => 'Contadores operativos';
+
+  @override
+  String get diagnosticsOpenSosLimitedKnown =>
+      'SOS conocidos limitados por tasa';
+
+  @override
+  String get diagnosticsOpenSosLimitedUnknown =>
+      'SOS desconocidos limitados por tasa';
+
+  @override
+  String get diagnosticsRelaySuppressed =>
+      'Relays suprimidos por amortiguación';
+
+  @override
+  String get diagnosticsRelayScheduled => 'Relays programados';
+
+  @override
+  String get diagnosticsRelayExpired => 'Temporizadores de relay completados';
+
+  @override
+  String get diagnosticsTrustEvictions => 'Pins de confianza expulsados';
+
+  @override
+  String get diagnosticsTrustConflicts => 'Conflictos de confianza';
+
+  @override
   String get diagnosticsTransportsSection => 'Transportes activos';
 
   @override

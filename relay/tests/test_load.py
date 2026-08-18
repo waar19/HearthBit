@@ -99,6 +99,16 @@ async def test_unknown_signed_identity_spam_is_rejected_without_state_growth() -
         assert core._buckets == {}
         assert store.packet_count() == 0
         assert sink.sent == []
+        assert core.diagnostic_snapshot() == {
+            "lifetime": "process",
+            "accepted": 0,
+            "rejected": identity_count,
+            "forwarded": 0,
+            "stored": 0,
+            "trustConflicts": 0,
+            "trustCapacityRejected": 0,
+            "resultsByReason": {"unknown-signing-key": identity_count},
+        }
     finally:
         store.close()
 
@@ -158,5 +168,14 @@ async def test_verified_sos_burst_is_bounded_by_current_emergency_policy() -> No
         )
         assert len(sink.sent) == burst
         assert store.packet_count() == burst
+        snapshot = core.diagnostic_snapshot()
+        assert snapshot["accepted"] == burst + 1
+        assert snapshot["rejected"] == burst
+        assert snapshot["forwarded"] == burst + 1
+        assert snapshot["stored"] == burst
+        assert snapshot["resultsByReason"] == {
+            "rate-limited": burst,
+            "relayed": burst + 1,
+        }
     finally:
         store.close()

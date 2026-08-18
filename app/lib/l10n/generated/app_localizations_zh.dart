@@ -851,6 +851,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnosticsStoreForward => '存储转发队列';
 
   @override
+  String get diagnosticsOperationalCountersSection => '运行计数器';
+
+  @override
+  String get diagnosticsOpenSosLimitedKnown => '已限流的已知 SOS';
+
+  @override
+  String get diagnosticsOpenSosLimitedUnknown => '已限流的未知 SOS';
+
+  @override
+  String get diagnosticsRelaySuppressed => '因抑制而取消的中继';
+
+  @override
+  String get diagnosticsRelayScheduled => '已计划的中继';
+
+  @override
+  String get diagnosticsRelayExpired => '已完成的中继计时器';
+
+  @override
+  String get diagnosticsTrustEvictions => '已逐出的信任固定项';
+
+  @override
+  String get diagnosticsTrustConflicts => '信任冲突';
+
+  @override
   String get diagnosticsTransportsSection => '活跃传输方式';
 
   @override

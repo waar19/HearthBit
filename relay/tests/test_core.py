@@ -40,6 +40,7 @@ from hearthbit_relay.protocol import (
     encode_packet,
 )
 from hearthbit_relay.store import PacketStore
+from hearthbit_relay.trust import TrustCapacityError
 
 
 class MemoryLink(InMemoryRelayLink):
@@ -64,6 +65,14 @@ class MemoryLink(InMemoryRelayLink):
         )
 
 
+class CapacityTrustStore:
+    def pin(self, *_args) -> bool:
+        raise TrustCapacityError("capacity")
+
+    def get(self, _sender_id):
+        return None
+
+
 def relay_config() -> RelayConfig:
     store = replace(
         StoreConfig(),
@@ -81,6 +90,28 @@ def relay_config() -> RelayConfig:
 
 def _announcement_clock_ms() -> int:
     return 0
+
+
+async def test_trust_capacity_is_counted_without_identity_data(tmp_path) -> None:
+    config = relay_config()
+    store = PacketStore(config.store)
+    identity = RelayIdentity.load_or_create(tmp_path / "capacity.json")
+    core = RelayCore(
+        config,
+        store,
+        trust_store=CapacityTrustStore(),
+        announcement_clock_ms=lambda: 1,
+    )
+
+    result = await core.inbound(
+        "source",
+        identity.build_announcement(nickname="Capacity", timestamp_ms=1),
+    )
+
+    assert result.reason == "trust-capacity"
+    assert core.diagnostic_snapshot()["trustCapacityRejected"] == 1
+    assert "sender" not in str(core.diagnostic_snapshot()).lower()
+    store.close()
 
 
 def signed_message(
@@ -628,6 +659,10 @@ async def test_known_identity_verifies_signatures_and_rejects_key_rotation(
         signature=attacker.sign(canonical_packet_bytes(unsigned)),
     )
     assert (await core.inbound("source", conflict)).reason == "identity-conflict"
+    snapshot = core.diagnostic_snapshot()
+    assert snapshot["trustConflicts"] == 1
+    assert snapshot["trustCapacityRejected"] == 0
+    assert list(snapshot["resultsByReason"]) == sorted(snapshot["resultsByReason"])
     store.close()
 
 

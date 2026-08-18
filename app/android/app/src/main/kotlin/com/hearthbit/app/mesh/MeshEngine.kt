@@ -361,6 +361,8 @@ internal class MeshEngine(
             "activeScans" to metrics.getValue("activeScans"),
             "scanStarts" to metrics.getValue("scanStarts"),
             "storeForwardEntries" to metrics.getValue("storeForwardEntries"),
+            "operationalCounters" to operationalCounters(),
+            "operationalCountersLifetime" to "process",
             "linkCount" to activeLinks().size,
             "nearbyCount" to nearbyPeerCount(),
             "presenceCount" to genericPresenceTracker
@@ -386,7 +388,14 @@ internal class MeshEngine(
                 (if (genericPresenceScanRunning) 1 else 0),
             "scanStarts" to scanStartCount,
             "storeForwardEntries" to storeForward.entryCount(now),
+            "operationalCounters" to operationalCounters(),
         )
+    }
+
+    private fun operationalCounters(): Map<String, Long> = buildMap {
+        putAll(openEmergencyRateLimiter.operationalCounters())
+        putAll(relayDamping.operationalCounters())
+        putAll(peerTrustStore.operationalCounters())
     }
 
     fun notificationSnapshot(): MeshNotificationState = MeshNotificationState(

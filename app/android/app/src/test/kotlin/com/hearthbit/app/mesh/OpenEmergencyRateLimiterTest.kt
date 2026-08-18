@@ -22,6 +22,12 @@ class OpenEmergencyRateLimiterTest {
             assertTrue(limiter.allow(knownRelationship = false, now = 1_000L))
         }
         assertFalse(limiter.allow(knownRelationship = false, now = 1_000L))
+        assertTrue(
+            limiter.operationalCounters() == mapOf(
+                "openSosRateLimitedKnown" to 0L,
+                "openSosRateLimitedUnknown" to 1L,
+            ),
+        )
     }
 
     @Test
@@ -38,6 +44,12 @@ class OpenEmergencyRateLimiterTest {
             assertTrue(limiter.allow(knownRelationship = true, now = 1_000L))
         }
         assertFalse(limiter.allow(knownRelationship = true, now = 1_000L))
+        assertTrue(
+            limiter.operationalCounters() == mapOf(
+                "openSosRateLimitedKnown" to 1L,
+                "openSosRateLimitedUnknown" to 1L,
+            ),
+        )
     }
 
     @Test
@@ -53,6 +65,7 @@ class OpenEmergencyRateLimiterTest {
         assertTrue(limiter.allow(knownRelationship = false))
         assertFalse(limiter.allow(knownRelationship = false))
         limiter.reset()
+        assertTrue(limiter.operationalCounters().values.all { it == 0L })
         assertTrue(limiter.allow(knownRelationship = false))
         assertFalse(limiter.allow(knownRelationship = false))
         now += 100L

@@ -868,6 +868,30 @@ class AppLocalizationsJa extends AppLocalizations {
   String get diagnosticsStoreForward => '蓄積転送キュー';
 
   @override
+  String get diagnosticsOperationalCountersSection => '運用カウンター';
+
+  @override
+  String get diagnosticsOpenSosLimitedKnown => 'レート制限された既知の SOS';
+
+  @override
+  String get diagnosticsOpenSosLimitedUnknown => 'レート制限された未知の SOS';
+
+  @override
+  String get diagnosticsRelaySuppressed => '抑制された中継';
+
+  @override
+  String get diagnosticsRelayScheduled => '予約された中継';
+
+  @override
+  String get diagnosticsRelayExpired => '完了した中継タイマー';
+
+  @override
+  String get diagnosticsTrustEvictions => '削除された信頼ピン';
+
+  @override
+  String get diagnosticsTrustConflicts => '信頼の競合';
+
+  @override
   String get diagnosticsTransportsSection => '有効な通信経路';
 
   @override

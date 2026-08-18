@@ -1029,6 +1029,13 @@ class RunnerTests: XCTestCase {
       XCTAssertTrue(limiter.allow(knownRelationship: true, now: 100))
     }
     XCTAssertFalse(limiter.allow(knownRelationship: true, now: 100))
+    XCTAssertEqual(
+      limiter.operationalCounters(),
+      [
+        "openSosRateLimitedKnown": 1,
+        "openSosRateLimitedUnknown": 1,
+      ]
+    )
 
     XCTAssertTrue(limiter.allow(knownRelationship: false, now: 160))
     XCTAssertTrue(limiter.allow(knownRelationship: true, now: 160))
@@ -1137,6 +1144,21 @@ class RunnerTests: XCTestCase {
     )
     XCTAssertFalse(
       IOSRelayDampingPolicy.shouldRelay(additionalCopies: 3, emergency: true)
+    )
+  }
+
+  func testRelayOperationalCountersUseParityNames() {
+    let counters = IOSRelayOperationalCounters()
+    counters.recordScheduled()
+    counters.recordExpiration(suppressed: true)
+
+    XCTAssertEqual(
+      counters.snapshot(),
+      [
+        "relayDampingSuppressed": 1,
+        "relayDampingScheduled": 1,
+        "relayDampingExpired": 1,
+      ]
     )
   }
 
@@ -1658,6 +1680,8 @@ class RunnerTests: XCTestCase {
     XCTAssertNil(store.pin(for: evictedPeerID))
     XCTAssertNotNil(store.pin(for: protectedPeerID))
     XCTAssertNotNil(store.pin(for: incoming.peerID))
+    XCTAssertEqual(store.operationalCounters()["trustStoreEvictions"], 1)
+    XCTAssertEqual(store.operationalCounters()["trustConflicts"], 0)
   }
 
   func testPeerPinEvictionRollsBackAndFailsClosedWhenPersistenceFails() throws {
@@ -1734,6 +1758,7 @@ class RunnerTests: XCTestCase {
       ),
       .conflict(noiseChanged: true, signingChanged: true)
     )
+    XCTAssertEqual(store.operationalCounters()["trustConflicts"], 1)
   }
 
   func testPeerPinAcceptsSameBoundKeys() throws {

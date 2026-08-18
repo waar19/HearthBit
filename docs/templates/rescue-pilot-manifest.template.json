@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "run_id": "RUN-YYYYMMDDTHHMMSSZ-RESCUE-PILOT",
+  "created_utc": "PENDING",
+  "status": "PENDING",
+  "commit": "PENDING",
+  "build": "PENDING",
+  "privacy": "No PII, serials, MAC, peer IDs, keys, real coordinates or real messages",
+  "hardware": {
+    "android_devices": "PENDING",
+    "iphone_and_mac": "PENDING",
+    "bitle_anchors": "PENDING",
+    "raspberry_pi_bluez": "PENDING",
+    "meshtastic_pair": "PENDING",
+    "authorized_lora_pair": "PENDING"
+  },
+  "required_scenarios": [
+    "ROSTER",
+    "TRIAGE",
+    "CASES",
+    "CLUSTERS",
+    "ZONES",
+    "AUTHORITY",
+    "GEOJSON",
+    "P0-SOS-NO-AUDIENCE",
+    "P0-SOS-ACK",
+    "P0-STORE-REBOOT",
+    "P0-RESCUE-KILL-DOZE",
+    "P0-PRIVATE-NOISE",
+    "P0-FOUR-NODE-TWO-HOP",
+    "P0-LAN-PI",
+    "P0-RADAR-10M",
+    "P0-BATTERY-24H",
+    "P0-IOS-MESH-RESTART",
+    "P0-INTEROP-OFF",
+    "P0-PANIC-WIPE",
+    "P0-OPTICAL-TRUST"
+  ],
+  "criteria_confirmed": [],
+  "first_failed_criterion": "PENDING",
+  "evidence": [
+    {
+      "category": "PENDING",
+      "path": "PENDING",
+      "sha256": "PENDING"
+    }
+  ],
+  "operator_attestation": "PENDING"
+}

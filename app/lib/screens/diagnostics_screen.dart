@@ -70,6 +70,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
         'scanStarts': controller.scanStarts,
         'storeForwardEntries': controller.storeForwardEntries,
         'transportCount': controller.activeTransports.length,
+        ...controller.operationalCounters.toJson(),
       },
     );
     try {
@@ -77,6 +78,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       await _export.share(
         anchor: anchor,
         subject: context.l10n.diagnosticsExportSubject,
+        operationalCounters: controller.operationalCounters.toJson(),
       );
     } catch (error, stackTrace) {
       DiagnosticsLog.instance.warning(
@@ -177,6 +179,40 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                   (
                     context.l10n.diagnosticsStoreForward,
                     '${controller.storeForwardEntries}',
+                  ),
+                ],
+              ),
+              _DiagnosticCard(
+                title: context.l10n.diagnosticsOperationalCountersSection,
+                icon: Icons.monitor_heart_outlined,
+                rows: [
+                  (
+                    context.l10n.diagnosticsOpenSosLimitedKnown,
+                    '${controller.operationalCounters.openSosRateLimitedKnown}',
+                  ),
+                  (
+                    context.l10n.diagnosticsOpenSosLimitedUnknown,
+                    '${controller.operationalCounters.openSosRateLimitedUnknown}',
+                  ),
+                  (
+                    context.l10n.diagnosticsRelaySuppressed,
+                    '${controller.operationalCounters.relayDampingSuppressed}',
+                  ),
+                  (
+                    context.l10n.diagnosticsRelayScheduled,
+                    '${controller.operationalCounters.relayDampingScheduled}',
+                  ),
+                  (
+                    context.l10n.diagnosticsRelayExpired,
+                    '${controller.operationalCounters.relayDampingExpired}',
+                  ),
+                  (
+                    context.l10n.diagnosticsTrustEvictions,
+                    '${controller.operationalCounters.trustStoreEvictions}',
+                  ),
+                  (
+                    context.l10n.diagnosticsTrustConflicts,
+                    '${controller.operationalCounters.trustConflicts}',
                   ),
                 ],
               ),

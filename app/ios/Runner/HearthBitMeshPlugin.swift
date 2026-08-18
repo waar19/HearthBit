@@ -102,6 +102,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var seen: [String: Date] = [:]
   private var pendingRelays: [String: PendingRelay] = [:]
   private var pendingRelaySequence: UInt64 = 0
+  private let relayOperationalCounters = IOSRelayOperationalCounters()
   private var syncPackets: [String: IOSMeshPacket] = [:]
   private var syncResponseTimes: [UUID: [Date]] = [:]
   private var lastSyncRequestBySource: [UUID: Date] = [:]
@@ -3148,16 +3149,16 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       guard
         let self,
         self.pendingRelays[fingerprint]?.token == token,
-        let pending = self.pendingRelays.removeValue(forKey: fingerprint),
-        self.running,
-        self.localRole.relaysPackets,
-        IOSRelayDampingPolicy.shouldRelay(
+        let pending = self.pendingRelays.removeValue(forKey: fingerprint)
+      else { return }
+      let shouldRelay = IOSRelayDampingPolicy.shouldRelay(
           additionalCopies: IOSRelayDampingPolicy.additionalCopies(
             sourceKeys: pending.sourceKeys
           ),
           emergency: pending.emergency
         )
-      else { return }
+      self.relayOperationalCounters.recordExpiration(suppressed: !shouldRelay)
+      guard self.running, self.localRole.relaysPackets, shouldRelay else { return }
       self.broadcast(pending.packet, excluding: pending.source)
     }
     pendingRelays[fingerprint] = PendingRelay(
@@ -3169,6 +3170,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       workItem: workItem,
       sourceKeys: [IOSRelayDampingPolicy.sourceKey(source)]
     )
+    relayOperationalCounters.recordScheduled()
     let delay = IOSRelayDampingPolicy.jitterMilliseconds(
       fingerprint: fingerprint,
       salt: identity.peerID,
@@ -3185,6 +3187,12 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     pendingRelays.removeAll()
     pendingRelaySequence = 0
     workItems.forEach { $0.cancel() }
+  }
+
+  private func operationalCounters() -> [String: UInt64] {
+    return openEmergencyRateLimiter.operationalCounters()
+      .merging(peerIdentityPins.operationalCounters()) { _, latest in latest }
+      .merging(relayOperationalCounters.snapshot()) { _, latest in latest }
   }
 
   private func validateAnnouncementIdentity(
@@ -3206,6 +3214,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       let noiseChanged = previous.noisePublicKey != announcement.noisePublicKey
       let signingChanged = previous.signingPublicKey != announcement.signingPublicKey
       if noiseChanged || signingChanged {
+        peerIdentityPins.recordObservedConflict()
         emitIdentityConflict(
           peerID: senderID,
           noiseChanged: noiseChanged,
@@ -4284,6 +4293,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       "activeScans": scanning ? 1 : 0,
       "scanStarts": 0,
       "storeForwardEntries": 0,
+      "operationalCounters": operationalCounters(),
+      "operationalCountersLifetime": "process",
       "linkCount": bleLinkCount,
       "nearbyCount": peerMaps().filter { ($0["online"] as? Bool) == true }.count,
       "presenceCount": genericPresenceTracker?

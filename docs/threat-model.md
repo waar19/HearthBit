@@ -269,7 +269,7 @@ Controles presentes:
   anterior, secuencia monotónica y reemplazo persistente.
 - Rechazo de replay de rotación y de colisión con claves de otro peer.
 - Android cifra pins con Keystore y admite hasta 4096; iOS los guarda en
-  Keychain y admite hasta 4096; el relay Linux mantiene hasta 4096 en un JSON
+  Keychain y admite hasta 512; el relay Linux mantiene hasta 4096 en un JSON
   atómico con permisos `0600`.
 - Peers con relaciones, sesiones, radar o entregas pendientes se protegen de
   expulsión en móvil cuando aplica la política de retención.
@@ -464,6 +464,12 @@ Señales disponibles hoy:
 - portadoras que aceptaron el frame;
 - outbox `pending/relayed/acknowledged/expired`, intentos y siguiente reintento;
 - pings de rescate esperados/ejecutados y `lastPingAt`;
+- contadores móviles de vida del proceso para límites open-SOS conocidos y
+  desconocidos, relays programados/vencidos/suprimidos, expulsiones de pins y
+  conflictos de confianza; se muestran y exportan sin IDs;
+- snapshot local thread-safe del relay Python con resultados por razón,
+  aceptados, fan-out, almacenados, conflictos y rechazos por capacidad; se
+  registra al detener el proceso y no abre un endpoint de red;
 - logs de relay para paquete inválido, conflicto de identidad, fallo de
   persistencia, fan-out y replay;
 - diagnósticos locales saneados y exportables por decisión del usuario.
@@ -479,11 +485,13 @@ Interpretación:
   store o batería es compatible con abuso o con una emergencia masiva y exige
   revisión humana.
 
-Brecha de observabilidad: el móvil no expone actualmente contadores durables de
-frames descartados por bucket open-SOS, expulsiones de pins/huellas, supresión
-por damping ni saturación por identidad. No se debe inferir «sin ataque» de la
-ausencia de un evento. Para una operación administrada se recomiendan, sin
-contenido ni IDs estables:
+Brecha de observabilidad residual: los nuevos contadores móviles se reinician
+con el proceso y no cubren expulsiones de huellas, ocupación/evicción de todas
+las colas, identidades nuevas por ventana, latencia de ACK ni continuidad RF.
+El snapshot del relay también vive solo durante el proceso; el log de cierre
+depende de una parada ordenada y no es telemetría durable. No se debe inferir
+«sin ataque» de ceros, reinicios o ausencia de un evento. Para una operación
+administrada todavía se recomiendan, sin contenido ni IDs estables:
 
 - descartes por razón y portadora por ventana;
 - identidades nuevas por minuto y ocupación de trust store/cachés;

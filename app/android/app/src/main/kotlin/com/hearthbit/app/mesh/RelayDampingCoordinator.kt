@@ -23,6 +23,9 @@ internal class RelayDampingCoordinator(
     )
 
     private val pending = LinkedHashMap<String, PendingRelay>()
+    private var scheduled = 0L
+    private var expired = 0L
+    private var suppressed = 0L
 
     init {
         require(maximumPendingRelays > 0)
@@ -60,6 +63,7 @@ internal class RelayDampingCoordinator(
             pendingRelay.cancellation = scheduler.schedule(delayMs) {
                 expire(fingerprint, pendingRelay)
             }
+            scheduled += 1
             true
         } catch (error: Throwable) {
             pending.remove(fingerprint, pendingRelay)
@@ -88,17 +92,28 @@ internal class RelayDampingCoordinator(
     @Synchronized
     internal fun pendingCount(): Int = pending.size
 
+    /** Contadores acumulados durante la vida de esta instancia. */
+    @Synchronized
+    fun operationalCounters(): Map<String, Long> = mapOf(
+        "relayDampingSuppressed" to suppressed,
+        "relayDampingScheduled" to scheduled,
+        "relayDampingExpired" to expired,
+    )
+
     private fun expire(fingerprint: String, expected: PendingRelay) {
         val relay = synchronized(this) {
             val current = pending[fingerprint]
             if (current !== expected) return@synchronized null
             pending.remove(fingerprint)
-            current.relay.takeIf {
-                RelayDampingPolicy.shouldRelay(
-                    additionalCopies = current.sources.size - 1,
-                    emergency = current.emergency,
-                )
+            expired += 1
+            val shouldRelay = RelayDampingPolicy.shouldRelay(
+                additionalCopies = current.sources.size - 1,
+                emergency = current.emergency,
+            )
+            if (!shouldRelay) {
+                suppressed += 1
             }
+            current.relay.takeIf { shouldRelay }
         }
         relay?.invoke()
     }
