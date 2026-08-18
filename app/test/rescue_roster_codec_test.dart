@@ -24,6 +24,14 @@ void main() {
           role: RescueRosterRole.leader,
           signingPublicKey: Uint8List.fromList(publicKey.bytes),
         ),
+        RescueRosterMember(
+          peerId: '8899aabbccddeeff',
+          callsign: 'Autoridad',
+          role: RescueRosterRole.authority,
+          signingPublicKey: Uint8List.fromList(
+            List.generate(32, (index) => index + 1),
+          ),
+        ),
       ],
       signature: Uint8List(0),
     );
@@ -47,7 +55,8 @@ void main() {
 
     expect(decoded.name, 'Equipo Norte');
     expect(decoded.leaderPeerId, '0011223344556677');
-    expect(decoded.members.single.callsign, 'Líder 1');
+    expect(decoded.members.first.callsign, 'Líder 1');
+    expect(decoded.members.last.role, RescueRosterRole.authority);
   });
 
   test('rechaza miembros duplicados antes de firmar', () {

@@ -3501,7 +3501,7 @@ abstract class AppLocalizations {
   /// No description provided for @locationExportConfirmBody.
   ///
   /// In en, this message translates to:
-  /// **'The CSV can contain precise locations and emergency details. Share it only with trusted responders and protect the exported file.'**
+  /// **'The export can contain precise locations, identities and emergency details. Share it only with trusted responders and protect the file.'**
   String get locationExportConfirmBody;
 
   /// No description provided for @locationExportConfirmAction.
@@ -3509,6 +3509,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'EXPORT LOCATIONS'**
   String get locationExportConfirmAction;
+
+  /// No description provided for @mapExport.
+  ///
+  /// In en, this message translates to:
+  /// **'Export operational data'**
+  String get mapExport;
+
+  /// No description provided for @mapExportFormatTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose export format'**
+  String get mapExportFormatTitle;
+
+  /// No description provided for @mapExportCsv.
+  ///
+  /// In en, this message translates to:
+  /// **'CSV · active rescue cases'**
+  String get mapExportCsv;
+
+  /// No description provided for @mapExportGeoJson.
+  ///
+  /// In en, this message translates to:
+  /// **'GeoJSON · active cases and swept zones'**
+  String get mapExportGeoJson;
+
+  /// No description provided for @mapExportSubject.
+  ///
+  /// In en, this message translates to:
+  /// **'HearthBit rescue operations'**
+  String get mapExportSubject;
+
+  /// No description provided for @mapExportError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not export rescue operations: {error}'**
+  String mapExportError(String error);
 
   /// No description provided for @lanGatewayConnected.
   ///
@@ -3863,6 +3899,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Communications'**
   String get rescueRosterRoleCommunications;
+
+  /// No description provided for @rescueRosterRoleAuthority.
+  ///
+  /// In en, this message translates to:
+  /// **'Authority'**
+  String get rescueRosterRoleAuthority;
+
+  /// No description provided for @authorityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Authority announcements'**
+  String get authorityTitle;
+
+  /// No description provided for @authorityTrustBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Only members assigned the Authority role in the active signed roster can issue these authenticated team announcements. Team leaders are not authorized automatically.'**
+  String get authorityTrustBody;
+
+  /// No description provided for @authorityCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'Create announcement'**
+  String get authorityCreate;
+
+  /// No description provided for @authorityPriority.
+  ///
+  /// In en, this message translates to:
+  /// **'Priority'**
+  String get authorityPriority;
+
+  /// No description provided for @authorityPriorityInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'INFORMATION'**
+  String get authorityPriorityInfo;
+
+  /// No description provided for @authorityPriorityWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'WARNING'**
+  String get authorityPriorityWarning;
+
+  /// No description provided for @authorityPriorityEvacuate.
+  ///
+  /// In en, this message translates to:
+  /// **'EVACUATE'**
+  String get authorityPriorityEvacuate;
+
+  /// No description provided for @authorityBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Official instruction'**
+  String get authorityBody;
+
+  /// No description provided for @authorityDuration.
+  ///
+  /// In en, this message translates to:
+  /// **'Valid for'**
+  String get authorityDuration;
+
+  /// No description provided for @authorityDurationMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes} minutes'**
+  String authorityDurationMinutes(int minutes);
+
+  /// No description provided for @authorityDurationHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours, plural, =1{1 hour} other{{hours} hours}}'**
+  String authorityDurationHours(int hours);
+
+  /// No description provided for @authoritySend.
+  ///
+  /// In en, this message translates to:
+  /// **'ISSUE ANNOUNCEMENT'**
+  String get authoritySend;
+
+  /// No description provided for @authoritySent.
+  ///
+  /// In en, this message translates to:
+  /// **'The signed authority announcement was sent.'**
+  String get authoritySent;
+
+  /// No description provided for @authoritySendError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not send the authority announcement: {error}'**
+  String authoritySendError(String error);
+
+  /// No description provided for @authorityHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Announcement history'**
+  String get authorityHistory;
+
+  /// No description provided for @authorityHistoryEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No authenticated authority announcements have been received.'**
+  String get authorityHistoryEmpty;
+
+  /// No description provided for @authorityActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get authorityActive;
+
+  /// No description provided for @authorityExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Expired'**
+  String get authorityExpired;
+
+  /// No description provided for @authorityExpires.
+  ///
+  /// In en, this message translates to:
+  /// **'Expires {date}'**
+  String authorityExpires(String date);
+
+  /// No description provided for @authorityBannerSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'Active authenticated authority announcement'**
+  String get authorityBannerSemantics;
 
   /// No description provided for @verifiedRescuerBadge.
   ///

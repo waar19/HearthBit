@@ -1912,10 +1912,30 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get locationExportConfirmBody =>
-      'CSVには正確な位置と緊急情報が含まれる場合があります。信頼できる救助者とのみ共有し、ファイルを保護してください。';
+      'エクスポートには正確な位置、身元情報、緊急情報が含まれる場合があります。信頼できる救助者とのみ共有し、ファイルを保護してください。';
 
   @override
   String get locationExportConfirmAction => '位置をエクスポート';
+
+  @override
+  String get mapExport => '運用データをエクスポート';
+
+  @override
+  String get mapExportFormatTitle => 'エクスポート形式を選択';
+
+  @override
+  String get mapExportCsv => 'CSV・進行中の救助案件';
+
+  @override
+  String get mapExportGeoJson => 'GeoJSON・進行中の案件と捜索済み区域';
+
+  @override
+  String get mapExportSubject => 'HearthBit救助活動';
+
+  @override
+  String mapExportError(String error) {
+    return '救助活動をエクスポートできませんでした：$error';
+  }
 
   @override
   String get lanGatewayConnected => 'LANリレー接続済み';
@@ -2108,6 +2128,78 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get rescueRosterRoleCommunications => '通信';
+
+  @override
+  String get rescueRosterRoleAuthority => '公的機関';
+
+  @override
+  String get authorityTitle => '公的機関からのお知らせ';
+
+  @override
+  String get authorityTrustBody =>
+      '有効な署名済み名簿で「公的機関」役割を割り当てられたメンバーだけが、認証済みのお知らせを発信できます。チームリーダーには自動的に権限は付与されません。';
+
+  @override
+  String get authorityCreate => 'お知らせを作成';
+
+  @override
+  String get authorityPriority => '優先度';
+
+  @override
+  String get authorityPriorityInfo => '情報';
+
+  @override
+  String get authorityPriorityWarning => '警告';
+
+  @override
+  String get authorityPriorityEvacuate => '避難';
+
+  @override
+  String get authorityBody => '公式指示';
+
+  @override
+  String get authorityDuration => '有効期間';
+
+  @override
+  String authorityDurationMinutes(int minutes) {
+    return '$minutes分';
+  }
+
+  @override
+  String authorityDurationHours(int hours) {
+    return '$hours時間';
+  }
+
+  @override
+  String get authoritySend => 'お知らせを発信';
+
+  @override
+  String get authoritySent => '署名済みの公的機関のお知らせを送信しました。';
+
+  @override
+  String authoritySendError(String error) {
+    return '公的機関のお知らせを送信できませんでした：$error';
+  }
+
+  @override
+  String get authorityHistory => 'お知らせ履歴';
+
+  @override
+  String get authorityHistoryEmpty => '認証済みの公的機関のお知らせはありません。';
+
+  @override
+  String get authorityActive => '有効';
+
+  @override
+  String get authorityExpired => '期限切れ';
+
+  @override
+  String authorityExpires(String date) {
+    return '期限：$date';
+  }
+
+  @override
+  String get authorityBannerSemantics => '有効な認証済み公的機関のお知らせ';
 
   @override
   String get verifiedRescuerBadge => '確認済み救助者';

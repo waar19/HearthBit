@@ -1,5 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth_bit/models/mesh_models.dart';
+import 'package:hearth_bit/models/rescue_case_models.dart';
+import 'package:hearth_bit/models/swept_zone_models.dart';
 import 'package:hearth_bit/services/rescue_export_service.dart';
 
 MeshMessage _message({
@@ -132,4 +136,148 @@ void main() {
     expect(csv, isNot(contains(DrillCheckIn.marker)));
     expect(csv, isNot(contains('SIMULACRO')));
   });
+
+  test('GeoJSON RFC 7946 es determinista y limpia geometrías inválidas', () {
+    final now = DateTime.utc(2026, 8, 18, 12);
+    final first = _case(
+      hash: _repeat('a', 64),
+      latitude: 4.61,
+      longitude: -74.07,
+      now: now,
+    );
+    final second = _case(
+      hash: _repeat('b', 64),
+      latitude: double.nan,
+      longitude: 200,
+      now: now,
+    );
+    final validZone = SweptZone(
+      version: 1,
+      zoneId: _repeat('1', 32),
+      teamId: _repeat('2', 32),
+      actorPeerId: _repeat('3', 16),
+      callsign: 'Cóndor',
+      startedAt: now,
+      endedAt: now.add(const Duration(minutes: 2)),
+      points: [
+        SweptZonePoint(latitude: 4.6, longitude: -74.1, recordedAt: now),
+        SweptZonePoint(
+          latitude: double.infinity,
+          longitude: -74.09,
+          recordedAt: now.add(const Duration(minutes: 1)),
+        ),
+        SweptZonePoint(
+          latitude: 4.62,
+          longitude: -74.08,
+          recordedAt: now.add(const Duration(minutes: 2)),
+        ),
+      ],
+    );
+    final invalidZone = SweptZone(
+      version: 1,
+      zoneId: _repeat('4', 32),
+      teamId: _repeat('2', 32),
+      actorPeerId: _repeat('3', 16),
+      callsign: 'Cóndor',
+      startedAt: now,
+      endedAt: now,
+      points: [
+        SweptZonePoint(latitude: 95, longitude: 0, recordedAt: now),
+        SweptZonePoint(latitude: 4.6, longitude: -74, recordedAt: now),
+      ],
+    );
+
+    final encoded = RescueGeoJson.build(
+      cases: [second, first],
+      zones: [invalidZone, validZone],
+    );
+    final repeated = RescueGeoJson.build(
+      cases: [first, second],
+      zones: [validZone, invalidZone],
+    );
+    final decoded = jsonDecode(encoded) as Map<String, dynamic>;
+    final features = decoded['features']! as List<dynamic>;
+
+    expect(encoded, repeated);
+    expect(decoded['type'], 'FeatureCollection');
+    expect(features, hasLength(3));
+    expect(
+      (features[0] as Map<String, dynamic>)['id'],
+      'case:${_repeat('a', 64)}',
+    );
+    expect(
+      ((features[0] as Map<String, dynamic>)['geometry']
+          as Map<String, dynamic>)['coordinates'],
+      [-74.07, 4.61],
+    );
+    expect((features[1] as Map<String, dynamic>)['geometry'], isNull);
+    final zoneGeometry =
+        (features[2] as Map<String, dynamic>)['geometry']
+            as Map<String, dynamic>;
+    expect(zoneGeometry['type'], 'LineString');
+    expect(zoneGeometry['coordinates'], [
+      [-74.1, 4.6],
+      [-74.08, 4.62],
+    ]);
+    final properties =
+        (features[0] as Map<String, dynamic>)['properties']
+            as Map<String, dynamic>;
+    expect(properties['schema'], RescueGeoJson.schema);
+    expect(properties['version'], RescueGeoJson.version);
+    expect(properties['priority'], 'critical');
+    expect(properties['triage'], isA<Map<String, dynamic>>());
+  });
+
+  test('contrato de extensión y MIME distingue CSV de GeoJSON', () {
+    expect(RescueExportFormat.csv.extension, 'csv');
+    expect(RescueExportFormat.csv.mimeType, 'text/csv');
+    expect(RescueExportFormat.geoJson.extension, 'geojson');
+    expect(RescueExportFormat.geoJson.mimeType, 'application/geo+json');
+  });
+
+  test('política operativa exporta todos los casos excepto cerrados', () {
+    final now = DateTime.utc(2026, 8, 18);
+    final active = _case(
+      hash: _repeat('a', 64),
+      latitude: 1,
+      longitude: 1,
+      now: now,
+    );
+    final closed = active.copyWith(
+      state: RescueCaseState.closed,
+      assigneePeerId: active.assigneePeerId,
+    );
+
+    expect(RescueExportPolicy.operationalCases([closed, active]), [
+      same(active),
+    ]);
+  });
 }
+
+RescueCase _case({
+  required String hash,
+  required double latitude,
+  required double longitude,
+  required DateTime now,
+}) => RescueCase(
+  caseHash: hash,
+  victimPeerId: _repeat('0', 16),
+  victim: 'Víctima',
+  message: 'Necesita extracción',
+  triage: const SosTriage(
+    peopleCount: 2,
+    injuryStatus: SosInjuryStatus.injured,
+    injuredCount: 1,
+    trappedStatus: SosTrappedStatus.yes,
+    primaryNeed: SosPrimaryNeed.medical,
+  ),
+  latitude: latitude,
+  longitude: longitude,
+  state: RescueCaseState.assigned,
+  assigneePeerId: _repeat('9', 16),
+  createdAt: now,
+  updatedAt: now,
+  lastActorPeerId: _repeat('9', 16),
+);
+
+String _repeat(String value, int count) => List.filled(count, value).join();

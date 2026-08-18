@@ -389,6 +389,7 @@ class _RescueRosterScreenState extends State<RescueRosterScreen> {
     RescueRosterRole.logistics => context.l10n.rescueRosterRoleLogistics,
     RescueRosterRole.communications =>
       context.l10n.rescueRosterRoleCommunications,
+    RescueRosterRole.authority => context.l10n.rescueRosterRoleAuthority,
   };
 
   @override
@@ -431,6 +432,8 @@ class _RescueRosterScreenState extends State<RescueRosterScreen> {
                         leading: Icon(
                           member.role == RescueRosterRole.leader
                               ? Icons.admin_panel_settings_outlined
+                              : member.role == RescueRosterRole.authority
+                              ? Icons.campaign_outlined
                               : Icons.health_and_safety_outlined,
                         ),
                         title: Text(member.callsign),

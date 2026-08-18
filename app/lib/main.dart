@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import 'controllers/authority_announcement_controller.dart';
 import 'controllers/mesh_controller.dart';
 import 'controllers/emergency_gateway_controller.dart';
 import 'controllers/family_controller.dart';
@@ -143,6 +144,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
   late final RescueRosterController _rescueRoster;
   late final RescueCaseController _rescueCases;
   late final SweptZoneController _sweptZones;
+  late final AuthorityAnnouncementController _authorityAnnouncements;
   late final LanGatewayController _lanGateway;
   late final TransportDiagnostics _transportDiagnostics;
   late final Future<void> _initialization;
@@ -176,6 +178,10 @@ class _HearthBitAppState extends State<HearthBitApp> {
       roster: _rescueRoster,
     );
     _sweptZones = SweptZoneController(mesh: _controller, roster: _rescueRoster);
+    _authorityAnnouncements = AuthorityAnnouncementController(
+      mesh: _controller,
+      roster: _rescueRoster,
+    );
     _lanGateway = LanGatewayController();
     _initialization = _initialize();
   }
@@ -193,6 +199,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
     await _rescueRoster.initialize();
     await _rescueCases.initialize();
     await _sweptZones.initialize();
+    await _authorityAnnouncements.initialize();
   }
 
   @override
@@ -200,6 +207,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
     _gateway.dispose();
     _family.dispose();
     _sweptZones.dispose();
+    _authorityAnnouncements.dispose();
     _rescueCases.dispose();
     _rescueRoster.dispose();
     _lanGateway.dispose();
@@ -220,6 +228,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
         _rescueRoster,
         _rescueCases,
         _sweptZones,
+        _authorityAnnouncements,
       ]),
       builder: (context, _) => MaterialApp(
         onGenerateTitle: (context) => context.l10n.appTitle,
@@ -282,6 +291,7 @@ class _HearthBitAppState extends State<HearthBitApp> {
               gateway: _gateway,
               family: _family,
               rescueRoster: _rescueRoster,
+              authorityAnnouncements: _authorityAnnouncements,
               rescueCases: _rescueCases,
               sweptZones: _sweptZones,
               lanGateway: _lanGateway,

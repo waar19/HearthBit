@@ -6,7 +6,8 @@ enum RescueRosterRole {
   medic(2),
   search(3),
   logistics(4),
-  communications(5);
+  communications(5),
+  authority(6);
 
   const RescueRosterRole(this.wireCode);
 

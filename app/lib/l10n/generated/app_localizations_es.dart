@@ -1995,10 +1995,30 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get locationExportConfirmBody =>
-      'El CSV puede contener ubicaciones precisas y detalles de emergencia. Compártelo solo con rescatistas de confianza y protege el archivo exportado.';
+      'La exportación puede contener ubicaciones precisas, identidades y detalles de emergencia. Compártela solo con rescatistas de confianza y protege el archivo.';
 
   @override
   String get locationExportConfirmAction => 'EXPORTAR UBICACIONES';
+
+  @override
+  String get mapExport => 'Exportar datos operativos';
+
+  @override
+  String get mapExportFormatTitle => 'Elige el formato de exportación';
+
+  @override
+  String get mapExportCsv => 'CSV · casos de rescate activos';
+
+  @override
+  String get mapExportGeoJson => 'GeoJSON · casos activos y zonas recorridas';
+
+  @override
+  String get mapExportSubject => 'Operaciones de rescate HearthBit';
+
+  @override
+  String mapExportError(String error) {
+    return 'No se pudieron exportar las operaciones de rescate: $error';
+  }
 
   @override
   String get lanGatewayConnected => 'Relay LAN conectado';
@@ -2202,6 +2222,86 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get rescueRosterRoleCommunications => 'Comunicaciones';
+
+  @override
+  String get rescueRosterRoleAuthority => 'Autoridad';
+
+  @override
+  String get authorityTitle => 'Anuncios de autoridad';
+
+  @override
+  String get authorityTrustBody =>
+      'Solo los miembros con el rol Autoridad en el roster firmado activo pueden emitir estos anuncios autenticados para el equipo. El líder no queda autorizado automáticamente.';
+
+  @override
+  String get authorityCreate => 'Crear anuncio';
+
+  @override
+  String get authorityPriority => 'Prioridad';
+
+  @override
+  String get authorityPriorityInfo => 'INFORMACIÓN';
+
+  @override
+  String get authorityPriorityWarning => 'ADVERTENCIA';
+
+  @override
+  String get authorityPriorityEvacuate => 'EVACUAR';
+
+  @override
+  String get authorityBody => 'Instrucción oficial';
+
+  @override
+  String get authorityDuration => 'Válido durante';
+
+  @override
+  String authorityDurationMinutes(int minutes) {
+    return '$minutes minutos';
+  }
+
+  @override
+  String authorityDurationHours(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours horas',
+      one: '1 hora',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get authoritySend => 'EMITIR ANUNCIO';
+
+  @override
+  String get authoritySent => 'El anuncio firmado de autoridad fue enviado.';
+
+  @override
+  String authoritySendError(String error) {
+    return 'No se pudo enviar el anuncio de autoridad: $error';
+  }
+
+  @override
+  String get authorityHistory => 'Historial de anuncios';
+
+  @override
+  String get authorityHistoryEmpty =>
+      'No se han recibido anuncios autenticados de autoridad.';
+
+  @override
+  String get authorityActive => 'Activo';
+
+  @override
+  String get authorityExpired => 'Expirado';
+
+  @override
+  String authorityExpires(String date) {
+    return 'Expira $date';
+  }
+
+  @override
+  String get authorityBannerSemantics =>
+      'Anuncio autenticado de autoridad activo';
 
   @override
   String get verifiedRescuerBadge => 'RESCATISTA VERIFICADO';

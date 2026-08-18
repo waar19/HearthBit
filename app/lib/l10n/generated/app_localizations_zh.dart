@@ -1874,10 +1874,30 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get locationExportConfirmBody =>
-      'CSV 可能包含精确位置和紧急详情。仅与可信救援人员共享并妥善保护文件。';
+      '导出内容可能包含精确位置、身份信息和紧急详情。仅与可信救援人员共享并妥善保护文件。';
 
   @override
   String get locationExportConfirmAction => '导出位置';
+
+  @override
+  String get mapExport => '导出行动数据';
+
+  @override
+  String get mapExportFormatTitle => '选择导出格式';
+
+  @override
+  String get mapExportCsv => 'CSV · 进行中的救援案件';
+
+  @override
+  String get mapExportGeoJson => 'GeoJSON · 进行中的案件和已搜索区域';
+
+  @override
+  String get mapExportSubject => 'HearthBit 救援行动';
+
+  @override
+  String mapExportError(String error) {
+    return '无法导出救援行动：$error';
+  }
 
   @override
   String get lanGatewayConnected => 'LAN 中继已连接';
@@ -2068,6 +2088,78 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get rescueRosterRoleCommunications => '通信';
+
+  @override
+  String get rescueRosterRoleAuthority => '主管部门';
+
+  @override
+  String get authorityTitle => '主管部门公告';
+
+  @override
+  String get authorityTrustBody =>
+      '只有当前已签名名册中被分配“主管部门”角色的成员才能发布这些已认证的队伍公告。队长不会自动获得该权限。';
+
+  @override
+  String get authorityCreate => '创建公告';
+
+  @override
+  String get authorityPriority => '优先级';
+
+  @override
+  String get authorityPriorityInfo => '信息';
+
+  @override
+  String get authorityPriorityWarning => '警告';
+
+  @override
+  String get authorityPriorityEvacuate => '撤离';
+
+  @override
+  String get authorityBody => '官方指示';
+
+  @override
+  String get authorityDuration => '有效时长';
+
+  @override
+  String authorityDurationMinutes(int minutes) {
+    return '$minutes 分钟';
+  }
+
+  @override
+  String authorityDurationHours(int hours) {
+    return '$hours 小时';
+  }
+
+  @override
+  String get authoritySend => '发布公告';
+
+  @override
+  String get authoritySent => '已发送签名的主管部门公告。';
+
+  @override
+  String authoritySendError(String error) {
+    return '无法发送主管部门公告：$error';
+  }
+
+  @override
+  String get authorityHistory => '公告历史';
+
+  @override
+  String get authorityHistoryEmpty => '尚未收到已认证的主管部门公告。';
+
+  @override
+  String get authorityActive => '有效';
+
+  @override
+  String get authorityExpired => '已过期';
+
+  @override
+  String authorityExpires(String date) {
+    return '到期时间：$date';
+  }
+
+  @override
+  String get authorityBannerSemantics => '当前有效的已认证主管部门公告';
 
   @override
   String get verifiedRescuerBadge => '已验证救援人员';

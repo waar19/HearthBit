@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../controllers/emergency_gateway_controller.dart';
+import '../controllers/authority_announcement_controller.dart';
 import '../controllers/family_controller.dart';
 import '../controllers/lan_gateway_controller.dart';
 import '../controllers/mesh_controller.dart';
@@ -28,6 +29,8 @@ import '../services/secure_database.dart';
 import '../services/transport_diagnostics.dart';
 import '../utils/scroll_to_bottom.dart';
 import '../widgets/nickname_dialog.dart';
+import '../widgets/authority_announcement_banner.dart';
+import 'authority_announcements_screen.dart';
 import 'diagnostics_screen.dart';
 import 'emergency_screen.dart';
 import 'family_screen.dart';
@@ -48,6 +51,7 @@ enum _AppMenuAction {
   family,
   rescueOperations,
   rescueRoster,
+  authorityAnnouncements,
   diagnostics,
   changeNickname,
   privacy,
@@ -64,6 +68,7 @@ class HomeScreen extends StatefulWidget {
     required this.gateway,
     required this.family,
     this.rescueRoster,
+    this.authorityAnnouncements,
     this.rescueCases,
     this.sweptZones,
     this.lanGateway,
@@ -78,6 +83,7 @@ class HomeScreen extends StatefulWidget {
   final EmergencyGatewayController gateway;
   final FamilyController family;
   final RescueRosterController? rescueRoster;
+  final AuthorityAnnouncementController? authorityAnnouncements;
   final RescueCaseController? rescueCases;
   final SweptZoneController? sweptZones;
   final LanGatewayController? lanGateway;
@@ -318,7 +324,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge([widget.controller, widget.gateway]),
+      animation: Listenable.merge([
+        widget.controller,
+        widget.gateway,
+        if (widget.authorityAnnouncements != null)
+          widget.authorityAnnouncements!,
+      ]),
       builder: (context, _) {
         final controller = widget.controller;
         return Scaffold(
@@ -388,6 +399,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         title: Text(context.l10n.rescueRosterTitle),
                       ),
                     ),
+                  if (widget.authorityAnnouncements != null &&
+                      widget.rescueRoster?.activeRoster != null)
+                    PopupMenuItem(
+                      value: _AppMenuAction.authorityAnnouncements,
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.campaign_outlined),
+                        title: Text(context.l10n.authorityTitle),
+                      ),
+                    ),
                   PopupMenuItem(
                     value: _AppMenuAction.diagnostics,
                     child: ListTile(
@@ -447,6 +468,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             child: Column(
               children: [
                 MeshStatusBanner(controller: controller),
+                if (_tab != 0 && widget.authorityAnnouncements != null)
+                  AuthorityAnnouncementBanner(
+                    controller: widget.authorityAnnouncements!,
+                    onTap: _openAuthorityAnnouncements,
+                  ),
                 if (controller.lastError != null)
                   MaterialBanner(
                     content: Text(controller.lastError!),
@@ -467,6 +493,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         preferences: widget.preferences,
                         gateway: widget.gateway,
                         family: widget.family,
+                        authorityAnnouncements: widget.authorityAnnouncements,
                         rescueCases: widget.rescueCases,
                         sweptZones: widget.sweptZones,
                       ),
@@ -655,6 +682,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
         );
         return;
+      case _AppMenuAction.authorityAnnouncements:
+        await _openAuthorityAnnouncements();
+        return;
       case _AppMenuAction.diagnostics:
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
@@ -678,6 +708,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         await _confirmWipe(controller);
         return;
     }
+  }
+
+  Future<void> _openAuthorityAnnouncements() async {
+    final authority = widget.authorityAnnouncements;
+    if (authority == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AuthorityAnnouncementsScreen(controller: authority),
+      ),
+    );
   }
 
   Future<void> _showPrivacy(MeshController controller) async {

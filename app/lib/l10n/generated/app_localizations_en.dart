@@ -1981,10 +1981,30 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get locationExportConfirmBody =>
-      'The CSV can contain precise locations and emergency details. Share it only with trusted responders and protect the exported file.';
+      'The export can contain precise locations, identities and emergency details. Share it only with trusted responders and protect the file.';
 
   @override
   String get locationExportConfirmAction => 'EXPORT LOCATIONS';
+
+  @override
+  String get mapExport => 'Export operational data';
+
+  @override
+  String get mapExportFormatTitle => 'Choose export format';
+
+  @override
+  String get mapExportCsv => 'CSV · active rescue cases';
+
+  @override
+  String get mapExportGeoJson => 'GeoJSON · active cases and swept zones';
+
+  @override
+  String get mapExportSubject => 'HearthBit rescue operations';
+
+  @override
+  String mapExportError(String error) {
+    return 'Could not export rescue operations: $error';
+  }
 
   @override
   String get lanGatewayConnected => 'LAN relay connected';
@@ -2184,6 +2204,86 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get rescueRosterRoleCommunications => 'Communications';
+
+  @override
+  String get rescueRosterRoleAuthority => 'Authority';
+
+  @override
+  String get authorityTitle => 'Authority announcements';
+
+  @override
+  String get authorityTrustBody =>
+      'Only members assigned the Authority role in the active signed roster can issue these authenticated team announcements. Team leaders are not authorized automatically.';
+
+  @override
+  String get authorityCreate => 'Create announcement';
+
+  @override
+  String get authorityPriority => 'Priority';
+
+  @override
+  String get authorityPriorityInfo => 'INFORMATION';
+
+  @override
+  String get authorityPriorityWarning => 'WARNING';
+
+  @override
+  String get authorityPriorityEvacuate => 'EVACUATE';
+
+  @override
+  String get authorityBody => 'Official instruction';
+
+  @override
+  String get authorityDuration => 'Valid for';
+
+  @override
+  String authorityDurationMinutes(int minutes) {
+    return '$minutes minutes';
+  }
+
+  @override
+  String authorityDurationHours(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours hours',
+      one: '1 hour',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get authoritySend => 'ISSUE ANNOUNCEMENT';
+
+  @override
+  String get authoritySent => 'The signed authority announcement was sent.';
+
+  @override
+  String authoritySendError(String error) {
+    return 'Could not send the authority announcement: $error';
+  }
+
+  @override
+  String get authorityHistory => 'Announcement history';
+
+  @override
+  String get authorityHistoryEmpty =>
+      'No authenticated authority announcements have been received.';
+
+  @override
+  String get authorityActive => 'Active';
+
+  @override
+  String get authorityExpired => 'Expired';
+
+  @override
+  String authorityExpires(String date) {
+    return 'Expires $date';
+  }
+
+  @override
+  String get authorityBannerSemantics =>
+      'Active authenticated authority announcement';
 
   @override
   String get verifiedRescuerBadge => 'VERIFIED RESCUER';

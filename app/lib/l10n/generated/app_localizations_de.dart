@@ -1994,10 +1994,30 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get locationExportConfirmBody =>
-      'Die CSV-Datei kann genaue Standorte und Notfalldetails enthalten. Nur mit vertrauenswürdigen Einsatzkräften teilen und schützen.';
+      'Der Export kann genaue Standorte, Identitäten und Notfalldetails enthalten. Nur mit vertrauenswürdigen Einsatzkräften teilen und die Datei schützen.';
 
   @override
   String get locationExportConfirmAction => 'STANDORTE EXPORTIEREN';
+
+  @override
+  String get mapExport => 'Einsatzdaten exportieren';
+
+  @override
+  String get mapExportFormatTitle => 'Exportformat auswählen';
+
+  @override
+  String get mapExportCsv => 'CSV · aktive Rettungsfälle';
+
+  @override
+  String get mapExportGeoJson => 'GeoJSON · aktive Fälle und abgesuchte Zonen';
+
+  @override
+  String get mapExportSubject => 'HearthBit-Rettungseinsatz';
+
+  @override
+  String mapExportError(String error) {
+    return 'Rettungseinsatz konnte nicht exportiert werden: $error';
+  }
 
   @override
   String get lanGatewayConnected => 'LAN-Relay verbunden';
@@ -2200,6 +2220,87 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get rescueRosterRoleCommunications => 'Kommunikation';
+
+  @override
+  String get rescueRosterRoleAuthority => 'Behörde';
+
+  @override
+  String get authorityTitle => 'Behördliche Ankündigungen';
+
+  @override
+  String get authorityTrustBody =>
+      'Nur Mitglieder mit der Rolle Behörde im aktiven signierten Einsatzteam dürfen diese authentifizierten Ankündigungen senden. Die Teamleitung ist nicht automatisch berechtigt.';
+
+  @override
+  String get authorityCreate => 'Ankündigung erstellen';
+
+  @override
+  String get authorityPriority => 'Priorität';
+
+  @override
+  String get authorityPriorityInfo => 'INFORMATION';
+
+  @override
+  String get authorityPriorityWarning => 'WARNUNG';
+
+  @override
+  String get authorityPriorityEvacuate => 'EVAKUIEREN';
+
+  @override
+  String get authorityBody => 'Offizielle Anweisung';
+
+  @override
+  String get authorityDuration => 'Gültig für';
+
+  @override
+  String authorityDurationMinutes(int minutes) {
+    return '$minutes Minuten';
+  }
+
+  @override
+  String authorityDurationHours(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours Stunden',
+      one: '1 Stunde',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get authoritySend => 'ANKÜNDIGUNG SENDEN';
+
+  @override
+  String get authoritySent =>
+      'Die signierte Behördenankündigung wurde gesendet.';
+
+  @override
+  String authoritySendError(String error) {
+    return 'Behördenankündigung konnte nicht gesendet werden: $error';
+  }
+
+  @override
+  String get authorityHistory => 'Ankündigungsverlauf';
+
+  @override
+  String get authorityHistoryEmpty =>
+      'Keine authentifizierten Behördenankündigungen empfangen.';
+
+  @override
+  String get authorityActive => 'Aktiv';
+
+  @override
+  String get authorityExpired => 'Abgelaufen';
+
+  @override
+  String authorityExpires(String date) {
+    return 'Läuft am $date ab';
+  }
+
+  @override
+  String get authorityBannerSemantics =>
+      'Aktive authentifizierte Behördenankündigung';
 
   @override
   String get verifiedRescuerBadge => 'VERIFIZIERTE RETTUNGSKRAFT';

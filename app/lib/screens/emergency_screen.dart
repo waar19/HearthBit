@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../controllers/emergency_gateway_controller.dart';
+import '../controllers/authority_announcement_controller.dart';
 import '../controllers/family_controller.dart';
 import '../controllers/mesh_controller.dart';
 import '../controllers/rescue_case_controller.dart';
@@ -10,6 +11,8 @@ import '../controllers/swept_zone_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/mesh_models.dart';
 import '../services/app_preferences.dart';
+import '../widgets/authority_announcement_banner.dart';
+import 'authority_announcements_screen.dart';
 import 'emergency_contacts_screen.dart';
 import 'emergency_gateway_card.dart';
 import 'map_screen.dart';
@@ -24,6 +27,7 @@ class EmergencyScreen extends StatelessWidget {
     required this.preferences,
     required this.gateway,
     required this.family,
+    this.authorityAnnouncements,
     this.rescueCases,
     this.sweptZones,
     this.emergencyHoldDuration = const Duration(seconds: 2),
@@ -34,6 +38,7 @@ class EmergencyScreen extends StatelessWidget {
   final AppPreferences preferences;
   final EmergencyGatewayController gateway;
   final FamilyController family;
+  final AuthorityAnnouncementController? authorityAnnouncements;
   final RescueCaseController? rescueCases;
   final SweptZoneController? sweptZones;
   final Duration emergencyHoldDuration;
@@ -53,6 +58,19 @@ class EmergencyScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
+        if (authorityAnnouncements != null) ...[
+          AuthorityAnnouncementBanner(
+            controller: authorityAnnouncements!,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => AuthorityAnnouncementsScreen(
+                  controller: authorityAnnouncements!,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         if (drillMode) ...[_DrillBanner(), const SizedBox(height: 12)],
         Text(
           context.l10n.emergencyHeadline,

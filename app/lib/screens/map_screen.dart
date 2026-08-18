@@ -15,6 +15,7 @@ import '../models/swept_zone_models.dart';
 import '../services/offline_tile_cache.dart';
 import '../services/peer_location_tracker.dart';
 import '../services/rescue_case_clusterer.dart';
+import '../services/rescue_export_service.dart';
 
 enum MapCaseFilter { active, unassigned, assigned, closed }
 
@@ -273,6 +274,68 @@ class _MapScreenState extends State<MapScreen> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  Future<void> _exportOperationalData(BuildContext anchorContext) async {
+    final anchor = anchorContext.findRenderObject() as RenderBox?;
+    final format = await showDialog<RescueExportFormat>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: Text(context.l10n.mapExportFormatTitle),
+        children: [
+          SimpleDialogOption(
+            onPressed: () =>
+                Navigator.pop(dialogContext, RescueExportFormat.csv),
+            child: ListTile(
+              leading: const Icon(Icons.table_view_outlined),
+              title: Text(context.l10n.mapExportCsv),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () =>
+                Navigator.pop(dialogContext, RescueExportFormat.geoJson),
+            child: ListTile(
+              leading: const Icon(Icons.map_outlined),
+              title: Text(context.l10n.mapExportGeoJson),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (format == null || !mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.privacy_tip_outlined),
+        title: Text(context.l10n.locationExportConfirmTitle),
+        content: Text(context.l10n.locationExportConfirmBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.l10n.actionCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.l10n.locationExportConfirmAction),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await RescueExportService.shareOperational(
+        format: format,
+        cases: RescueExportPolicy.operationalCases(widget.rescueCases.cases),
+        zones: widget.sweptZones.zones,
+        anchor: anchor,
+        subject: context.l10n.mapExportSubject,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.mapExportError('$error'))),
+      );
+    }
+  }
+
   void _handleTileError(Object error) {
     if (!mounted || _lastTileError?.runtimeType == error.runtimeType) return;
     setState(() => _lastTileError = error);
@@ -311,6 +374,13 @@ class _MapScreenState extends State<MapScreen> {
                 onPressed: _downloading ? null : _downloadVisibleArea,
                 icon: const Icon(Icons.download_for_offline_outlined),
               ),
+            Builder(
+              builder: (buttonContext) => IconButton(
+                tooltip: context.l10n.mapExport,
+                onPressed: () => _exportOperationalData(buttonContext),
+                icon: const Icon(Icons.ios_share_outlined),
+              ),
+            ),
           ],
         ),
         body: Column(
