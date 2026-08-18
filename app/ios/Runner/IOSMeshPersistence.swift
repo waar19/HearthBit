@@ -220,7 +220,7 @@ final class IOSPeerIdentityPinStore {
     if pins.count == maximumPins {
       let protected = Set(protectedPeerIDs.map { $0.lowercased() })
       guard let eviction = pins.values
-        .filter { $0.retired != true && !protected.contains($0.peerID) }
+        .filter({ $0.retired != true && !protected.contains($0.peerID) })
         .map(\.peerID)
         .sorted()
         .first
