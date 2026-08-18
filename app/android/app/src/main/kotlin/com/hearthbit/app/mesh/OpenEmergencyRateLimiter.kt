@@ -54,8 +54,8 @@ internal class OpenEmergencyRateLimiter(
     /** Contadores acumulados durante la vida de esta instancia. */
     @Synchronized
     fun operationalCounters(): Map<String, Long> = mapOf(
-        "openSosRateLimitedKnown" to knownRateLimited,
-        "openSosRateLimitedUnknown" to unknownRateLimited,
+        "openEmergencyRateLimitedKnown" to knownRateLimited,
+        "openEmergencyRateLimitedUnknown" to unknownRateLimited,
     )
 
     @Synchronized

@@ -4,8 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('operational counters accept only aggregate contract fields', () {
     final counters = MeshOperationalCounters.fromNative({
-      'openSosRateLimitedKnown': 4,
-      'openSosRateLimitedUnknown': -2,
+      'openEmergencyRateLimitedKnown': 4,
+      'openEmergencyRateLimitedUnknown': -2,
       'relayDampingSuppressed': 3.9,
       'relayDampingScheduled': 8,
       'relayDampingExpired': 7,
@@ -14,11 +14,34 @@ void main() {
       'senderId': 'sensitive',
     });
 
-    expect(counters.openSosRateLimitedKnown, 4);
-    expect(counters.openSosRateLimitedUnknown, 0);
+    expect(counters.openEmergencyRateLimitedKnown, 4);
+    expect(counters.openEmergencyRateLimitedUnknown, 0);
     expect(counters.relayDampingSuppressed, 3);
     expect(counters.toJson(), isNot(contains('senderId')));
+    expect(counters.toJson(), isNot(contains('openSosRateLimitedKnown')));
   });
+
+  test(
+    'operational counters read legacy SOS aliases without exporting them',
+    () {
+      final counters = MeshOperationalCounters.fromNative({
+        'openSosRateLimitedKnown': 2,
+        'openSosRateLimitedUnknown': 5,
+      });
+
+      expect(counters.openEmergencyRateLimitedKnown, 2);
+      expect(counters.openEmergencyRateLimitedUnknown, 5);
+      expect(counters.toJson(), {
+        'openEmergencyRateLimitedKnown': 2,
+        'openEmergencyRateLimitedUnknown': 5,
+        'relayDampingSuppressed': 0,
+        'relayDampingScheduled': 0,
+        'relayDampingExpired': 0,
+        'trustStoreEvictions': 0,
+        'trustConflicts': 0,
+      });
+    },
+  );
 
   group('triage SOS T1', () {
     const triage = SosTriage(

@@ -847,6 +847,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get diagnosticsExportError => 'Could not export the diagnostic report';
 
   @override
+  String get diagnosticsExportRefreshError =>
+      'Diagnostics could not be refreshed. Nothing was exported.';
+
+  @override
   String get diagnosticsTitle => 'Diagnostics';
 
   @override
@@ -898,10 +902,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get diagnosticsOperationalCountersSection => 'Operational counters';
 
   @override
-  String get diagnosticsOpenSosLimitedKnown => 'Known SOS rate-limited';
+  String get diagnosticsOpenEmergencyLimitedKnown =>
+      'Known emergency frames rate-limited';
 
   @override
-  String get diagnosticsOpenSosLimitedUnknown => 'Unknown SOS rate-limited';
+  String get diagnosticsOpenEmergencyLimitedUnknown =>
+      'Unknown emergency frames rate-limited';
 
   @override
   String get diagnosticsRelaySuppressed => 'Relays suppressed by damping';
@@ -917,6 +923,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagnosticsTrustConflicts => 'Trust conflicts';
+
+  @override
+  String get diagnosticsOperationalCountersLifetime => 'Counter period';
+
+  @override
+  String get diagnosticsLifetimeProcess => 'Since this process started';
+
+  @override
+  String get diagnosticsLifetimeUnknown => 'Period not reported';
 
   @override
   String get diagnosticsTransportsSection => 'Active transports';

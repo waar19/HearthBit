@@ -389,6 +389,7 @@ internal class MeshEngine(
             "scanStarts" to scanStartCount,
             "storeForwardEntries" to storeForward.entryCount(now),
             "operationalCounters" to operationalCounters(),
+            "operationalCountersLifetime" to "process",
         )
     }
 

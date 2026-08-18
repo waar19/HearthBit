@@ -803,6 +803,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnosticsExportError => '无法导出诊断报告';
 
   @override
+  String get diagnosticsExportRefreshError => '无法刷新诊断信息，因此未导出任何内容。';
+
+  @override
   String get diagnosticsTitle => '诊断';
 
   @override
@@ -854,10 +857,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnosticsOperationalCountersSection => '运行计数器';
 
   @override
-  String get diagnosticsOpenSosLimitedKnown => '已限流的已知 SOS';
+  String get diagnosticsOpenEmergencyLimitedKnown => '已限流的已知紧急帧';
 
   @override
-  String get diagnosticsOpenSosLimitedUnknown => '已限流的未知 SOS';
+  String get diagnosticsOpenEmergencyLimitedUnknown => '已限流的未知紧急帧';
 
   @override
   String get diagnosticsRelaySuppressed => '因抑制而取消的中继';
@@ -873,6 +876,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get diagnosticsTrustConflicts => '信任冲突';
+
+  @override
+  String get diagnosticsOperationalCountersLifetime => '计数周期';
+
+  @override
+  String get diagnosticsLifetimeProcess => '自本进程启动以来';
+
+  @override
+  String get diagnosticsLifetimeUnknown => '未报告周期';
 
   @override
   String get diagnosticsTransportsSection => '活跃传输方式';

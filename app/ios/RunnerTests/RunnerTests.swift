@@ -1032,8 +1032,8 @@ class RunnerTests: XCTestCase {
     XCTAssertEqual(
       limiter.operationalCounters(),
       [
-        "openSosRateLimitedKnown": 1,
-        "openSosRateLimitedUnknown": 1,
+        "openEmergencyRateLimitedKnown": 1,
+        "openEmergencyRateLimitedUnknown": 1,
       ]
     )
 
@@ -1863,6 +1863,38 @@ class RunnerTests: XCTestCase {
         signingPublicKey: old.signing
       ),
       .conflict(noiseChanged: true, signingChanged: true)
+    )
+  }
+
+  func testPeerPinRotationCollisionIncrementsTrustConflictWithoutChangingPins() throws {
+    let backend = TestSecurePinBackend()
+    let store = backend.makeStore()
+    let old = makePeerPinMaterial()
+    let existing = makePeerPinMaterial()
+    _ = try store.validateAndPin(
+      peerID: old.peerID,
+      noisePublicKey: old.noise,
+      signingPublicKey: old.signing
+    )
+    _ = try store.validateAndPin(
+      peerID: existing.peerID,
+      noisePublicKey: existing.noise,
+      signingPublicKey: existing.signing
+    )
+
+    XCTAssertNil(
+      try store.rotate(
+        oldPeerID: old.peerID,
+        noisePublicKey: existing.noise,
+        signingPublicKey: Curve25519.Signing.PrivateKey().publicKey.rawRepresentation,
+        sequence: 1
+      )
+    )
+    XCTAssertEqual(store.operationalCounters()["trustConflicts"], 1)
+    XCTAssertEqual(store.pin(for: old.peerID)?.noisePublicKey, old.noise)
+    XCTAssertEqual(
+      store.pin(for: existing.peerID)?.signingPublicKey,
+      existing.signing
     )
   }
 

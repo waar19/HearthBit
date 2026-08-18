@@ -54,7 +54,12 @@ class RelayResult:
 
 
 class RelayOperationalCounters:
-    """Process-lifetime aggregate counters with no peer or payload data."""
+    """Process-lifetime aggregates with no peer or payload data.
+
+    ``forwarded`` counts each successful frame/link send, including every
+    stored frame emitted by replay. Reassembly outcomes are counted separately
+    only when the inner packet is rejected.
+    """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -63,14 +68,20 @@ class RelayOperationalCounters:
         self._forwarded = 0
         self._stored = 0
 
-    def record(self, result: RelayResult) -> None:
+    def record_result(
+        self,
+        result: RelayResult,
+        *,
+        count_outcome: bool = True,
+    ) -> None:
         with self._lock:
-            self._reasons[result.reason] += 1
-            if result.accepted:
-                self._accepted += 1
+            if count_outcome:
+                self._reasons[result.reason] += 1
+                if result.accepted:
+                    self._accepted += 1
+                if result.stored:
+                    self._stored += 1
             self._forwarded += result.forwarded
-            if result.stored:
-                self._stored += 1
 
     def snapshot(self) -> dict[str, object]:
         with self._lock:
@@ -152,6 +163,18 @@ class RelayCore:
         """Return deterministic local diagnostics; no network endpoint is opened."""
         return self._operational_counters.snapshot()
 
+    def _record_result(
+        self,
+        result: RelayResult,
+        *,
+        count_outcome: bool = True,
+    ) -> RelayResult:
+        self._operational_counters.record_result(
+            result,
+            count_outcome=count_outcome,
+        )
+        return result
+
     async def register_link(self, link: RelayLink) -> int:
         async with self._lock:
             self._links[link.id] = link
@@ -183,9 +206,7 @@ class RelayCore:
             packet = decode_packet(raw, max_size=self.config.max_packet_size)
         except PacketError as error:
             LOGGER.warning("invalid packet from %s: %s", source_id, error)
-            result = RelayResult(False, "invalid")
-            self._operational_counters.record(result)
-            return result
+            return self._record_result(RelayResult(False, "invalid"))
 
         result = await self._process_packet(
             source_id,
@@ -195,8 +216,7 @@ class RelayCore:
             apply_rate_limit=True,
             allow_reassembly=True,
         )
-        self._operational_counters.record(result)
-        return result
+        return self._record_result(result)
 
     async def _process_packet(
         self,
@@ -299,6 +319,7 @@ class RelayCore:
             )
             stored = stored or reassembled_result.stored
             if not reassembled_result.accepted:
+                self._record_result(reassembled_result)
                 LOGGER.warning(
                     "reassembled packet rejected from %s: %s",
                     source_id,
@@ -424,6 +445,10 @@ class RelayCore:
             await self.store.amark_delivered(item.fingerprint, link.id)
             sent += 1
         if sent:
+            self._record_result(
+                RelayResult(True, "replay", forwarded=sent),
+                count_outcome=False,
+            )
             LOGGER.info("replayed %d stored packet(s) to %s", sent, link.id)
         return sent
 

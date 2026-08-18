@@ -55,8 +55,8 @@ enum MeshPowerProfile {
 
 class MeshOperationalCounters {
   const MeshOperationalCounters({
-    this.openSosRateLimitedKnown = 0,
-    this.openSosRateLimitedUnknown = 0,
+    this.openEmergencyRateLimitedKnown = 0,
+    this.openEmergencyRateLimitedUnknown = 0,
     this.relayDampingSuppressed = 0,
     this.relayDampingScheduled = 0,
     this.relayDampingExpired = 0,
@@ -64,23 +64,38 @@ class MeshOperationalCounters {
     this.trustConflicts = 0,
   });
 
-  final int openSosRateLimitedKnown;
-  final int openSosRateLimitedUnknown;
+  final int openEmergencyRateLimitedKnown;
+  final int openEmergencyRateLimitedUnknown;
   final int relayDampingSuppressed;
   final int relayDampingScheduled;
   final int relayDampingExpired;
   final int trustStoreEvictions;
   final int trustConflicts;
 
+  @Deprecated('Use openEmergencyRateLimitedKnown')
+  int get openSosRateLimitedKnown => openEmergencyRateLimitedKnown;
+
+  @Deprecated('Use openEmergencyRateLimitedUnknown')
+  int get openSosRateLimitedUnknown => openEmergencyRateLimitedUnknown;
+
   factory MeshOperationalCounters.fromNative(Map<Object?, Object?> value) {
-    int counter(String key) {
-      final parsed = (value[key] as num?)?.toInt() ?? 0;
+    int counter(String key, {String? legacyKey}) {
+      final parsed =
+          (value[key] as num?)?.toInt() ??
+          (legacyKey == null ? null : (value[legacyKey] as num?)?.toInt()) ??
+          0;
       return parsed < 0 ? 0 : parsed;
     }
 
     return MeshOperationalCounters(
-      openSosRateLimitedKnown: counter('openSosRateLimitedKnown'),
-      openSosRateLimitedUnknown: counter('openSosRateLimitedUnknown'),
+      openEmergencyRateLimitedKnown: counter(
+        'openEmergencyRateLimitedKnown',
+        legacyKey: 'openSosRateLimitedKnown',
+      ),
+      openEmergencyRateLimitedUnknown: counter(
+        'openEmergencyRateLimitedUnknown',
+        legacyKey: 'openSosRateLimitedUnknown',
+      ),
       relayDampingSuppressed: counter('relayDampingSuppressed'),
       relayDampingScheduled: counter('relayDampingScheduled'),
       relayDampingExpired: counter('relayDampingExpired'),
@@ -90,8 +105,8 @@ class MeshOperationalCounters {
   }
 
   Map<String, int> toJson() => {
-    'openSosRateLimitedKnown': openSosRateLimitedKnown,
-    'openSosRateLimitedUnknown': openSosRateLimitedUnknown,
+    'openEmergencyRateLimitedKnown': openEmergencyRateLimitedKnown,
+    'openEmergencyRateLimitedUnknown': openEmergencyRateLimitedUnknown,
     'relayDampingSuppressed': relayDampingSuppressed,
     'relayDampingScheduled': relayDampingScheduled,
     'relayDampingExpired': relayDampingExpired,

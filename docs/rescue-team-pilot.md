@@ -27,8 +27,12 @@ equivalente.
 1. Identifique commit, build y versiones. Use solo alias como `HB-VICTIM-1`,
    `HB-RESCUE-1`, `HB-RELAY-1`, `HB-IOS-1`, `ANCHOR-1` y `LORA-A`.
 2. Cree una carpeta nueva con
-   `scripts\field-test\New-RescuePilotRun.ps1`. El script consulta versiones y
-   `adb devices` de forma read-only, registra solo el número de equipos y no
+   `scripts\field-test\New-RescuePilotRun.ps1`. El script intenta consultar
+   `adb version`, `flutter --version`, `git --version`, `python --version`,
+   `java -version` y `xcodebuild -version` con timeout. Registra la primera
+   línea real o solo `UNAVAILABLE`, `TIMEOUT_OR_START_FAILURE` o
+   `VERSION_QUERY_FAILED`; nunca inventa una versión. `adb devices` se usa de
+   forma read-only y solo se conserva el número de equipos. El script no
    inicia/detiene `flutter run`, servicios ni aplicaciones.
 3. Mantenga el manifiesto en `PENDING` o `BLOCKED`. No copie seriales, MAC,
    peer IDs, nombres Bluetooth, claves, coordenadas reales ni contenido humano.
@@ -80,8 +84,10 @@ Ejecute los gates de [prueba de campo](field-test.md), como mínimo:
 - `P0-LAN-PI`, `P0-RADAR-10M`, `P0-BATTERY-24H`;
 - `P0-IOS-MESH-RESTART`, `P0-INTEROP-OFF`, `P0-PANIC-WIPE`,
   `P0-OPTICAL-TRUST`;
-- reloj, recuperación Bluetooth, reinicio de rescate, límite force-quit iOS,
-  beacon por un salto, prioridad Meshtastic y atomicidad LoRa cuando apliquen.
+- `P0-SOS-CLOCK-01`, `P0-SOS-BATTERY-01`, `P0-BT-RECOVERY-01`,
+  `P0-RESCUE-RESTART-01`, `P0-IOS-FORCEQUIT-01`, `P0-RADAR-30M-01`;
+- `P0-BEACON-HOP-01`, `P0-MESHTASTIC-QUEUE-01`,
+  `P0-LORA-ATOMIC-01` y `P0-SONAR-NOISE-01`.
 
 No agrupe ejecuciones incompatibles: batería 24 h, aislamiento RF, force-quit y
 reinicio necesitan corridas y evidencia independientes.
@@ -101,19 +107,33 @@ Cada corrida debe contener:
 - para LoRa/Meshtastic: autorización/configuración, logs de ambos extremos y
   hashes/longitudes de frames opacos, nunca payload real.
 
-`PASS` exige que todos los criterios aplicables estén confirmados por la persona
-operadora y que los archivos/hashes existan. El preflight puede rechazar un
-`PASS` incompleto, pero no puede confirmar cobertura, RF, recepción visual,
-integridad humana, exactitud clínica o cumplimiento regulatorio.
+Cada escenario debe apuntar a evidencia propia. Una misma ruta o el mismo hash
+no pueden reutilizarse para dos escenarios o categorías: un hash solo prueba
+integridad del archivo suministrado, no cobertura, RF, recepción visual,
+exactitud clínica ni cumplimiento regulatorio.
+
+El script solo comprueba completitud estructural, rutas, categorías y hashes.
+Su máximo es `READY_FOR_REVIEW`; nunca emite `PASS`.
 
 ## Cierre
 
-1. Ejecute el guard de manifiesto con `-ManifestPath ... -RequestPass` solo
-   después de completar evidencia. Si falla, el estado permanece pendiente.
-2. Registre `FAIL` ante un criterio incumplido reproducible; no lo convierta en
+1. Ejecute el guard con `-ManifestPath ... -RequestReview` después de completar
+   evidencia. Si todo está íntegro, el manifiesto queda `READY_FOR_REVIEW`;
+   si falla, conserva su estado anterior. El alias histórico `-RequestPass`
+   produce exactamente el mismo resultado y tampoco puede emitir `PASS`.
+2. Una persona revisora distinta de la operadora debe abrir cada archivo,
+   comprobar el gate físico y sus controles negativos, y registrar fuera del
+   script un acta independiente con alias de ambas personas, UTC, commit/build,
+   decisión por gate y hash del manifiesto revisado. Solo esa acta puede usar
+   `PASS`; el manifiesto generado por el script permanece
+   `READY_FOR_REVIEW`.
+3. Registre `FAIL` ante un criterio incumplido reproducible; no lo convierta en
    `BLOCKED`.
-3. Registre gates físicos no ejecutados por hardware de forma explícita.
-4. Archive evidencia saneada según la política del equipo y destruya copias con
+4. Registre gates físicos no ejecutados por hardware de forma explícita.
+5. Archive evidencia saneada según la política del equipo y destruya copias con
    información accidentalmente sensible.
-5. La declaración «lista para emergencias reales» permanece bloqueada mientras
+6. La declaración «lista para emergencias reales» permanece bloqueada mientras
    cualquier P0 aplicable esté pendiente, bloqueado, fallido o sin evidencia.
+
+Ejecute `scripts\field-test\Test-RescuePilotRun.ps1` para verificar
+automáticamente los casos incompleto, evidencia duplicada y paquete completo.

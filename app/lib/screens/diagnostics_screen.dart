@@ -13,20 +13,23 @@ class DiagnosticsScreen extends StatefulWidget {
   DiagnosticsScreen({
     required this.controller,
     TransportDiagnostics? transportDiagnostics,
+    DiagnosticsExportService? exportService,
     super.key,
   }) : transportDiagnostics =
-           transportDiagnostics ?? TransportDiagnostics.instance;
+           transportDiagnostics ?? TransportDiagnostics.instance,
+       exportService = exportService ?? DiagnosticsExportService();
 
   final MeshController controller;
   final TransportDiagnostics transportDiagnostics;
+  final DiagnosticsExportService exportService;
 
   @override
   State<DiagnosticsScreen> createState() => _DiagnosticsScreenState();
 }
 
 class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
-  final _export = DiagnosticsExportService();
   bool _refreshing = false;
+  bool _exporting = false;
 
   @override
   void initState() {
@@ -52,7 +55,29 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   }
 
   Future<void> _share(BuildContext anchorContext) async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
     final controller = widget.controller;
+    try {
+      await controller.refreshDiagnostics();
+    } catch (error, stackTrace) {
+      DiagnosticsLog.instance.warning(
+        'diagnostics.export_refresh.failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.diagnosticsExportRefreshError)),
+      );
+      setState(() => _exporting = false);
+      return;
+    }
+    if (!mounted) return;
+    if (!anchorContext.mounted) {
+      setState(() => _exporting = false);
+      return;
+    }
     DiagnosticsLog.instance.info(
       'diagnostics.snapshot',
       data: {
@@ -70,15 +95,17 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
         'scanStarts': controller.scanStarts,
         'storeForwardEntries': controller.storeForwardEntries,
         'transportCount': controller.activeTransports.length,
+        'operationalCountersLifetime': controller.operationalCountersLifetime,
         ...controller.operationalCounters.toJson(),
       },
     );
     try {
       final anchor = anchorContext.findRenderObject() as RenderBox?;
-      await _export.share(
+      await widget.exportService.share(
         anchor: anchor,
         subject: context.l10n.diagnosticsExportSubject,
         operationalCounters: controller.operationalCounters.toJson(),
+        operationalCountersLifetime: controller.operationalCountersLifetime,
       );
     } catch (error, stackTrace) {
       DiagnosticsLog.instance.warning(
@@ -90,6 +117,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.l10n.diagnosticsExportError)),
       );
+    } finally {
+      if (mounted) setState(() => _exporting = false);
     }
   }
 
@@ -187,12 +216,12 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                 icon: Icons.monitor_heart_outlined,
                 rows: [
                   (
-                    context.l10n.diagnosticsOpenSosLimitedKnown,
-                    '${controller.operationalCounters.openSosRateLimitedKnown}',
+                    context.l10n.diagnosticsOpenEmergencyLimitedKnown,
+                    '${controller.operationalCounters.openEmergencyRateLimitedKnown}',
                   ),
                   (
-                    context.l10n.diagnosticsOpenSosLimitedUnknown,
-                    '${controller.operationalCounters.openSosRateLimitedUnknown}',
+                    context.l10n.diagnosticsOpenEmergencyLimitedUnknown,
+                    '${controller.operationalCounters.openEmergencyRateLimitedUnknown}',
                   ),
                   (
                     context.l10n.diagnosticsRelaySuppressed,
@@ -213,6 +242,12 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                   (
                     context.l10n.diagnosticsTrustConflicts,
                     '${controller.operationalCounters.trustConflicts}',
+                  ),
+                  (
+                    context.l10n.diagnosticsOperationalCountersLifetime,
+                    controller.operationalCountersLifetime == 'process'
+                        ? context.l10n.diagnosticsLifetimeProcess
+                        : context.l10n.diagnosticsLifetimeUnknown,
                   ),
                 ],
               ),
@@ -277,7 +312,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
               const SizedBox(height: 8),
               Builder(
                 builder: (buttonContext) => FilledButton.icon(
-                  onPressed: () => _share(buttonContext),
+                  onPressed: _exporting ? null : () => _share(buttonContext),
                   icon: const Icon(Icons.ios_share),
                   label: Text(context.l10n.diagnosticsExportButton),
                 ),

@@ -245,6 +245,7 @@ async def test_relay_deduplicates_decrements_ttl_and_replays_store(tmp_path) -> 
     replayed = await core.register_link(later_peer)
     assert replayed == 1
     assert later_peer.sent == live_peer.sent
+    assert core.diagnostic_snapshot()["forwarded"] == 3
     store.close()
 
 
@@ -992,9 +993,72 @@ async def test_invalid_fragmented_announce_does_not_pin_identity(tmp_path) -> No
     ):
         result = await core.inbound("source", fragment)
     assert result.accepted
+    snapshot = core.diagnostic_snapshot()
+    assert snapshot["rejected"] == 1
+    assert snapshot["resultsByReason"]["invalid-announce"] == 1
 
     message = signed_message(identity, payload=b"untrusted", timestamp_ms=2)
     assert (await core.inbound("source", message)).reason == "unknown-signing-key"
+    store.close()
+
+
+async def test_fragmented_conflicting_announce_counts_inner_rejection(
+    tmp_path,
+) -> None:
+    config = relay_config()
+    store = PacketStore(config.store)
+    core = RelayCore(
+        config,
+        store,
+        announcement_clock_ms=_announcement_clock_ms,
+    )
+    identity = RelayIdentity.load_or_create(tmp_path / "identity.json")
+    attacker = RelayIdentity.load_or_create(tmp_path / "attacker.json")
+    assert (
+        await core.inbound(
+            "source",
+            identity.build_announcement(nickname="Known", timestamp_ms=1),
+        )
+    ).accepted
+    conflicting_payload = encode_announcement(
+        nickname="Conflict",
+        noise_public_key=identity.noise_public_key,
+        signing_public_key=attacker.signing_public_key,
+        is_infrastructure=False,
+    )
+    unsigned = decode_packet(
+        encode_packet(
+            message_type=TYPE_ANNOUNCE,
+            ttl=7,
+            timestamp_ms=2,
+            sender_id=identity.peer_id,
+            payload=conflicting_payload,
+        )
+    )
+    conflict = encode_packet(
+        message_type=TYPE_ANNOUNCE,
+        ttl=7,
+        timestamp_ms=2,
+        sender_id=identity.peer_id,
+        payload=conflicting_payload,
+        signature=attacker.sign(canonical_packet_bytes(unsigned)),
+    )
+    fragments = fragment_frames(
+        conflict,
+        sender_id=identity.peer_id,
+        original_type=TYPE_ANNOUNCE,
+    )
+
+    for fragment in fragments:
+        result = await core.inbound("source", fragment)
+
+    assert result.accepted
+    snapshot = core.diagnostic_snapshot()
+    assert snapshot["accepted"] == len(fragments) + 1
+    assert snapshot["rejected"] == 1
+    assert snapshot["forwarded"] == 0
+    assert snapshot["trustConflicts"] == 1
+    assert snapshot["resultsByReason"]["identity-conflict"] == 1
     store.close()
 
 

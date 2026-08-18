@@ -851,6 +851,10 @@ class AppLocalizationsFr extends AppLocalizations {
       'Impossible d\'exporter le rapport de diagnostic';
 
   @override
+  String get diagnosticsExportRefreshError =>
+      'Impossible d\'actualiser le diagnostic. Aucune donnée n\'a été exportée.';
+
+  @override
   String get diagnosticsTitle => 'Diagnostic';
 
   @override
@@ -902,11 +906,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get diagnosticsOperationalCountersSection => 'Compteurs opérationnels';
 
   @override
-  String get diagnosticsOpenSosLimitedKnown => 'SOS connus limités par débit';
+  String get diagnosticsOpenEmergencyLimitedKnown =>
+      'Trames d\'urgence connues limitées par débit';
 
   @override
-  String get diagnosticsOpenSosLimitedUnknown =>
-      'SOS inconnus limités par débit';
+  String get diagnosticsOpenEmergencyLimitedUnknown =>
+      'Trames d\'urgence inconnues limitées par débit';
 
   @override
   String get diagnosticsRelaySuppressed => 'Relais supprimés par amortissement';
@@ -922,6 +927,16 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get diagnosticsTrustConflicts => 'Conflits de confiance';
+
+  @override
+  String get diagnosticsOperationalCountersLifetime => 'Période des compteurs';
+
+  @override
+  String get diagnosticsLifetimeProcess =>
+      'Depuis le démarrage de ce processus';
+
+  @override
+  String get diagnosticsLifetimeUnknown => 'Période non signalée';
 
   @override
   String get diagnosticsTransportsSection => 'Transports actifs';

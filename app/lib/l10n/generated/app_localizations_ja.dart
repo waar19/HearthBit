@@ -820,6 +820,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get diagnosticsExportError => '診断レポートをエクスポートできませんでした';
 
   @override
+  String get diagnosticsExportRefreshError => '診断情報を更新できなかったため、エクスポートしませんでした。';
+
+  @override
   String get diagnosticsTitle => '診断';
 
   @override
@@ -871,10 +874,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get diagnosticsOperationalCountersSection => '運用カウンター';
 
   @override
-  String get diagnosticsOpenSosLimitedKnown => 'レート制限された既知の SOS';
+  String get diagnosticsOpenEmergencyLimitedKnown => 'レート制限された既知の緊急フレーム';
 
   @override
-  String get diagnosticsOpenSosLimitedUnknown => 'レート制限された未知の SOS';
+  String get diagnosticsOpenEmergencyLimitedUnknown => 'レート制限された未知の緊急フレーム';
 
   @override
   String get diagnosticsRelaySuppressed => '抑制された中継';
@@ -890,6 +893,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get diagnosticsTrustConflicts => '信頼の競合';
+
+  @override
+  String get diagnosticsOperationalCountersLifetime => 'カウンター期間';
+
+  @override
+  String get diagnosticsLifetimeProcess => 'このプロセスの開始以降';
+
+  @override
+  String get diagnosticsLifetimeUnknown => '期間は報告されていません';
 
   @override
   String get diagnosticsTransportsSection => '有効な通信経路';

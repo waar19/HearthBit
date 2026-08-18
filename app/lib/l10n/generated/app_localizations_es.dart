@@ -852,6 +852,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se pudo exportar el informe de diagnóstico';
 
   @override
+  String get diagnosticsExportRefreshError =>
+      'No se pudo actualizar el diagnóstico. No se exportó información.';
+
+  @override
   String get diagnosticsTitle => 'Diagnóstico';
 
   @override
@@ -903,12 +907,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get diagnosticsOperationalCountersSection => 'Contadores operativos';
 
   @override
-  String get diagnosticsOpenSosLimitedKnown =>
-      'SOS conocidos limitados por tasa';
+  String get diagnosticsOpenEmergencyLimitedKnown =>
+      'Frames de emergencia conocidos limitados por tasa';
 
   @override
-  String get diagnosticsOpenSosLimitedUnknown =>
-      'SOS desconocidos limitados por tasa';
+  String get diagnosticsOpenEmergencyLimitedUnknown =>
+      'Frames de emergencia desconocidos limitados por tasa';
 
   @override
   String get diagnosticsRelaySuppressed =>
@@ -925,6 +929,16 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get diagnosticsTrustConflicts => 'Conflictos de confianza';
+
+  @override
+  String get diagnosticsOperationalCountersLifetime =>
+      'Periodo de los contadores';
+
+  @override
+  String get diagnosticsLifetimeProcess => 'Desde el inicio de este proceso';
+
+  @override
+  String get diagnosticsLifetimeUnknown => 'Periodo no informado';
 
   @override
   String get diagnosticsTransportsSection => 'Transportes activos';

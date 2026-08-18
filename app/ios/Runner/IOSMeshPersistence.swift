@@ -372,7 +372,11 @@ final class IOSPeerIdentityPinStore {
         ($0.noisePublicKey == noisePublicKey ||
          $0.signingPublicKey == signingPublicKey)
     }
-    guard newID != oldID, pins[newID] == nil, !collides else { return nil }
+    guard newID != oldID else { return nil }
+    if pins[newID] != nil || collides {
+      incrementTrustConflict()
+      return nil
+    }
     let replacement = IOSPeerIdentityPin(
       peerID: newID,
       noisePublicKey: noisePublicKey,

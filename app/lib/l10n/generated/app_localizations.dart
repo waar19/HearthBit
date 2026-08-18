@@ -1548,6 +1548,12 @@ abstract class AppLocalizations {
   /// **'Could not export the diagnostic report'**
   String get diagnosticsExportError;
 
+  /// No description provided for @diagnosticsExportRefreshError.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics could not be refreshed. Nothing was exported.'**
+  String get diagnosticsExportRefreshError;
+
   /// No description provided for @diagnosticsTitle.
   ///
   /// In en, this message translates to:
@@ -1650,17 +1656,17 @@ abstract class AppLocalizations {
   /// **'Operational counters'**
   String get diagnosticsOperationalCountersSection;
 
-  /// No description provided for @diagnosticsOpenSosLimitedKnown.
+  /// No description provided for @diagnosticsOpenEmergencyLimitedKnown.
   ///
   /// In en, this message translates to:
-  /// **'Known SOS rate-limited'**
-  String get diagnosticsOpenSosLimitedKnown;
+  /// **'Known emergency frames rate-limited'**
+  String get diagnosticsOpenEmergencyLimitedKnown;
 
-  /// No description provided for @diagnosticsOpenSosLimitedUnknown.
+  /// No description provided for @diagnosticsOpenEmergencyLimitedUnknown.
   ///
   /// In en, this message translates to:
-  /// **'Unknown SOS rate-limited'**
-  String get diagnosticsOpenSosLimitedUnknown;
+  /// **'Unknown emergency frames rate-limited'**
+  String get diagnosticsOpenEmergencyLimitedUnknown;
 
   /// No description provided for @diagnosticsRelaySuppressed.
   ///
@@ -1691,6 +1697,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Trust conflicts'**
   String get diagnosticsTrustConflicts;
+
+  /// No description provided for @diagnosticsOperationalCountersLifetime.
+  ///
+  /// In en, this message translates to:
+  /// **'Counter period'**
+  String get diagnosticsOperationalCountersLifetime;
+
+  /// No description provided for @diagnosticsLifetimeProcess.
+  ///
+  /// In en, this message translates to:
+  /// **'Since this process started'**
+  String get diagnosticsLifetimeProcess;
+
+  /// No description provided for @diagnosticsLifetimeUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Period not reported'**
+  String get diagnosticsLifetimeUnknown;
 
   /// No description provided for @diagnosticsTransportsSection.
   ///

@@ -545,8 +545,8 @@ final class IOSOpenEmergencyRateLimiter {
     lock.lock()
     defer { lock.unlock() }
     return [
-      "openSosRateLimitedKnown": knownRateLimited,
-      "openSosRateLimitedUnknown": unknownRateLimited,
+      "openEmergencyRateLimitedKnown": knownRateLimited,
+      "openEmergencyRateLimitedUnknown": unknownRateLimited,
     ]
   }
 

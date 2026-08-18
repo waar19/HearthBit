@@ -853,6 +853,10 @@ class AppLocalizationsDe extends AppLocalizations {
       'Der Diagnosebericht konnte nicht exportiert werden';
 
   @override
+  String get diagnosticsExportRefreshError =>
+      'Die Diagnose konnte nicht aktualisiert werden. Es wurde nichts exportiert.';
+
+  @override
   String get diagnosticsTitle => 'Diagnose';
 
   @override
@@ -904,10 +908,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get diagnosticsOperationalCountersSection => 'Betriebszähler';
 
   @override
-  String get diagnosticsOpenSosLimitedKnown => 'Bekannte SOS ratebegrenzt';
+  String get diagnosticsOpenEmergencyLimitedKnown =>
+      'Bekannte Notfall-Frames ratebegrenzt';
 
   @override
-  String get diagnosticsOpenSosLimitedUnknown => 'Unbekannte SOS ratebegrenzt';
+  String get diagnosticsOpenEmergencyLimitedUnknown =>
+      'Unbekannte Notfall-Frames ratebegrenzt';
 
   @override
   String get diagnosticsRelaySuppressed => 'Durch Dämpfung unterdrückte Relays';
@@ -923,6 +929,15 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get diagnosticsTrustConflicts => 'Vertrauenskonflikte';
+
+  @override
+  String get diagnosticsOperationalCountersLifetime => 'Zählerzeitraum';
+
+  @override
+  String get diagnosticsLifetimeProcess => 'Seit dem Start dieses Prozesses';
+
+  @override
+  String get diagnosticsLifetimeUnknown => 'Zeitraum nicht gemeldet';
 
   @override
   String get diagnosticsTransportsSection => 'Aktive Übertragungswege';

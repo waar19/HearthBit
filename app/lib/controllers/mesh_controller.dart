@@ -120,6 +120,7 @@ class MeshController extends ChangeNotifier {
   int scanStarts = 0;
   int storeForwardEntries = 0;
   MeshOperationalCounters operationalCounters = const MeshOperationalCounters();
+  String operationalCountersLifetime = 'unknown';
   Set<String> activeTransports = const {};
   DateTime? radarConsentUntil;
   PendingBeaconRequest? pendingBeaconRequest;
@@ -413,6 +414,9 @@ class MeshController extends ChangeNotifier {
         (diagnostics['storeForwardEntries'] as num?)?.toInt() ??
         storeForwardEntries;
     _applyOperationalCounters(diagnostics['operationalCounters']);
+    _applyOperationalCountersLifetime(
+      diagnostics['operationalCountersLifetime'],
+    );
     final transports = diagnostics['transports'];
     if (transports is List<Object?>) {
       activeTransports = transports
@@ -1943,6 +1947,7 @@ class MeshController extends ChangeNotifier {
           (metrics['storeForwardEntries'] as num?)?.toInt() ??
           storeForwardEntries;
       _applyOperationalCounters(metrics['operationalCounters']);
+      _applyOperationalCountersLifetime(metrics['operationalCountersLifetime']);
       DiagnosticsLog.instance.info(
         'mesh.resource.stats',
         data: {
@@ -1976,6 +1981,10 @@ class MeshController extends ChangeNotifier {
   void _applyOperationalCounters(Object? value) {
     if (value is! Map<Object?, Object?>) return;
     operationalCounters = MeshOperationalCounters.fromNative(value);
+  }
+
+  void _applyOperationalCountersLifetime(Object? value) {
+    if (value == 'process') operationalCountersLifetime = 'process';
   }
 
   void _updateConnectionStatus(String? wireStatus) {
