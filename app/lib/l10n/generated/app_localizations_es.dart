@@ -2590,4 +2590,134 @@ class AppLocalizationsEs extends AppLocalizations {
   String mapZoneError(String error) {
     return 'No se pudo registrar o compartir el recorrido barrido: $error';
   }
+
+  @override
+  String anchorAdminTitle(String name) {
+    return 'Administrar $name';
+  }
+
+  @override
+  String get anchorAdminStatus => 'Estado del Anchor';
+
+  @override
+  String get anchorAdminClaimed => 'Protegido con clave de administrador';
+
+  @override
+  String get anchorAdminUnclaimed => 'Aún no está protegido';
+
+  @override
+  String anchorAdminFirmware(int version, int protocol) {
+    return 'Firmware $version · protocolo $protocol';
+  }
+
+  @override
+  String anchorAdminUptime(String duration) {
+    return 'Tiempo activo: $duration';
+  }
+
+  @override
+  String anchorAdminBootCount(int count) {
+    return 'Arranques: $count';
+  }
+
+  @override
+  String anchorAdminMailbox(int used, int capacity) {
+    return 'Buzón: $used/$capacity';
+  }
+
+  @override
+  String get anchorAdminClockReady => 'Reloj sincronizado';
+
+  @override
+  String get anchorAdminClockPending => 'Reloj sin sincronizar';
+
+  @override
+  String get anchorAdminPackets => 'Paquetes';
+
+  @override
+  String get anchorAdminReceived => 'Recibidos';
+
+  @override
+  String get anchorAdminForwarded => 'Reenviados';
+
+  @override
+  String get anchorAdminStored => 'Guardados';
+
+  @override
+  String get anchorAdminDelivered => 'Entregados';
+
+  @override
+  String get anchorAdminDeduplicated => 'Duplicados evitados';
+
+  @override
+  String get anchorAdminExpired => 'Expirados';
+
+  @override
+  String get anchorAdminRejected => 'Rechazados';
+
+  @override
+  String get anchorAdminRefresh => 'ACTUALIZAR';
+
+  @override
+  String get anchorAdminSetPassword => 'CONFIGURAR CLAVE';
+
+  @override
+  String get anchorAdminChangePassword => 'CAMBIAR CLAVE';
+
+  @override
+  String get anchorAdminRename => 'CAMBIAR NOMBRE';
+
+  @override
+  String get anchorAdminReboot => 'REINICIAR ANCHOR';
+
+  @override
+  String get anchorAdminFactoryReset => 'RESTABLECER DE FÁBRICA';
+
+  @override
+  String get anchorAdminPassword => 'Clave de administrador';
+
+  @override
+  String get anchorAdminNewPassword => 'Nueva clave';
+
+  @override
+  String get anchorAdminPasswordHint => 'Mínimo 10 caracteres';
+
+  @override
+  String get anchorAdminName => 'Nombre del Anchor';
+
+  @override
+  String get anchorAdminConfirmReboot => '¿Reiniciar este Anchor ahora?';
+
+  @override
+  String get anchorAdminConfirmFactoryReset =>
+      'Esto elimina su identidad, clave, nombre, métricas y mensajes guardados. No se puede deshacer.';
+
+  @override
+  String get anchorAdminWorking => 'Comunicando de forma segura con el Anchor…';
+
+  @override
+  String get anchorAdminSaved => 'Anchor actualizado correctamente.';
+
+  @override
+  String get anchorAdminWrongPassword =>
+      'La clave de administrador es incorrecta.';
+
+  @override
+  String anchorAdminLocked(int seconds) {
+    return 'Demasiados intentos. Inténtalo de nuevo en $seconds segundos.';
+  }
+
+  @override
+  String get anchorAdminUnavailable =>
+      'El Anchor no respondió. Mantén el teléfono cerca e inténtalo otra vez.';
+
+  @override
+  String get anchorAdminUnsupported =>
+      'El firmware de este Anchor aún no permite administrarlo.';
+
+  @override
+  String get anchorAdminPasswordMismatch => 'Las claves nuevas no coinciden.';
+
+  @override
+  String get anchorAdminRepeatPassword => 'Repetir nueva clave';
 }

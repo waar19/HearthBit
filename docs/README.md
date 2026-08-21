@@ -34,6 +34,7 @@ meaning. When translations disagree, the English license text in
 - [Field testing](field-test.md)
 - [P0 execution guide](p0-execution-guide.md)
 - [Anchor deployment](anchor-deployment-guide.md)
+- [Anchor administration protocol](anchor-admin-protocol.md)
 - [Anchor density and placement](anchor-density-guide.md)
 - [Rescue-team pilot](rescue-team-pilot.md)
 - [Battery and memory validation](battery-memory-validation.md)

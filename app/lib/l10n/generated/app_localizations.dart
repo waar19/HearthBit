@@ -4517,6 +4517,234 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not record or share the swept route: {error}'**
   String mapZoneError(String error);
+
+  /// No description provided for @anchorAdminTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage {name}'**
+  String anchorAdminTitle(String name);
+
+  /// No description provided for @anchorAdminStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Anchor status'**
+  String get anchorAdminStatus;
+
+  /// No description provided for @anchorAdminClaimed.
+  ///
+  /// In en, this message translates to:
+  /// **'Protected by administrator password'**
+  String get anchorAdminClaimed;
+
+  /// No description provided for @anchorAdminUnclaimed.
+  ///
+  /// In en, this message translates to:
+  /// **'Not protected yet'**
+  String get anchorAdminUnclaimed;
+
+  /// No description provided for @anchorAdminFirmware.
+  ///
+  /// In en, this message translates to:
+  /// **'Firmware {version} · protocol {protocol}'**
+  String anchorAdminFirmware(int version, int protocol);
+
+  /// No description provided for @anchorAdminUptime.
+  ///
+  /// In en, this message translates to:
+  /// **'Uptime: {duration}'**
+  String anchorAdminUptime(String duration);
+
+  /// No description provided for @anchorAdminBootCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Starts: {count}'**
+  String anchorAdminBootCount(int count);
+
+  /// No description provided for @anchorAdminMailbox.
+  ///
+  /// In en, this message translates to:
+  /// **'Mailbox: {used}/{capacity}'**
+  String anchorAdminMailbox(int used, int capacity);
+
+  /// No description provided for @anchorAdminClockReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Clock synchronized'**
+  String get anchorAdminClockReady;
+
+  /// No description provided for @anchorAdminClockPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Clock not synchronized'**
+  String get anchorAdminClockPending;
+
+  /// No description provided for @anchorAdminPackets.
+  ///
+  /// In en, this message translates to:
+  /// **'Packets'**
+  String get anchorAdminPackets;
+
+  /// No description provided for @anchorAdminReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'Received'**
+  String get anchorAdminReceived;
+
+  /// No description provided for @anchorAdminForwarded.
+  ///
+  /// In en, this message translates to:
+  /// **'Forwarded'**
+  String get anchorAdminForwarded;
+
+  /// No description provided for @anchorAdminStored.
+  ///
+  /// In en, this message translates to:
+  /// **'Stored'**
+  String get anchorAdminStored;
+
+  /// No description provided for @anchorAdminDelivered.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivered'**
+  String get anchorAdminDelivered;
+
+  /// No description provided for @anchorAdminDeduplicated.
+  ///
+  /// In en, this message translates to:
+  /// **'Deduplicated'**
+  String get anchorAdminDeduplicated;
+
+  /// No description provided for @anchorAdminExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Expired'**
+  String get anchorAdminExpired;
+
+  /// No description provided for @anchorAdminRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'Rejected'**
+  String get anchorAdminRejected;
+
+  /// No description provided for @anchorAdminRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'REFRESH'**
+  String get anchorAdminRefresh;
+
+  /// No description provided for @anchorAdminSetPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'SET ADMIN PASSWORD'**
+  String get anchorAdminSetPassword;
+
+  /// No description provided for @anchorAdminChangePassword.
+  ///
+  /// In en, this message translates to:
+  /// **'CHANGE PASSWORD'**
+  String get anchorAdminChangePassword;
+
+  /// No description provided for @anchorAdminRename.
+  ///
+  /// In en, this message translates to:
+  /// **'RENAME ANCHOR'**
+  String get anchorAdminRename;
+
+  /// No description provided for @anchorAdminReboot.
+  ///
+  /// In en, this message translates to:
+  /// **'RESTART ANCHOR'**
+  String get anchorAdminReboot;
+
+  /// No description provided for @anchorAdminFactoryReset.
+  ///
+  /// In en, this message translates to:
+  /// **'FACTORY RESET'**
+  String get anchorAdminFactoryReset;
+
+  /// No description provided for @anchorAdminPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Administrator password'**
+  String get anchorAdminPassword;
+
+  /// No description provided for @anchorAdminNewPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'New password'**
+  String get anchorAdminNewPassword;
+
+  /// No description provided for @anchorAdminPasswordHint.
+  ///
+  /// In en, this message translates to:
+  /// **'At least 10 characters'**
+  String get anchorAdminPasswordHint;
+
+  /// No description provided for @anchorAdminName.
+  ///
+  /// In en, this message translates to:
+  /// **'Anchor name'**
+  String get anchorAdminName;
+
+  /// No description provided for @anchorAdminConfirmReboot.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart this Anchor now?'**
+  String get anchorAdminConfirmReboot;
+
+  /// No description provided for @anchorAdminConfirmFactoryReset.
+  ///
+  /// In en, this message translates to:
+  /// **'This removes its identity, password, name, metrics and stored messages. This cannot be undone.'**
+  String get anchorAdminConfirmFactoryReset;
+
+  /// No description provided for @anchorAdminWorking.
+  ///
+  /// In en, this message translates to:
+  /// **'Communicating securely with the Anchor…'**
+  String get anchorAdminWorking;
+
+  /// No description provided for @anchorAdminSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Anchor updated successfully.'**
+  String get anchorAdminSaved;
+
+  /// No description provided for @anchorAdminWrongPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'The administrator password is incorrect.'**
+  String get anchorAdminWrongPassword;
+
+  /// No description provided for @anchorAdminLocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many attempts. Try again in {seconds} seconds.'**
+  String anchorAdminLocked(int seconds);
+
+  /// No description provided for @anchorAdminUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The Anchor did not respond. Keep the phone nearby and try again.'**
+  String get anchorAdminUnavailable;
+
+  /// No description provided for @anchorAdminUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'This Anchor firmware does not support administration yet.'**
+  String get anchorAdminUnsupported;
+
+  /// No description provided for @anchorAdminPasswordMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'The new passwords do not match.'**
+  String get anchorAdminPasswordMismatch;
+
+  /// No description provided for @anchorAdminRepeatPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Repeat new password'**
+  String get anchorAdminRepeatPassword;
 }
 
 class _AppLocalizationsDelegate

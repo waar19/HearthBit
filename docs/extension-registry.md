@@ -9,7 +9,7 @@ Este registro gobierna extensiones de HearthBit sobre el perfil de
 La fuente BitChat fijada es
 `vendor/bitchat-android@5156f7de89ec9f6a3429630d90f709b68f6fd7fd`.
 Ese commit no registra Courier `0x04`, los tipos exteriores `0x23`–`0x28`,
-`0x2A`–`0x2C` ni el tipo Noise interior `0x30`. `0x29` sí está asignado por
+`0x2A`–`0x2C` ni los tipos Noise interiores `0x30`–`0x31`. `0x29` sí está asignado por
 upstream a `VOICE_FRAME`; Bitle asigna `0x24` a `PREKEY_BUNDLE`. Las entradas
 propias de este documento pertenecen a HearthBit/Bitle y **MUST NOT**
 presentarse como compatibilidad upstream.
@@ -68,6 +68,7 @@ recepción. Un alias legacy **MUST NOT** usarse para emitir.
 | exterior | `0x2B` | `EMERGENCY_ACK` | HearthBit | sí | dirigido y acotado |
 | exterior | `0x2C` | `KEY_ROTATION` | HearthBit | sí | nunca |
 | Noise interior | `0x30` | `HBT_TRANSFER_FRAME` | HearthBit | no para la sesión | nunca |
+| Noise interior | `0x31` | `ANCHOR_ADMIN` | HearthBit/Bitle | sí | nunca |
 
 “Crítica” significa que interpretar mal la entrada puede modificar
 autorización, privacidad, identidad operativa o política de relay. Una entrada
@@ -407,9 +408,22 @@ diferida de un mensaje privado usa Courier, que conserva como ciphertext el
 paquete Noise completo y aplica sus propias restricciones. Los blobs de
 archivo HBT **MUST NOT** entrar en Courier ni en el store-forward de mensajes.
 
-## 13. ExtensionEnvelope futuro
+## 13. `ANCHOR_ADMIN` Noise interior `0x31`
 
-### 13.1 Objetivo y estado
+`ANCHOR_ADMIN` solo puede circular como plaintext autenticado dentro de una
+sesión Noise directa entre la aplicación y un nodo con rol
+`INFRA_DATA_ANCHOR` o `INFRA_RELAY`. Nunca se retransmite, deduplica, sincroniza
+ni almacena por courier. Un receptor que no implemente `0x31` lo ignora sin
+cerrar la sesión.
+
+La versión, comandos, challenge de un solo uso, PBKDF2, HMAC, estados y límites
+se especifican en [`anchor-admin-protocol.md`](anchor-admin-protocol.md). Todo
+comando que modifica estado es crítico: una trama inválida se rechaza como
+unidad y no puede reinterpretarse como mensaje privado o transferencia.
+
+## 14. ExtensionEnvelope futuro
+
+### 14.1 Objetivo y estado
 
 Las asignaciones activas de la tabla de la sección 3 **MUST** conservarse.
 `0x24` significa `PREKEY_BUNDLE`, `0x29` permanece `VOICE_FRAME`, y sus aliases
@@ -424,7 +438,7 @@ carrier y su negociación, una implementación **MUST NOT** emitir
 `ExtensionEnvelope` en la red ni reutilizar un tipo upstream. Esta restricción
 evita inventar compatibilidad.
 
-### 13.2 Encoding
+### 14.2 Encoding
 
 El encabezado mide 12 octetos:
 
@@ -458,7 +472,7 @@ consultar además la entrada del registro, autenticación, destinatario, cuota y
 expiración. El flag nunca puede volver almacenable un subtipo registrado como
 “nunca”.
 
-### 13.3 Negociación y tipos desconocidos
+### 14.3 Negociación y tipos desconocidos
 
 Un emisor **MUST NOT** enviar un `ExtensionEnvelope` hasta haber recibido un
 `ANNOUNCE` autenticado y una capacidad autenticada que declare soporte para el
@@ -476,7 +490,7 @@ Para un envelope desconocido:
 - **MUST NOT** almacenarlo salvo que el registro y la negociación autoricen
   explícitamente store-forward.
 
-## 14. Proceso de asignación
+## 15. Proceso de asignación
 
 Toda nueva entrada **MUST** documentar:
 

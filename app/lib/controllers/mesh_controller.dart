@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../l10n/l10n.dart';
+import '../models/anchor_admin_models.dart';
 import '../models/mesh_models.dart';
 import '../models/pending_beacon_request.dart';
 import '../models/private_message_result.dart';
@@ -89,6 +90,8 @@ class MeshController extends ChangeNotifier {
   final List<EmergencyDelivery> _emergencyDeliveries = [];
   final Set<String> _emergencyChannelsUsed = {};
   final Random _random = Random.secure();
+  final Map<String, Completer<AnchorAdminResult>> _anchorAdminRequests = {};
+  final Map<String, AnchorAdminResult> _earlyAnchorAdminResults = {};
 
   StreamSubscription<MeshNativeEvent>? _subscription;
   bool _drainingPrivateMessageOutbox = false;
@@ -695,6 +698,37 @@ class MeshController extends ChangeNotifier {
       timestamp: DateTime.now(),
     );
     return const PrivateMessageSendResult.sent();
+  }
+
+  Future<AnchorAdminResult> requestAnchorAdmin({
+    required MeshPeer peer,
+    required String command,
+    String? password,
+    String? value,
+    String? newPassword,
+  }) async {
+    if (peer.role != MeshNodeRole.infraDataAnchor &&
+        peer.role != MeshNodeRole.infraRelay) {
+      throw StateError('anchor_admin_invalid_peer');
+    }
+    final requestId = await _platform.anchorAdminRequest(
+      peerId: peer.id,
+      command: command,
+      password: password,
+      value: value,
+      newPassword: newPassword,
+    );
+    final early = _earlyAnchorAdminResults.remove(requestId);
+    if (early != null) return early;
+    final completer = Completer<AnchorAdminResult>();
+    _anchorAdminRequests[requestId] = completer;
+    return completer.future.timeout(
+      const Duration(seconds: 50),
+      onTimeout: () {
+        _anchorAdminRequests.remove(requestId);
+        throw TimeoutException('anchor_admin_timeout');
+      },
+    );
   }
 
   Future<void> sendSos(
@@ -1855,6 +1889,15 @@ class MeshController extends ChangeNotifier {
         // Lecturas y avisos del radar de rescate: los consume RadarScreen
         // directamente del stream; evitar redibujar toda la app.
         return;
+      case MeshAnchorAdminEvent():
+        final result = AnchorAdminResult.fromMap(event.raw);
+        final completer = _anchorAdminRequests.remove(result.requestId);
+        if (completer != null && !completer.isCompleted) {
+          completer.complete(result);
+        } else if (result.requestId.isNotEmpty) {
+          _earlyAnchorAdminResults[result.requestId] = result;
+        }
+        return;
       case MeshRangingMeasurementEvent() ||
           MeshRadioRangingStateEvent() ||
           MeshRangingControlEvent() ||
@@ -2227,6 +2270,13 @@ class MeshController extends ChangeNotifier {
     _emergencyRetryTimer?.cancel();
     _stopRadarLocationSharing();
     _subscription?.cancel();
+    for (final completer in _anchorAdminRequests.values) {
+      if (!completer.isCompleted) {
+        completer.completeError(StateError('anchor_admin_disposed'));
+      }
+    }
+    _anchorAdminRequests.clear();
+    _earlyAnchorAdminResults.clear();
     _preferences?.removeListener(_handlePreferencesChanged);
     peerLocations.removeListener(_notifyLocationChanged);
     peerLocations.dispose();

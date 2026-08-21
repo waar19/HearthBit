@@ -2,12 +2,12 @@
 
 ## Estado y alcance
 
-Esta guía describe el firmware fijado en `firmware/anchor-node` y sus cambios
-locales sin commit al momento de esta entrega. No es una guía genérica para
-ESP32. La instalación y el flujo store-and-forward aquí definidos **no han sido
-validados físicamente en esta entrega**: `P0-STORE-REBOOT` y los demás gates P0
-que dependen de radios, teléfonos o aislamiento físico continúan `PENDING` o
-`BLOCKED`.
+Esta guía describe el firmware fijado en `firmware/anchor-node`. No es una guía
+genérica para ESP32. El panel administrativo de firmware v6 sí se validó en una
+ESP32-S3 N16R8 con Android: reclamo, cambio de nombre, reinicio con persistencia
+y bloqueo tras claves incorrectas. Esa prueba no sustituye la validación física
+del flujo store-and-forward: `P0-STORE-REBOOT` y los demás gates P0 que dependen
+de radios, teléfonos o aislamiento físico continúan `PENDING` o `BLOCKED`.
 
 No se garantiza cobertura ni alcance en metros. Antes de decidir cantidad,
 altura o ubicación, ejecute la
@@ -137,14 +137,37 @@ En el primer arranque, el firmware genera y persiste en el namespace NVS
 La identidad se reutiliza mientras NVS sobreviva. El nickname de aplicación se
 deriva como `Bitle-####` del peer ID y se guarda como `noise/nickname`. El
 firmware acepta un nombre ASCII imprimible de 1 a 31 caracteres escrito
-directamente en esa clave NVS, pero no existe un comando de runtime conectado
-para establecerlo o regenerarlo. `Bitle Relay` es el nombre BLE fijo; no es el
-nickname de la malla.
+directamente en esa clave NVS. Desde firmware v6 también puede cambiarse desde
+el panel del Anchor en HearthBit, después de autenticar la clave administrativa.
+`Bitle Relay` es el nombre BLE fijo; no es el nickname de la malla.
+
+### Reclamo administrativo antes de instalar
+
+Después del primer flash, abra HearthBit, toque el Anchor en **Cercanos** y
+configure inmediatamente su clave administrativa. Hágalo bajo control físico y
+compruebe los primeros ocho caracteres del peer ID: el primer reclamo no puede
+autenticarse con una clave anterior porque el dispositivo todavía no tiene una.
+No instale ni exponga públicamente un Anchor sin reclamar.
+
+La aplicación nunca envía la clave. Deriva un verificador mediante
+PBKDF2-HMAC-SHA256 y usa un challenge de un solo uso dentro de Noise. Verifique
+desde el panel:
+
+1. estado, firmware y reloj;
+2. buzón y contadores operativos;
+3. cambio de nombre;
+4. reinicio y reconexión con la misma identidad;
+5. rechazo de una clave incorrecta.
+
+El restablecimiento de fábrica borra identidad, clave administrativa, nombre,
+reloj, métricas, configuración de aplicación y buzón. Úselo solo con doble
+confirmación. El formato se documenta en
+[`anchor-admin-protocol.md`](anchor-admin-protocol.md).
 
 ### OTA firmado y versión
 
 `BITLE_FW_VERSION`, en `main/bitle_ota.h`, es el contador monotónico que compara
-imágenes; en el árbol actual vale **5**. No es una versión comercial. Para cada
+imágenes; en el árbol actual vale **6**. No es una versión comercial. Para cada
 release:
 
 1. incremente ese valor;
@@ -297,10 +320,11 @@ publique el log serie completo sin sanearlo.
 - Un atacante con acceso físico puede intentar leer, borrar o reemplazar flash.
   Proteja caja, puerto USB, reset, alimentación y cadena de custodia de cada
   ancla.
-- No existe en la documentación del firmware un procedimiento operativo de
-  factory reset o reprovisión de identidad. `erase-flash` solo está documentado
-  para retirar Meshtastic antes de la primera provisión S3 y destruye la flash;
-  no lo use como recuperación rutinaria ni durante un gate.
+- El panel de HearthBit ofrece restablecimiento de fábrica autenticado y con
+  doble confirmación. Borra identidad, administración, nombre, reloj, métricas,
+  OTA, LoRa y buzón; después exige incorporar y reclamar de nuevo el nodo.
+  `erase-flash` queda reservado a provisión o recuperación por cable y destruye
+  toda la flash; no lo use como operación administrativa rutinaria.
 - Si NVS detecta páginas agotadas o una versión/layout incompatible, el arranque
   la borra y reinicializa. Eso puede regenerar identidad y rompe la continuidad
   esperada del peer; trátelo como incidente y vuelva a incorporar el nodo bajo

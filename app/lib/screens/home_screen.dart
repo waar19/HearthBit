@@ -30,6 +30,7 @@ import '../services/transport_diagnostics.dart';
 import '../utils/scroll_to_bottom.dart';
 import '../widgets/nickname_dialog.dart';
 import '../widgets/authority_announcement_banner.dart';
+import 'anchor_admin_screen.dart';
 import 'authority_announcements_screen.dart';
 import 'diagnostics_screen.dart';
 import 'emergency_screen.dart';
@@ -515,6 +516,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         onShareInvite: _shareInvite,
                         onOpenPrivateChat: (peer) =>
                             _openPrivateChat(controller, peer),
+                        onOpenAnchorAdmin: (peer) {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => AnchorAdminScreen(
+                                controller: controller,
+                                peer: peer,
+                              ),
+                            ),
+                          );
+                        },
                         onOpenRadar: _openRadarForPeer,
                         onUnavailableAction: _showUnavailablePeerAction,
                         onSendFile: _sendFileTo,

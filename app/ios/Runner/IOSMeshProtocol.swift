@@ -430,6 +430,219 @@ struct IOSMeshPacket {
     return IOSMeshProtocol.encode(copy, padded: true)
   }
 }
+enum IOSAnchorAdminProtocol {
+  static let version: UInt8 = 1
+  static let statusGet: UInt8 = 0x01
+  static let challengeGet: UInt8 = 0x02
+  static let setPassword: UInt8 = 0x03
+  static let changePassword: UInt8 = 0x04
+  static let rename: UInt8 = 0x05
+  static let reboot: UInt8 = 0x06
+  static let factoryReset: UInt8 = 0x07
+  static let ok = 0
+  static let locked = 6
+  static let saltSize = 16
+  static let nonceSize = 16
+  static let verifierSize = 32
+
+  struct Response {
+    let command: UInt8
+    let requestID: UInt32
+    let status: Int
+    let body: Data
+  }
+
+  struct Challenge {
+    let claimed: Bool
+    let salt: Data
+    let nonce: Data
+    let iterations: UInt32
+    let retryAfterSeconds: UInt32
+  }
+
+  static func request(command: UInt8, requestID: UInt32) -> Data {
+    Data([version, command]) + uint32(requestID)
+  }
+
+  static func requestID(_ data: Data) -> UInt32? {
+    let bytes = [UInt8](data)
+    guard bytes.count >= 6, bytes[0] == version else { return nil }
+    return readUInt32(bytes, 2)
+  }
+
+  static func authenticatedRequest(
+    command: UInt8,
+    requestID: UInt32,
+    nonce: Data,
+    data: Data,
+    verifier: Data
+  ) throws -> Data {
+    guard nonce.count == nonceSize, verifier.count == verifierSize else {
+      throw IOSMeshError.invalidPayload
+    }
+    let signed = request(command: command, requestID: requestID) + nonce + data
+    let key = SymmetricKey(data: verifier)
+    let proof = Data(HMAC<SHA256>.authenticationCode(for: signed, using: key))
+    return signed + proof
+  }
+
+  static func deriveVerifier(
+    password: Data,
+    salt: Data,
+    iterations: UInt32
+  ) throws -> Data {
+    guard password.count >= 10, password.count <= 128,
+          salt.count == saltSize,
+          iterations >= 10_000, iterations <= 2_000_000 else {
+      throw IOSMeshError.invalidPayload
+    }
+    var output = [UInt8](repeating: 0, count: verifierSize)
+    let outputCount = output.count
+    let status = output.withUnsafeMutableBytes { outputBytes in
+      password.withUnsafeBytes { passwordBytes in
+        salt.withUnsafeBytes { saltBytes in
+          CCKeyDerivationPBKDF(
+            CCPBKDFAlgorithm(kCCPBKDF2),
+            passwordBytes.bindMemory(to: Int8.self).baseAddress,
+            password.count,
+            saltBytes.bindMemory(to: UInt8.self).baseAddress,
+            salt.count,
+            CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256),
+            iterations,
+            outputBytes.bindMemory(to: UInt8.self).baseAddress,
+            outputCount
+          )
+        }
+      }
+    }
+    guard status == kCCSuccess else { throw IOSMeshError.invalidPayload }
+    return Data(output)
+  }
+
+  static func renameData(_ nickname: String) throws -> Data {
+    let bytes = Data(nickname.utf8)
+    guard !bytes.isEmpty, bytes.count <= 31,
+          bytes.allSatisfy({ $0 >= 0x20 && $0 <= 0x7E }) else {
+      throw IOSMeshError.invalidPayload
+    }
+    return Data([UInt8(bytes.count)]) + bytes
+  }
+
+  static func parseResponse(_ data: Data) -> Response? {
+    let bytes = [UInt8](data)
+    guard bytes.count >= 7, bytes[0] == version, bytes[1] & 0x80 != 0 else {
+      return nil
+    }
+    return Response(
+      command: bytes[1] & 0x7F,
+      requestID: readUInt32(bytes, 2),
+      status: Int(bytes[6]),
+      body: Data(bytes.dropFirst(7))
+    )
+  }
+
+  static func parseChallenge(_ data: Data) -> Challenge? {
+    let bytes = [UInt8](data)
+    guard bytes.count == 1 + saltSize + nonceSize + 4 + 4 else { return nil }
+    let saltStart = 1
+    let nonceStart = saltStart + saltSize
+    let iterationStart = nonceStart + nonceSize
+    let iterations = readUInt32(bytes, iterationStart)
+    guard iterations >= 10_000, iterations <= 2_000_000 else { return nil }
+    return Challenge(
+      claimed: bytes[0] != 0,
+      salt: Data(bytes[saltStart..<nonceStart]),
+      nonce: Data(bytes[nonceStart..<iterationStart]),
+      iterations: iterations,
+      retryAfterSeconds: readUInt32(bytes, iterationStart + 4)
+    )
+  }
+
+  static func parseStatus(_ data: Data) -> [String: Any]? {
+    let bytes = [UInt8](data)
+    let fixedLength = 1 + 4 + 4 + (8 * 10) + 2 + 2 + 3 + 1
+    guard bytes.count >= fixedLength else { return nil }
+    var offset = 0
+    let claimed = bytes[offset] != 0
+    offset += 1
+    let firmware = readUInt32(bytes, offset)
+    offset += 4
+    let protocolVersion = readUInt32(bytes, offset)
+    offset += 4
+    var values: [UInt64] = []
+    for _ in 0..<10 {
+      values.append(readUInt64(bytes, offset))
+      offset += 8
+    }
+    let mailboxUsed = readUInt16(bytes, offset)
+    offset += 2
+    let mailboxCapacity = readUInt16(bytes, offset)
+    offset += 2
+    let mailboxAvailable = bytes[offset] != 0
+    offset += 1
+    let clockValid = bytes[offset] != 0
+    offset += 1
+    let clockAuthoritative = bytes[offset] != 0
+    offset += 1
+    let nicknameLength = Int(bytes[offset])
+    offset += 1
+    guard offset + nicknameLength == bytes.count,
+          let nickname = String(
+            data: Data(bytes[offset..<(offset + nicknameLength)]),
+            encoding: .ascii
+          ) else { return nil }
+    return [
+      "claimed": claimed,
+      "firmwareVersion": Int64(firmware),
+      "protocolVersion": Int64(protocolVersion),
+      "uptimeMs": Int64(bitPattern: values[0]),
+      "bootCount": Int64(bitPattern: values[1]),
+      "packetsReceived": Int64(bitPattern: values[2]),
+      "packetsForwarded": Int64(bitPattern: values[3]),
+      "packetsStored": Int64(bitPattern: values[4]),
+      "packetsDelivered": Int64(bitPattern: values[5]),
+      "packetsDeduplicated": Int64(bitPattern: values[6]),
+      "packetsExpired": Int64(bitPattern: values[7]),
+      "packetsRejected": Int64(bitPattern: values[8]),
+      "lastActivityUptimeMs": Int64(bitPattern: values[9]),
+      "mailboxUsed": Int(mailboxUsed),
+      "mailboxCapacity": Int(mailboxCapacity),
+      "mailboxAvailable": mailboxAvailable,
+      "clockValid": clockValid,
+      "clockAuthoritative": clockAuthoritative,
+      "nickname": nickname,
+    ]
+  }
+
+  private static func uint32(_ value: UInt32) -> Data {
+    Data([
+      UInt8(value >> 24),
+      UInt8(value >> 16),
+      UInt8(value >> 8),
+      UInt8(value),
+    ])
+  }
+
+  private static func readUInt16(_ bytes: [UInt8], _ offset: Int) -> UInt16 {
+    UInt16(bytes[offset]) << 8 | UInt16(bytes[offset + 1])
+  }
+
+  private static func readUInt32(_ bytes: [UInt8], _ offset: Int) -> UInt32 {
+    UInt32(bytes[offset]) << 24 |
+      UInt32(bytes[offset + 1]) << 16 |
+      UInt32(bytes[offset + 2]) << 8 |
+      UInt32(bytes[offset + 3])
+  }
+
+  private static func readUInt64(_ bytes: [UInt8], _ offset: Int) -> UInt64 {
+    var value: UInt64 = 0
+    for index in offset..<(offset + 8) {
+      value = value << 8 | UInt64(bytes[index])
+    }
+    return value
+  }
+}
+
 enum IOSMeshProtocol {
   static let announce: UInt8 = 0x01
   static let message: UInt8 = 0x02
@@ -453,6 +666,7 @@ enum IOSMeshProtocol {
   static let noisePrivate: UInt8 = 0x01
   /// Trama HBT (HearthBit Transfer) encapsulada dentro de la sesión Noise.
   static let noiseTransferFrame: UInt8 = 0x30
+  static let noiseAnchorAdmin: UInt8 = 0x31
   static let defaultTTL: UInt8 = 7
   static let drillFlag: UInt8 = 0x20
 

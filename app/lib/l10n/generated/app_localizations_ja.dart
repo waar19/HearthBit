@@ -2469,4 +2469,134 @@ class AppLocalizationsJa extends AppLocalizations {
   String mapZoneError(String error) {
     return '捜索済み経路を記録または共有できませんでした：$error';
   }
+
+  @override
+  String anchorAdminTitle(String name) {
+    return 'Manage $name';
+  }
+
+  @override
+  String get anchorAdminStatus => 'Anchor status';
+
+  @override
+  String get anchorAdminClaimed => 'Protected by administrator password';
+
+  @override
+  String get anchorAdminUnclaimed => 'Not protected yet';
+
+  @override
+  String anchorAdminFirmware(int version, int protocol) {
+    return 'Firmware $version · protocol $protocol';
+  }
+
+  @override
+  String anchorAdminUptime(String duration) {
+    return 'Uptime: $duration';
+  }
+
+  @override
+  String anchorAdminBootCount(int count) {
+    return 'Starts: $count';
+  }
+
+  @override
+  String anchorAdminMailbox(int used, int capacity) {
+    return 'Mailbox: $used/$capacity';
+  }
+
+  @override
+  String get anchorAdminClockReady => 'Clock synchronized';
+
+  @override
+  String get anchorAdminClockPending => 'Clock not synchronized';
+
+  @override
+  String get anchorAdminPackets => 'Packets';
+
+  @override
+  String get anchorAdminReceived => 'Received';
+
+  @override
+  String get anchorAdminForwarded => 'Forwarded';
+
+  @override
+  String get anchorAdminStored => 'Stored';
+
+  @override
+  String get anchorAdminDelivered => 'Delivered';
+
+  @override
+  String get anchorAdminDeduplicated => 'Deduplicated';
+
+  @override
+  String get anchorAdminExpired => 'Expired';
+
+  @override
+  String get anchorAdminRejected => 'Rejected';
+
+  @override
+  String get anchorAdminRefresh => 'REFRESH';
+
+  @override
+  String get anchorAdminSetPassword => 'SET ADMIN PASSWORD';
+
+  @override
+  String get anchorAdminChangePassword => 'CHANGE PASSWORD';
+
+  @override
+  String get anchorAdminRename => 'RENAME ANCHOR';
+
+  @override
+  String get anchorAdminReboot => 'RESTART ANCHOR';
+
+  @override
+  String get anchorAdminFactoryReset => 'FACTORY RESET';
+
+  @override
+  String get anchorAdminPassword => 'Administrator password';
+
+  @override
+  String get anchorAdminNewPassword => 'New password';
+
+  @override
+  String get anchorAdminPasswordHint => 'At least 10 characters';
+
+  @override
+  String get anchorAdminName => 'Anchor name';
+
+  @override
+  String get anchorAdminConfirmReboot => 'Restart this Anchor now?';
+
+  @override
+  String get anchorAdminConfirmFactoryReset =>
+      'This removes its identity, password, name, metrics and stored messages. This cannot be undone.';
+
+  @override
+  String get anchorAdminWorking => 'Communicating securely with the Anchor…';
+
+  @override
+  String get anchorAdminSaved => 'Anchor updated successfully.';
+
+  @override
+  String get anchorAdminWrongPassword =>
+      'The administrator password is incorrect.';
+
+  @override
+  String anchorAdminLocked(int seconds) {
+    return 'Too many attempts. Try again in $seconds seconds.';
+  }
+
+  @override
+  String get anchorAdminUnavailable =>
+      'The Anchor did not respond. Keep the phone nearby and try again.';
+
+  @override
+  String get anchorAdminUnsupported =>
+      'This Anchor firmware does not support administration yet.';
+
+  @override
+  String get anchorAdminPasswordMismatch => 'The new passwords do not match.';
+
+  @override
+  String get anchorAdminRepeatPassword => 'Repeat new password';
 }

@@ -261,6 +261,15 @@ class MainActivity : FlutterActivity() {
                     )
                     null
                 }
+                "anchorAdminRequest" -> runMethod(result) {
+                    MeshRuntime.engine(this).requestAnchorAdmin(
+                        peerIdHex = requireNotNull(call.argument<String>("peerId")),
+                        commandName = requireNotNull(call.argument<String>("command")),
+                        password = call.argument<String>("password"),
+                        value = call.argument<String>("value"),
+                        newPassword = call.argument<String>("newPassword"),
+                    )
+                }
                 "composeEmergencySms" -> runMethod(result) {
                     val recipient = normalizeNativeSmsRecipient(
                         requireNotNull(call.argument<String>("recipient")),

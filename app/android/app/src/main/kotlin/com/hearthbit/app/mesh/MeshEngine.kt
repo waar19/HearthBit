@@ -32,6 +32,7 @@ import java.io.ByteArrayOutputStream
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 internal class MeshEngine(
     private val context: Context,
@@ -84,6 +85,9 @@ internal class MeshEngine(
     private val pendingPrivate = BoundedPeerPendingQueue<PendingPrivateMessage>()
     private val pendingFrames = BoundedPeerPendingQueue<ByteArray>()
     private val pendingCourier = BoundedPeerPendingQueue<MeshProtocol.Packet>()
+    private val pendingAnchorAdmin = BoundedPeerPendingQueue<ByteArray>()
+    private val anchorAdminOperations = ConcurrentHashMap<Int, PendingAnchorAdminOperation>()
+    private val anchorAdminRequestIds = AtomicInteger(1)
     private val clientGatts = ConcurrentHashMap<String, BluetoothGatt>()
     private val knownDevices = ConcurrentHashMap<String, BluetoothDevice>()
     private val knownDeviceLastSeenAt = ConcurrentHashMap<String, Long>()
@@ -718,6 +722,9 @@ internal class MeshEngine(
         pendingPrivate.clear()
         pendingFrames.clear()
         pendingCourier.clear()
+        pendingAnchorAdmin.clear()
+        anchorAdminOperations.values.forEach(PendingAnchorAdminOperation::clearSecrets)
+        anchorAdminOperations.clear()
         remoteRadarConsents.clear()
         tentativeRadarReads.clear()
         if (notify) {
@@ -1190,6 +1197,91 @@ internal class MeshEngine(
         }
     }
 
+    fun requestAnchorAdmin(
+        peerIdHex: String,
+        commandName: String,
+        password: String? = null,
+        value: String? = null,
+        newPassword: String? = null,
+    ): String {
+        val normalized = peerIdHex.lowercase()
+        val peer = peers[normalized]
+        require(peer != null && isPeerOnline(peer) &&
+            (peer.role == MeshNodeRole.INFRA_DATA_ANCHOR ||
+                peer.role == MeshNodeRole.INFRA_RELAY)
+        ) {
+            context.getString(R.string.error_peer_unavailable)
+        }
+        val command = when (commandName) {
+            "status" -> AnchorAdminProtocol.STATUS_GET
+            "setPassword" -> AnchorAdminProtocol.SET_PASSWORD
+            "changePassword" -> AnchorAdminProtocol.CHANGE_PASSWORD
+            "rename" -> AnchorAdminProtocol.RENAME
+            "reboot" -> AnchorAdminProtocol.REBOOT
+            "factoryReset" -> AnchorAdminProtocol.FACTORY_RESET
+            else -> throw IllegalArgumentException("anchor_admin_unknown_command")
+        }
+        if (command != AnchorAdminProtocol.STATUS_GET) {
+            require(password != null &&
+                password.toByteArray(Charsets.UTF_8).size in
+                    AnchorAdminProtocol.MIN_PASSWORD_LENGTH..
+                    AnchorAdminProtocol.MAX_PASSWORD_LENGTH
+            ) {
+                "anchor_admin_invalid_password"
+            }
+        }
+        if (command == AnchorAdminProtocol.CHANGE_PASSWORD) {
+            require(newPassword != null &&
+                newPassword.toByteArray(Charsets.UTF_8).size in
+                    AnchorAdminProtocol.MIN_PASSWORD_LENGTH..
+                    AnchorAdminProtocol.MAX_PASSWORD_LENGTH
+            ) {
+                "anchor_admin_invalid_new_password"
+            }
+        }
+        if (command == AnchorAdminProtocol.RENAME) {
+            requireNotNull(value)
+            AnchorAdminProtocol.renameData(value)
+        }
+
+        val requestId = anchorAdminRequestIds.getAndUpdate {
+            if (it == Int.MAX_VALUE) 1 else it + 1
+        }
+        val operation = PendingAnchorAdminOperation(
+            peerId = normalized,
+            command = command,
+            password = password?.toCharArray(),
+            newPassword = newPassword?.toCharArray(),
+            value = value,
+        )
+        anchorAdminOperations[requestId] = operation
+        val firstCommand = if (command == AnchorAdminProtocol.STATUS_GET) {
+            AnchorAdminProtocol.STATUS_GET
+        } else {
+            AnchorAdminProtocol.CHALLENGE_GET
+        }
+        sendOrQueueAnchorAdmin(
+            normalized,
+            AnchorAdminProtocol.request(firstCommand, requestId),
+        )
+        mainHandler.postDelayed({
+            anchorAdminOperations.remove(requestId)?.let { expired ->
+                expired.clearSecrets()
+                emit(
+                    mapOf(
+                        "type" to "anchorAdmin",
+                        "peerId" to expired.peerId,
+                        "requestId" to requestId.toString(),
+                        "command" to anchorAdminCommandName(expired.command),
+                        "statusCode" to -1,
+                        "error" to "timeout",
+                    ),
+                )
+            }
+        }, 45_000L)
+        return requestId.toString()
+    }
+
     fun signPayload(data: ByteArray): ByteArray = identity.signBytes(data)
 
     fun verifySignatureWithPublicKey(
@@ -1276,6 +1368,224 @@ internal class MeshEngine(
         )
     }
 
+    private fun sendOrQueueAnchorAdmin(peerIdHex: String, payload: ByteArray) {
+        if (noiseSessions.isEstablished(peerIdHex)) {
+            sendEncryptedAnchorAdmin(peerIdHex, payload)
+        } else {
+            val queued = pendingAnchorAdmin.offer(
+                peerIdHex,
+                payload.copyOf(),
+                protectedPendingPeerIds(),
+            )
+            if (!queued) {
+                failQueuedAnchorAdmin(payload, peerIdHex)
+                return
+            }
+            initiateHandshake(peerIdHex)
+        }
+    }
+
+    private fun sendEncryptedAnchorAdmin(peerIdHex: String, payload: ByteArray) {
+        val typedPayload = byteArrayOf(MeshProtocol.NOISE_ANCHOR_ADMIN) + payload
+        val encrypted = runCatching { noiseSessions.encrypt(peerIdHex, typedPayload) }.getOrElse {
+            if (it is NoiseHandshakeFailure.SessionExpired) {
+                val queued = pendingAnchorAdmin.offer(
+                    peerIdHex,
+                    payload.copyOf(),
+                    protectedPendingPeerIds(),
+                )
+                if (!queued) {
+                    failQueuedAnchorAdmin(payload, peerIdHex)
+                    return
+                }
+                recoverNoiseSession(peerIdHex)
+                return
+            }
+            failAnchorAdminForPeer(peerIdHex, "encrypt_failed")
+            return
+        }
+        sendNoisePacket(
+            MeshProtocol.TYPE_NOISE_ENCRYPTED,
+            peerIdHex.hexToBytes(),
+            encrypted,
+        )
+    }
+
+    private fun failQueuedAnchorAdmin(payload: ByteArray, peerIdHex: String) {
+        val requestId = AnchorAdminProtocol.requestId(payload) ?: return
+        val operation = anchorAdminOperations[requestId] ?: return
+        if (operation.peerId == peerIdHex) {
+            failAnchorAdmin(requestId, operation, "queue_full")
+        }
+    }
+
+    private fun processAnchorAdminResponse(peerIdHex: String, payload: ByteArray) {
+        val response = AnchorAdminProtocol.parseResponse(payload) ?: return
+        val operation = anchorAdminOperations[response.requestId] ?: return
+        if (operation.peerId != peerIdHex) return
+
+        if (response.command == AnchorAdminProtocol.CHALLENGE_GET) {
+            if (response.status != AnchorAdminProtocol.STATUS_OK) {
+                completeAnchorAdmin(response, operation, emptyMap())
+                return
+            }
+            val challenge = AnchorAdminProtocol.parseChallenge(response.body)
+            if (challenge == null) {
+                failAnchorAdmin(response.requestId, operation, "invalid_challenge")
+                return
+            }
+            if (challenge.retryAfterSeconds > 0) {
+                completeAnchorAdmin(
+                    response.copy(status = AnchorAdminProtocol.STATUS_LOCKED),
+                    operation,
+                    mapOf("retryAfterSeconds" to challenge.retryAfterSeconds),
+                )
+                return
+            }
+            val password = operation.password
+            if (password == null) {
+                failAnchorAdmin(response.requestId, operation, "password_required")
+                return
+            }
+            var verifier: ByteArray? = null
+            var newVerifier: ByteArray? = null
+            try {
+                verifier = AnchorAdminProtocol.deriveVerifier(
+                    password,
+                    challenge.salt,
+                    challenge.iterations,
+                )
+                val data = when (operation.command) {
+                    AnchorAdminProtocol.SET_PASSWORD -> verifier
+                    AnchorAdminProtocol.CHANGE_PASSWORD -> {
+                        val replacement = requireNotNull(operation.newPassword)
+                        AnchorAdminProtocol.deriveVerifier(
+                            replacement,
+                            challenge.salt,
+                            challenge.iterations,
+                        ).also { newVerifier = it }
+                    }
+                    AnchorAdminProtocol.RENAME ->
+                        AnchorAdminProtocol.renameData(requireNotNull(operation.value))
+                    AnchorAdminProtocol.REBOOT,
+                    AnchorAdminProtocol.FACTORY_RESET,
+                    -> byteArrayOf()
+                    else -> {
+                        failAnchorAdmin(response.requestId, operation, "invalid_command")
+                        return
+                    }
+                }
+                val authenticated = AnchorAdminProtocol.authenticatedRequest(
+                    operation.command,
+                    response.requestId,
+                    challenge.nonce,
+                    data,
+                    verifier,
+                )
+                sendOrQueueAnchorAdmin(peerIdHex, authenticated)
+            } catch (_: RuntimeException) {
+                failAnchorAdmin(response.requestId, operation, "request_failed")
+            } finally {
+                verifier?.fill(0)
+                newVerifier?.fill(0)
+            }
+            return
+        }
+
+        if (response.command == AnchorAdminProtocol.STATUS_GET &&
+            response.status == AnchorAdminProtocol.STATUS_OK
+        ) {
+            val status = AnchorAdminProtocol.parseStatus(response.body)
+            if (status == null) {
+                failAnchorAdmin(response.requestId, operation, "invalid_status")
+                return
+            }
+            completeAnchorAdmin(
+                response,
+                operation,
+                mapOf(
+                    "claimed" to status.claimed,
+                    "firmwareVersion" to status.firmwareVersion,
+                    "protocolVersion" to status.protocolVersion,
+                    "uptimeMs" to status.uptimeMs,
+                    "bootCount" to status.bootCount,
+                    "packetsReceived" to status.packetsReceived,
+                    "packetsForwarded" to status.packetsForwarded,
+                    "packetsStored" to status.packetsStored,
+                    "packetsDelivered" to status.packetsDelivered,
+                    "packetsDeduplicated" to status.packetsDeduplicated,
+                    "packetsExpired" to status.packetsExpired,
+                    "packetsRejected" to status.packetsRejected,
+                    "lastActivityUptimeMs" to status.lastActivityUptimeMs,
+                    "mailboxUsed" to status.mailboxUsed,
+                    "mailboxCapacity" to status.mailboxCapacity,
+                    "mailboxAvailable" to status.mailboxAvailable,
+                    "clockValid" to status.clockValid,
+                    "clockAuthoritative" to status.clockAuthoritative,
+                    "nickname" to status.nickname,
+                ),
+            )
+            return
+        }
+        completeAnchorAdmin(response, operation, emptyMap())
+    }
+
+    private fun completeAnchorAdmin(
+        response: AnchorAdminProtocol.Response,
+        operation: PendingAnchorAdminOperation,
+        details: Map<String, Any?>,
+    ) {
+        anchorAdminOperations.remove(response.requestId)
+        operation.clearSecrets()
+        emit(
+            buildMap {
+                put("type", "anchorAdmin")
+                put("peerId", operation.peerId)
+                put("requestId", response.requestId.toString())
+                put("command", anchorAdminCommandName(operation.command))
+                put("statusCode", response.status)
+                putAll(details)
+            },
+        )
+    }
+
+    private fun failAnchorAdmin(
+        requestId: Int,
+        operation: PendingAnchorAdminOperation,
+        error: String,
+    ) {
+        anchorAdminOperations.remove(requestId)
+        operation.clearSecrets()
+        emit(
+            mapOf(
+                "type" to "anchorAdmin",
+                "peerId" to operation.peerId,
+                "requestId" to requestId.toString(),
+                "command" to anchorAdminCommandName(operation.command),
+                "statusCode" to -1,
+                "error" to error,
+            ),
+        )
+    }
+
+    private fun failAnchorAdminForPeer(peerIdHex: String, error: String) {
+        anchorAdminOperations.entries
+            .filter { it.value.peerId == peerIdHex }
+            .forEach { (requestId, operation) ->
+                failAnchorAdmin(requestId, operation, error)
+            }
+    }
+
+    private fun anchorAdminCommandName(command: Byte): String = when (command) {
+        AnchorAdminProtocol.STATUS_GET -> "status"
+        AnchorAdminProtocol.SET_PASSWORD -> "setPassword"
+        AnchorAdminProtocol.CHANGE_PASSWORD -> "changePassword"
+        AnchorAdminProtocol.RENAME -> "rename"
+        AnchorAdminProtocol.REBOOT -> "reboot"
+        AnchorAdminProtocol.FACTORY_RESET -> "factoryReset"
+        else -> "unknown"
+    }
+
     private fun sendEncryptedFrame(peerIdHex: String, frame: ByteArray) {
         val typedPayload = byteArrayOf(MeshProtocol.NOISE_TRANSFER_FRAME) + frame
         val encrypted = runCatching { noiseSessions.encrypt(peerIdHex, typedPayload) }.getOrElse {
@@ -1344,6 +1654,9 @@ internal class MeshEngine(
         pendingPrivate.clear()
         pendingFrames.clear()
         pendingCourier.clear()
+        pendingAnchorAdmin.clear()
+        anchorAdminOperations.values.forEach(PendingAnchorAdminOperation::clearSecrets)
+        anchorAdminOperations.clear()
         peers.clear()
         knownDevices.clear()
         knownDeviceLastSeenAt.clear()
@@ -1849,7 +2162,8 @@ internal class MeshEngine(
     private fun hasPendingRelationship(peerIdHex: String): Boolean =
         pendingPrivate.hasPending(peerIdHex) ||
             pendingFrames.hasPending(peerIdHex) ||
-            pendingCourier.hasPending(peerIdHex)
+            pendingCourier.hasPending(peerIdHex) ||
+            pendingAnchorAdmin.hasPending(peerIdHex)
 
     private fun isKnownRelationship(peerIdHex: String): Boolean =
         peersWithSessionHistory.contains(peerIdHex) ||
@@ -1865,6 +2179,7 @@ internal class MeshEngine(
         activeBeaconRequest?.peerId?.let(::add)
         pendingBeaconRequests.values.mapTo(this) { it.peerId }
         outgoingBeaconRequests.values.mapTo(this) { it.peerId }
+        anchorAdminOperations.values.mapTo(this) { it.peerId }
     }
 
     private fun protectedTrustPeerIds(): Set<String> = buildSet {
@@ -1873,6 +2188,7 @@ internal class MeshEngine(
         addAll(pendingPrivate.peerIds())
         addAll(pendingFrames.peerIds())
         addAll(pendingCourier.peerIds())
+        addAll(pendingAnchorAdmin.peerIds())
         noiseSessions.snapshot()
             .asSequence()
             .filter(NoiseSessionInfo::established)
@@ -2922,6 +3238,12 @@ internal class MeshEngine(
             pendingCourier.drain(senderHex).forEach {
                 sendCourierDeposit(senderHex, it)
             }
+            pendingAnchorAdmin.drain(senderHex).forEach {
+                val requestId = AnchorAdminProtocol.requestId(it)
+                if (requestId != null && anchorAdminOperations.containsKey(requestId)) {
+                    sendEncryptedAnchorAdmin(senderHex, it)
+                }
+            }
         }
     }
 
@@ -2972,6 +3294,10 @@ internal class MeshEngine(
             }
         noiseFailureTracker.recordSuccess(senderHex)
         if (plaintext.isEmpty()) return
+        if (plaintext[0] == MeshProtocol.NOISE_ANCHOR_ADMIN) {
+            processAnchorAdminResponse(senderHex, plaintext.copyOfRange(1, plaintext.size))
+            return
+        }
         if (plaintext[0] == MeshProtocol.NOISE_TRANSFER_FRAME) {
             emit(
                 mapOf(
@@ -4134,6 +4460,7 @@ internal class MeshEngine(
             addAll(pendingPrivate.peerIds())
             addAll(pendingFrames.peerIds())
             addAll(pendingCourier.peerIds())
+            addAll(pendingAnchorAdmin.peerIds())
             pendingBeaconRequests.values.mapTo(this) { it.peerId }
             outgoingBeaconRequests.values.mapTo(this) { it.peerId }
             activeBeaconRequest?.let { add(it.peerId) }
