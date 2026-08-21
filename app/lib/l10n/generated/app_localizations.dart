@@ -4626,6 +4626,78 @@ abstract class AppLocalizations {
   /// **'Rejected'**
   String get anchorAdminRejected;
 
+  /// No description provided for @anchorAdminActivity.
+  ///
+  /// In en, this message translates to:
+  /// **'Live activity'**
+  String get anchorAdminActivity;
+
+  /// No description provided for @anchorAdminLive.
+  ///
+  /// In en, this message translates to:
+  /// **'LIVE'**
+  String get anchorAdminLive;
+
+  /// No description provided for @anchorAdminOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'OFFLINE'**
+  String get anchorAdminOffline;
+
+  /// No description provided for @anchorAdminTraffic.
+  ///
+  /// In en, this message translates to:
+  /// **'Traffic'**
+  String get anchorAdminTraffic;
+
+  /// No description provided for @anchorAdminTrafficValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{received} received · {forwarded} forwarded'**
+  String anchorAdminTrafficValue(int received, int forwarded);
+
+  /// No description provided for @anchorAdminMailboxUsage.
+  ///
+  /// In en, this message translates to:
+  /// **'Mailbox usage'**
+  String get anchorAdminMailboxUsage;
+
+  /// No description provided for @anchorAdminPercent.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}%'**
+  String anchorAdminPercent(int percent);
+
+  /// No description provided for @anchorAdminMemory.
+  ///
+  /// In en, this message translates to:
+  /// **'Free memory'**
+  String get anchorAdminMemory;
+
+  /// No description provided for @anchorAdminMemoryValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{current} KB free · {minimum} KB minimum'**
+  String anchorAdminMemoryValue(int current, int minimum);
+
+  /// No description provided for @anchorAdminSecurity.
+  ///
+  /// In en, this message translates to:
+  /// **'Security'**
+  String get anchorAdminSecurity;
+
+  /// No description provided for @anchorAdminSecurityValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{rejected} rejected · {deduplicated} duplicates'**
+  String anchorAdminSecurityValue(int rejected, int deduplicated);
+
+  /// No description provided for @anchorAdminLastFourMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'Last four minutes'**
+  String get anchorAdminLastFourMinutes;
+
   /// No description provided for @anchorAdminRefresh.
   ///
   /// In en, this message translates to:

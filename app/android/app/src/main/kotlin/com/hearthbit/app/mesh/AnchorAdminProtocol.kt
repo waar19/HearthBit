@@ -61,6 +61,8 @@ internal object AnchorAdminProtocol {
         val clockValid: Boolean,
         val clockAuthoritative: Boolean,
         val nickname: String,
+        val freeHeap: Long?,
+        val minFreeHeap: Long?,
     )
 
     fun request(command: Byte, requestId: Int): ByteArray =
@@ -165,7 +167,19 @@ internal object AnchorAdminProtocol {
         val nicknameLength = buffer.get().toInt() and 0xFF
         if (nicknameLength > buffer.remaining()) return null
         val nicknameBytes = ByteArray(nicknameLength).also(buffer::get)
-        if (buffer.hasRemaining()) return null
+        val freeHeap: Long?
+        val minFreeHeap: Long?
+        when (buffer.remaining()) {
+            0 -> {
+                freeHeap = null
+                minFreeHeap = null
+            }
+            8 -> {
+                freeHeap = buffer.int.toLong() and 0xFFFF_FFFFL
+                minFreeHeap = buffer.int.toLong() and 0xFFFF_FFFFL
+            }
+            else -> return null
+        }
         return Status(
             claimed = claimed,
             firmwareVersion = firmwareVersion,
@@ -186,6 +200,8 @@ internal object AnchorAdminProtocol {
             clockValid = clockValid,
             clockAuthoritative = clockAuthoritative,
             nickname = nicknameBytes.toString(Charsets.US_ASCII),
+            freeHeap = freeHeap,
+            minFreeHeap = minFreeHeap,
         )
     }
 }

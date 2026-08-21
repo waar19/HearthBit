@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../controllers/mesh_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/anchor_admin_models.dart';
 import '../models/mesh_models.dart';
+import '../widgets/anchor_sparkline.dart';
 
 class AnchorAdminScreen extends StatefulWidget {
   const AnchorAdminScreen({
@@ -19,27 +22,91 @@ class AnchorAdminScreen extends StatefulWidget {
   State<AnchorAdminScreen> createState() => _AnchorAdminScreenState();
 }
 
-class _AnchorAdminScreenState extends State<AnchorAdminScreen> {
+class _AnchorAdminScreenState extends State<AnchorAdminScreen>
+    with WidgetsBindingObserver {
   AnchorAdminStatus? _status;
+  final AnchorActivityHistory _activity = AnchorActivityHistory();
+  Timer? _pollTimer;
+  bool _pollInFlight = false;
+  bool _offline = false;
   bool _working = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _refresh();
+    WidgetsBinding.instance.addObserver(this);
+    _startPolling();
   }
 
-  Future<void> _refresh() async {
-    await _run(
-      command: 'status',
-      onSuccess: (result) {
-        if (result.status != null) {
-          setState(() => _status = result.status);
-        }
-      },
-      showSuccess: false,
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _startPolling();
+    } else {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+    }
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollStatus(showProgress: _status == null);
+    _pollTimer = Timer.periodic(
+      const Duration(seconds: 4),
+      (_) => _pollStatus(),
     );
+  }
+
+  Future<void> _refresh() => _pollStatus(showProgress: true);
+
+  Future<void> _pollStatus({bool showProgress = false}) async {
+    if (_pollInFlight || _working) return;
+    _pollInFlight = true;
+    if (showProgress && mounted) {
+      setState(() {
+        _working = true;
+        _error = null;
+      });
+    }
+    try {
+      final result = await widget.controller.requestAnchorAdmin(
+        peer: widget.peer,
+        command: 'status',
+      );
+      if (!mounted) return;
+      final status = result.status;
+      if (!result.succeeded || status == null) {
+        setState(() {
+          _offline = true;
+          if (_status == null) _error = _messageFor(result);
+        });
+        return;
+      }
+      _activity.add(status);
+      setState(() {
+        _status = status;
+        _offline = false;
+        _error = null;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _offline = true;
+          if (_status == null) _error = context.l10n.anchorAdminUnavailable;
+        });
+      }
+    } finally {
+      _pollInFlight = false;
+      if (showProgress && mounted) setState(() => _working = false);
+    }
   }
 
   Future<bool> _run({
@@ -350,6 +417,8 @@ class _AnchorAdminScreenState extends State<AnchorAdminScreen> {
               else ...[
                 _statusCard(context, status),
                 const SizedBox(height: 12),
+                _activityCard(context),
+                const SizedBox(height: 12),
                 _packetCard(context, status),
                 const SizedBox(height: 12),
                 _actionsCard(context, status),
@@ -411,6 +480,156 @@ class _AnchorAdminScreenState extends State<AnchorAdminScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _activityCard(BuildContext context) {
+    final samples = _activity.samples;
+    if (samples.isEmpty) return const SizedBox.shrink();
+    final colors = Theme.of(context).colorScheme;
+    final latest = samples.last;
+    final currentHeap = latest.freeHeap;
+    final minimumHeap = latest.minFreeHeap;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    context.l10n.anchorAdminActivity,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: (_offline ? colors.error : colors.primary)
+                        .withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    _offline
+                        ? context.l10n.anchorAdminOffline
+                        : context.l10n.anchorAdminLive,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: _offline ? colors.error : colors.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              context.l10n.anchorAdminLastFourMinutes,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            _chartTile(
+              context,
+              title: context.l10n.anchorAdminTraffic,
+              value: context.l10n.anchorAdminTrafficValue(
+                latest.received,
+                latest.forwarded,
+              ),
+              series: [
+                samples.map((sample) => sample.received.toDouble()).toList(),
+                samples.map((sample) => sample.forwarded.toDouble()).toList(),
+              ],
+              seriesColors: [colors.primary, colors.tertiary],
+              style: AnchorSparklineStyle.bars,
+            ),
+            _chartTile(
+              context,
+              title: context.l10n.anchorAdminMailboxUsage,
+              value: context.l10n.anchorAdminPercent(
+                latest.mailboxPercent.round(),
+              ),
+              series: [samples.map((sample) => sample.mailboxPercent).toList()],
+              seriesColors: [colors.secondary],
+              style: AnchorSparklineStyle.lineArea,
+            ),
+            if (currentHeap != null)
+              _chartTile(
+                context,
+                title: context.l10n.anchorAdminMemory,
+                value: context.l10n.anchorAdminMemoryValue(
+                  (currentHeap / 1024).round(),
+                  ((minimumHeap ?? currentHeap) / 1024).round(),
+                ),
+                series: [
+                  samples
+                      .map((sample) => (sample.freeHeap ?? 0) / 1024)
+                      .toList(),
+                ],
+                seriesColors: [colors.primary],
+                style: AnchorSparklineStyle.lineArea,
+              ),
+            _chartTile(
+              context,
+              title: context.l10n.anchorAdminSecurity,
+              value: context.l10n.anchorAdminSecurityValue(
+                latest.rejected,
+                latest.deduplicated,
+              ),
+              series: [
+                samples.map((sample) => sample.rejected.toDouble()).toList(),
+                samples
+                    .map((sample) => sample.deduplicated.toDouble())
+                    .toList(),
+              ],
+              seriesColors: [colors.error, colors.secondary],
+              style: AnchorSparklineStyle.bars,
+              showDivider: false,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _chartTile(
+    BuildContext context, {
+    required String title,
+    required String value,
+    required List<List<double>> series,
+    required List<Color> seriesColors,
+    required AnchorSparklineStyle style,
+    bool showDivider = true,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ),
+            Text(value, style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ExcludeSemantics(
+          child: AnchorSparkline(
+            series: series,
+            colors: seriesColors,
+            style: style,
+          ),
+        ),
+        if (showDivider) const Divider(height: 24),
+      ],
     );
   }
 

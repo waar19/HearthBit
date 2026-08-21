@@ -95,6 +95,38 @@ class AnchorAdminProtocolTest {
         assertEquals("Anchor Norte", status?.nickname)
         assertTrue(status?.clockValid == true)
         assertFalse(status?.clockAuthoritative == true)
+        assertNull(status?.freeHeap)
+        assertNull(status?.minFreeHeap)
+    }
+
+    @Test
+    fun `status parses firmware seven heap extension and rejects other suffixes`() {
+        val nickname = "Anchor Norte".toByteArray()
+        val base = ByteBuffer.allocate(97 + nickname.size)
+            .order(ByteOrder.BIG_ENDIAN)
+            .put(1)
+            .putInt(7)
+            .putInt(1)
+            .apply { repeat(10) { putLong((it + 1).toLong()) } }
+            .putShort(12)
+            .putShort(128)
+            .put(1)
+            .put(1)
+            .put(0)
+            .put(nickname.size.toByte())
+            .put(nickname)
+            .array()
+        val extended = base + ByteBuffer.allocate(8)
+            .order(ByteOrder.BIG_ENDIAN)
+            .putInt(512_000)
+            .putInt(480_000)
+            .array()
+
+        val status = AnchorAdminProtocol.parseStatus(extended)
+        assertNotNull(status)
+        assertEquals(512_000L, status?.freeHeap)
+        assertEquals(480_000L, status?.minFreeHeap)
+        assertNull(AnchorAdminProtocol.parseStatus(base + ByteArray(4)))
     }
 
     @Test

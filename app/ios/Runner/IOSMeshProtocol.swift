@@ -586,12 +586,15 @@ enum IOSAnchorAdminProtocol {
     offset += 1
     let nicknameLength = Int(bytes[offset])
     offset += 1
-    guard offset + nicknameLength == bytes.count,
+    guard offset + nicknameLength <= bytes.count,
           let nickname = String(
             data: Data(bytes[offset..<(offset + nicknameLength)]),
             encoding: .ascii
           ) else { return nil }
-    return [
+    offset += nicknameLength
+    let suffixLength = bytes.count - offset
+    guard suffixLength == 0 || suffixLength == 8 else { return nil }
+    var status: [String: Any] = [
       "claimed": claimed,
       "firmwareVersion": Int64(firmware),
       "protocolVersion": Int64(protocolVersion),
@@ -612,6 +615,11 @@ enum IOSAnchorAdminProtocol {
       "clockAuthoritative": clockAuthoritative,
       "nickname": nickname,
     ]
+    if suffixLength == 8 {
+      status["freeHeap"] = Int64(readUInt32(bytes, offset))
+      status["minFreeHeap"] = Int64(readUInt32(bytes, offset + 4))
+    }
+    return status
   }
 
   private static func uint32(_ value: UInt32) -> Data {

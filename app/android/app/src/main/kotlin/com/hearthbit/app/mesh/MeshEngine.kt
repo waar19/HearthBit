@@ -1500,30 +1500,33 @@ internal class MeshEngine(
                 failAnchorAdmin(response.requestId, operation, "invalid_status")
                 return
             }
+            val details = mutableMapOf<String, Any>(
+                "claimed" to status.claimed,
+                "firmwareVersion" to status.firmwareVersion,
+                "protocolVersion" to status.protocolVersion,
+                "uptimeMs" to status.uptimeMs,
+                "bootCount" to status.bootCount,
+                "packetsReceived" to status.packetsReceived,
+                "packetsForwarded" to status.packetsForwarded,
+                "packetsStored" to status.packetsStored,
+                "packetsDelivered" to status.packetsDelivered,
+                "packetsDeduplicated" to status.packetsDeduplicated,
+                "packetsExpired" to status.packetsExpired,
+                "packetsRejected" to status.packetsRejected,
+                "lastActivityUptimeMs" to status.lastActivityUptimeMs,
+                "mailboxUsed" to status.mailboxUsed,
+                "mailboxCapacity" to status.mailboxCapacity,
+                "mailboxAvailable" to status.mailboxAvailable,
+                "clockValid" to status.clockValid,
+                "clockAuthoritative" to status.clockAuthoritative,
+                "nickname" to status.nickname,
+            )
+            status.freeHeap?.let { details["freeHeap"] = it }
+            status.minFreeHeap?.let { details["minFreeHeap"] = it }
             completeAnchorAdmin(
                 response,
                 operation,
-                mapOf(
-                    "claimed" to status.claimed,
-                    "firmwareVersion" to status.firmwareVersion,
-                    "protocolVersion" to status.protocolVersion,
-                    "uptimeMs" to status.uptimeMs,
-                    "bootCount" to status.bootCount,
-                    "packetsReceived" to status.packetsReceived,
-                    "packetsForwarded" to status.packetsForwarded,
-                    "packetsStored" to status.packetsStored,
-                    "packetsDelivered" to status.packetsDelivered,
-                    "packetsDeduplicated" to status.packetsDeduplicated,
-                    "packetsExpired" to status.packetsExpired,
-                    "packetsRejected" to status.packetsRejected,
-                    "lastActivityUptimeMs" to status.lastActivityUptimeMs,
-                    "mailboxUsed" to status.mailboxUsed,
-                    "mailboxCapacity" to status.mailboxCapacity,
-                    "mailboxAvailable" to status.mailboxAvailable,
-                    "clockValid" to status.clockValid,
-                    "clockAuthoritative" to status.clockAuthoritative,
-                    "nickname" to status.nickname,
-                ),
+                details,
             )
             return
         }

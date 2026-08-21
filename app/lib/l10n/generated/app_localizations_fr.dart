@@ -2653,6 +2653,50 @@ class AppLocalizationsFr extends AppLocalizations {
   String get anchorAdminRejected => 'Rejected';
 
   @override
+  String get anchorAdminActivity => 'Live activity';
+
+  @override
+  String get anchorAdminLive => 'LIVE';
+
+  @override
+  String get anchorAdminOffline => 'OFFLINE';
+
+  @override
+  String get anchorAdminTraffic => 'Traffic';
+
+  @override
+  String anchorAdminTrafficValue(int received, int forwarded) {
+    return '$received received · $forwarded forwarded';
+  }
+
+  @override
+  String get anchorAdminMailboxUsage => 'Mailbox usage';
+
+  @override
+  String anchorAdminPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String get anchorAdminMemory => 'Free memory';
+
+  @override
+  String anchorAdminMemoryValue(int current, int minimum) {
+    return '$current KB free · $minimum KB minimum';
+  }
+
+  @override
+  String get anchorAdminSecurity => 'Security';
+
+  @override
+  String anchorAdminSecurityValue(int rejected, int deduplicated) {
+    return '$rejected rejected · $deduplicated duplicates';
+  }
+
+  @override
+  String get anchorAdminLastFourMinutes => 'Last four minutes';
+
+  @override
   String get anchorAdminRefresh => 'REFRESH';
 
   @override
