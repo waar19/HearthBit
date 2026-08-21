@@ -29,6 +29,7 @@
 		ECF100052026081600000005 /* IOSMeshSecurity.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECF100062026081600000006 /* IOSMeshSecurity.swift */; };
 		ECF100072026081600000007 /* IOSMeshPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECF100082026081600000008 /* IOSMeshPersistence.swift */; };
 		ECF100092026081600000009 /* IOSMeshTransferSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECF100102026081600000010 /* IOSMeshTransferSupport.swift */; };
+		ECF100112026081800000011 /* IOSMeshPacketCounters.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECF100122026081800000012 /* IOSMeshPacketCounters.swift */; };
 		ECD100012026081300000001 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = ECD100022026081300000002 /* InfoPlist.strings */; };
 /* End PBXBuildFile section */
 
@@ -90,6 +91,7 @@
 		ECF100062026081600000006 /* IOSMeshSecurity.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IOSMeshSecurity.swift; sourceTree = "<group>"; };
 		ECF100082026081600000008 /* IOSMeshPersistence.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IOSMeshPersistence.swift; sourceTree = "<group>"; };
 		ECF100102026081600000010 /* IOSMeshTransferSupport.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IOSMeshTransferSupport.swift; sourceTree = "<group>"; };
+		ECF100122026081800000012 /* IOSMeshPacketCounters.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IOSMeshPacketCounters.swift; sourceTree = "<group>"; };
 		ECD100032026081300000003 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		ECD100042026081300000004 /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		ECD100052026081300000005 /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/InfoPlist.strings; sourceTree = "<group>"; };
@@ -196,6 +198,7 @@
 				ECF100062026081600000006 /* IOSMeshSecurity.swift */,
 				ECF100082026081600000008 /* IOSMeshPersistence.swift */,
 				ECF100102026081600000010 /* IOSMeshTransferSupport.swift */,
+				ECF100122026081800000012 /* IOSMeshPacketCounters.swift */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
@@ -442,6 +445,7 @@
 				ECF100052026081600000005 /* IOSMeshSecurity.swift in Sources */,
 				ECF100072026081600000007 /* IOSMeshPersistence.swift in Sources */,
 				ECF100092026081600000009 /* IOSMeshTransferSupport.swift in Sources */,
+				ECF100112026081800000011 /* IOSMeshPacketCounters.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 			);

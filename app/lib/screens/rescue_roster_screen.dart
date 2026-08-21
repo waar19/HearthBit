@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../controllers/rescue_roster_controller.dart';
 import '../l10n/l10n.dart';
@@ -166,20 +168,33 @@ class _RescueRosterScreenState extends State<RescueRosterScreen> {
     }
   }
 
-  Future<void> _exportFile() async {
+  Future<void> _exportFile(BuildContext anchorContext) async {
     try {
-      final location = await getSaveLocation(
-        suggestedName: 'hearthbit-rescue-roster.hbrt',
-        acceptedTypeGroups: [_rosterFileType],
+      final anchor = anchorContext.findRenderObject() as RenderBox?;
+      final origin = anchor == null || !anchor.hasSize
+          ? const Rect.fromLTWH(0, 0, 1, 1)
+          : anchor.localToGlobal(Offset.zero) & anchor.size;
+      final exportTitle = context.l10n.rescueRosterExportFile;
+      final directory = await getTemporaryDirectory();
+      final file = File(
+        '${directory.path}${Platform.pathSeparator}'
+        'hearthbit-rescue-roster.hbrt',
       );
-      if (location == null) return;
-      await File(
-        location.path,
-      ).writeAsString(widget.controller.exportRoster(), flush: true);
+      await file.writeAsString(widget.controller.exportRoster(), flush: true);
+      final result = await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path, mimeType: 'text/plain')],
+          subject: exportTitle,
+          title: exportTitle,
+          sharePositionOrigin: origin,
+        ),
+      );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.rescueRosterExported)),
-      );
+      if (result.status == ShareResultStatus.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.rescueRosterExported)),
+        );
+      }
     } catch (error) {
       _showError(error);
     }
@@ -507,10 +522,12 @@ class _RescueRosterScreenState extends State<RescueRosterScreen> {
                         icon: const Icon(Icons.qr_code_2),
                         label: Text(context.l10n.rescueRosterExportQr),
                       ),
-                      OutlinedButton.icon(
-                        onPressed: _exportFile,
-                        icon: const Icon(Icons.save_alt),
-                        label: Text(context.l10n.rescueRosterExportFile),
+                      Builder(
+                        builder: (buttonContext) => OutlinedButton.icon(
+                          onPressed: () => _exportFile(buttonContext),
+                          icon: const Icon(Icons.save_alt),
+                          label: Text(context.l10n.rescueRosterExportFile),
+                        ),
                       ),
                       TextButton.icon(
                         onPressed: _clearRoster,

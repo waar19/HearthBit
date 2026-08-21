@@ -1,6 +1,7 @@
 import 'package:flutter/rendering.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../models/mesh_models.dart';
 import 'diagnostics_log.dart';
 import 'transport_diagnostics.dart';
 
@@ -26,6 +27,7 @@ class DiagnosticsExportService {
     required String subject,
     Map<String, int> operationalCounters = const {},
     String operationalCountersLifetime = 'unknown',
+    SosOperationalMetrics sosMetrics = const SosOperationalMetrics(),
   }) async {
     _log.info(
       'diagnostics.transport.outcomes',
@@ -35,6 +37,7 @@ class DiagnosticsExportService {
       operationalCounters,
       lifetime: operationalCountersLifetime,
     );
+    includeSosMetrics(sosMetrics);
     final file = await _log.createExportFile();
     final origin = anchor == null || !anchor.hasSize
         ? const Rect.fromLTWH(0, 0, 1, 1)
@@ -60,6 +63,19 @@ class DiagnosticsExportService {
         'operationalCountersLifetime': lifetime == 'process'
             ? 'process'
             : 'unknown',
+      },
+    );
+  }
+
+  void includeSosMetrics(SosOperationalMetrics metrics) {
+    _log.info(
+      'diagnostics.sos_metrics',
+      data: {
+        ...metrics.toJson(),
+        'firstRelayObserved': 'unavailable',
+        'relayStateMeaning': 'local_native_tx',
+        'hopCount': 'unavailable',
+        'hopCountReason': 'ttl_reset_and_unsigned',
       },
     );
   }

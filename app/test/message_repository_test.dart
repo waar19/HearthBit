@@ -267,6 +267,140 @@ void main() {
     expect(expired.state, EmergencyDeliveryState.expired);
   });
 
+  test(
+    'agrega métricas SOS con ACK múltiples y latencia determinista',
+    () async {
+      final base = DateTime.utc(2026, 8, 14, 1);
+
+      Future<void> insert({
+        required String id,
+        required EmergencyDeliveryKind kind,
+        required EmergencyDeliveryState state,
+        required DateTime createdAt,
+        required String hash,
+      }) => repository.insertEmergencyDelivery(
+        EmergencyDelivery(
+          localId: id,
+          kind: kind,
+          content: kind == EmergencyDeliveryKind.sos
+              ? 'SOS|Ayuda||'
+              : 'Estoy bien\n[HB-CHECKIN|OK|1|||1]',
+          createdAt: createdAt,
+          expiresAt: createdAt.add(const Duration(hours: 24)),
+          nextAttemptAt: createdAt,
+          state: state,
+          canonicalHash: hash,
+        ),
+      );
+
+      await insert(
+        id: 'sos-old',
+        kind: EmergencyDeliveryKind.sos,
+        state: EmergencyDeliveryState.relayed,
+        createdAt: base,
+        hash: 'a' * 64,
+      );
+      await insert(
+        id: 'sos-new',
+        kind: EmergencyDeliveryKind.sos,
+        state: EmergencyDeliveryState.relayed,
+        createdAt: base.add(const Duration(minutes: 1)),
+        hash: 'b' * 64,
+      );
+      await insert(
+        id: 'sos-relayed',
+        kind: EmergencyDeliveryKind.sos,
+        state: EmergencyDeliveryState.relayed,
+        createdAt: base.add(const Duration(minutes: 2)),
+        hash: 'c' * 64,
+      );
+      await insert(
+        id: 'sos-expired',
+        kind: EmergencyDeliveryKind.sos,
+        state: EmergencyDeliveryState.expired,
+        createdAt: base.add(const Duration(minutes: 3)),
+        hash: 'd' * 64,
+      );
+      await insert(
+        id: 'check-in',
+        kind: EmergencyDeliveryKind.checkIn,
+        state: EmergencyDeliveryState.relayed,
+        createdAt: base.add(const Duration(minutes: 4)),
+        hash: 'e' * 64,
+      );
+
+      await repository.recordEmergencyAcknowledgement(
+        canonicalHash: 'a' * 64,
+        peerId: 'peer-1',
+        acknowledgedAt: base.add(const Duration(seconds: 1)),
+      );
+      await repository.recordEmergencyAcknowledgement(
+        canonicalHash: 'a' * 64,
+        peerId: 'peer-2',
+        acknowledgedAt: base.add(const Duration(seconds: 2)),
+      );
+      await repository.recordEmergencyAcknowledgement(
+        canonicalHash: 'b' * 64,
+        peerId: 'peer-3',
+        acknowledgedAt: base.add(const Duration(minutes: 1, seconds: 3)),
+      );
+      await repository.recordEmergencyAcknowledgement(
+        canonicalHash: 'e' * 64,
+        peerId: 'peer-check-in',
+        acknowledgedAt: base.add(const Duration(minutes: 4, seconds: 4)),
+      );
+
+      final metrics = await repository.loadSosOperationalMetrics();
+      expect(metrics.sosCreated, 4);
+      expect(metrics.sosRelayedLocal, 4);
+      expect(metrics.sosAckReceived, 2);
+      expect(metrics.sosAckCount, 3);
+      expect(metrics.sosExpired, 1);
+      expect(metrics.sosDeliveryLatencyMs, 3000);
+    },
+  );
+
+  test('sosRelayedLocal usa historial TX y no el estado actual', () async {
+    final base = DateTime.utc(2026, 8, 18, 12);
+
+    Future<EmergencyDelivery> insert({
+      required String id,
+      required String? hash,
+    }) async {
+      final delivery = EmergencyDelivery(
+        localId: id,
+        kind: EmergencyDeliveryKind.sos,
+        content: 'SOS|Ayuda||',
+        createdAt: base.add(Duration(seconds: id.length)),
+        expiresAt: base.add(const Duration(hours: 24)),
+        nextAttemptAt: base,
+        state: hash == null
+            ? EmergencyDeliveryState.pending
+            : EmergencyDeliveryState.relayed,
+        canonicalHash: hash,
+      );
+      await repository.insertEmergencyDelivery(delivery);
+      return delivery;
+    }
+
+    final expiredAfterTx = await insert(id: 'expired-after-tx', hash: 'f' * 64);
+    final pendingAfterTx = await insert(id: 'pending-after-tx', hash: '1' * 64);
+    await insert(id: 'never-transmitted', hash: null);
+
+    await repository.updateEmergencyDelivery(
+      expiredAfterTx.copyWith(state: EmergencyDeliveryState.expired),
+    );
+    await repository.updateEmergencyDelivery(
+      pendingAfterTx.copyWith(state: EmergencyDeliveryState.pending),
+    );
+
+    final metrics = await repository.loadSosOperationalMetrics();
+    expect(metrics.scope, SosOperationalMetrics.retainedOutboxScope);
+    expect(metrics.sosCreated, 3);
+    expect(metrics.sosRelayedLocal, 2);
+    expect(metrics.sosExpired, 1);
+  });
+
   test('carga los 500 más recientes y conserva 1000 en disco', () async {
     await repository.load();
     final database = await databaseFactoryFfi.openDatabase(

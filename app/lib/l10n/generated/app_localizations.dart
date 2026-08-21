@@ -1698,6 +1698,60 @@ abstract class AppLocalizations {
   /// **'Trust conflicts'**
   String get diagnosticsTrustConflicts;
 
+  /// No description provided for @diagnosticsPacketsReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'Packets received at ingress'**
+  String get diagnosticsPacketsReceived;
+
+  /// No description provided for @diagnosticsPacketsAccepted.
+  ///
+  /// In en, this message translates to:
+  /// **'Unique packets accepted'**
+  String get diagnosticsPacketsAccepted;
+
+  /// No description provided for @diagnosticsPacketsRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'Packets permanently rejected'**
+  String get diagnosticsPacketsRejected;
+
+  /// No description provided for @diagnosticsPacketsForwarded.
+  ///
+  /// In en, this message translates to:
+  /// **'Packets relayed to broadcast'**
+  String get diagnosticsPacketsForwarded;
+
+  /// No description provided for @diagnosticsPacketsDeduplicated.
+  ///
+  /// In en, this message translates to:
+  /// **'Duplicate packets'**
+  String get diagnosticsPacketsDeduplicated;
+
+  /// No description provided for @diagnosticsPacketsExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Packets explicitly expired'**
+  String get diagnosticsPacketsExpired;
+
+  /// No description provided for @diagnosticsPacketsDroppedRateLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Packets dropped by rate limit'**
+  String get diagnosticsPacketsDroppedRateLimit;
+
+  /// No description provided for @diagnosticsPacketsDroppedTtl.
+  ///
+  /// In en, this message translates to:
+  /// **'Relay candidates dropped by TTL'**
+  String get diagnosticsPacketsDroppedTtl;
+
+  /// No description provided for @diagnosticsPacketsFailedTransport.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed link attempts'**
+  String get diagnosticsPacketsFailedTransport;
+
   /// No description provided for @diagnosticsOperationalCountersLifetime.
   ///
   /// In en, this message translates to:
@@ -1715,6 +1769,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Period not reported'**
   String get diagnosticsLifetimeUnknown;
+
+  /// No description provided for @diagnosticsSosMetricsSection.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS delivery metrics · retained outbox'**
+  String get diagnosticsSosMetricsSection;
+
+  /// No description provided for @diagnosticsSosMetricsScope.
+  ///
+  /// In en, this message translates to:
+  /// **'Metric scope'**
+  String get diagnosticsSosMetricsScope;
+
+  /// No description provided for @diagnosticsSosMetricsScopeRetainedOutbox.
+  ///
+  /// In en, this message translates to:
+  /// **'Retained outbox (up to 200 emergencies)'**
+  String get diagnosticsSosMetricsScopeRetainedOutbox;
+
+  /// No description provided for @diagnosticsSosCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS created'**
+  String get diagnosticsSosCreated;
+
+  /// No description provided for @diagnosticsSosRelayedLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS with confirmed local transmission'**
+  String get diagnosticsSosRelayedLocal;
+
+  /// No description provided for @diagnosticsSosAckReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS with at least one ACK'**
+  String get diagnosticsSosAckReceived;
+
+  /// No description provided for @diagnosticsSosAckCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Total SOS ACKs'**
+  String get diagnosticsSosAckCount;
+
+  /// No description provided for @diagnosticsSosExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'SOS expired'**
+  String get diagnosticsSosExpired;
+
+  /// No description provided for @diagnosticsSosDeliveryLatency.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest SOS: latency to first ACK'**
+  String get diagnosticsSosDeliveryLatency;
+
+  /// No description provided for @diagnosticsValueUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable'**
+  String get diagnosticsValueUnavailable;
+
+  /// No description provided for @diagnosticsFirstRelayObserved.
+  ///
+  /// In en, this message translates to:
+  /// **'First remote relay observed'**
+  String get diagnosticsFirstRelayObserved;
+
+  /// No description provided for @diagnosticsFirstRelayObservedReason.
+  ///
+  /// In en, this message translates to:
+  /// **'Relayed state only confirms a local transmission accepted by the native stack.'**
+  String get diagnosticsFirstRelayObservedReason;
+
+  /// No description provided for @diagnosticsHopCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Hop count'**
+  String get diagnosticsHopCount;
+
+  /// No description provided for @diagnosticsHopCountReason.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency retries reset TTL, and the transmitted TTL is not signed.'**
+  String get diagnosticsHopCountReason;
 
   /// No description provided for @diagnosticsTransportsSection.
   ///
@@ -4379,6 +4517,306 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not record or share the swept route: {error}'**
   String mapZoneError(String error);
+
+  /// No description provided for @anchorAdminTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage {name}'**
+  String anchorAdminTitle(String name);
+
+  /// No description provided for @anchorAdminStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Anchor status'**
+  String get anchorAdminStatus;
+
+  /// No description provided for @anchorAdminClaimed.
+  ///
+  /// In en, this message translates to:
+  /// **'Protected by administrator password'**
+  String get anchorAdminClaimed;
+
+  /// No description provided for @anchorAdminUnclaimed.
+  ///
+  /// In en, this message translates to:
+  /// **'Not protected yet'**
+  String get anchorAdminUnclaimed;
+
+  /// No description provided for @anchorAdminFirmware.
+  ///
+  /// In en, this message translates to:
+  /// **'Firmware {version} · protocol {protocol}'**
+  String anchorAdminFirmware(int version, int protocol);
+
+  /// No description provided for @anchorAdminUptime.
+  ///
+  /// In en, this message translates to:
+  /// **'Uptime: {duration}'**
+  String anchorAdminUptime(String duration);
+
+  /// No description provided for @anchorAdminBootCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Starts: {count}'**
+  String anchorAdminBootCount(int count);
+
+  /// No description provided for @anchorAdminMailbox.
+  ///
+  /// In en, this message translates to:
+  /// **'Mailbox: {used}/{capacity}'**
+  String anchorAdminMailbox(int used, int capacity);
+
+  /// No description provided for @anchorAdminClockReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Clock synchronized'**
+  String get anchorAdminClockReady;
+
+  /// No description provided for @anchorAdminClockPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Clock not synchronized'**
+  String get anchorAdminClockPending;
+
+  /// No description provided for @anchorAdminPackets.
+  ///
+  /// In en, this message translates to:
+  /// **'Packets'**
+  String get anchorAdminPackets;
+
+  /// No description provided for @anchorAdminReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'Received'**
+  String get anchorAdminReceived;
+
+  /// No description provided for @anchorAdminForwarded.
+  ///
+  /// In en, this message translates to:
+  /// **'Forwarded'**
+  String get anchorAdminForwarded;
+
+  /// No description provided for @anchorAdminStored.
+  ///
+  /// In en, this message translates to:
+  /// **'Stored'**
+  String get anchorAdminStored;
+
+  /// No description provided for @anchorAdminDelivered.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivered'**
+  String get anchorAdminDelivered;
+
+  /// No description provided for @anchorAdminDeduplicated.
+  ///
+  /// In en, this message translates to:
+  /// **'Deduplicated'**
+  String get anchorAdminDeduplicated;
+
+  /// No description provided for @anchorAdminExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Expired'**
+  String get anchorAdminExpired;
+
+  /// No description provided for @anchorAdminRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'Rejected'**
+  String get anchorAdminRejected;
+
+  /// No description provided for @anchorAdminActivity.
+  ///
+  /// In en, this message translates to:
+  /// **'Live activity'**
+  String get anchorAdminActivity;
+
+  /// No description provided for @anchorAdminLive.
+  ///
+  /// In en, this message translates to:
+  /// **'LIVE'**
+  String get anchorAdminLive;
+
+  /// No description provided for @anchorAdminOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'OFFLINE'**
+  String get anchorAdminOffline;
+
+  /// No description provided for @anchorAdminTraffic.
+  ///
+  /// In en, this message translates to:
+  /// **'Traffic'**
+  String get anchorAdminTraffic;
+
+  /// No description provided for @anchorAdminTrafficValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{received} received · {forwarded} forwarded'**
+  String anchorAdminTrafficValue(int received, int forwarded);
+
+  /// No description provided for @anchorAdminMailboxUsage.
+  ///
+  /// In en, this message translates to:
+  /// **'Mailbox usage'**
+  String get anchorAdminMailboxUsage;
+
+  /// No description provided for @anchorAdminPercent.
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}%'**
+  String anchorAdminPercent(int percent);
+
+  /// No description provided for @anchorAdminMemory.
+  ///
+  /// In en, this message translates to:
+  /// **'Free memory'**
+  String get anchorAdminMemory;
+
+  /// No description provided for @anchorAdminMemoryValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{current} KB free · {minimum} KB minimum'**
+  String anchorAdminMemoryValue(int current, int minimum);
+
+  /// No description provided for @anchorAdminSecurity.
+  ///
+  /// In en, this message translates to:
+  /// **'Security'**
+  String get anchorAdminSecurity;
+
+  /// No description provided for @anchorAdminSecurityValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{rejected} rejected · {deduplicated} duplicates'**
+  String anchorAdminSecurityValue(int rejected, int deduplicated);
+
+  /// No description provided for @anchorAdminLastFourMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'Last four minutes'**
+  String get anchorAdminLastFourMinutes;
+
+  /// No description provided for @anchorAdminRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'REFRESH'**
+  String get anchorAdminRefresh;
+
+  /// No description provided for @anchorAdminSetPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'SET ADMIN PASSWORD'**
+  String get anchorAdminSetPassword;
+
+  /// No description provided for @anchorAdminChangePassword.
+  ///
+  /// In en, this message translates to:
+  /// **'CHANGE PASSWORD'**
+  String get anchorAdminChangePassword;
+
+  /// No description provided for @anchorAdminRename.
+  ///
+  /// In en, this message translates to:
+  /// **'RENAME ANCHOR'**
+  String get anchorAdminRename;
+
+  /// No description provided for @anchorAdminReboot.
+  ///
+  /// In en, this message translates to:
+  /// **'RESTART ANCHOR'**
+  String get anchorAdminReboot;
+
+  /// No description provided for @anchorAdminFactoryReset.
+  ///
+  /// In en, this message translates to:
+  /// **'FACTORY RESET'**
+  String get anchorAdminFactoryReset;
+
+  /// No description provided for @anchorAdminPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Administrator password'**
+  String get anchorAdminPassword;
+
+  /// No description provided for @anchorAdminNewPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'New password'**
+  String get anchorAdminNewPassword;
+
+  /// No description provided for @anchorAdminPasswordHint.
+  ///
+  /// In en, this message translates to:
+  /// **'At least 10 characters'**
+  String get anchorAdminPasswordHint;
+
+  /// No description provided for @anchorAdminName.
+  ///
+  /// In en, this message translates to:
+  /// **'Anchor name'**
+  String get anchorAdminName;
+
+  /// No description provided for @anchorAdminConfirmReboot.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart this Anchor now?'**
+  String get anchorAdminConfirmReboot;
+
+  /// No description provided for @anchorAdminConfirmFactoryReset.
+  ///
+  /// In en, this message translates to:
+  /// **'This removes its identity, password, name, metrics and stored messages. This cannot be undone.'**
+  String get anchorAdminConfirmFactoryReset;
+
+  /// No description provided for @anchorAdminWorking.
+  ///
+  /// In en, this message translates to:
+  /// **'Communicating securely with the Anchor…'**
+  String get anchorAdminWorking;
+
+  /// No description provided for @anchorAdminSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Anchor updated successfully.'**
+  String get anchorAdminSaved;
+
+  /// No description provided for @anchorAdminWrongPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'The administrator password is incorrect.'**
+  String get anchorAdminWrongPassword;
+
+  /// No description provided for @anchorAdminLocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many attempts. Try again in {seconds} seconds.'**
+  String anchorAdminLocked(int seconds);
+
+  /// No description provided for @anchorAdminUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The Anchor did not respond. Keep the phone nearby and try again.'**
+  String get anchorAdminUnavailable;
+
+  /// No description provided for @anchorAdminUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'This Anchor firmware does not support administration yet.'**
+  String get anchorAdminUnsupported;
+
+  /// No description provided for @anchorAdminPasswordMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'The new passwords do not match.'**
+  String get anchorAdminPasswordMismatch;
+
+  /// No description provided for @anchorAdminRepeatPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Repeat new password'**
+  String get anchorAdminRepeatPassword;
 }
 
 class _AppLocalizationsDelegate

@@ -485,6 +485,57 @@ class MessageRepository {
         .toList(growable: false);
   }
 
+  /// Agrega solo filas retenidas, estados y tiempos; no devuelve contenido ni
+  /// peers. El alcance no es lifetime porque el outbox conserva hasta 200 filas.
+  ///
+  /// `sosRelayedLocal` cuenta historial TX durable en `emergency_attempt_hash`,
+  /// aunque el estado actual vuelva a pending o expired. La latencia usa el SOS
+  /// con ACK más reciente por `created_at` (desempate estable por `local_id`) y
+  /// su primera fila `acknowledged_at`.
+  Future<SosOperationalMetrics> loadSosOperationalMetrics() async {
+    final rows = await (await _db).rawQuery(
+      '''
+      WITH sos AS (
+        SELECT local_id, created_at, state
+        FROM emergency_outbox
+        WHERE kind = ?
+      ),
+      ack_by_sos AS (
+        SELECT a.local_id,
+          COUNT(*) AS ack_count,
+          MIN(a.acknowledged_at) AS first_acknowledged_at
+        FROM emergency_ack a
+        INNER JOIN sos s ON s.local_id = a.local_id
+        GROUP BY a.local_id
+      )
+      SELECT
+        (SELECT COUNT(*) FROM sos) AS sos_created,
+        (SELECT COUNT(*) FROM sos s
+          WHERE EXISTS (
+            SELECT 1 FROM emergency_attempt_hash h
+            WHERE h.local_id = s.local_id
+          )) AS sos_relayed_local,
+        (SELECT COUNT(*) FROM ack_by_sos) AS sos_ack_received,
+        (SELECT COALESCE(SUM(ack_count), 0)
+          FROM ack_by_sos) AS sos_ack_count,
+        (SELECT COUNT(*) FROM sos
+          WHERE state = ?) AS sos_expired,
+        (
+          SELECT a.first_acknowledged_at - s.created_at
+          FROM sos s
+          INNER JOIN ack_by_sos a ON a.local_id = s.local_id
+          ORDER BY s.created_at DESC, s.local_id DESC
+          LIMIT 1
+        ) AS sos_delivery_latency_ms
+    ''',
+      [
+        EmergencyDeliveryKind.sos.wireName,
+        EmergencyDeliveryState.expired.wireName,
+      ],
+    );
+    return SosOperationalMetrics.fromDatabase(rows.single);
+  }
+
   Future<String?> recordEmergencyAcknowledgement({
     required String canonicalHash,
     required String peerId,

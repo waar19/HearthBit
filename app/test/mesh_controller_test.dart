@@ -294,6 +294,7 @@ class _FakeRepository extends MessageRepository {
   final List<EmergencyDelivery> emergencyOutbox = [];
   final Map<String, String> emergencyAttemptLocalIds = {};
   int acknowledgementMisses = 0;
+  int sosMetricsLoadCalls = 0;
 
   @override
   Future<List<MeshMessage>> load() async => List.of(loaded);
@@ -362,6 +363,34 @@ class _FakeRepository extends MessageRepository {
   @override
   Future<List<EmergencyDelivery>> loadEmergencyDeliveries() async =>
       List.of(emergencyOutbox.reversed);
+
+  @override
+  Future<SosOperationalMetrics> loadSosOperationalMetrics() async {
+    sosMetricsLoadCalls += 1;
+    final sos = emergencyOutbox
+        .where((item) => item.kind == EmergencyDeliveryKind.sos)
+        .toList(growable: false);
+    return SosOperationalMetrics(
+      sosCreated: sos.length,
+      sosRelayedLocal: sos
+          .where(
+            (item) =>
+                item.state == EmergencyDeliveryState.relayed ||
+                item.state == EmergencyDeliveryState.acknowledged,
+          )
+          .length,
+      sosAckReceived: sos
+          .where((item) => item.acknowledgedBy.isNotEmpty)
+          .length,
+      sosAckCount: sos.fold(
+        0,
+        (total, item) => total + item.acknowledgedBy.length,
+      ),
+      sosExpired: sos
+          .where((item) => item.state == EmergencyDeliveryState.expired)
+          .length,
+    );
+  }
 
   @override
   Future<void> expireEmergencyDeliveries(DateTime now) async {
@@ -1541,6 +1570,9 @@ void main() {
     final relayed = controller.emergencyDeliveries.single;
     expect(relayed.state, EmergencyDeliveryState.relayed);
     expect(relayed.confirmationCount, 0);
+    expect(controller.sosOperationalMetrics.sosCreated, 1);
+    expect(controller.sosOperationalMetrics.sosRelayedLocal, 1);
+    expect(controller.sosOperationalMetrics.sosAckReceived, 0);
 
     platform.emit({
       'type': 'emergencyAck',
@@ -1553,6 +1585,10 @@ void main() {
     final acknowledged = controller.emergencyDeliveries.single;
     expect(acknowledged.state, EmergencyDeliveryState.acknowledged);
     expect(acknowledged.confirmationCount, 1);
+    expect(controller.sosOperationalMetrics.sosRelayedLocal, 1);
+    expect(controller.sosOperationalMetrics.sosAckReceived, 1);
+    expect(controller.sosOperationalMetrics.sosAckCount, 1);
+    expect(repository.sosMetricsLoadCalls, greaterThan(3));
   });
 
   test('SOS conserva triage firmado en envío y cola persistida', () async {

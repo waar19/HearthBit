@@ -1,7 +1,7 @@
 package com.hearthbit.app.mesh
 
-import com.bitchat.android.noise.southernstorm.protocol.CipherState
-import com.bitchat.android.noise.southernstorm.protocol.HandshakeState
+import com.hearthbit.noise.southernstorm.protocol.CipherState
+import com.hearthbit.noise.southernstorm.protocol.HandshakeState
 
 internal class NoiseSessionLite(
     private val claimedPeerId: ByteArray,

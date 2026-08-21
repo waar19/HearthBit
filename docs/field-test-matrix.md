@@ -4,6 +4,9 @@ Esta matriz valida el camino crítico de HearthBit con teléfonos reales. Cada
 ejecución debe registrar fecha, versión, modelos, versiones de sistema,
 porcentaje de batería inicial/final, entorno y resultado.
 
+La secuencia ejecutable de los gates P0 prioritarios está en la
+[guía de ejecución P0](p0-execution-guide.md).
+
 ## Criterios comunes
 
 - Repetir cada escenario cinco veces después de reiniciar ambas aplicaciones.

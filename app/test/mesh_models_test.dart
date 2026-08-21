@@ -11,12 +11,23 @@ void main() {
       'relayDampingExpired': 7,
       'trustStoreEvictions': 2,
       'trustConflicts': 1,
+      'packetsReceived': 20,
+      'packetsAccepted': 12,
+      'packetsRejected': 3,
+      'packetsForwarded': 4,
+      'packetsDeduplicated': 5,
+      'packetsExpired': 0,
+      'packetsDroppedRateLimit': 2,
+      'packetsDroppedTtl': 1,
+      'packetsFailedTransport': 6,
       'senderId': 'sensitive',
     });
 
     expect(counters.openEmergencyRateLimitedKnown, 4);
     expect(counters.openEmergencyRateLimitedUnknown, 0);
     expect(counters.relayDampingSuppressed, 3);
+    expect(counters.packetsReceived, 20);
+    expect(counters.packetsFailedTransport, 6);
     expect(counters.toJson(), isNot(contains('senderId')));
     expect(counters.toJson(), isNot(contains('openSosRateLimitedKnown')));
   });
@@ -39,9 +50,40 @@ void main() {
         'relayDampingExpired': 0,
         'trustStoreEvictions': 0,
         'trustConflicts': 0,
+        'packetsReceived': 0,
+        'packetsAccepted': 0,
+        'packetsRejected': 0,
+        'packetsForwarded': 0,
+        'packetsDeduplicated': 0,
+        'packetsExpired': 0,
+        'packetsDroppedRateLimit': 0,
+        'packetsDroppedTtl': 0,
+        'packetsFailedTransport': 0,
       });
     },
   );
+
+  test('SOS metrics preserve nullable latency and aggregate fields', () {
+    final metrics = SosOperationalMetrics.fromDatabase({
+      'sos_created': 7,
+      'sos_relayed_local': 5,
+      'sos_ack_received': 3,
+      'sos_ack_count': 8,
+      'sos_expired': 2,
+      'sos_delivery_latency_ms': 1250,
+      'peer_id': 'sensitive',
+    });
+
+    expect(metrics.sosCreated, 7);
+    expect(metrics.scope, 'retained_outbox');
+    expect(metrics.sosDeliveryLatencyMs, 1250);
+    expect(metrics.toJson()['scope'], 'retained_outbox');
+    expect(metrics.toJson(), isNot(contains('peer_id')));
+    expect(
+      SosOperationalMetrics.fromDatabase(const {}).sosDeliveryLatencyMs,
+      isNull,
+    );
+  });
 
   group('triage SOS T1', () {
     const triage = SosTriage(

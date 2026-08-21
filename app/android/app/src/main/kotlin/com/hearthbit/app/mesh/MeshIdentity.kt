@@ -2,7 +2,7 @@ package com.hearthbit.app.mesh
 
 import android.content.Context
 import android.util.Base64
-import com.bitchat.android.noise.southernstorm.protocol.Noise
+import com.hearthbit.noise.southernstorm.protocol.Noise
 import org.bouncycastle.crypto.generators.Ed25519KeyPairGenerator
 import org.bouncycastle.crypto.params.Ed25519KeyGenerationParameters
 import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters

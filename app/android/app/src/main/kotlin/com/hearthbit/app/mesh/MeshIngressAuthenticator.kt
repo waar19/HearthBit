@@ -10,6 +10,7 @@ internal data class MeshIngressAuthentication(
     val disposition: MeshIngressDisposition,
     val announcement: MeshProtocol.Announcement? = null,
     val keyRotation: KeyRotationProtocol.Rotation? = null,
+    val rateLimited: Boolean = false,
 ) {
     val relayAllowed: Boolean
         get() = disposition != MeshIngressDisposition.REJECT
@@ -107,7 +108,7 @@ internal class MeshIngressAuthenticator(
         if (trust == PeerTrustLookup.Unknown &&
             !unknownRateLimiter.allow(sourceAddress ?: senderHex, now)
         ) {
-            return rejected()
+            return rejected(rateLimited = true)
         }
         if (packet.type == MeshProtocol.TYPE_FRAGMENT) {
             val originalType = MeshProtocol.decodeFragmentPayload(packet.payload)?.originalType
@@ -191,7 +192,10 @@ internal class MeshIngressAuthenticator(
         }
     }
 
-    private fun rejected() = MeshIngressAuthentication(MeshIngressDisposition.REJECT)
+    private fun rejected(rateLimited: Boolean = false) = MeshIngressAuthentication(
+        disposition = MeshIngressDisposition.REJECT,
+        rateLimited = rateLimited,
+    )
 
     private fun requiresPublicSignature(type: Byte): Boolean = when (type) {
         MeshProtocol.TYPE_MESSAGE,

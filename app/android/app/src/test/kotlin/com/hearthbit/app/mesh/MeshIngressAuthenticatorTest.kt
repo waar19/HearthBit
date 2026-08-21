@@ -1,6 +1,6 @@
 package com.hearthbit.app.mesh
 
-import com.bitchat.android.noise.southernstorm.protocol.Noise
+import com.hearthbit.noise.southernstorm.protocol.Noise
 import org.bouncycastle.crypto.generators.Ed25519KeyPairGenerator
 import org.bouncycastle.crypto.params.Ed25519KeyGenerationParameters
 import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
@@ -114,6 +114,31 @@ class MeshIngressAuthenticatorTest {
         assertFalse(limiter.allow("source-a", now = 1_002))
         assertTrue(limiter.allow("source-b", now = 1_002))
         assertTrue(limiter.allow("source-a", now = 1_100))
+    }
+
+    @Test
+    fun `unknown ingress rate limit exposes explicit rejection reason`() {
+        val noise = ByteArray(32) { it.toByte() }
+        val signing = ByteArray(32) { 0x31 }
+        val packet = announcement(noise, signing)
+        val authenticator = authenticator(
+            pins = emptyMap(),
+            validSignatureKey = signing,
+            unknownRateLimiter = UnknownIngressRateLimiter(maximumPackets = 1),
+        )
+
+        val accepted = authenticator.authenticate(packet, "source-a")
+        val limited = authenticator.authenticate(packet, "source-a")
+        val counters = MeshPacketCounters()
+        counters.recordIngressRejection(limited.rateLimited)
+
+        assertEquals(MeshIngressDisposition.ACCEPT, accepted.disposition)
+        assertFalse(accepted.rateLimited)
+        assertEquals(MeshIngressDisposition.REJECT, limited.disposition)
+        assertTrue(limited.rateLimited)
+        assertFalse(limited.relayAllowed)
+        assertEquals(1L, counters.snapshot()["packetsDroppedRateLimit"])
+        assertEquals(0L, counters.snapshot()["packetsRejected"])
     }
 
     @Test
@@ -386,6 +411,7 @@ class MeshIngressAuthenticatorTest {
         pins: Map<String, PeerIdentityKeys>,
         validSignatureKey: ByteArray,
         now: Long = 1,
+        unknownRateLimiter: UnknownIngressRateLimiter = UnknownIngressRateLimiter(),
     ) = MeshIngressAuthenticator(
         trustLookup = { peerId ->
             pins[peerId]?.let(PeerTrustLookup::Pinned) ?: PeerTrustLookup.Unknown
@@ -396,6 +422,7 @@ class MeshIngressAuthenticatorTest {
         },
         verifySignature = { _, key -> key.contentEquals(validSignatureKey) },
         nowMs = { now },
+        unknownRateLimiter = unknownRateLimiter,
     )
 
     private fun announcement(

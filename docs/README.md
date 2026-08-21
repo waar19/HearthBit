@@ -32,11 +32,15 @@ meaning. When translations disagree, the English license text in
 - [Transfer protocol](transfer-protocol.md)
 - [Radar and ranging validation](radar-ranging-validation.md)
 - [Field testing](field-test.md)
+- [P0 execution guide](p0-execution-guide.md)
+- [Anchor deployment](anchor-deployment-guide.md)
+- [Anchor administration protocol](anchor-admin-protocol.md)
 - [Anchor density and placement](anchor-density-guide.md)
 - [Rescue-team pilot](rescue-team-pilot.md)
 - [Battery and memory validation](battery-memory-validation.md)
 - [Localization workflow](localization.md)
 - [Security reporting](../SECURITY.md)
+- [Licensing and provenance risk](legal-provenance-risk.md)
 - [Contribution policy](../CONTRIBUTING.md)
 
 ## Component guides

@@ -28,6 +28,43 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let candidate: CBPeripheral
   }
 
+  private final class PendingAnchorAdminOperation {
+    let peerID: String
+    let command: UInt8
+    let value: String?
+    private(set) var password: Data?
+    private(set) var newPassword: Data?
+
+    init(
+      peerID: String,
+      command: UInt8,
+      password: String?,
+      newPassword: String?,
+      value: String?
+    ) {
+      self.peerID = peerID
+      self.command = command
+      self.password = password.map { Data($0.utf8) }
+      self.newPassword = newPassword.map { Data($0.utf8) }
+      self.value = value
+    }
+
+    func clearSecrets() {
+      if let passwordCount = password?.count {
+        password?.resetBytes(in: 0..<passwordCount)
+      }
+      if let newPasswordCount = newPassword?.count {
+        newPassword?.resetBytes(in: 0..<newPasswordCount)
+      }
+      password = nil
+      newPassword = nil
+    }
+
+    deinit {
+      clearSecrets()
+    }
+  }
+
   private struct PendingRelay {
     let packet: IOSMeshPacket
     let source: UUID?
@@ -66,6 +103,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private let peerIdentityPins = IOSPeerIdentityPinStore()
   private let unknownIngressRateLimiter = IOSUnknownIngressRateLimiter()
   private let openEmergencyRateLimiter = IOSOpenEmergencyRateLimiter()
+  private let packetCounters = IOSMeshPacketCounters()
   private let emergencyFingerprints = IOSEmergencyFingerprintCache()
   private var central: CBCentralManager?
   private var peripheralManager: CBPeripheralManager?
@@ -99,6 +137,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var pendingPrivate = IOSBoundedPeerPendingQueue<(String, String)>()
   private var pendingFrames = IOSBoundedPeerPendingQueue<Data>()
   private var pendingCourier = IOSBoundedPeerPendingQueue<IOSMeshPacket>()
+  private var pendingAnchorAdmin = IOSBoundedPeerPendingQueue<Data>()
+  private var anchorAdminOperations: [UInt32: PendingAnchorAdminOperation] = [:]
+  private var nextAnchorAdminRequestID: UInt32 = 1
   private var seen: [String: Date] = [:]
   private var pendingRelays: [String: PendingRelay] = [:]
   private var pendingRelaySequence: UInt64 = 0
@@ -587,6 +628,16 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       case "ensurePrivateChannel":
         try ensurePrivateChannel(peerID: arguments["peerId"] as? String ?? "")
         result(nil)
+      case "anchorAdminRequest":
+        result(
+          try requestAnchorAdmin(
+            peerID: arguments["peerId"] as? String ?? "",
+            commandName: arguments["command"] as? String ?? "",
+            password: arguments["password"] as? String,
+            value: arguments["value"] as? String,
+            newPassword: arguments["newPassword"] as? String
+          )
+        )
       case "composeEmergencySms":
         guard MFMessageComposeViewController.canSendText() else {
           result(false)
@@ -866,6 +917,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         pendingPrivate.removeAll()
         pendingFrames.removeAll()
         pendingCourier.removeAll()
+        pendingAnchorAdmin.removeAll()
+        anchorAdminOperations.values.forEach { $0.clearSecrets() }
+        anchorAdminOperations.removeAll()
         seen.removeAll()
         syncPackets.removeAll()
         syncResponseTimes.removeAll()
@@ -1266,6 +1320,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     pendingPrivate.removeAll()
     pendingFrames.removeAll()
     pendingCourier.removeAll()
+    pendingAnchorAdmin.removeAll()
+    anchorAdminOperations.values.forEach { $0.clearSecrets() }
+    anchorAdminOperations.removeAll()
     lastSubscriptionAnnouncement.removeAll()
     syncResponseTimes.removeAll()
     lastSyncRequestBySource.removeAll()
@@ -1375,6 +1432,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     pendingPrivate.removeAll()
     pendingFrames.removeAll()
     pendingCourier.removeAll()
+    pendingAnchorAdmin.removeAll()
+    anchorAdminOperations.values.forEach { $0.clearSecrets() }
+    anchorAdminOperations.removeAll()
     lastSubscriptionAnnouncement.removeAll()
     fragmentReassembler.clear()
     lastSyncRequestBySource.removeAll()
@@ -2062,6 +2122,105 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     return id
   }
 
+  private func requestAnchorAdmin(
+    peerID: String,
+    commandName: String,
+    password: String?,
+    value: String?,
+    newPassword: String?
+  ) throws -> String {
+    guard
+      let peer = peers[peerID],
+      peer.role == .infraDataAnchor || peer.role == .infraRelay,
+      isPeerReachable(peerID)
+    else { throw IOSMeshError.peerUnavailable }
+    let command: UInt8
+    switch commandName {
+    case "status": command = IOSAnchorAdminProtocol.statusGet
+    case "setPassword": command = IOSAnchorAdminProtocol.setPassword
+    case "changePassword": command = IOSAnchorAdminProtocol.changePassword
+    case "rename": command = IOSAnchorAdminProtocol.rename
+    case "reboot": command = IOSAnchorAdminProtocol.reboot
+    case "factoryReset": command = IOSAnchorAdminProtocol.factoryReset
+    default: throw IOSMeshError.invalidPayload
+    }
+    if command != IOSAnchorAdminProtocol.statusGet {
+      guard
+        let password,
+        password.utf8.count >= 10,
+        password.utf8.count <= 128
+      else {
+        throw IOSMeshError.invalidPayload
+      }
+    }
+    if command == IOSAnchorAdminProtocol.changePassword {
+      guard
+        let newPassword,
+        newPassword.utf8.count >= 10,
+        newPassword.utf8.count <= 128
+      else {
+        throw IOSMeshError.invalidPayload
+      }
+    }
+    if command == IOSAnchorAdminProtocol.rename {
+      _ = try IOSAnchorAdminProtocol.renameData(value ?? "")
+    }
+
+    let requestID = nextAnchorAdminRequestID
+    nextAnchorAdminRequestID = requestID == UInt32.max ? 1 : requestID + 1
+    anchorAdminOperations[requestID] = PendingAnchorAdminOperation(
+      peerID: peerID,
+      command: command,
+      password: password,
+      newPassword: newPassword,
+      value: value
+    )
+    let firstCommand = command == IOSAnchorAdminProtocol.statusGet
+      ? IOSAnchorAdminProtocol.statusGet
+      : IOSAnchorAdminProtocol.challengeGet
+    do {
+      try sendOrQueueAnchorAdmin(
+        peerID: peerID,
+        payload: IOSAnchorAdminProtocol.request(
+          command: firstCommand,
+          requestID: requestID
+        )
+      )
+    } catch {
+      anchorAdminOperations.removeValue(forKey: requestID)
+      throw error
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 45) { [weak self] in
+      guard
+        let self,
+        let expired = self.anchorAdminOperations.removeValue(forKey: requestID)
+      else { return }
+      expired.clearSecrets()
+      self.emit([
+        "type": "anchorAdmin",
+        "peerId": expired.peerID,
+        "requestId": String(requestID),
+        "command": self.anchorAdminCommandName(expired.command),
+        "statusCode": -1,
+        "error": "timeout",
+      ])
+    }
+    return String(requestID)
+  }
+
+  private func sendOrQueueAnchorAdmin(peerID: String, payload: Data) throws {
+    if sessions[peerID]?.established == true {
+      try sendEncryptedAnchorAdmin(peerID: peerID, payload: payload)
+      return
+    }
+    guard pendingAnchorAdmin.enqueue(
+      payload,
+      for: peerID,
+      protectedPeerIDs: activeRetentionPeerIDs()
+    ) else { throw IOSMeshError.peerUnavailable }
+    try initiateHandshake(peerID: peerID)
+  }
+
   /// Envía una trama HBT al peer por la sesión Noise; si aún no hay sesión,
   /// la deja en cola y dispara el handshake.
   private func sendTransferFrame(peerID: String, frame: Data) throws {
@@ -2106,7 +2265,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func hasPendingRelationship(_ peerID: String) -> Bool {
     pendingPrivate.contains(peerID: peerID) ||
       pendingFrames.contains(peerID: peerID) ||
-      pendingCourier.contains(peerID: peerID)
+      pendingCourier.contains(peerID: peerID) ||
+      pendingAnchorAdmin.contains(peerID: peerID)
   }
 
   private func isKnownRelationship(_ peerID: String) -> Bool {
@@ -2121,6 +2281,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let pendingIDs = pendingPrivate.peerIDs
       .union(pendingFrames.peerIDs)
       .union(pendingCourier.peerIDs)
+      .union(pendingAnchorAdmin.peerIDs)
     protected.formUnion(pendingIDs.filter(hasPendingRelationship))
     return protected
   }
@@ -2300,6 +2461,28 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     )
   }
 
+  private func sendEncryptedAnchorAdmin(peerID: String, payload: Data) throws {
+    guard let session = sessions[peerID] else { return }
+    guard !session.requiresRekey else {
+      guard pendingAnchorAdmin.enqueue(
+        payload,
+        for: peerID,
+        protectedPeerIDs: activeRetentionPeerIDs()
+      ) else { throw IOSMeshError.peerUnavailable }
+      invalidateNoiseState(peerID: peerID)
+      scheduleAutoHandshake(peerID: peerID, force: true, delay: 0)
+      return
+    }
+    let encrypted = try session.encrypt(
+      Data([IOSMeshProtocol.noiseAnchorAdmin]) + payload
+    )
+    sendNoise(
+      type: IOSMeshProtocol.noiseEncrypted,
+      recipient: try Data(hex: peerID),
+      payload: encrypted
+    )
+  }
+
   private func sendEncryptedPrivate(peerID: String, id: String, content: String) throws {
     guard let session = sessions[peerID] else { return }
     guard !session.requiresRekey else {
@@ -2334,7 +2517,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private func depositCourierWithDirectAnchors(innerPacket: IOSMeshPacket) {
     let directPeerIDs = Set(peripheralPeers.values)
     for anchor in peers.values
-    where anchor.isInfrastructure && directPeerIDs.contains(anchor.id) {
+    where anchor.role.acceptsCourierDeposits && directPeerIDs.contains(anchor.id) {
       if sessions[anchor.id]?.established == true {
         sendCourierDeposit(anchorID: anchor.id, innerPacket: innerPacket)
       } else {
@@ -2999,6 +3182,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     frames: Int,
     message: String? = nil
   ) {
+    packetCounters.recordTransportFailure(code: code)
     var event: [String: Any] = [
       "type": "bleTransportFailure",
       "code": code,
@@ -3024,16 +3208,24 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       }
       return
     }
-    guard
-      let fingerprint = IOSMeshProtocol.relayFingerprint(data),
-      let packet = IOSMeshProtocol.decode(data)
-    else { return }
+    packetCounters.recordReceived()
+    guard let packet = IOSMeshProtocol.decode(data) else {
+      packetCounters.recordRejected()
+      return
+    }
+    guard let fingerprint = IOSMeshProtocol.relayFingerprint(data) else {
+      packetCounters.recordRejected()
+      return
+    }
     let senderID = packet.senderID.hex
     if senderID == identity.peerIDHex { return }
     let pinnedIdentity = peerIdentityPins.pin(for: senderID)
     if pinnedIdentity == nil {
       let rateLimitKey = source?.uuidString ?? senderID
-      guard unknownIngressRateLimiter.allow(source: rateLimitKey) else { return }
+      guard unknownIngressRateLimiter.allow(source: rateLimitKey) else {
+        packetCounters.recordDroppedRateLimit()
+        return
+      }
     }
     var validatedAnnouncement: IOSMeshProtocol.Announcement?
     var validatedKeyRotation: IOSMeshProtocol.KeyRotation?
@@ -3041,10 +3233,16 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       guard let announcement = validateAnnouncementIdentity(
         packet,
         senderID: senderID
-      ) else { return }
+      ) else {
+        packetCounters.recordRejected()
+        return
+      }
       validatedAnnouncement = announcement
     } else if packet.type == IOSMeshProtocol.keyRotation {
-      guard let rotation = validateKeyRotation(packet, senderID: senderID) else { return }
+      guard let rotation = validateKeyRotation(packet, senderID: senderID) else {
+        packetCounters.recordRejected()
+        return
+      }
       validatedKeyRotation = rotation
     } else {
       let originalType = packet.type == IOSMeshProtocol.fragment
@@ -3052,12 +3250,18 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         : nil
       let effectiveType = originalType ?? packet.type
       if IOSMeshIngressPolicy.requiresPublicSignature(effectiveType) {
-        guard let pinnedIdentity else { return }
+        guard let pinnedIdentity else {
+          packetCounters.recordRejected()
+          return
+        }
         if packet.type != IOSMeshProtocol.fragment {
           guard IOSMeshIngressPolicy.accepts(
             packet,
             signingPublicKey: pinnedIdentity.signingPublicKey
-          ) else { return }
+          ) else {
+            packetCounters.recordRejected()
+            return
+          }
         }
       }
     }
@@ -3067,15 +3271,23 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         in: pendingRelay.sourceKeys
       )
       pendingRelays[fingerprint] = pendingRelay
+      packetCounters.recordDeduplicated()
       return
     }
-    if seen[fingerprint] != nil { return }
+    if seen[fingerprint] != nil {
+      packetCounters.recordDeduplicated()
+      return
+    }
     if isOpenEmergencyLanPacket(packet) {
       guard openEmergencyRateLimiter.allow(
         knownRelationship: isKnownRelationship(senderID)
-      ) else { return }
+      ) else {
+        packetCounters.recordDroppedRateLimit()
+        return
+      }
     }
     rememberSeenFingerprint(fingerprint)
+    packetCounters.recordAccepted()
     let forUs = packet.recipientID == nil ||
       packet.recipientID == identity.peerID ||
       packet.recipientID == Data(repeating: 0xff, count: 8)
@@ -3096,13 +3308,14 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     let directedRecipient = packet.recipientID.map {
       $0 != Data(repeating: 0xff, count: 8)
     } ?? false
-    if IOSMeshRelayPolicy.shouldRelay(
+    let shouldRelay = IOSMeshRelayPolicy.shouldRelay(
       role: localRole,
       packetType: effectiveType,
       ttl: packet.ttl,
       addressedToLocalNode: addressedToLocalNode,
       hasDirectedRecipient: directedRecipient
-    ) {
+    )
+    if shouldRelay {
       var relayed = packet
       relayed.ttl -= 1
       let emergency =
@@ -3116,6 +3329,19 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         source: source,
         emergency: emergency
       )
+    } else if packet.ttl <= 1 {
+      let candidateTTL = effectiveType == IOSMeshProtocol.beaconControl
+        ? IOSBeaconControlProtocol.initialTTL
+        : 2
+      if IOSMeshRelayPolicy.shouldRelay(
+        role: localRole,
+        packetType: effectiveType,
+        ttl: candidateTTL,
+        addressedToLocalNode: addressedToLocalNode,
+        hasDirectedRecipient: directedRecipient
+      ) {
+        packetCounters.recordDroppedTtl()
+      }
     }
   }
 
@@ -3159,6 +3385,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         )
       self.relayOperationalCounters.recordExpiration(suppressed: !shouldRelay)
       guard self.running, self.localRole.relaysPackets, shouldRelay else { return }
+      self.packetCounters.recordForwarded()
       self.broadcast(pending.packet, excluding: pending.source)
     }
     pendingRelays[fingerprint] = PendingRelay(
@@ -3193,6 +3420,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     return openEmergencyRateLimiter.operationalCounters()
       .merging(peerIdentityPins.operationalCounters()) { _, latest in latest }
       .merging(relayOperationalCounters.snapshot()) { _, latest in latest }
+      .merging(packetCounters.snapshot()) { _, latest in latest }
   }
 
   private func validateAnnouncementIdentity(
@@ -3403,7 +3631,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           }
         } else if pendingPrivate.contains(peerID: senderID) ||
                     pendingFrames.contains(peerID: senderID) ||
-                    pendingCourier.contains(peerID: senderID) {
+                    pendingCourier.contains(peerID: senderID) ||
+                    pendingAnchorAdmin.contains(peerID: senderID) {
           try? initiateHandshake(peerID: senderID)
         } else {
           scheduleAutoHandshake(peerID: senderID)
@@ -3969,6 +4198,14 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         for innerPacket in queuedCourier {
           sendCourierDeposit(anchorID: senderID, innerPacket: innerPacket)
         }
+        let queuedAdmin = pendingAnchorAdmin.removeValues(for: senderID)
+        for payload in queuedAdmin {
+          guard
+            let requestID = IOSAnchorAdminProtocol.requestID(payload),
+            anchorAdminOperations[requestID] != nil
+          else { continue }
+          try sendEncryptedAnchorAdmin(peerID: senderID, payload: payload)
+        }
       }
     } catch {
       if isCandidate {
@@ -3995,6 +4232,161 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     }
   }
 
+  private func processAnchorAdminResponse(_ payload: Data, senderID: String) {
+    guard
+      let response = IOSAnchorAdminProtocol.parseResponse(payload),
+      let operation = anchorAdminOperations[response.requestID],
+      operation.peerID == senderID
+    else { return }
+
+    if response.command == IOSAnchorAdminProtocol.challengeGet {
+      guard response.status == IOSAnchorAdminProtocol.ok else {
+        completeAnchorAdmin(response: response, operation: operation, details: [:])
+        return
+      }
+      guard let challenge = IOSAnchorAdminProtocol.parseChallenge(response.body) else {
+        failAnchorAdmin(
+          requestID: response.requestID,
+          operation: operation,
+          error: "invalid_challenge"
+        )
+        return
+      }
+      if challenge.retryAfterSeconds > 0 {
+        let locked = IOSAnchorAdminProtocol.Response(
+          command: response.command,
+          requestID: response.requestID,
+          status: IOSAnchorAdminProtocol.locked,
+          body: Data()
+        )
+        completeAnchorAdmin(
+          response: locked,
+          operation: operation,
+          details: ["retryAfterSeconds": Int64(challenge.retryAfterSeconds)]
+        )
+        return
+      }
+      guard let password = operation.password else {
+        failAnchorAdmin(
+          requestID: response.requestID,
+          operation: operation,
+          error: "password_required"
+        )
+        return
+      }
+      do {
+        var verifier = try IOSAnchorAdminProtocol.deriveVerifier(
+          password: password,
+          salt: challenge.salt,
+          iterations: challenge.iterations
+        )
+        var commandData = Data()
+        defer {
+          verifier.resetBytes(in: 0..<verifier.count)
+          commandData.resetBytes(in: 0..<commandData.count)
+        }
+        switch operation.command {
+        case IOSAnchorAdminProtocol.setPassword:
+          commandData = verifier
+        case IOSAnchorAdminProtocol.changePassword:
+          guard let replacement = operation.newPassword else {
+            throw IOSMeshError.invalidPayload
+          }
+          commandData = try IOSAnchorAdminProtocol.deriveVerifier(
+            password: replacement,
+            salt: challenge.salt,
+            iterations: challenge.iterations
+          )
+        case IOSAnchorAdminProtocol.rename:
+          commandData = try IOSAnchorAdminProtocol.renameData(operation.value ?? "")
+        case IOSAnchorAdminProtocol.reboot, IOSAnchorAdminProtocol.factoryReset:
+          commandData = Data()
+        default:
+          throw IOSMeshError.invalidPayload
+        }
+        let authenticated = try IOSAnchorAdminProtocol.authenticatedRequest(
+          command: operation.command,
+          requestID: response.requestID,
+          nonce: challenge.nonce,
+          data: commandData,
+          verifier: verifier
+        )
+        try sendOrQueueAnchorAdmin(peerID: senderID, payload: authenticated)
+      } catch {
+        failAnchorAdmin(
+          requestID: response.requestID,
+          operation: operation,
+          error: "request_failed"
+        )
+      }
+      return
+    }
+
+    if response.command == IOSAnchorAdminProtocol.statusGet,
+       response.status == IOSAnchorAdminProtocol.ok {
+      guard let status = IOSAnchorAdminProtocol.parseStatus(response.body) else {
+        failAnchorAdmin(
+          requestID: response.requestID,
+          operation: operation,
+          error: "invalid_status"
+        )
+        return
+      }
+      completeAnchorAdmin(response: response, operation: operation, details: status)
+      return
+    }
+    completeAnchorAdmin(response: response, operation: operation, details: [:])
+  }
+
+  private func completeAnchorAdmin(
+    response: IOSAnchorAdminProtocol.Response,
+    operation: PendingAnchorAdminOperation,
+    details: [String: Any]
+  ) {
+    anchorAdminOperations.removeValue(forKey: response.requestID)
+    operation.clearSecrets()
+    var event: [String: Any] = [
+      "type": "anchorAdmin",
+      "peerId": operation.peerID,
+      "requestId": String(response.requestID),
+      "command": anchorAdminCommandName(operation.command),
+      "statusCode": response.status,
+    ]
+    for (key, value) in details {
+      event[key] = value
+    }
+    emit(event)
+  }
+
+  private func failAnchorAdmin(
+    requestID: UInt32,
+    operation: PendingAnchorAdminOperation,
+    error: String
+  ) {
+    anchorAdminOperations.removeValue(forKey: requestID)
+    operation.clearSecrets()
+    emit([
+      "type": "anchorAdmin",
+      "peerId": operation.peerID,
+      "requestId": String(requestID),
+      "command": anchorAdminCommandName(operation.command),
+      "statusCode": -1,
+      "error": error,
+    ])
+  }
+
+  private func anchorAdminCommandName(_ command: UInt8) -> String {
+    switch command {
+    case IOSAnchorAdminProtocol.statusGet: return "status"
+    case IOSAnchorAdminProtocol.setPassword: return "setPassword"
+    case IOSAnchorAdminProtocol.changePassword: return "changePassword"
+    case IOSAnchorAdminProtocol.rename: return "rename"
+    case IOSAnchorAdminProtocol.reboot: return "reboot"
+    case IOSAnchorAdminProtocol.factoryReset: return "factoryReset"
+    default: return "unknown"
+    }
+  }
+
   private func processEncrypted(_ packet: IOSMeshPacket, senderID: String) {
     guard !privateMode || peers[senderID]?.hearthbitVerified == true else { return }
     guard IOSNoiseReplayPolicy.isCurrent(
@@ -4013,6 +4405,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       let plaintext = try session.decrypt(packet.payload)
       securePeerIDs.insert(senderID)
       decryptFailures.removeValue(forKey: senderID)
+      if plaintext.first == IOSMeshProtocol.noiseAnchorAdmin {
+        processAnchorAdminResponse(Data(plaintext.dropFirst()), senderID: senderID)
+        return
+      }
       if plaintext.first == IOSMeshProtocol.noiseTransferFrame {
         emit([
           "type": "transferFrame",
@@ -4394,6 +4790,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       .union(pendingPrivate.peerIDs)
       .union(pendingFrames.peerIDs)
       .union(pendingCourier.peerIDs)
+      .union(pendingAnchorAdmin.peerIDs)
   }
 
   private func rememberPeer(_ peer: IOSMeshPeer, seenAt: Date) {
@@ -4531,6 +4928,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         pendingPrivate.contains(peerID: $0) ||
         pendingFrames.contains(peerID: $0) ||
         pendingCourier.contains(peerID: $0) ||
+        pendingAnchorAdmin.contains(peerID: $0) ||
         radarPeerID == $0
     } ?? false
     let hasProtectedSession = peerID.map {
@@ -4845,7 +5243,8 @@ extension HearthBitMeshPlugin: CBCentralManagerDelegate, CBPeripheralDelegate {
          privateChatPeerIDs.contains(peerID) ||
          pendingPrivate.contains(peerID: peerID) ||
          pendingFrames.contains(peerID: peerID) ||
-         pendingCourier.contains(peerID: peerID) {
+         pendingCourier.contains(peerID: peerID) ||
+         pendingAnchorAdmin.contains(peerID: peerID) {
         preferredPeripheralIDs.insert(peripheral.identifier)
       }
     }

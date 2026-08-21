@@ -925,6 +925,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String get diagnosticsTrustConflicts => 'Trust conflicts';
 
   @override
+  String get diagnosticsPacketsReceived => 'Packets received at ingress';
+
+  @override
+  String get diagnosticsPacketsAccepted => 'Unique packets accepted';
+
+  @override
+  String get diagnosticsPacketsRejected => 'Packets permanently rejected';
+
+  @override
+  String get diagnosticsPacketsForwarded => 'Packets relayed to broadcast';
+
+  @override
+  String get diagnosticsPacketsDeduplicated => 'Duplicate packets';
+
+  @override
+  String get diagnosticsPacketsExpired => 'Packets explicitly expired';
+
+  @override
+  String get diagnosticsPacketsDroppedRateLimit =>
+      'Packets dropped by rate limit';
+
+  @override
+  String get diagnosticsPacketsDroppedTtl => 'Relay candidates dropped by TTL';
+
+  @override
+  String get diagnosticsPacketsFailedTransport => 'Failed link attempts';
+
+  @override
   String get diagnosticsOperationalCountersLifetime => 'Counter period';
 
   @override
@@ -932,6 +960,54 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagnosticsLifetimeUnknown => 'Period not reported';
+
+  @override
+  String get diagnosticsSosMetricsSection =>
+      'SOS delivery metrics · retained outbox';
+
+  @override
+  String get diagnosticsSosMetricsScope => 'Metric scope';
+
+  @override
+  String get diagnosticsSosMetricsScopeRetainedOutbox =>
+      'Retained outbox (up to 200 emergencies)';
+
+  @override
+  String get diagnosticsSosCreated => 'SOS created';
+
+  @override
+  String get diagnosticsSosRelayedLocal =>
+      'SOS with confirmed local transmission';
+
+  @override
+  String get diagnosticsSosAckReceived => 'SOS with at least one ACK';
+
+  @override
+  String get diagnosticsSosAckCount => 'Total SOS ACKs';
+
+  @override
+  String get diagnosticsSosExpired => 'SOS expired';
+
+  @override
+  String get diagnosticsSosDeliveryLatency =>
+      'Latest SOS: latency to first ACK';
+
+  @override
+  String get diagnosticsValueUnavailable => 'Unavailable';
+
+  @override
+  String get diagnosticsFirstRelayObserved => 'First remote relay observed';
+
+  @override
+  String get diagnosticsFirstRelayObservedReason =>
+      'Relayed state only confirms a local transmission accepted by the native stack.';
+
+  @override
+  String get diagnosticsHopCount => 'Hop count';
+
+  @override
+  String get diagnosticsHopCountReason =>
+      'Emergency retries reset TTL, and the transmitted TTL is not signed.';
 
   @override
   String get diagnosticsTransportsSection => 'Active transports';
@@ -2490,4 +2566,178 @@ class AppLocalizationsEn extends AppLocalizations {
   String mapZoneError(String error) {
     return 'Could not record or share the swept route: $error';
   }
+
+  @override
+  String anchorAdminTitle(String name) {
+    return 'Manage $name';
+  }
+
+  @override
+  String get anchorAdminStatus => 'Anchor status';
+
+  @override
+  String get anchorAdminClaimed => 'Protected by administrator password';
+
+  @override
+  String get anchorAdminUnclaimed => 'Not protected yet';
+
+  @override
+  String anchorAdminFirmware(int version, int protocol) {
+    return 'Firmware $version · protocol $protocol';
+  }
+
+  @override
+  String anchorAdminUptime(String duration) {
+    return 'Uptime: $duration';
+  }
+
+  @override
+  String anchorAdminBootCount(int count) {
+    return 'Starts: $count';
+  }
+
+  @override
+  String anchorAdminMailbox(int used, int capacity) {
+    return 'Mailbox: $used/$capacity';
+  }
+
+  @override
+  String get anchorAdminClockReady => 'Clock synchronized';
+
+  @override
+  String get anchorAdminClockPending => 'Clock not synchronized';
+
+  @override
+  String get anchorAdminPackets => 'Packets';
+
+  @override
+  String get anchorAdminReceived => 'Received';
+
+  @override
+  String get anchorAdminForwarded => 'Forwarded';
+
+  @override
+  String get anchorAdminStored => 'Stored';
+
+  @override
+  String get anchorAdminDelivered => 'Delivered';
+
+  @override
+  String get anchorAdminDeduplicated => 'Deduplicated';
+
+  @override
+  String get anchorAdminExpired => 'Expired';
+
+  @override
+  String get anchorAdminRejected => 'Rejected';
+
+  @override
+  String get anchorAdminActivity => 'Live activity';
+
+  @override
+  String get anchorAdminLive => 'LIVE';
+
+  @override
+  String get anchorAdminOffline => 'OFFLINE';
+
+  @override
+  String get anchorAdminTraffic => 'Traffic';
+
+  @override
+  String anchorAdminTrafficValue(int received, int forwarded) {
+    return '$received received · $forwarded forwarded';
+  }
+
+  @override
+  String get anchorAdminMailboxUsage => 'Mailbox usage';
+
+  @override
+  String anchorAdminPercent(int percent) {
+    return '$percent%';
+  }
+
+  @override
+  String get anchorAdminMemory => 'Free memory';
+
+  @override
+  String anchorAdminMemoryValue(int current, int minimum) {
+    return '$current KB free · $minimum KB minimum';
+  }
+
+  @override
+  String get anchorAdminSecurity => 'Security';
+
+  @override
+  String anchorAdminSecurityValue(int rejected, int deduplicated) {
+    return '$rejected rejected · $deduplicated duplicates';
+  }
+
+  @override
+  String get anchorAdminLastFourMinutes => 'Last four minutes';
+
+  @override
+  String get anchorAdminRefresh => 'REFRESH';
+
+  @override
+  String get anchorAdminSetPassword => 'SET ADMIN PASSWORD';
+
+  @override
+  String get anchorAdminChangePassword => 'CHANGE PASSWORD';
+
+  @override
+  String get anchorAdminRename => 'RENAME ANCHOR';
+
+  @override
+  String get anchorAdminReboot => 'RESTART ANCHOR';
+
+  @override
+  String get anchorAdminFactoryReset => 'FACTORY RESET';
+
+  @override
+  String get anchorAdminPassword => 'Administrator password';
+
+  @override
+  String get anchorAdminNewPassword => 'New password';
+
+  @override
+  String get anchorAdminPasswordHint => 'At least 10 characters';
+
+  @override
+  String get anchorAdminName => 'Anchor name';
+
+  @override
+  String get anchorAdminConfirmReboot => 'Restart this Anchor now?';
+
+  @override
+  String get anchorAdminConfirmFactoryReset =>
+      'This removes its identity, password, name, metrics and stored messages. This cannot be undone.';
+
+  @override
+  String get anchorAdminWorking => 'Communicating securely with the Anchor…';
+
+  @override
+  String get anchorAdminSaved => 'Anchor updated successfully.';
+
+  @override
+  String get anchorAdminWrongPassword =>
+      'The administrator password is incorrect.';
+
+  @override
+  String anchorAdminLocked(int seconds) {
+    return 'Too many attempts. Try again in $seconds seconds.';
+  }
+
+  @override
+  String get anchorAdminUnavailable =>
+      'The Anchor did not respond. Keep the phone nearby and try again.';
+
+  @override
+  String get anchorAdminUnsupported =>
+      'This Anchor firmware does not support administration yet.';
+
+  @override
+  String get anchorAdminPasswordMismatch => 'The new passwords do not match.';
+
+  @override
+  String get anchorAdminRepeatPassword => 'Repeat new password';
 }

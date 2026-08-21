@@ -129,7 +129,7 @@ class ConformanceFixtureTest {
             NodeCapabilityProtocol.decode(fixtures.bytes("extension.node_capability.anchor")),
         )
         assertEquals(MeshNodeRole.INFRA_DATA_ANCHOR, node.role)
-        assertEquals(1, node.flags.toInt())
+        assertEquals(5, node.flags.toInt())
         val radar = requireNotNull(
             RadarConsentProtocol.decode(fixtures.bytes("extension.radar_grant")),
         )

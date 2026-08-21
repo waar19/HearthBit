@@ -45,7 +45,7 @@ android {
 
     sourceSets {
         getByName("main").java.srcDir(
-            "../../../vendor/bitchat-android/app/src/main/java/com/bitchat/android/noise/southernstorm"
+            "../noise/src/main/java"
         )
     }
 

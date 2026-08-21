@@ -20,6 +20,7 @@ class PeersTab extends StatelessWidget {
     required this.lanGateway,
     required this.onShareInvite,
     required this.onOpenPrivateChat,
+    required this.onOpenAnchorAdmin,
     required this.onOpenRadar,
     required this.onUnavailableAction,
     required this.onSendFile,
@@ -33,6 +34,7 @@ class PeersTab extends StatelessWidget {
   final LanGatewayController? lanGateway;
   final void Function(BuildContext anchorContext) onShareInvite;
   final void Function(MeshPeer peer) onOpenPrivateChat;
+  final void Function(MeshPeer peer) onOpenAnchorAdmin;
   final void Function(MeshPeer peer) onOpenRadar;
   final ValueChanged<String> onUnavailableAction;
   final void Function(MeshPeer peer) onSendFile;
@@ -190,6 +192,9 @@ class PeersTab extends StatelessWidget {
 
   Widget _nearbyPeerCard(BuildContext context, MeshPeer peer) {
     final chatAvailable = controller.canChatWithPeer(peer);
+    final anchorAdminAvailable =
+        peer.role == MeshNodeRole.infraDataAnchor ||
+        peer.role == MeshNodeRole.infraRelay;
     return Card(
       child: Column(
         children: [
@@ -207,7 +212,11 @@ class PeersTab extends StatelessWidget {
                 _verifiedRescuerBadge(context, peer),
               ],
             ),
-            onTap: chatAvailable ? () => onOpenPrivateChat(peer) : null,
+            onTap: chatAvailable
+                ? () => onOpenPrivateChat(peer)
+                : anchorAdminAvailable
+                ? () => onOpenAnchorAdmin(peer)
+                : null,
           ),
           if (chatAvailable)
             PeerActionBar(

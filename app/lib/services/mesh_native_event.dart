@@ -97,6 +97,7 @@ sealed class MeshNativeEvent {
         remote: raw['remote'] == true,
         tentative: raw['tentative'] == true,
       ),
+      'anchorAdmin' => MeshAnchorAdminEvent(raw),
       final String type => MeshUnknownEvent(raw, type: type),
       _ => MeshUnknownEvent(raw, type: null),
     };
@@ -314,6 +315,10 @@ final class MeshRssiEvent extends MeshNativeEvent {
   final int? at;
   final bool remote;
   final bool tentative;
+}
+
+final class MeshAnchorAdminEvent extends MeshNativeEvent {
+  const MeshAnchorAdminEvent(super.raw);
 }
 
 final class MeshUnknownEvent extends MeshNativeEvent {

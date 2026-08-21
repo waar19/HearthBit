@@ -303,6 +303,22 @@ class MeshPlatformService {
     });
   }
 
+  Future<String> anchorAdminRequest({
+    required String peerId,
+    required String command,
+    String? password,
+    String? value,
+    String? newPassword,
+  }) async {
+    return (await _methods.invokeMethod<String>('anchorAdminRequest', {
+      'peerId': peerId,
+      'command': command,
+      'password': password,
+      'value': value,
+      'newPassword': newPassword,
+    }))!;
+  }
+
   Future<String> sendSos({
     required String content,
     double? latitude,

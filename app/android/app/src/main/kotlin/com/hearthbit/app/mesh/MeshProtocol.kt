@@ -38,6 +38,7 @@ internal object MeshProtocol {
 
     /** Trama HBT (HearthBit Transfer) encapsulada dentro de la sesión Noise. */
     const val NOISE_TRANSFER_FRAME: Byte = 0x30
+    const val NOISE_ANCHOR_ADMIN: Byte = 0x31
 
     val broadcastRecipient = ByteArray(8) { 0xFF.toByte() }
 

@@ -39,7 +39,7 @@ android {
         getByName("main").java.srcDirs(
             "src/main/kotlin",
             "../app/src/main/kotlin/com/hearthbit/app/mesh",
-            "../../../vendor/bitchat-android/app/src/main/java/com/bitchat/android/noise/southernstorm",
+            "../noise/src/main/java",
         )
     }
 
