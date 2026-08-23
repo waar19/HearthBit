@@ -98,6 +98,17 @@ sealed class MeshNativeEvent {
         tentative: raw['tentative'] == true,
       ),
       'anchorAdmin' => MeshAnchorAdminEvent(raw),
+      'anchorOta' => MeshAnchorOtaEvent(
+        raw,
+        peerId: _string(raw['peerId']),
+        state: _string(raw['state']),
+        targetVersion: _int(raw['targetVersion']),
+        bytesSent: _int(raw['bytesSent']),
+        totalBytes: _int(raw['totalBytes']),
+        progress: _double(raw['progress']),
+        error: _string(raw['error']),
+        statusCode: _int(raw['statusCode']),
+      ),
       final String type => MeshUnknownEvent(raw, type: type),
       _ => MeshUnknownEvent(raw, type: null),
     };
@@ -319,6 +330,29 @@ final class MeshRssiEvent extends MeshNativeEvent {
 
 final class MeshAnchorAdminEvent extends MeshNativeEvent {
   const MeshAnchorAdminEvent(super.raw);
+}
+
+final class MeshAnchorOtaEvent extends MeshNativeEvent {
+  const MeshAnchorOtaEvent(
+    super.raw, {
+    required this.peerId,
+    required this.state,
+    required this.targetVersion,
+    required this.bytesSent,
+    required this.totalBytes,
+    required this.progress,
+    required this.error,
+    required this.statusCode,
+  });
+
+  final String? peerId;
+  final String? state;
+  final int? targetVersion;
+  final int? bytesSent;
+  final int? totalBytes;
+  final double? progress;
+  final String? error;
+  final int? statusCode;
 }
 
 final class MeshUnknownEvent extends MeshNativeEvent {

@@ -10,6 +10,77 @@ class RunnerTests: XCTestCase {
   private let sender = Data([1, 2, 3, 4, 5, 6, 7, 8])
   private let fragmentID = Data([9, 8, 7, 6, 5, 4, 3, 2])
 
+  func testAnchorOtaManifestAndChunkFraming() throws {
+    let image = Data((0..<1_000).map { UInt8($0 & 0xFF) })
+    let manifestBytes = anchorOtaManifest(
+      image: image,
+      version: 8,
+      chunkSize: 384
+    )
+    let manifest = try IOSAnchorOtaProtocol.validateBundle(
+      manifestBytes: manifestBytes,
+      image: image,
+      currentVersion: 7
+    )
+
+    XCTAssertEqual(manifest.version, 8)
+    XCTAssertEqual(manifest.chunkCount, 3)
+    let request = bigEndian(8) + bigEndian(2)
+    let chunk = try XCTUnwrap(
+      IOSAnchorOtaProtocol.chunk(
+        manifest: manifest,
+        image: image,
+        request: request
+      )
+    )
+    XCTAssertEqual(chunk.index, 2)
+    XCTAssertEqual(chunk.bytesSent, 1_000)
+    XCTAssertEqual(chunk.payload.prefix(8), request)
+    XCTAssertEqual(chunk.payload.dropFirst(8), image.suffix(232))
+  }
+
+  func testAnchorOtaRejectsStaleAndMalformedBundles() {
+    let image = Data([1, 2, 3, 4])
+    let manifest = anchorOtaManifest(image: image, version: 8, chunkSize: 384)
+
+    XCTAssertThrowsError(
+      try IOSAnchorOtaProtocol.validateBundle(
+        manifestBytes: manifest,
+        image: image,
+        currentVersion: 8
+      )
+    )
+    XCTAssertNil(IOSAnchorOtaProtocol.parseManifest(manifest.dropLast()))
+    XCTAssertNil(IOSAnchorOtaProtocol.status(Data()))
+    XCTAssertEqual(IOSAnchorOtaProtocol.status(Data([0xE1])), 0xE1)
+  }
+
+  private func anchorOtaManifest(
+    image: Data,
+    version: UInt32,
+    chunkSize: UInt16
+  ) -> Data {
+    var manifest = Data("BOTA".utf8)
+    manifest.append(bigEndian(version))
+    manifest.append(bigEndian(UInt32(image.count)))
+    manifest.append(Data(SHA256.hash(data: image)))
+    manifest.append(Data([
+      UInt8(chunkSize >> 8),
+      UInt8(chunkSize),
+    ]))
+    manifest.append(Data(repeating: 0, count: 64))
+    return manifest
+  }
+
+  private func bigEndian(_ value: UInt32) -> Data {
+    Data([
+      UInt8(value >> 24),
+      UInt8(value >> 16),
+      UInt8(value >> 8),
+      UInt8(value),
+    ])
+  }
+
   func testMeshPacketCountersExposeExactAggregateSemantics() {
     let counters = IOSMeshPacketCounters()
     counters.recordReceived()

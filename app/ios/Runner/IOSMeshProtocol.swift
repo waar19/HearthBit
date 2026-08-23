@@ -651,6 +651,126 @@ enum IOSAnchorAdminProtocol {
   }
 }
 
+enum IOSAnchorOtaProtocol {
+  static let manifestType: UInt8 = 0xA0
+  static let requestType: UInt8 = 0xA1
+  static let chunkType: UInt8 = 0xA2
+  static let statusType: UInt8 = 0xA3
+  static let manifestLength = 110
+  static let minimumChunkSize = 64
+  static let maximumChunkSize = 480
+
+  struct Manifest {
+    let raw: Data
+    let version: UInt32
+    let imageSize: Int
+    let digest: Data
+    let chunkSize: Int
+
+    var chunkCount: Int {
+      (imageSize + chunkSize - 1) / chunkSize
+    }
+  }
+
+  struct Chunk {
+    let index: UInt32
+    let payload: Data
+    let bytesSent: Int
+    let totalBytes: Int
+  }
+
+  static func validateBundle(
+    manifestBytes: Data,
+    image: Data,
+    currentVersion: UInt32
+  ) throws -> Manifest {
+    guard
+      let manifest = parseManifest(manifestBytes),
+      manifest.version > currentVersion,
+      manifest.imageSize == image.count,
+      manifest.digest == Data(SHA256.hash(data: image))
+    else {
+      throw IOSMeshError.invalidPayload
+    }
+    return manifest
+  }
+
+  static func parseManifest(_ data: Data) -> Manifest? {
+    let bytes = [UInt8](data)
+    guard
+      bytes.count == manifestLength,
+      Array(bytes[0..<4]) == Array("BOTA".utf8)
+    else { return nil }
+    let version = readUInt32(bytes, 4)
+    let imageSize = UInt64(readUInt32(bytes, 8))
+    let chunkSize = Int(readUInt16(bytes, 44))
+    guard
+      version > 0,
+      imageSize > 0,
+      imageSize <= UInt64(Int.max),
+      (minimumChunkSize...maximumChunkSize).contains(chunkSize)
+    else { return nil }
+    return Manifest(
+      raw: data,
+      version: version,
+      imageSize: Int(imageSize),
+      digest: Data(bytes[12..<44]),
+      chunkSize: chunkSize
+    )
+  }
+
+  static func chunk(
+    manifest: Manifest,
+    image: Data,
+    request: Data
+  ) -> Chunk? {
+    let bytes = [UInt8](request)
+    guard bytes.count == 8 else { return nil }
+    let version = readUInt32(bytes, 0)
+    let index = UInt64(readUInt32(bytes, 4))
+    guard
+      version == manifest.version,
+      index < UInt64(manifest.chunkCount)
+    else { return nil }
+    let offset = Int(index) * manifest.chunkSize
+    let length = min(manifest.chunkSize, image.count - offset)
+    var payload = Data()
+    payload.append(uint32(version))
+    payload.append(uint32(UInt32(index)))
+    payload.append(image.subdata(in: offset..<(offset + length)))
+    return Chunk(
+      index: UInt32(index),
+      payload: payload,
+      bytesSent: offset + length,
+      totalBytes: image.count
+    )
+  }
+
+  static func status(_ data: Data) -> UInt8? {
+    data.count == 1 ? data.first : nil
+  }
+
+  private static func uint32(_ value: UInt32) -> Data {
+    Data([
+      UInt8(value >> 24),
+      UInt8(value >> 16),
+      UInt8(value >> 8),
+      UInt8(value),
+    ])
+  }
+
+  private static func readUInt16(_ bytes: [UInt8], _ offset: Int) -> UInt16 {
+    UInt16(bytes[offset]) << 8 | UInt16(bytes[offset + 1])
+  }
+
+  private static func readUInt32(_ bytes: [UInt8], _ offset: Int) -> UInt32 {
+    UInt32(bytes[offset]) << 24 |
+      UInt32(bytes[offset + 1]) << 16 |
+      UInt32(bytes[offset + 2]) << 8 |
+      UInt32(bytes[offset + 3])
+  }
+}
+
 enum IOSMeshProtocol {
   static let announce: UInt8 = 0x01
   static let message: UInt8 = 0x02
@@ -669,6 +789,10 @@ enum IOSMeshProtocol {
   static let hbtCapability: UInt8 = 0x2A
   static let emergencyAck: UInt8 = 0x2B
   static let keyRotation: UInt8 = 0x2C
+  static let otaManifest: UInt8 = 0xA0
+  static let otaRequest: UInt8 = 0xA1
+  static let otaChunk: UInt8 = 0xA2
+  static let otaStatus: UInt8 = 0xA3
   static let emergencyVersion: UInt8 = 0x01
   static let hbtVersion: UInt8 = 0x01
   static let noisePrivate: UInt8 = 0x01

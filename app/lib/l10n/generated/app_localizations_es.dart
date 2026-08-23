@@ -2764,4 +2764,63 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get anchorAdminRepeatPassword => 'Repetir nueva clave';
+
+  @override
+  String get anchorOtaTitle => 'Actualización de firmware';
+
+  @override
+  String anchorOtaAvailable(int current, int target) {
+    return 'La versión $current → $target está lista para instalar.';
+  }
+
+  @override
+  String get anchorOtaConfirmTitle => '¿Actualizar este Anchor?';
+
+  @override
+  String get anchorOtaConfirmBody =>
+      'La actualización puede tardar varios minutos. Mantén HearthBit abierto y el teléfono cerca del Anchor hasta que reinicie.';
+
+  @override
+  String get anchorOtaInstall => 'INSTALAR ACTUALIZACIÓN';
+
+  @override
+  String get anchorOtaPreparing => 'Verificando la actualización firmada…';
+
+  @override
+  String anchorOtaTransferring(int percent) {
+    return 'Enviando firmware: $percent%';
+  }
+
+  @override
+  String get anchorOtaRebooting =>
+      'Firmware recibido. Esperando que el Anchor reinicie…';
+
+  @override
+  String anchorOtaCompleted(int version) {
+    return 'Anchor actualizado a la versión $version.';
+  }
+
+  @override
+  String get anchorOtaFailed =>
+      'La actualización no terminó. El Anchor conservó el firmware anterior. Inténtalo otra vez manteniendo el teléfono cerca.';
+
+  @override
+  String get anchorOtaManifestRejected =>
+      'El Anchor rechazó el manifiesto. La actualización puede no estar firmada, estar dañada o no ser más reciente.';
+
+  @override
+  String get anchorOtaRemoteRejected =>
+      'El Anchor no pudo verificar o instalar el firmware recibido. Conservó la versión anterior.';
+
+  @override
+  String get anchorOtaReconnectTimeout =>
+      'El Anchor no se reconectó después de reiniciar. Enciéndelo y actualiza esta pantalla para confirmar su versión.';
+
+  @override
+  String get anchorOtaPackageInvalid =>
+      'El firmware incluido con HearthBit falta o no es válido.';
+
+  @override
+  String get anchorOtaKeepOpen =>
+      'Mantén esta pantalla abierta durante la actualización.';
 }

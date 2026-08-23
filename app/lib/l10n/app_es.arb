@@ -821,5 +821,20 @@
   "anchorAdminUnavailable": "El Anchor no respondió. Mantén el teléfono cerca e inténtalo otra vez.",
   "anchorAdminUnsupported": "El firmware de este Anchor aún no permite administrarlo.",
   "anchorAdminPasswordMismatch": "Las claves nuevas no coinciden.",
-  "anchorAdminRepeatPassword": "Repetir nueva clave"
+  "anchorAdminRepeatPassword": "Repetir nueva clave",
+  "anchorOtaTitle": "Actualización de firmware",
+  "anchorOtaAvailable": "La versión {current} → {target} está lista para instalar.",
+  "anchorOtaConfirmTitle": "¿Actualizar este Anchor?",
+  "anchorOtaConfirmBody": "La actualización puede tardar varios minutos. Mantén HearthBit abierto y el teléfono cerca del Anchor hasta que reinicie.",
+  "anchorOtaInstall": "INSTALAR ACTUALIZACIÓN",
+  "anchorOtaPreparing": "Verificando la actualización firmada…",
+  "anchorOtaTransferring": "Enviando firmware: {percent}%",
+  "anchorOtaRebooting": "Firmware recibido. Esperando que el Anchor reinicie…",
+  "anchorOtaCompleted": "Anchor actualizado a la versión {version}.",
+  "anchorOtaFailed": "La actualización no terminó. El Anchor conservó el firmware anterior. Inténtalo otra vez manteniendo el teléfono cerca.",
+  "anchorOtaManifestRejected": "El Anchor rechazó el manifiesto. La actualización puede no estar firmada, estar dañada o no ser más reciente.",
+  "anchorOtaRemoteRejected": "El Anchor no pudo verificar o instalar el firmware recibido. Conservó la versión anterior.",
+  "anchorOtaReconnectTimeout": "El Anchor no se reconectó después de reiniciar. Enciéndelo y actualiza esta pantalla para confirmar su versión.",
+  "anchorOtaPackageInvalid": "El firmware incluido con HearthBit falta o no es válido.",
+  "anchorOtaKeepOpen": "Mantén esta pantalla abierta durante la actualización."
 }

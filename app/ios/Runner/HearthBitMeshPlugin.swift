@@ -65,6 +65,42 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     }
   }
 
+  private enum AnchorOtaStage {
+    case transferring
+    case rebooting
+  }
+
+  private final class AnchorOtaTransfer {
+    let peerID: String
+    let manifest: IOSAnchorOtaProtocol.Manifest
+    var image: Data
+    var bytesSent = 0
+    var lastChunkIndex: UInt32?
+    var lastChunkResponseAt = Date.distantPast
+    var lastProgressAt = Date()
+    var lastManifestSentAt = Date()
+    var stage = AnchorOtaStage.transferring
+
+    init(
+      peerID: String,
+      manifest: IOSAnchorOtaProtocol.Manifest,
+      image: Data
+    ) {
+      self.peerID = peerID
+      self.manifest = manifest
+      self.image = image
+    }
+
+    func clear() {
+      image.resetBytes(in: 0..<image.count)
+      image = Data()
+    }
+
+    deinit {
+      clear()
+    }
+  }
+
   private struct PendingRelay {
     let packet: IOSMeshPacket
     let source: UUID?
@@ -85,6 +121,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private static let reconnectCooldown: TimeInterval = 120
   private static let linkLossScanBurst: TimeInterval = 15
   private static let subscriptionAnnouncementCooldown: TimeInterval = 10
+  private static let anchorOtaDuplicateRequestWindow: TimeInterval = 1
+  private static let anchorOtaManifestResendIdle: TimeInterval = 5
   private static let autoHandshakeCooldown: TimeInterval = 60
   private static let handshakeTimeout: TimeInterval = 20
   private static let maximumHandshakeRestarts = 3
@@ -140,6 +178,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
   private var pendingAnchorAdmin = IOSBoundedPeerPendingQueue<Data>()
   private var anchorAdminOperations: [UInt32: PendingAnchorAdminOperation] = [:]
   private var nextAnchorAdminRequestID: UInt32 = 1
+  private var anchorOtaTransfer: AnchorOtaTransfer?
   private var seen: [String: Date] = [:]
   private var pendingRelays: [String: PendingRelay] = [:]
   private var pendingRelaySequence: UInt64 = 0
@@ -439,6 +478,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           "acousticSonar": true,
           "radioRanging": false,
           "meshtastic": false,
+          "anchorOta": true,
           "nodeRoles": IOSMeshNodeRole.allCases.map(\.rawValue),
         ])
       case "getMeshDiagnostics":
@@ -636,6 +676,21 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
             password: arguments["password"] as? String,
             value: arguments["value"] as? String,
             newPassword: arguments["newPassword"] as? String
+          )
+        )
+      case "startAnchorOta":
+        guard
+          let peerID = arguments["peerId"] as? String,
+          let manifest = (arguments["manifest"] as? FlutterStandardTypedData)?.data,
+          let image = (arguments["image"] as? FlutterStandardTypedData)?.data,
+          let currentVersion = arguments["currentVersion"] as? NSNumber
+        else { throw IOSMeshError.invalidPayload }
+        result(
+          try startAnchorOta(
+            peerID: peerID,
+            manifestBytes: manifest,
+            image: image,
+            currentVersion: currentVersion.uint32Value
           )
         )
       case "composeEmergencySms":
@@ -1323,6 +1378,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     pendingAnchorAdmin.removeAll()
     anchorAdminOperations.values.forEach { $0.clearSecrets() }
     anchorAdminOperations.removeAll()
+    if let transfer = anchorOtaTransfer {
+      failAnchorOta(transfer, error: "mesh_stopped")
+    }
     lastSubscriptionAnnouncement.removeAll()
     syncResponseTimes.removeAll()
     lastSyncRequestBySource.removeAll()
@@ -1435,6 +1493,9 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
     pendingAnchorAdmin.removeAll()
     anchorAdminOperations.values.forEach { $0.clearSecrets() }
     anchorAdminOperations.removeAll()
+    if let transfer = anchorOtaTransfer {
+      failAnchorOta(transfer, error: "mesh_restarted")
+    }
     lastSubscriptionAnnouncement.removeAll()
     fragmentReassembler.clear()
     lastSyncRequestBySource.removeAll()
@@ -2206,6 +2267,203 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       ])
     }
     return String(requestID)
+  }
+
+  private func startAnchorOta(
+    peerID: String,
+    manifestBytes: Data,
+    image: Data,
+    currentVersion: UInt32
+  ) throws -> [String: Any] {
+    guard
+      let peer = peers[peerID],
+      isPeerReachable(peerID),
+      peer.role == .infraDataAnchor || peer.role == .infraRelay,
+      peripheralPeers.values.contains(peerID)
+    else { throw IOSMeshError.peerUnavailable }
+    let manifest = try IOSAnchorOtaProtocol.validateBundle(
+      manifestBytes: manifestBytes,
+      image: image,
+      currentVersion: currentVersion
+    )
+    if let active = anchorOtaTransfer,
+       active.peerID != peerID || active.manifest.version != manifest.version {
+      throw IOSMeshError.invalidPayload
+    }
+    let transfer = AnchorOtaTransfer(
+      peerID: peerID,
+      manifest: manifest,
+      image: image
+    )
+    anchorOtaTransfer = transfer
+    emitAnchorOta(transfer, state: "preparing")
+    sendAnchorOtaPacket(
+      type: IOSMeshProtocol.otaManifest,
+      peerID: peerID,
+      payload: manifest.raw
+    )
+    emitAnchorOta(transfer, state: "transferring")
+    DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self, weak transfer] in
+      guard
+        let self,
+        let transfer,
+        self.anchorOtaTransfer === transfer,
+        transfer.stage == .transferring,
+        transfer.bytesSent == 0
+      else { return }
+      self.failAnchorOta(transfer, error: "manifest_rejected")
+    }
+    return [
+      "targetVersion": Int64(manifest.version),
+      "totalBytes": image.count,
+      "chunkSize": manifest.chunkSize,
+    ]
+  }
+
+  private func processAnchorOtaPacket(
+    _ packet: IOSMeshPacket,
+    senderID: String
+  ) {
+    guard let transfer = anchorOtaTransfer, transfer.peerID == senderID else { return }
+    switch packet.type {
+    case IOSMeshProtocol.otaRequest:
+      guard
+        transfer.stage == .transferring,
+        let chunk = IOSAnchorOtaProtocol.chunk(
+          manifest: transfer.manifest,
+          image: transfer.image,
+          request: packet.payload
+        )
+      else { return }
+      let now = Date()
+      if transfer.lastChunkIndex == chunk.index,
+         now.timeIntervalSince(transfer.lastChunkResponseAt) <
+           Self.anchorOtaDuplicateRequestWindow {
+        return
+      }
+      transfer.lastChunkIndex = chunk.index
+      transfer.lastChunkResponseAt = now
+      sendAnchorOtaPacket(
+        type: IOSMeshProtocol.otaChunk,
+        peerID: transfer.peerID,
+        payload: chunk.payload
+      )
+      if chunk.bytesSent > transfer.bytesSent {
+        transfer.bytesSent = chunk.bytesSent
+        transfer.lastProgressAt = now
+        emitAnchorOta(transfer, state: "transferring")
+      }
+    case IOSMeshProtocol.otaStatus:
+      guard let status = IOSAnchorOtaProtocol.status(packet.payload) else { return }
+      if status == 0 {
+        transfer.stage = .rebooting
+        transfer.bytesSent = transfer.image.count
+        emitAnchorOta(transfer, state: "rebooting", statusCode: status)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 120) { [weak self, weak transfer] in
+          guard
+            let self,
+            let transfer,
+            self.anchorOtaTransfer === transfer,
+            transfer.stage == .rebooting
+          else { return }
+          self.failAnchorOta(transfer, error: "reconnect_timeout")
+        }
+      } else {
+        failAnchorOta(transfer, error: "remote_status", statusCode: status)
+      }
+    default:
+      break
+    }
+  }
+
+  private func confirmAnchorOta(peerID: String, firmwareVersion: UInt32) {
+    guard
+      let transfer = anchorOtaTransfer,
+      transfer.peerID == peerID,
+      transfer.manifest.version == firmwareVersion
+    else { return }
+    emitAnchorOta(transfer, state: "completed")
+    transfer.clear()
+    anchorOtaTransfer = nil
+  }
+
+  private func resendAnchorOtaManifest(peerID: String) {
+    guard
+      let transfer = anchorOtaTransfer,
+      transfer.peerID == peerID,
+      transfer.stage == .transferring
+    else { return }
+    let now = Date()
+    guard
+      now.timeIntervalSince(transfer.lastProgressAt) >=
+        Self.anchorOtaManifestResendIdle,
+      now.timeIntervalSince(transfer.lastManifestSentAt) >=
+        Self.anchorOtaManifestResendIdle
+    else { return }
+    transfer.lastManifestSentAt = now
+    sendAnchorOtaPacket(
+      type: IOSMeshProtocol.otaManifest,
+      peerID: peerID,
+      payload: transfer.manifest.raw
+    )
+  }
+
+  private func sendAnchorOtaPacket(
+    type: UInt8,
+    peerID: String,
+    payload: Data
+  ) {
+    guard let recipient = try? Data(hex: peerID) else { return }
+    send(
+      packet: IOSMeshPacket(
+        type: type,
+        ttl: IOSMeshProtocol.defaultTTL,
+        timestamp: currentMilliseconds(),
+        senderID: identity.peerID,
+        recipientID: recipient,
+        payload: payload
+      ),
+      toPeerID: peerID
+    )
+  }
+
+  private func emitAnchorOta(
+    _ transfer: AnchorOtaTransfer,
+    state: String,
+    error: String? = nil,
+    statusCode: UInt8? = nil
+  ) {
+    var event: [String: Any] = [
+      "type": "anchorOta",
+      "peerId": transfer.peerID,
+      "state": state,
+      "targetVersion": Int64(transfer.manifest.version),
+      "bytesSent": transfer.bytesSent,
+      "totalBytes": transfer.image.count,
+      "progress": transfer.image.isEmpty
+        ? 0
+        : Double(transfer.bytesSent) / Double(transfer.image.count),
+    ]
+    if let error { event["error"] = error }
+    if let statusCode { event["statusCode"] = Int(statusCode) }
+    emit(event)
+  }
+
+  private func failAnchorOta(
+    _ transfer: AnchorOtaTransfer,
+    error: String,
+    statusCode: UInt8? = nil
+  ) {
+    emitAnchorOta(
+      transfer,
+      state: "failed",
+      error: error,
+      statusCode: statusCode
+    )
+    transfer.clear()
+    if anchorOtaTransfer === transfer {
+      anchorOtaTransfer = nil
+    }
   }
 
   private func sendOrQueueAnchorAdmin(peerID: String, payload: Data) throws {
@@ -3558,6 +3816,7 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       if (packet.ttl == announcementTTL ||
           packet.ttl == IOSMeshProtocol.defaultTTL), let source {
         rememberPeripheralPeer(senderID, source: source)
+        resendAnchorOtaManifest(peerID: senderID)
       }
       let now = Date()
       let previousPeer = peers[senderID]
@@ -3713,6 +3972,8 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       processHandshake(packet, senderID: senderID)
     case IOSMeshProtocol.noiseEncrypted:
       processEncrypted(packet, senderID: senderID)
+    case IOSMeshProtocol.otaRequest, IOSMeshProtocol.otaStatus:
+      processAnchorOtaPacket(packet, senderID: senderID)
     case IOSMeshProtocol.courierEnvelope:
       processCourier(packet, senderID: senderID)
     case IOSMeshProtocol.requestSync:
@@ -4331,6 +4592,14 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
           error: "invalid_status"
         )
         return
+      }
+      if let firmwareVersion = status["firmwareVersion"] as? Int64,
+         firmwareVersion >= 0,
+         firmwareVersion <= Int64(UInt32.max) {
+        confirmAnchorOta(
+          peerID: senderID,
+          firmwareVersion: UInt32(firmwareVersion)
+        )
       }
       completeAnchorAdmin(response: response, operation: operation, details: status)
       return

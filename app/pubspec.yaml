@@ -94,6 +94,7 @@ flutter:
   assets:
     - assets/icon/hearthbit.png
     - assets/emergency_contacts/
+    - assets/firmware/
 
 flutter_launcher_icons:
   android: "ic_launcher"

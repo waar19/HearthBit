@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import '../controllers/mesh_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/anchor_admin_models.dart';
+import '../models/anchor_ota_manifest.dart';
 import '../models/mesh_models.dart';
+import '../services/mesh_native_event.dart';
 import '../widgets/anchor_sparkline.dart';
 
 class AnchorAdminScreen extends StatefulWidget {
@@ -25,23 +27,40 @@ class AnchorAdminScreen extends StatefulWidget {
 class _AnchorAdminScreenState extends State<AnchorAdminScreen>
     with WidgetsBindingObserver {
   AnchorAdminStatus? _status;
+  AnchorOtaBundle? _otaBundle;
   final AnchorActivityHistory _activity = AnchorActivityHistory();
   Timer? _pollTimer;
+  StreamSubscription<MeshAnchorOtaEvent>? _otaSubscription;
   bool _pollInFlight = false;
   bool _offline = false;
   bool _working = false;
+  String? _otaState;
+  double _otaProgress = 0;
+  int? _otaTargetVersion;
+  bool _otaPackageInvalid = false;
+  String? _otaErrorCode;
   String? _error;
+
+  bool get _otaBlocksPolling =>
+      _otaState == 'preparing' || _otaState == 'transferring';
+
+  bool get _otaActive => _otaBlocksPolling || _otaState == 'rebooting';
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _otaSubscription = widget.controller.anchorOtaEvents
+        .where((event) => event.peerId == widget.peer.id)
+        .listen(_handleOtaEvent);
+    _loadOtaBundle();
     _startPolling();
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _otaSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -57,6 +76,7 @@ class _AnchorAdminScreenState extends State<AnchorAdminScreen>
   }
 
   void _startPolling() {
+    if (_otaBlocksPolling) return;
     _pollTimer?.cancel();
     _pollStatus(showProgress: _status == null);
     _pollTimer = Timer.periodic(
@@ -68,7 +88,7 @@ class _AnchorAdminScreenState extends State<AnchorAdminScreen>
   Future<void> _refresh() => _pollStatus(showProgress: true);
 
   Future<void> _pollStatus({bool showProgress = false}) async {
-    if (_pollInFlight || _working) return;
+    if (_pollInFlight || _working || _otaBlocksPolling) return;
     _pollInFlight = true;
     if (showProgress && mounted) {
       setState(() {
@@ -109,6 +129,102 @@ class _AnchorAdminScreenState extends State<AnchorAdminScreen>
     }
   }
 
+  Future<void> _loadOtaBundle() async {
+    try {
+      final bundle = await AnchorOtaBundle.load();
+      if (!mounted) return;
+      setState(() {
+        _otaBundle = bundle;
+        _otaPackageInvalid = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _otaBundle = null;
+        _otaPackageInvalid = true;
+      });
+    }
+  }
+
+  void _handleOtaEvent(MeshAnchorOtaEvent event) {
+    if (!mounted) return;
+    final state = event.state;
+    setState(() {
+      _otaState = state;
+      _otaTargetVersion = event.targetVersion ?? _otaTargetVersion;
+      _otaErrorCode = event.error;
+      _otaProgress = (event.progress ?? _otaProgress)
+          .clamp(0.0, 1.0)
+          .toDouble();
+      if (state == 'failed') {
+        _error = null;
+      } else if (state == 'completed') {
+        _error = null;
+        _otaProgress = 1;
+      }
+    });
+    if (state == 'rebooting' || state == 'failed' || state == 'completed') {
+      _startPolling();
+    } else {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+    }
+  }
+
+  Future<void> _startOta() async {
+    final status = _status;
+    final bundle = _otaBundle;
+    if (status == null ||
+        bundle == null ||
+        bundle.manifest.version <= status.firmwareVersion ||
+        _otaActive) {
+      return;
+    }
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.l10n.anchorOtaConfirmTitle),
+        content: Text(context.l10n.anchorOtaConfirmBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(context.l10n.actionCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(context.l10n.anchorOtaInstall),
+          ),
+        ],
+      ),
+    );
+    if (accepted != true || !mounted) return;
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    setState(() {
+      _otaState = 'preparing';
+      _otaProgress = 0;
+      _otaTargetVersion = bundle.manifest.version;
+      _otaErrorCode = null;
+      _error = null;
+    });
+    try {
+      await widget.controller.startAnchorOta(
+        peer: widget.peer,
+        manifest: bundle.manifestBytes,
+        image: bundle.imageBytes,
+        currentVersion: status.firmwareVersion,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _otaState = 'failed';
+        _otaErrorCode = 'unavailable';
+        _error = null;
+      });
+      _startPolling();
+    }
+  }
+
   Future<bool> _run({
     required String command,
     String? password,
@@ -117,7 +233,7 @@ class _AnchorAdminScreenState extends State<AnchorAdminScreen>
     void Function(AnchorAdminResult result)? onSuccess,
     bool showSuccess = true,
   }) async {
-    if (_working) return false;
+    if (_working || _otaActive) return false;
     setState(() {
       _working = true;
       _error = null;
@@ -390,7 +506,7 @@ class _AnchorAdminScreenState extends State<AnchorAdminScreen>
         title: Text(context.l10n.anchorAdminTitle(displayName)),
         actions: [
           IconButton(
-            onPressed: _working ? null : _refresh,
+            onPressed: _working || _otaActive ? null : _refresh,
             tooltip: context.l10n.anchorAdminRefresh,
             icon: const Icon(Icons.refresh),
           ),
@@ -416,6 +532,10 @@ class _AnchorAdminScreenState extends State<AnchorAdminScreen>
                 )
               else ...[
                 _statusCard(context, status),
+                if (_showOtaCard(status)) ...[
+                  const SizedBox(height: 12),
+                  _otaCard(context, status),
+                ],
                 const SizedBox(height: 12),
                 _activityCard(context),
                 const SizedBox(height: 12),
@@ -435,6 +555,93 @@ class _AnchorAdminScreenState extends State<AnchorAdminScreen>
         ],
       ),
     );
+  }
+
+  bool _showOtaCard(AnchorAdminStatus status) {
+    if (!widget.controller.supportsAnchorOta) return false;
+    final target = _otaBundle?.manifest.version;
+    return _otaPackageInvalid ||
+        _otaState != null ||
+        (target != null && target > status.firmwareVersion);
+  }
+
+  Widget _otaCard(BuildContext context, AnchorAdminStatus status) {
+    final colors = Theme.of(context).colorScheme;
+    final target = _otaTargetVersion ?? _otaBundle?.manifest.version;
+    final canInstall =
+        !_otaPackageInvalid &&
+        !_otaActive &&
+        target != null &&
+        target > status.firmwareVersion;
+    final message = switch (_otaState) {
+      'preparing' => context.l10n.anchorOtaPreparing,
+      'transferring' => context.l10n.anchorOtaTransferring(
+        (_otaProgress * 100).round(),
+      ),
+      'rebooting' => context.l10n.anchorOtaRebooting,
+      'completed' => context.l10n.anchorOtaCompleted(
+        target ?? status.firmwareVersion,
+      ),
+      'failed' => _otaErrorMessage(context),
+      _ when _otaPackageInvalid => context.l10n.anchorOtaPackageInvalid,
+      _ when target != null => context.l10n.anchorOtaAvailable(
+        status.firmwareVersion,
+        target,
+      ),
+      _ => context.l10n.anchorOtaPackageInvalid,
+    };
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.system_update_alt, color: colors.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    context.l10n.anchorOtaTitle,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(message),
+            if (_otaActive) ...[
+              const SizedBox(height: 12),
+              LinearProgressIndicator(
+                value: _otaState == 'rebooting' ? null : _otaProgress,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                context.l10n.anchorOtaKeepOpen,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+            if (canInstall) ...[
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _startOta,
+                icon: const Icon(Icons.system_update),
+                label: Text(context.l10n.anchorOtaInstall),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _otaErrorMessage(BuildContext context) {
+    return switch (_otaErrorCode) {
+      'manifest_rejected' => context.l10n.anchorOtaManifestRejected,
+      'remote_status' => context.l10n.anchorOtaRemoteRejected,
+      'reconnect_timeout' => context.l10n.anchorOtaReconnectTimeout,
+      _ => context.l10n.anchorOtaFailed,
+    };
   }
 
   Widget _statusCard(BuildContext context, AnchorAdminStatus status) {
@@ -675,23 +882,23 @@ class _AnchorAdminScreenState extends State<AnchorAdminScreen>
           children: [
             if (!status.claimed)
               FilledButton.icon(
-                onPressed: _working ? null : _setPassword,
+                onPressed: _working || _otaActive ? null : _setPassword,
                 icon: const Icon(Icons.password),
                 label: Text(context.l10n.anchorAdminSetPassword),
               )
             else ...[
               OutlinedButton.icon(
-                onPressed: _working ? null : _changePassword,
+                onPressed: _working || _otaActive ? null : _changePassword,
                 icon: const Icon(Icons.password),
                 label: Text(context.l10n.anchorAdminChangePassword),
               ),
               OutlinedButton.icon(
-                onPressed: _working ? null : _rename,
+                onPressed: _working || _otaActive ? null : _rename,
                 icon: const Icon(Icons.edit),
                 label: Text(context.l10n.anchorAdminRename),
               ),
               OutlinedButton.icon(
-                onPressed: _working
+                onPressed: _working || _otaActive
                     ? null
                     : () => _destructiveAction(
                         command: 'reboot',
@@ -702,7 +909,7 @@ class _AnchorAdminScreenState extends State<AnchorAdminScreen>
                 label: Text(context.l10n.anchorAdminReboot),
               ),
               FilledButton.tonalIcon(
-                onPressed: _working
+                onPressed: _working || _otaActive
                     ? null
                     : () => _destructiveAction(
                         command: 'factoryReset',

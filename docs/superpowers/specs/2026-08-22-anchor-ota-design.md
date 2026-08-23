@@ -56,14 +56,22 @@ validación criptográfica autoritativa.
 
 Los dos archivos se empaquetan en `app/assets/firmware/`. Cada release debe compilar,
 firmar y copiar ambos artefactos juntos. La versión del manifiesto debe coincidir con
-`BITLE_FW_VERSION`.
+`BITLE_FW_VERSION`. Desde la raíz se usa:
+
+```powershell
+python scripts/package_anchor_firmware.py
+```
+
+El script rechaza binarios cuyo tamaño o SHA-256 no coincidan con el manifiesto.
 
 ## Arquitectura y flujo
 
 1. Flutter lee el manifiesto empaquetado y compara su versión con `STATUS_GET`.
 2. Si la versión empaquetada es mayor, el panel ofrece actualizar.
 3. El código nativo recibe los bytes del manifiesto y del binario y envía
-   `OTA_MANIFEST` (`0xA0`) dentro de la sesión Noise actual.
+   `OTA_MANIFEST` (`0xA0`) como paquete BitChat dirigido por el enlace BLE directo.
+   Los paquetes OTA no usan Noise: el manifiesto firmado autentica la imagen y permite
+   que nodos sin una sesión Noise activa la propaguen.
 4. El Anchor verifica firma, versión, tamaño y disponibilidad de partición.
 5. El Anchor dirige stop-and-wait mediante `OTA_REQ` (`0xA1`), con versión e índice.
 6. El teléfono valida cada petición y responde `OTA_CHUNK` (`0xA2`) con versión,

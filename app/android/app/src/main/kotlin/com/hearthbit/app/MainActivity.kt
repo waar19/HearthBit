@@ -104,6 +104,7 @@ class MainActivity : FlutterActivity() {
                         "acousticSonar" to true,
                         "radioRanging" to (Build.VERSION.SDK_INT >= 36),
                         "meshtastic" to true,
+                        "anchorOta" to true,
                         "nodeRoles" to listOf(
                             "PHONE_RELAY",
                             "PHONE_BEACON",
@@ -268,6 +269,15 @@ class MainActivity : FlutterActivity() {
                         password = call.argument<String>("password"),
                         value = call.argument<String>("value"),
                         newPassword = call.argument<String>("newPassword"),
+                    )
+                }
+                "startAnchorOta" -> runMethod(result) {
+                    MeshRuntime.engine(this).startAnchorOta(
+                        peerIdHex = requireNotNull(call.argument<String>("peerId")),
+                        manifestBytes = requireNotNull(call.argument<ByteArray>("manifest")),
+                        imageBytes = requireNotNull(call.argument<ByteArray>("image")),
+                        currentVersion =
+                            requireNotNull(call.argument<Number>("currentVersion")).toLong(),
                     )
                 }
                 "composeEmergencySms" -> runMethod(result) {

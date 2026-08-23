@@ -98,6 +98,25 @@ void main() {
     expect(rotation.newPeerId, '1112131415161718');
   });
 
+  test('parsea progreso OTA del Anchor', () {
+    final event = MeshNativeEvent.parse({
+      'type': 'anchorOta',
+      'peerId': '0102030405060708',
+      'state': 'transferring',
+      'targetVersion': 9,
+      'bytesSent': 384,
+      'totalBytes': 768,
+      'progress': 0.5,
+    });
+
+    expect(event, isA<MeshAnchorOtaEvent>());
+    final ota = event as MeshAnchorOtaEvent;
+    expect(ota.state, 'transferring');
+    expect(ota.targetVersion, 9);
+    expect(ota.bytesSent, 384);
+    expect(ota.progress, 0.5);
+  });
+
   test('conserva eventos desconocidos para compatibilidad futura', () {
     final event = MeshNativeEvent.parse({
       'type': 'futureCapability',

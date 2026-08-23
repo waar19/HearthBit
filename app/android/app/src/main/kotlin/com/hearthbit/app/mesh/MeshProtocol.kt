@@ -29,6 +29,10 @@ internal object MeshProtocol {
     const val TYPE_HBT_CAPABILITY: Byte = 0x2A
     const val TYPE_EMERGENCY_ACK: Byte = 0x2B
     const val TYPE_KEY_ROTATION: Byte = 0x2C
+    const val TYPE_OTA_MANIFEST: Byte = 0xA0.toByte()
+    const val TYPE_OTA_REQUEST: Byte = 0xA1.toByte()
+    const val TYPE_OTA_CHUNK: Byte = 0xA2.toByte()
+    const val TYPE_OTA_STATUS: Byte = 0xA3.toByte()
     const val EMERGENCY_PROTOCOL_VERSION: Byte = 0x01
     const val TTL: Byte = 7
     const val HBT_VERSION: Byte = 0x01

@@ -2762,4 +2762,62 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get anchorAdminRepeatPassword => 'Repeat new password';
+
+  @override
+  String get anchorOtaTitle => 'Firmware update';
+
+  @override
+  String anchorOtaAvailable(int current, int target) {
+    return 'Version $current → $target is ready to install.';
+  }
+
+  @override
+  String get anchorOtaConfirmTitle => 'Update this Anchor?';
+
+  @override
+  String get anchorOtaConfirmBody =>
+      'The update can take several minutes. Keep HearthBit open and the phone close to the Anchor until it restarts.';
+
+  @override
+  String get anchorOtaInstall => 'INSTALL UPDATE';
+
+  @override
+  String get anchorOtaPreparing => 'Checking the signed update…';
+
+  @override
+  String anchorOtaTransferring(int percent) {
+    return 'Sending firmware: $percent%';
+  }
+
+  @override
+  String get anchorOtaRebooting =>
+      'Firmware received. Waiting for the Anchor to restart…';
+
+  @override
+  String anchorOtaCompleted(int version) {
+    return 'Anchor updated to version $version.';
+  }
+
+  @override
+  String get anchorOtaFailed =>
+      'The update did not finish. The Anchor kept its previous firmware. Try again while keeping the phone nearby.';
+
+  @override
+  String get anchorOtaManifestRejected =>
+      'The Anchor rejected the manifest. The update may be unsigned, corrupt, or not newer.';
+
+  @override
+  String get anchorOtaRemoteRejected =>
+      'The Anchor could not verify or install the received firmware. It kept the previous version.';
+
+  @override
+  String get anchorOtaReconnectTimeout =>
+      'The Anchor did not reconnect after restarting. Turn it on and refresh this screen to confirm its version.';
+
+  @override
+  String get anchorOtaPackageInvalid =>
+      'The firmware included with HearthBit is missing or invalid.';
+
+  @override
+  String get anchorOtaKeepOpen => 'Keep this screen open during the update.';
 }

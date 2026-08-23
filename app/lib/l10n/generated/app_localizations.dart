@@ -4817,6 +4817,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Repeat new password'**
   String get anchorAdminRepeatPassword;
+
+  /// No description provided for @anchorOtaTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Firmware update'**
+  String get anchorOtaTitle;
+
+  /// No description provided for @anchorOtaAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Version {current} → {target} is ready to install.'**
+  String anchorOtaAvailable(int current, int target);
+
+  /// No description provided for @anchorOtaConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update this Anchor?'**
+  String get anchorOtaConfirmTitle;
+
+  /// No description provided for @anchorOtaConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The update can take several minutes. Keep HearthBit open and the phone close to the Anchor until it restarts.'**
+  String get anchorOtaConfirmBody;
+
+  /// No description provided for @anchorOtaInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'INSTALL UPDATE'**
+  String get anchorOtaInstall;
+
+  /// No description provided for @anchorOtaPreparing.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking the signed update…'**
+  String get anchorOtaPreparing;
+
+  /// No description provided for @anchorOtaTransferring.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending firmware: {percent}%'**
+  String anchorOtaTransferring(int percent);
+
+  /// No description provided for @anchorOtaRebooting.
+  ///
+  /// In en, this message translates to:
+  /// **'Firmware received. Waiting for the Anchor to restart…'**
+  String get anchorOtaRebooting;
+
+  /// No description provided for @anchorOtaCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Anchor updated to version {version}.'**
+  String anchorOtaCompleted(int version);
+
+  /// No description provided for @anchorOtaFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The update did not finish. The Anchor kept its previous firmware. Try again while keeping the phone nearby.'**
+  String get anchorOtaFailed;
+
+  /// No description provided for @anchorOtaManifestRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'The Anchor rejected the manifest. The update may be unsigned, corrupt, or not newer.'**
+  String get anchorOtaManifestRejected;
+
+  /// No description provided for @anchorOtaRemoteRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'The Anchor could not verify or install the received firmware. It kept the previous version.'**
+  String get anchorOtaRemoteRejected;
+
+  /// No description provided for @anchorOtaReconnectTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'The Anchor did not reconnect after restarting. Turn it on and refresh this screen to confirm its version.'**
+  String get anchorOtaReconnectTimeout;
+
+  /// No description provided for @anchorOtaPackageInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'The firmware included with HearthBit is missing or invalid.'**
+  String get anchorOtaPackageInvalid;
+
+  /// No description provided for @anchorOtaKeepOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep this screen open during the update.'**
+  String get anchorOtaKeepOpen;
 }
 
 class _AppLocalizationsDelegate

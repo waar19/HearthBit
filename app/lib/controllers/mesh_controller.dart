@@ -92,6 +92,8 @@ class MeshController extends ChangeNotifier {
   final Random _random = Random.secure();
   final Map<String, Completer<AnchorAdminResult>> _anchorAdminRequests = {};
   final Map<String, AnchorAdminResult> _earlyAnchorAdminResults = {};
+  final StreamController<MeshAnchorOtaEvent> _anchorOtaEvents =
+      StreamController<MeshAnchorOtaEvent>.broadcast();
 
   StreamSubscription<MeshNativeEvent>? _subscription;
   bool _drainingPrivateMessageOutbox = false;
@@ -110,6 +112,7 @@ class MeshController extends ChangeNotifier {
   String? lastKeyRotationDiagnostic;
   bool supportsBackgroundRelay = false;
   bool supportsMeshtastic = false;
+  bool supportsAnchorOta = false;
   String platformName = 'unknown';
   bool supportsAcousticSonar = false;
   bool supportsRadioRanging = false;
@@ -171,6 +174,7 @@ class MeshController extends ChangeNotifier {
   bool _meshtasticEnabled;
 
   List<MeshMessage> get messages => List.unmodifiable(_messages);
+  Stream<MeshAnchorOtaEvent> get anchorOtaEvents => _anchorOtaEvents.stream;
   bool get bitchatInteropEnabled => _bitchatInteropEnabled;
   bool get meshtasticEnabled => _meshtasticEnabled;
   List<EmergencyDelivery> get emergencyDeliveries =>
@@ -327,6 +331,7 @@ class MeshController extends ChangeNotifier {
     platformName = capabilities['platform'] as String? ?? platformName;
     supportsBackgroundRelay = capabilities['backgroundRelay'] as bool? ?? false;
     supportsMeshtastic = capabilities['meshtastic'] as bool? ?? false;
+    supportsAnchorOta = capabilities['anchorOta'] as bool? ?? false;
     supportsAcousticSonar = capabilities['acousticSonar'] as bool? ?? false;
     supportsRadioRanging = capabilities['radioRanging'] as bool? ?? false;
     await _platform.configurePrivacyMode(
@@ -728,6 +733,25 @@ class MeshController extends ChangeNotifier {
         _anchorAdminRequests.remove(requestId);
         throw TimeoutException('anchor_admin_timeout');
       },
+    );
+  }
+
+  Future<void> startAnchorOta({
+    required MeshPeer peer,
+    required Uint8List manifest,
+    required Uint8List image,
+    required int currentVersion,
+  }) async {
+    if (!supportsAnchorOta ||
+        (peer.role != MeshNodeRole.infraDataAnchor &&
+            peer.role != MeshNodeRole.infraRelay)) {
+      throw StateError('anchor_ota_unavailable');
+    }
+    await _platform.startAnchorOta(
+      peerId: peer.id,
+      manifest: manifest,
+      image: image,
+      currentVersion: currentVersion,
     );
   }
 
@@ -1898,6 +1922,9 @@ class MeshController extends ChangeNotifier {
           _earlyAnchorAdminResults[result.requestId] = result;
         }
         return;
+      case MeshAnchorOtaEvent():
+        _anchorOtaEvents.add(event);
+        return;
       case MeshRangingMeasurementEvent() ||
           MeshRadioRangingStateEvent() ||
           MeshRangingControlEvent() ||
@@ -2277,6 +2304,7 @@ class MeshController extends ChangeNotifier {
     }
     _anchorAdminRequests.clear();
     _earlyAnchorAdminResults.clear();
+    _anchorOtaEvents.close();
     _preferences?.removeListener(_handlePreferencesChanged);
     peerLocations.removeListener(_notifyLocationChanged);
     peerLocations.dispose();

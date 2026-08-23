@@ -319,6 +319,22 @@ class MeshPlatformService {
     }))!;
   }
 
+  Future<Map<Object?, Object?>> startAnchorOta({
+    required String peerId,
+    required Uint8List manifest,
+    required Uint8List image,
+    required int currentVersion,
+  }) async {
+    final result = await _methods
+        .invokeMapMethod<Object?, Object?>('startAnchorOta', {
+          'peerId': peerId,
+          'manifest': manifest,
+          'image': image,
+          'currentVersion': currentVersion,
+        });
+    return result ?? const {};
+  }
+
   Future<String> sendSos({
     required String content,
     double? latitude,

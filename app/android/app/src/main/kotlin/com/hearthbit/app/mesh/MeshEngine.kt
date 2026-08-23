@@ -34,6 +34,9 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
+private const val ANCHOR_OTA_DUPLICATE_REQUEST_WINDOW_MS = 1_000L
+private const val ANCHOR_OTA_MANIFEST_RESEND_IDLE_MS = 5_000L
+
 internal class MeshEngine(
     private val context: Context,
     private val requiredRole: MeshNodeRole? = null,
@@ -88,6 +91,9 @@ internal class MeshEngine(
     private val pendingAnchorAdmin = BoundedPeerPendingQueue<ByteArray>()
     private val anchorAdminOperations = ConcurrentHashMap<Int, PendingAnchorAdminOperation>()
     private val anchorAdminRequestIds = AtomicInteger(1)
+    private val anchorOtaLock = Any()
+    @Volatile
+    private var anchorOtaTransfer: AnchorOtaTransfer? = null
     private val clientGatts = ConcurrentHashMap<String, BluetoothGatt>()
     private val knownDevices = ConcurrentHashMap<String, BluetoothDevice>()
     private val knownDeviceLastSeenAt = ConcurrentHashMap<String, Long>()
@@ -660,6 +666,9 @@ internal class MeshEngine(
         outgoingBeaconRequests.clear()
         seenBeaconActions.clear()
         activeBeaconRequest = null
+        synchronized(anchorOtaLock) {
+            anchorOtaTransfer?.let { failAnchorOtaLocked(it, "mesh_stopped") }
+        }
         addressToPeer.clear()
         hearthbitProvenAddresses.clear()
         runCatching { adapter.bluetoothLeScanner?.stopScan(scanCallback) }
@@ -1282,6 +1291,69 @@ internal class MeshEngine(
         return requestId.toString()
     }
 
+    fun startAnchorOta(
+        peerIdHex: String,
+        manifestBytes: ByteArray,
+        imageBytes: ByteArray,
+        currentVersion: Long,
+    ): Map<String, Any> {
+        val normalized = peerIdHex.lowercase()
+        val peer = peers[normalized]
+        require(peer != null && isPeerOnline(peer) &&
+            (peer.role == MeshNodeRole.INFRA_DATA_ANCHOR ||
+                peer.role == MeshNodeRole.INFRA_RELAY)
+        ) {
+            context.getString(R.string.error_peer_unavailable)
+        }
+        val sourceAddress = addressToPeer.entries
+            .firstOrNull { it.value == normalized }
+            ?.key
+            ?: throw IllegalArgumentException("anchor_ota_direct_link_required")
+        val manifest = AnchorOtaProtocol.validateBundle(
+            manifestBytes,
+            imageBytes,
+            currentVersion,
+        )
+        val transfer = synchronized(anchorOtaLock) {
+            val active = anchorOtaTransfer
+            require(active == null ||
+                (active.peerId == normalized && active.manifest.version == manifest.version)
+            ) {
+                "anchor_ota_busy"
+            }
+            AnchorOtaTransfer(
+                peerId = normalized,
+                sourceAddress = sourceAddress,
+                manifest = manifest,
+                image = imageBytes.copyOf(),
+            ).also { anchorOtaTransfer = it }
+        }
+        emitAnchorOta(transfer, state = "preparing")
+        sendAnchorOtaPacket(
+            type = AnchorOtaProtocol.TYPE_MANIFEST,
+            peerId = normalized,
+            payload = manifest.raw,
+            sourceAddress = sourceAddress,
+        )
+        emitAnchorOta(transfer, state = "transferring")
+        mainHandler.postDelayed({
+            synchronized(anchorOtaLock) {
+                val current = anchorOtaTransfer
+                if (current === transfer &&
+                    current.stage == AnchorOtaStage.TRANSFERRING &&
+                    current.bytesSent == 0
+                ) {
+                    failAnchorOtaLocked(current, "manifest_rejected")
+                }
+            }
+        }, 20_000L)
+        return mapOf(
+            "targetVersion" to manifest.version,
+            "totalBytes" to imageBytes.size,
+            "chunkSize" to manifest.chunkSize,
+        )
+    }
+
     fun signPayload(data: ByteArray): ByteArray = identity.signBytes(data)
 
     fun verifySignatureWithPublicKey(
@@ -1366,6 +1438,164 @@ internal class MeshEngine(
             identity.noisePrivateKey,
             ephemeralPublicKey,
         )
+    }
+
+    private fun processAnchorOtaPacket(
+        packet: MeshProtocol.Packet,
+        senderHex: String,
+        sourceAddress: String,
+    ) {
+        synchronized(anchorOtaLock) {
+            val transfer = anchorOtaTransfer ?: return
+            if (transfer.peerId != senderHex) return
+            when (packet.type) {
+                AnchorOtaProtocol.TYPE_REQUEST -> {
+                    if (transfer.stage != AnchorOtaStage.TRANSFERRING) return
+                    val chunk = AnchorOtaProtocol.chunkFor(
+                        transfer.manifest,
+                        transfer.image,
+                        packet.payload,
+                    ) ?: return
+                    val now = System.currentTimeMillis()
+                    if (transfer.lastChunkIndex == chunk.index &&
+                        now - transfer.lastChunkResponseAtMs <
+                        ANCHOR_OTA_DUPLICATE_REQUEST_WINDOW_MS
+                    ) {
+                        return
+                    }
+                    transfer.lastChunkIndex = chunk.index
+                    transfer.lastChunkResponseAtMs = now
+                    transfer.sourceAddress = sourceAddress
+                    sendAnchorOtaPacket(
+                        type = AnchorOtaProtocol.TYPE_CHUNK,
+                        peerId = transfer.peerId,
+                        payload = chunk.payload,
+                        sourceAddress = sourceAddress,
+                    )
+                    if (chunk.bytesSent > transfer.bytesSent) {
+                        transfer.bytesSent = chunk.bytesSent
+                        transfer.lastProgressAtMs = now
+                        emitAnchorOta(transfer, state = "transferring")
+                    }
+                }
+                AnchorOtaProtocol.TYPE_STATUS -> {
+                    val status = AnchorOtaProtocol.parseStatus(packet.payload) ?: return
+                    if (status == 0) {
+                        transfer.stage = AnchorOtaStage.REBOOTING
+                        transfer.bytesSent = transfer.image.size
+                        emitAnchorOta(transfer, state = "rebooting", statusCode = status)
+                        mainHandler.postDelayed({
+                            synchronized(anchorOtaLock) {
+                                val current = anchorOtaTransfer
+                                if (current === transfer &&
+                                    current.stage == AnchorOtaStage.REBOOTING
+                                ) {
+                                    failAnchorOtaLocked(current, "reconnect_timeout")
+                                }
+                            }
+                        }, 120_000L)
+                    } else {
+                        failAnchorOtaLocked(transfer, "remote_status", status)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun confirmAnchorOta(peerId: String, firmwareVersion: Long) {
+        synchronized(anchorOtaLock) {
+            val transfer = anchorOtaTransfer ?: return
+            if (transfer.peerId != peerId ||
+                firmwareVersion != transfer.manifest.version
+            ) {
+                return
+            }
+            emitAnchorOta(transfer, state = "completed")
+            transfer.image.fill(0)
+            anchorOtaTransfer = null
+        }
+    }
+
+    private fun resendAnchorOtaManifest(peerId: String, sourceAddress: String) {
+        synchronized(anchorOtaLock) {
+            val transfer = anchorOtaTransfer ?: return
+            if (transfer.peerId != peerId ||
+                transfer.stage != AnchorOtaStage.TRANSFERRING
+            ) {
+                return
+            }
+            val now = System.currentTimeMillis()
+            if (now - transfer.lastProgressAtMs < ANCHOR_OTA_MANIFEST_RESEND_IDLE_MS ||
+                now - transfer.lastManifestSentAtMs < ANCHOR_OTA_MANIFEST_RESEND_IDLE_MS
+            ) {
+                return
+            }
+            transfer.sourceAddress = sourceAddress
+            transfer.lastManifestSentAtMs = now
+            sendAnchorOtaPacket(
+                type = AnchorOtaProtocol.TYPE_MANIFEST,
+                peerId = transfer.peerId,
+                payload = transfer.manifest.raw,
+                sourceAddress = sourceAddress,
+            )
+        }
+    }
+
+    private fun sendAnchorOtaPacket(
+        type: Byte,
+        peerId: String,
+        payload: ByteArray,
+        sourceAddress: String,
+    ) {
+        val packet = MeshProtocol.Packet(
+            type = type,
+            ttl = MeshProtocol.TTL,
+            timestamp = System.currentTimeMillis(),
+            senderId = identity.peerId,
+            recipientId = peerId.hexToBytes(),
+            payload = payload,
+        )
+        sendBytesToAddress(MeshProtocol.encodeForBle(packet), sourceAddress)
+    }
+
+    private fun emitAnchorOta(
+        transfer: AnchorOtaTransfer,
+        state: String,
+        error: String? = null,
+        statusCode: Int? = null,
+    ) {
+        emit(
+            buildMap {
+                put("type", "anchorOta")
+                put("peerId", transfer.peerId)
+                put("state", state)
+                put("targetVersion", transfer.manifest.version)
+                put("bytesSent", transfer.bytesSent)
+                put("totalBytes", transfer.image.size)
+                put(
+                    "progress",
+                    if (transfer.image.isEmpty()) 0.0
+                    else transfer.bytesSent.toDouble() / transfer.image.size,
+                )
+                error?.let { put("error", it) }
+                statusCode?.let { put("statusCode", it) }
+            },
+        )
+    }
+
+    private fun failAnchorOtaLocked(
+        transfer: AnchorOtaTransfer,
+        error: String,
+        statusCode: Int? = null,
+    ) {
+        emitAnchorOta(
+            transfer,
+            state = "failed",
+            error = error,
+            statusCode = statusCode,
+        )
+        transfer.image.fill(0)
+        if (anchorOtaTransfer === transfer) anchorOtaTransfer = null
     }
 
     private fun sendOrQueueAnchorAdmin(peerIdHex: String, payload: ByteArray) {
@@ -1523,6 +1753,7 @@ internal class MeshEngine(
             )
             status.freeHeap?.let { details["freeHeap"] = it }
             status.minFreeHeap?.let { details["minFreeHeap"] = it }
+            confirmAnchorOta(peerIdHex, status.firmwareVersion)
             completeAnchorAdmin(
                 response,
                 operation,
@@ -2452,6 +2683,9 @@ internal class MeshEngine(
         notifyNotificationObserver()
         rescheduleKeepAlive()
         sendHearthBitLinkProof(address)
+        addressToPeer[address]?.let { peerId ->
+            resendAnchorOtaManifest(peerId, address)
+        }
         val shouldStart = gattDelivery.hasPendingClientWrites(address) &&
             gattDelivery.markClientWritesInFlight(address)
         if (shouldStart) gattDelivery.writeNextClient(address, gatt, characteristic)
@@ -2700,6 +2934,9 @@ internal class MeshEngine(
             MeshProtocol.TYPE_MESSAGE -> processPublicMessage(packet, senderHex)
             MeshProtocol.TYPE_NOISE_HANDSHAKE -> processHandshake(packet, senderHex)
             MeshProtocol.TYPE_NOISE_ENCRYPTED -> processEncrypted(packet, senderHex)
+            MeshProtocol.TYPE_OTA_REQUEST,
+            MeshProtocol.TYPE_OTA_STATUS,
+            -> processAnchorOtaPacket(packet, senderHex, sourceAddress)
             MeshProtocol.TYPE_COURIER_ENVELOPE -> processCourier(packet, senderHex)
             MeshProtocol.TYPE_REQUEST_SYNC -> processSyncRequest(packet, senderHex, sourceAddress)
             MeshProtocol.TYPE_RADAR_CONTROL -> processRadarControl(packet, senderHex)
@@ -2775,6 +3012,7 @@ internal class MeshEngine(
                 (privateMode && packet.ttl == MeshEngineConstants.PRIVATE_ANNOUNCE_TTL)
         if (directAnnouncement) {
             addressToPeer[sourceAddress] = senderHex
+            resendAnchorOtaManifest(senderHex, sourceAddress)
         }
         val previouslySupported = previousPeer?.supportsTransfers == true
         val previouslySupportedEmergencyAck = previousPeer?.supportsEmergencyAck == true
