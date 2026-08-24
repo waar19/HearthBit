@@ -991,16 +991,20 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         seenBeaconActions.removeAll()
         fragmentReassembler.clear()
         genericPresenceTracker?.clear()
-        // Huecos 1+2: re-aplicar NSFileProtection y exclusión de iCloud
-        // backup sobre los archivos del app data dir (p. ej. la nueva
-        // identidad, los caches reconstruidos) tras el wipe.
-        IOSFileProtection.applyAll()
         // Hueco 5: wipe nativo exhaustivo delegado a `IOSPanicWipe`
         // (testable en `RunnerTests/PanicWipeTests.swift`). El orden
         // canónico (Keychain → UserDefaults → files → URLCache) está
         // documentado y garantizado por el helper. Aquí solo lo
         // invocamos con los defaults (los 4 dirs del app data dir).
         _ = IOSPanicWipe.wipe()
+        // Huecos 1+2: re-aplicar NSFileProtection y exclusión de iCloud
+        // backup sobre los archivos del app data dir (p. ej. la nueva
+        // identidad, los caches reconstruidos) tras el wipe. El contrato
+        // de `IOSFileProtection` requiere invocar esto *post* wipe para
+        // que el set de archivos resultantes quede protegido; aplicar
+        // antes protegería archivos que `IOSPanicWipe` borraría 5 líneas
+        // más abajo.
+        IOSFileProtection.applyAll()
         let wipedState: [String: Any] = [
           "type": "wiped",
           "status": "stopped",
