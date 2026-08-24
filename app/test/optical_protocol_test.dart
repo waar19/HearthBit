@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -69,6 +70,55 @@ void main() {
     expect(
       OpticalProtocol.decode(OpticalProtocol.encodeEmergency(mismatched)),
       isNull,
+    );
+  });
+
+  group('manifiestos firmados (Hueco 2)', () {
+    OpticalHeader _validSignedHeader({
+      String senderPeerId = '0011223344556677',
+      int protocolVersion = OpticalProtocol.version,
+    }) {
+      return OpticalHeader(
+        transferId: Uint8List.fromList(List.generate(16, (i) => i * 7)),
+        seed: 0x12345678,
+        fileSize: 1024,
+        chunkSize: 256,
+        chunkCount: 4,
+        sha256: Uint8List.fromList(List.generate(32, (i) => i * 3)),
+        fileName: 'reporte.pdf',
+        senderPeerId: senderPeerId,
+        protocolVersion: protocolVersion,
+        signature: Uint8List.fromList(List.generate(64, (i) => i * 5)),
+      );
+    }
+
+    test(
+      'v2 con firma truncada o ausente es rechazado por el decoder',
+      () {
+        final valid = _validSignedHeader();
+        final encoded = base64Decode(OpticalProtocol.encodeHeader(valid));
+
+        // Truncar la firma a 32 bytes (deberían ser 64).
+        final truncated = Uint8List.sublistView(encoded, 0, encoded.length - 32);
+        expect(OpticalProtocol.decode(base64Encode(truncated)), isNull);
+
+        // Quitar la firma por completo.
+        final noSignature = Uint8List.sublistView(
+          encoded,
+          0,
+          encoded.length - OpticalProtocol.signatureLength,
+        );
+        expect(OpticalProtocol.decode(base64Encode(noSignature)), isNull);
+      },
+    );
+
+    test(
+      'v2 con senderPeerId vacío es rechazado (no se puede verificar origen)',
+      () {
+        final header = _validSignedHeader(senderPeerId: '');
+        // encodeHeader debe fallar (incoherente) porque v2 exige peerId.
+        expect(() => OpticalProtocol.encodeHeader(header), throwsArgumentError);
+      },
     );
   });
 }

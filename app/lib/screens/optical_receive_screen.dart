@@ -15,6 +15,7 @@ import '../l10n/l10n.dart';
 import '../services/fountain_code.dart';
 import '../services/mesh_platform_service.dart';
 import '../services/optical_protocol.dart';
+import '../services/optical_trust.dart';
 import '../services/transfer_crypto.dart';
 import '../services/transfer_protocol.dart';
 
@@ -48,7 +49,7 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
   bool _approvingHeader = false;
   bool _decoding = false;
   final List<(int, Uint8List)> _pendingSymbols = [];
-  _OpticalTrust? _trust;
+  OpticalTrust? _trust;
 
   void _onDetect(BarcodeCapture capture) {
     if (_savedPath != null ||
@@ -149,33 +150,33 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
       return;
     }
     _approvingHeader = true;
-    final knownPeer =
-        header.senderPeerId.isNotEmpty &&
-        (widget.mesh.peerById(header.senderPeerId) != null ||
-            widget.mesh.knownPeerById(header.senderPeerId) != null);
-    var trust = _OpticalTrust.unverified;
-    if (knownPeer && header.isSigned) {
-      var verified = false;
-      try {
-        verified = await MeshPlatformService().verifyPeerSignature(
-          header.senderPeerId,
-          OpticalProtocol.signingPayload(header),
-          header.signature!,
-        );
-      } catch (_) {
-        verified = false;
-      }
-      if (!verified) {
-        if (mounted) {
-          setState(() {
-            _error = context.l10n.opticalSignatureInvalid;
-            _approvingHeader = false;
-          });
+    final classification = await classifyOpticalTrust(
+      header: header,
+      isPeerKnown: (peerId) =>
+          widget.mesh.peerById(peerId) != null ||
+          widget.mesh.knownPeerById(peerId) != null,
+      verifySignature: (peerId, data, signature) async {
+        try {
+          return await MeshPlatformService().verifyPeerSignature(
+            peerId,
+            data,
+            signature,
+          );
+        } catch (_) {
+          return false;
         }
-        return;
+      },
+    );
+    if (classification == null) {
+      if (mounted) {
+        setState(() {
+          _error = context.l10n.opticalSignatureInvalid;
+          _approvingHeader = false;
+        });
       }
-      trust = _OpticalTrust.verified;
-    } else {
+      return;
+    }
+    if (classification.requiresUserConfirmation) {
       if (!mounted) return;
       await _scanner.stop();
       final accepted = await _confirmUnverified(header);
@@ -185,7 +186,6 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
         await _scanner.start();
         return;
       }
-      trust = header.isLegacy ? _OpticalTrust.legacy : _OpticalTrust.unverified;
       await _scanner.start();
     }
     final decoder = await FountainDecoder.createInIsolate(
@@ -197,7 +197,7 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
     // Cabecera nueva: el emisor reinició la sesión (o es otra transferencia).
     setState(() {
       _header = header;
-      _trust = trust;
+      _trust = classification.trust;
       _decoder = decoder;
       _error = null;
       _approvingHeader = false;
@@ -441,11 +441,11 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
                       if (_trust != null) ...[
                         const SizedBox(height: 8),
                         Text(
-                          _trust == _OpticalTrust.verified
+                          _trust == OpticalTrust.verified
                               ? context.l10n.opticalVerifiedSource
                               : context.l10n.opticalUnverifiedTitle,
                           style: TextStyle(
-                            color: _trust == _OpticalTrust.verified
+                            color: _trust == OpticalTrust.verified
                                 ? Theme.of(context).colorScheme.primary
                                 : Theme.of(context).colorScheme.error,
                             fontWeight: FontWeight.w600,
@@ -514,4 +514,3 @@ class _OpticalReceiveScreenState extends State<OpticalReceiveScreen> {
   }
 }
 
-enum _OpticalTrust { verified, unverified, legacy }

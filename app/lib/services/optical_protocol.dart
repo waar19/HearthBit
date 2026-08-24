@@ -323,6 +323,7 @@ class OpticalProtocol {
         header.sha256.length != sha256Length ||
         fileNameBytes.isEmpty ||
         fileNameBytes.length > 255 ||
+        (header.protocolVersion == version && senderPeerId.isEmpty) ||
         (senderPeerId.isNotEmpty &&
             !RegExp(r'^[0-9a-fA-F]{8,128}$').hasMatch(senderPeerId)) ||
         header.fileSize <= 0 ||
