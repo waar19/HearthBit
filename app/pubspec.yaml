@@ -77,6 +77,14 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.4
   sqflite_common_ffi: ^2.4.2
   shared_preferences_platform_interface: ^2.4.2
+  # Test-only platform interface deps for mocking in panic-wipe tests.
+  # Peer to shared_preferences_platform_interface: needed to stub
+  # getTemporaryPath/getApplicationSupportPath (PrivacyDataEraser) and
+  # FlutterSecureStorage.delete (AtRestFileCipher.destroyKey) without
+  # triggering MissingPluginException. See task 8 report.
+  flutter_secure_storage_platform_interface: ^2.0.3
+  path_provider_platform_interface: ^2.1.3
+  plugin_platform_interface: ^2.1.8
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
