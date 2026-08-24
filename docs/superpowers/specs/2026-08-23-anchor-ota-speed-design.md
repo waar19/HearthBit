@@ -86,6 +86,18 @@ el manifiesto Ed25519 y puede operar antes o después del reclamo.
 - Build ESP-IDF para ESP32-S3 N16R8.
 - Prueba física de borrado, flash v9, reclamo manual y OTA v9→v10.
 
+## Implementation delta (cierre 2026-08-24)
+
+- Android `CONNECTION_PRIORITY_HIGH` se solicita y restaura de forma
+  idempotente en todas las rutas terminales dentro de `MeshEngine.kt`.
+- `tools/sign_fw.py` usa 472 bytes como chunk default; `--chunk-size`
+  sigue disponible para diagnóstico.
+- iOS sin cambios (CoreBluetooth no expone equivalente).
+- Pendiente (hardware): medición física de v9→v10 en ESP32-S3 N16R8
+  con la app Android; ver `2026-08-24-anchor-p0-hardware-validation.md`.
+- Pendiente (operación): borrado + flash + reclamo manual del
+  `Bitle-5528` con clave no registrada en código.
+
 ## Criterios de éxito
 
 1. La OTA v9→v10 termina inalámbricamente y el panel confirma v10.
