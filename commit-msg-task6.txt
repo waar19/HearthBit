@@ -1,0 +1,19 @@
+test(security): post-wipe relaunch routes to onboarding (Hueco 7/8)
+
+Cierra el test de integracion que faltaba en el plan de panic wipe.
+
+Bootstrap de lib/main.dart:281-298 ya distingue /onboarding de /home
+segun AppPreferences.onboardingComplete; AppPreferences.panicWipe() borra
+esa clave y el orden canonico (Hueco 6) la limpia al final de la cadena de
+wipes, asi que el relanzar la app tras un panic wipe siempre ve
+onboardingComplete=false y monta OnboardingScreen.
+
+- 3 sub-tests: ciclo principal (onboarding -> home -> wipe -> onboarding),
+  instalacion limpia, y ciclo repetido x3 para descartar estado residual.
+- No requiere codigo de produccion nuevo: el routing ya distingue.
+- Mockea solo el MeshController con un doble local (sin Mockito).
+- Ver docs/superpowers/specs/2026-08-24-panic-wipe-sqlite-cipher-design.md
+  (Hueco 7) y docs/superpowers/plans/2026-08-24-panic-wipe-sqlite-cipher-plan.md
+  (Task 6).
+
+Output: 3/3 PASS en flutter test test/panic_wipe_post_relaunch_test.dart.
