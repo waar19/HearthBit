@@ -33,6 +33,8 @@
 		ECD100012026081300000001 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = ECD100022026081300000002 /* InfoPlist.strings */; };
 		EC5000032026082400000003 /* IOSFileProtection.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC5000022026082400000002 /* IOSFileProtection.swift */; };
 		EC5000052026082400000005 /* IOSFileProtectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC5000042026082400000004 /* IOSFileProtectionTests.swift */; };
+		EC5000072026082400000007 /* IOSPanicWipe.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC5000062026082400000006 /* IOSPanicWipe.swift */; };
+		EC5000092026082400000009 /* PanicWipeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC5000082026082400000008 /* PanicWipeTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -90,6 +92,8 @@
 		ECC000142026081500000007 /* HearthBitFileImportBridge.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HearthBitFileImportBridge.swift; sourceTree = "<group>"; };
 		EC5000022026082400000002 /* IOSFileProtection.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Security/IOSFileProtection.swift; sourceTree = "<group>"; };
 		EC5000042026082400000004 /* IOSFileProtectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSFileProtectionTests.swift; sourceTree = "<group>"; };
+		EC5000062026082400000006 /* IOSPanicWipe.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Security/IOSPanicWipe.swift; sourceTree = "<group>"; };
+		EC5000082026082400000008 /* PanicWipeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanicWipeTests.swift; sourceTree = "<group>"; };
 		ECF100022026081600000002 /* IOSMeshPolicies.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IOSMeshPolicies.swift; sourceTree = "<group>"; };
 		ECF100042026081600000004 /* IOSMeshProtocol.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IOSMeshProtocol.swift; sourceTree = "<group>"; };
 		ECF100062026081600000006 /* IOSMeshSecurity.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IOSMeshSecurity.swift; sourceTree = "<group>"; };
@@ -131,6 +135,7 @@
 			children = (
 				331C807B294A618700263BE5 /* RunnerTests.swift */,
 				EC5000042026082400000004 /* IOSFileProtectionTests.swift */,
+				EC5000082026082400000008 /* PanicWipeTests.swift */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -224,6 +229,7 @@
 			isa = PBXGroup;
 			children = (
 				EC5000022026082400000002 /* IOSFileProtection.swift */,
+				EC5000062026082400000006 /* IOSPanicWipe.swift */,
 			);
 			path = Security;
 			sourceTree = "<group>";
@@ -440,6 +446,7 @@
 			files = (
 				331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */,
 				EC5000052026082400000005 /* IOSFileProtectionTests.swift in Sources */,
+				EC5000092026082400000009 /* PanicWipeTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -464,6 +471,7 @@
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 				EC5000032026082400000003 /* IOSFileProtection.swift in Sources */,
+				EC5000072026082400000007 /* IOSPanicWipe.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
