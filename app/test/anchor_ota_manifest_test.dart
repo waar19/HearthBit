@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hearth_bit/models/anchor_ota_manifest.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   Uint8List manifestFor(
     Uint8List image, {
     int version = 8,
@@ -68,6 +69,19 @@ void main() {
       AnchorOtaBundle.load(bundle: bundle),
       throwsFormatException,
     );
+  });
+
+  test('packaged firmware manifest declares 472-byte chunks', () async {
+    // El spec OTA-speed fija el chunk default en 472 bytes (límite GATT 512
+    // menos 8 de cabecera y 32 de margen para evitar fragmentación de malla).
+    // Este test blinda el contrato contra cambios accidentales de
+    // `sign_fw.py` o de `scripts/package_anchor_firmware.py`.
+    final bundle = await AnchorOtaBundle.load();
+
+    expect(bundle.manifest.chunkSize, 472);
+    expect(bundle.manifest.chunkCount, greaterThan(0));
+    // sanity: el tamaño declarado coincide con los bytes del binario.
+    expect(bundle.manifest.imageSize, bundle.imageBytes.length);
   });
 }
 

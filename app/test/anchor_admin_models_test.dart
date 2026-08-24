@@ -85,4 +85,25 @@ void main() {
     expect(history.samples.first.received, 2);
     expect(history.samples.last.received, 3);
   });
+
+  test('la primera muestra satura todos los deltas a cero', () {
+    final history = AnchorActivityHistory();
+    history.add(
+      _status(
+        received: 10,
+        forwarded: 4,
+        deduplicated: 2,
+        rejected: 1,
+        mailboxUsed: 20,
+      ),
+    );
+
+    final first = history.samples.single;
+    expect(first.received, 0);
+    expect(first.forwarded, 0);
+    expect(first.deduplicated, 0);
+    expect(first.rejected, 0);
+    // Las mediciones directas se preservan aunque sea la primera muestra.
+    expect(first.mailboxPercent, 20);
+  });
 }

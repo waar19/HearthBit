@@ -1329,10 +1329,7 @@ internal class MeshEngine(
             ).also { anchorOtaTransfer = it }
         }
         emitAnchorOta(transfer, state = "preparing")
-        requestAnchorOtaConnectionPriority(
-            sourceAddress,
-            BluetoothGatt.CONNECTION_PRIORITY_HIGH,
-        )
+        priorityCoordinatorFor(sourceAddress).requestHigh()
         sendAnchorOtaPacket(
             type = AnchorOtaProtocol.TYPE_MANIFEST,
             peerId = normalized,
@@ -1485,10 +1482,7 @@ internal class MeshEngine(
                 AnchorOtaProtocol.TYPE_STATUS -> {
                     val status = AnchorOtaProtocol.parseStatus(packet.payload) ?: return
                     if (status == 0) {
-                        requestAnchorOtaConnectionPriority(
-                            transfer.sourceAddress,
-                            BluetoothGatt.CONNECTION_PRIORITY_BALANCED,
-                        )
+                        priorityCoordinatorFor(transfer.sourceAddress).restoreBalanced()
                         transfer.stage = AnchorOtaStage.REBOOTING
                         transfer.bytesSent = transfer.image.size
                         emitAnchorOta(transfer, state = "rebooting", statusCode = status)
@@ -1518,10 +1512,7 @@ internal class MeshEngine(
             ) {
                 return
             }
-            requestAnchorOtaConnectionPriority(
-                transfer.sourceAddress,
-                BluetoothGatt.CONNECTION_PRIORITY_BALANCED,
-            )
+            priorityCoordinatorFor(transfer.sourceAddress).restoreBalanced()
             emitAnchorOta(transfer, state = "completed")
             transfer.image.fill(0)
             anchorOtaTransfer = null
@@ -1544,10 +1535,7 @@ internal class MeshEngine(
             }
             transfer.sourceAddress = sourceAddress
             transfer.lastManifestSentAtMs = now
-            requestAnchorOtaConnectionPriority(
-                sourceAddress,
-                BluetoothGatt.CONNECTION_PRIORITY_HIGH,
-            )
+            priorityCoordinatorFor(sourceAddress).requestHigh()
             sendAnchorOtaPacket(
                 type = AnchorOtaProtocol.TYPE_MANIFEST,
                 peerId = transfer.peerId,
@@ -1600,32 +1588,41 @@ internal class MeshEngine(
     }
 
     @SuppressLint("MissingPermission")
-    private fun requestAnchorOtaConnectionPriority(sourceAddress: String, priority: Int) {
-        val gatt = clientGatts[sourceAddress] ?: return
-        val accepted = runCatching {
-            gatt.requestConnectionPriority(priority)
-        }.getOrDefault(false)
-        val priorityName = when (priority) {
-            BluetoothGatt.CONNECTION_PRIORITY_HIGH -> "high"
-            BluetoothGatt.CONNECTION_PRIORITY_BALANCED -> "balanced"
-            BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER -> "low_power"
-            else -> "unknown"
+    private fun anchorOtaPriorityApplier(sourceAddress: String): (Int) -> Boolean = { priority ->
+        val gatt = clientGatts[sourceAddress]
+        if (gatt == null) {
+            MeshLog.i(
+                MeshEngineConstants.LOG_TAG,
+                "Anchor OTA skipped BLE priority; no client GATT for $sourceAddress",
+            )
+            false
+        } else {
+            val accepted = runCatching {
+                gatt.requestConnectionPriority(priority)
+            }.getOrDefault(false)
+            val priorityName = when (priority) {
+                BluetoothGatt.CONNECTION_PRIORITY_HIGH -> "high"
+                BluetoothGatt.CONNECTION_PRIORITY_BALANCED -> "balanced"
+                BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER -> "low_power"
+                else -> "unknown"
+            }
+            MeshLog.i(
+                MeshEngineConstants.LOG_TAG,
+                "Anchor OTA requested BLE priority=$priorityName accepted=$accepted",
+            )
+            accepted
         }
-        MeshLog.i(
-            MeshEngineConstants.LOG_TAG,
-            "Anchor OTA requested BLE priority=$priorityName accepted=$accepted",
-        )
     }
+
+    private fun priorityCoordinatorFor(sourceAddress: String): AnchorOtaPriorityCoordinator =
+        AnchorOtaPriorityCoordinator(anchorOtaPriorityApplier(sourceAddress))
 
     private fun failAnchorOtaLocked(
         transfer: AnchorOtaTransfer,
         error: String,
         statusCode: Int? = null,
     ) {
-        requestAnchorOtaConnectionPriority(
-            transfer.sourceAddress,
-            BluetoothGatt.CONNECTION_PRIORITY_BALANCED,
-        )
+        priorityCoordinatorFor(transfer.sourceAddress).restoreBalanced()
         emitAnchorOta(
             transfer,
             state = "failed",
