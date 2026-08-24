@@ -108,6 +108,23 @@ Archivo: `app/lib/screens/anchor_admin_screen.dart` (+ widget de gráfica reutil
   cuatro gráficas se mueven al generar tráfico, apagar el Anchor y verificar la insignia
   "sin conexión", volver a encender y verificar la reanudación.
 
+## Implementation delta (cierre 2026-08-24)
+
+- Firmware saltó de v6 a v10 antes de cerrar este spec. Los dos campos
+  `u32` (`free_heap`, `min_free_heap`) se añadieron al payload como
+  describe la sección "Cambio de firmware", sin reintroducir
+  `BITLE_ADMIN_PROTOCOL_VERSION`.
+- `AnchorAdminProtocol.parseStatus` (Kotlin y Swift) implementa la
+  regla "0 u 8 bytes sobrantes; otro → null" y modela los dos
+  campos como opcionales.
+- Flutter: `AnchorActivityHistory` mantiene el buffer circular de 60
+  muestras; `AnchorSparkline` se dibuja con `CustomPainter`
+  (sin `fl_chart`).
+- i18n: EN y ES completas; DE/FR/ZH/JA heredan el fallback inglés
+  (decidido en el spec, no se amplía en esta entrega).
+- Pendiente (gates fuera de código): validación física con ESP32-S3
+  N16R8 + Bitle-5528 (ver `2026-08-24-anchor-p0-hardware-validation.md`).
+
 ## Criterios de éxito
 
 1. El panel muestra las cuatro gráficas actualizándose cada ~4 s con el Anchor real.
