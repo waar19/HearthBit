@@ -1150,6 +1150,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
     confirmationController.dispose();
     if (confirmed != true || !mounted) return;
+    // Orden canónico del panic wipe (ver
+    // docs/superpowers/specs/2026-08-24-panic-wipe-sqlite-cipher-design.md,
+    // sección "Hueco 6"):
+    //   1. sub-wipes por dominio (transfers, family, rescue, gateway, lan, controller)
+    //   2. logs (diagnostics)
+    //   3. archivos residuales (PrivacyDataEraser)
+    //   4. clave maestra (SecureDatabaseKeyStore) — al final para que
+    //      cualquier crash durante los pasos 1-3 deje los datos cifrados
+    //      con la clave aún existente, recuperables en el siguiente intento.
+    //   5. preferencias (app_preferences) — borra los flags de UI.
     try {
       await widget.transfers.wipe();
       await widget.family.panicWipe();

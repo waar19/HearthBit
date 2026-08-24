@@ -96,4 +96,49 @@ void main() {
     preferences.dispose();
     restored.dispose();
   });
+
+  // Spec Hueco 7: AppPreferences.panicWipe debe ser idempotente. Ver
+  // docs/superpowers/specs/2026-08-24-panic-wipe-sqlite-cipher-design.md.
+  // Cubre reintento por crash mid-wipe y doble pulsación de la UI.
+  test('panicWipe is idempotent', () async {
+    final preferences = AppPreferences();
+    await preferences.initialize();
+    await preferences.finishOnboarding();
+    await preferences.setAmoledTheme(true);
+    await preferences.setGatewayOptIn(true);
+    await preferences.setHighContrast(true);
+    await preferences.setMeshtasticEnabled(true);
+
+    // Primer wipe: datos persistentes creados arriba.
+    await preferences.panicWipe();
+    expect(preferences.onboardingComplete, isFalse);
+    expect(preferences.amoledTheme, isFalse);
+    expect(preferences.gatewayOptIn, isFalse);
+    expect(preferences.highContrast, isFalse);
+    expect(preferences.meshtasticEnabled, isFalse);
+
+    // Segundo wipe sobre estado ya vacío: no debe lanzar y debe dejar el
+    // mismo estado final.
+    await preferences.panicWipe();
+    expect(preferences.onboardingComplete, isFalse);
+    expect(preferences.amoledTheme, isFalse);
+    expect(preferences.gatewayOptIn, isFalse);
+    expect(preferences.highContrast, isFalse);
+    expect(preferences.meshtasticEnabled, isFalse);
+    expect(preferences.privacyPrivateMode, isTrue);
+    expect(preferences.bitchatInteropEnabled, isFalse);
+
+    // Una instancia nueva que arranca desde el mismo store no debe ver
+    // residuos de la primera: la segunda llamada no reescribió nada.
+    final restored = AppPreferences();
+    await restored.initialize();
+    expect(restored.onboardingComplete, isFalse);
+    expect(restored.amoledTheme, isFalse);
+    expect(restored.gatewayOptIn, isFalse);
+    expect(restored.highContrast, isFalse);
+    expect(restored.meshtasticEnabled, isFalse);
+
+    preferences.dispose();
+    restored.dispose();
+  });
 }
