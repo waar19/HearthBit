@@ -31,6 +31,8 @@
 		ECF100092026081600000009 /* IOSMeshTransferSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECF100102026081600000010 /* IOSMeshTransferSupport.swift */; };
 		ECF100112026081800000011 /* IOSMeshPacketCounters.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECF100122026081800000012 /* IOSMeshPacketCounters.swift */; };
 		ECD100012026081300000001 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = ECD100022026081300000002 /* InfoPlist.strings */; };
+		EC5000032026082400000003 /* IOSFileProtection.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC5000022026082400000002 /* IOSFileProtection.swift */; };
+		EC5000052026082400000005 /* IOSFileProtectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC5000042026082400000004 /* IOSFileProtectionTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -86,6 +88,8 @@
 		ECC000102026081500000005 /* HearthBitMultipeerTransport.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HearthBitMultipeerTransport.swift; sourceTree = "<group>"; };
 		ECC000122026081500000006 /* HearthBitMultipeerFileTransport.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HearthBitMultipeerFileTransport.swift; sourceTree = "<group>"; };
 		ECC000142026081500000007 /* HearthBitFileImportBridge.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HearthBitFileImportBridge.swift; sourceTree = "<group>"; };
+		EC5000022026082400000002 /* IOSFileProtection.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Security/IOSFileProtection.swift; sourceTree = "<group>"; };
+		EC5000042026082400000004 /* IOSFileProtectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSFileProtectionTests.swift; sourceTree = "<group>"; };
 		ECF100022026081600000002 /* IOSMeshPolicies.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IOSMeshPolicies.swift; sourceTree = "<group>"; };
 		ECF100042026081600000004 /* IOSMeshProtocol.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IOSMeshProtocol.swift; sourceTree = "<group>"; };
 		ECF100062026081600000006 /* IOSMeshSecurity.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IOSMeshSecurity.swift; sourceTree = "<group>"; };
@@ -126,6 +130,7 @@
 			isa = PBXGroup;
 			children = (
 				331C807B294A618700263BE5 /* RunnerTests.swift */,
+				EC5000042026082400000004 /* IOSFileProtectionTests.swift */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -201,6 +206,7 @@
 				ECF100122026081800000012 /* IOSMeshPacketCounters.swift */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
+				EC5000012026082400000001 /* Security */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
@@ -212,6 +218,14 @@
 				1DDA47395B4ACD2E855E8200 /* Pods_RunnerTests.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		EC5000012026082400000001 /* Security */ = {
+			isa = PBXGroup;
+			children = (
+				EC5000022026082400000002 /* IOSFileProtection.swift */,
+			);
+			path = Security;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -425,6 +439,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */,
+				EC5000052026082400000005 /* IOSFileProtectionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -448,6 +463,7 @@
 				ECF100112026081800000011 /* IOSMeshPacketCounters.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
+				EC5000032026082400000003 /* IOSFileProtection.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

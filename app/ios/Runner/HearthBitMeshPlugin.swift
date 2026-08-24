@@ -434,6 +434,12 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
       name: "com.hearthbit.transfer/events",
       binaryMessenger: messenger
     ).setStreamHandler(transferEvents)
+    // Huecos 1+2 del panic-wipe spec: tras registrar el plugin (equivalente
+    // a applicationDidFinishLaunching para el plugin), fija NSFileProtection
+    // .complete y marca los archivos del app data dir como excluidos de
+    // iCloud backup. Se repite en `case "panicWipe"` para re-aplicar tras
+    // cualquier escritura post-wipe.
+    IOSFileProtection.applyAll()
     return plugin
   }
 
@@ -985,6 +991,10 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         seenBeaconActions.removeAll()
         fragmentReassembler.clear()
         genericPresenceTracker?.clear()
+        // Huecos 1+2: re-aplicar NSFileProtection y exclusión de iCloud
+        // backup sobre los archivos del app data dir (p. ej. la nueva
+        // identidad, los caches reconstruidos) tras el wipe.
+        IOSFileProtection.applyAll()
         let wipedState: [String: Any] = [
           "type": "wiped",
           "status": "stopped",
