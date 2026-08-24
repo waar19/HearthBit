@@ -1,0 +1,27 @@
+test(ios): PanicWipeTests covering Keychain, files, idempotency, ordering
+
+Hueco 8 del panic-wipe spec. Refactor del wipe nativo en
+HearthBitMeshPlugin.case "panicWipe" para delegar al helper
+IOSPanicWipe (testable desde XCTest). 4 tests nuevos:
+
+- testKeychainCleared: N items en Keychain, panicWipe,
+  SecItemCopyMatching=errSecItemNotFound por cuenta.
+- testFilesRemoved: 4 dirs (App Support / Documents / Caches / tmp),
+  archivos wipeados, cada dir queda vacio.
+- testIdempotent: dos invocaciones consecutivas, la segunda no
+  lanza y deja el mismo estado final.
+- testOrderingKeychainBeforeFiles: orden canonico keychain ->
+  userDefaults -> files -> urlCache (consistencia con el orden
+  de MeshEngine.panicWipe en Android).
+
+Refactor:
+- Nuevo helper IOSPanicWipe.wipe(...) en Security/ con
+  dependency injection de fileManager, userDefaults, urlCache,
+  bundleIdentifier, keychainClasses, filesDirectories y
+  orderRecorder para que los tests operen sobre dirs temporales
+  sin tocar el app data dir real.
+- HearthBitMeshPlugin.case "panicWipe" reducido a una llamada
+  a IOSPanicWipe.wipe() con los defaults. -35 lineas, +1 linea.
+
+Tests no se corren localmente (Windows no tiene xcodebuild); CI
+macos-latest los corre. Ver task-7-report.md.
