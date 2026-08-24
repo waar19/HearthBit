@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../controllers/mesh_controller.dart';
@@ -615,11 +616,13 @@ class _AnchorAdminScreenState extends State<AnchorAdminScreen>
               LinearProgressIndicator(
                 value: _otaState == 'rebooting' ? null : _otaProgress,
               ),
-              const SizedBox(height: 8),
-              Text(
-                context.l10n.anchorOtaKeepOpen,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+              if (defaultTargetPlatform == TargetPlatform.iOS) ...[
+                const SizedBox(height: 8),
+                Text(
+                  context.l10n.anchorOtaKeepOpen,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
             ],
             if (canInstall) ...[
               const SizedBox(height: 12),
