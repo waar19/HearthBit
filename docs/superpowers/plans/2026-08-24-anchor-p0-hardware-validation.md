@@ -75,7 +75,14 @@ inalámbrica funciona sobre él.
 
 ## Reporte
 
-Al terminar, completar `templates/rescue-pilot-report.template.md`
+Al terminar, completar `docs/templates/rescue-pilot-report.template.md`
 (mismo template que usa `p0-execution-guide.md`) con los IDs de gate
 de este archivo, y commitear en la rama. No elevar a `PASS` global:
 el revisor independiente externo es el único que puede hacerlo.
+
+**Mapeo de gates (estos 4 gates no son P0 formales; usar estos IDs
+locales en el campo "IDs de gate" del template):**
+- Gate 1 (Live charts) → `ANCHOR-CHARTS-01`
+- Gate 2 (OTA inalámbrica) → `ANCHOR-OTA-01`
+- Gate 3 (OTA rápida, 472-byte chunk + priority) → `ANCHOR-OTA-SPEED-01`
+- Gate 4 (Reclamo del Bitle-5528) → `ANCHOR-RECLAIM-01`
