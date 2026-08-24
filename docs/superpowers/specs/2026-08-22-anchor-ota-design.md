@@ -142,6 +142,21 @@ estado conservado por el firmware.
   instalarla desde Android por BLE, comprobar reinicio, reconexión, versión v9 y ausencia
   de rollback.
 
+## Implementation delta (cierre 2026-08-24)
+
+- El flujo end-to-end está implementado: Flutter (`AnchorAdminScreen`),
+  Android (`MeshEngine.kt`), iOS (`HearthBitMeshPlugin.swift`),
+  firmware (`bitle_ota.c`).
+- `AnchorOtaManifest` y `AnchorOtaBundle` validan magic, longitud,
+  tamaño y chunk; rechazan binarios ausentes o inconsistentes.
+- `BITLE_FW_VERSION` actual: **10**. La primera versión firmada por
+  el owner fue v8; v9 validó el flujo BLE; v10 es la versión actual
+  publicada.
+- Pendiente: ceremonia de claves del owner (`tools/gen_owner_key.py`).
+  El usuario la ejecuta localmente; la clave privada nunca entra al
+  repo ni a CI.
+- Pendiente (hardware): ver `2026-08-24-anchor-p0-hardware-validation.md`.
+
 ## Criterios de éxito
 
 1. Una placa con v8 y la clave pública nueva acepta v9 desde HearthBit sin cable ni
