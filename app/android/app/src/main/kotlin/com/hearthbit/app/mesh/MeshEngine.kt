@@ -1942,15 +1942,21 @@ internal class MeshEngine(
         overflowMaskByAddress.clear()
         synchronized(seen) { seen.clear() }
         fragmentReassembler.clear()
-        storeForward.clear()
-        emergencyFingerprints.clear()
+        // Hueco 4: wipe de cada almacén nativo persistente.
+        // La lista de callbacks debe permanecer sincronizada con
+        // MeshEnginePanicWipe.wipePersistentState (ver PanicWipeTest).
+        MeshEnginePanicWipe.wipePersistentState(
+            relationshipPreferences = relationshipPreferences,
+            clearStoreAndForward = { storeForward.clear() },
+            clearEmergencyFingerprints = { emergencyFingerprints.clear() },
+            clearPeerTrustStore = { peerTrustStore.clear() },
+            clearRescueModeStore = { rescueModeStore.disable() },
+            clearRelationshipSecureStore = { relationshipSecureStore.clear() },
+            clearIdentity = { identity.clear() },
+        )
         openEmergencyRateLimiter.clear()
-        peerTrustStore.clear()
-        rescueModeStore.disable()
         rescueModeExpiresAt = 0L
         rescueModeStartedAt = 0L
-        relationshipPreferences.edit().clear().commit()
-        relationshipSecureStore.clear()
         peersWithSessionHistory.clear()
         learnedIosOverflowBit = null
         syncStore.clear()
