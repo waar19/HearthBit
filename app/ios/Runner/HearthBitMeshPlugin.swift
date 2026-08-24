@@ -995,6 +995,41 @@ final class HearthBitMeshPlugin: NSObject, FlutterStreamHandler {
         // backup sobre los archivos del app data dir (p. ej. la nueva
         // identidad, los caches reconstruidos) tras el wipe.
         IOSFileProtection.applyAll()
+        // Hueco 5: wipe nativo exhaustivo. Orden canónico:
+        //   1) Keychain (claves) — antes que UserDefaults por si quedó
+        //      algún handle abierto.
+        //   2) UserDefaults del bundle id (claves no manejadas por Dart).
+        //   3) Archivos en Application Support / Documents / Caches / tmp
+        //      (recreados vacíos tras borrar; la identidad nueva ya está
+        //      generada arriba, por lo que no quedan handles colgando).
+        //   4) URL cache (URLCache.shared). Este orden garantiza que un
+        //      crash mid-wipe deja la app en un estado consistente: o
+        //      bien la clave anterior ya no existe (Keychain vacío) y
+        //      los datos están cifrados con la clave nueva, o bien
+        //      quedan archivos viejos pero ya sin acceso vía Keychain.
+        let secClasses: [CFString] = [
+          kSecClassGenericPassword,
+          kSecClassInternetPassword,
+          kSecClassCertificate,
+        ]
+        for cls in secClasses {
+          SecItemDelete([kSecClass: cls] as CFDictionary)
+        }
+        if let bundleId = Bundle.main.bundleIdentifier {
+          UserDefaults.standard.removePersistentDomain(forName: bundleId)
+        }
+        let fm = FileManager.default
+        let dirs: [URL] = [
+          fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first,
+          fm.urls(for: .documentDirectory, in: .userDomainMask).first,
+          fm.urls(for: .cachesDirectory, in: .userDomainMask).first,
+          fm.temporaryDirectory,
+        ].compactMap { $0 }
+        for dir in dirs {
+          try? fm.removeItem(at: dir)
+          try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        URLCache.shared.removeAllCachedResponses()
         let wipedState: [String: Any] = [
           "type": "wiped",
           "status": "stopped",
