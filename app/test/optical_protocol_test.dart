@@ -74,7 +74,7 @@ void main() {
   });
 
   group('manifiestos firmados (Hueco 2)', () {
-    OpticalHeader _validSignedHeader({
+    OpticalHeader validSignedHeader({
       String senderPeerId = '0011223344556677',
       int protocolVersion = OpticalProtocol.version,
     }) {
@@ -95,7 +95,7 @@ void main() {
     test(
       'v2 con firma truncada o ausente es rechazado por el decoder',
       () {
-        final valid = _validSignedHeader();
+        final valid = validSignedHeader();
         final encoded = base64Decode(OpticalProtocol.encodeHeader(valid));
 
         // Truncar la firma a 32 bytes (deberían ser 64).
@@ -115,7 +115,7 @@ void main() {
     test(
       'v2 con senderPeerId vacío es rechazado (no se puede verificar origen)',
       () {
-        final header = _validSignedHeader(senderPeerId: '');
+        final header = validSignedHeader(senderPeerId: '');
         // encodeHeader debe fallar (incoherente) porque v2 exige peerId.
         expect(() => OpticalProtocol.encodeHeader(header), throwsArgumentError);
       },
