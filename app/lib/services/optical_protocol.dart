@@ -3,6 +3,10 @@ import 'dart:typed_data';
 
 import 'emergency_wire_codec.dart';
 
+// Spec: docs/superpowers/specs/2026-08-24-optical-signed-manifests-design.md
+// v1 (legacy) y v2 (firmado Ed25519). Decoder rechaza v2 sin firma
+// de 64 bytes; warning explícito para legacy.
+
 /// Framing de los símbolos ópticos HearthBit (HBQ v1/v2).
 ///
 /// Cada QR contiene un símbolo en base64: o bien la cabecera (metadatos y

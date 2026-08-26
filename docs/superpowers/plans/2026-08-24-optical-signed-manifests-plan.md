@@ -288,14 +288,14 @@ Documentar al usuario (safety policy Windows bloquea `Remove-Item`).
 
 ## Criterios de salida de la fase 2.2
 
-- [ ] Spec en `docs/superpowers/specs/2026-08-24-optical-signed-manifests-design.md` commiteado.
-- [ ] Audit MD creado con 7 escenarios cubiertos o gaps rellenados.
-- [ ] i18n EN/ES verificadas.
-- [ ] CHANGELOG "Sin publicar" actualizado.
-- [ ] Comentario en `optical_protocol.dart` apuntando al spec.
-- [ ] Security re-audit verde.
-- [ ] `flutter analyze` 0 issues, `flutter test` verde, gradle test verde.
-- [ ] Final whole-branch review sin findings bloqueantes.
+- [x] Spec en `docs/superpowers/specs/2026-08-24-optical-signed-manifests-design.md` commiteado.
+- [x] Audit MD creado con 7 escenarios cubiertos o gaps rellenados.
+- [x] i18n EN/ES verificadas.
+- [x] CHANGELOG "Sin publicar" actualizado.
+- [x] Comentario en `optical_protocol.dart` apuntando al spec.
+- [x] Security re-audit verde.
+- [~] `flutter analyze` 0 issues, `flutter test` verde, gradle test verde. (analyze y test en verde; gradle skippeado en esta máquina por falta de JAVA_HOME — ya validado en `2026-08-24-anchor-p0-closure-audit.md` 7/7 PASS.)
+- [x] Final whole-branch review sin findings bloqueantes.
 - [ ] Push, merge y tag ejecutados por el usuario (gated).
 
 Cuando estos 9 ítems estén en verde, fase 2.2 cerrada. Sigue 2.3

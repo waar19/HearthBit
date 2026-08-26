@@ -6,5 +6,6 @@
     "--background-index",
     "--query-driver=**",
     "--compile-commands-dir=c:\\src\\emergency-com\\build"
-  ]
+  ],
+  "java.compile.nullAnalysis.mode": "automatic"
 }
