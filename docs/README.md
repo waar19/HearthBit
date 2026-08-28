@@ -43,6 +43,16 @@ meaning. When translations disagree, the English license text in
 - [Licensing and provenance risk](legal-provenance-risk.md)
 - [Contribution policy](../CONTRIBUTING.md)
 
+## AI-assisted development
+
+- [Vibecoding context and start here](ai/README.md)
+- [Product context](ai/PRODUCT_CONTEXT.md)
+- [Feature map](ai/FEATURE_MAP.md)
+- [Workflows and acceptance criteria](ai/WORKFLOWS.md)
+- [Known gaps and platform limits](ai/KNOWN_GAPS.md)
+- [Current decisions](ai/DECISIONS.md)
+- [Task request template](ai/REQUEST_TEMPLATE.md)
+
 ## Component guides
 
 - Mobile app: [English](../app/README.md) ·
